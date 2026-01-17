@@ -168,28 +168,111 @@ body {
   background: rgba(78, 154, 6, 0.2);
 }
 
+/* Chevron - CSS triangle */
 .file-tree-chevron {
-  width: 16px;
-  font-size: 10px;
-  color: var(--text-secondary);
-  transition: transform 0.1s ease;
-  display: inline-block;
-  text-align: center;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.file-tree-chevron.expanded {
+.file-tree-chevron::before {
+  content: '';
+  display: block;
+  width: 0;
+  height: 0;
+  border-left: 4px solid #6b6560;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  transition: transform 0.1s ease;
+}
+
+.file-tree-chevron.expanded::before {
   transform: rotate(90deg);
 }
 
-.file-tree-spacer {
-  width: 16px;
+/* Expanded folder name emphasis */
+.file-tree-row:has(.file-tree-chevron.expanded) .file-tree-name {
+  font-weight: 500;
 }
 
-.file-tree-icon {
-  width: 20px;
-  text-align: center;
-  margin-right: 4px;
+/* Spacer for alignment */
+.file-tree-spacer {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
+
+/* Folder icon - CSS shape */
+.file-tree-icon.folder {
+  position: relative;
+  width: 14px;
+  height: 12px;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.file-tree-icon.folder::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 0;
+  width: 14px;
+  height: 10px;
+  background: #857f78;
+  border-radius: 0 2px 2px 2px;
+  transition: background 0.1s ease;
+}
+
+.file-tree-icon.folder::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 3px;
+  background: #857f78;
+  border-radius: 2px 2px 0 0;
+  transition: background 0.1s ease;
+}
+
+/* Expanded folder - open appearance */
+.file-tree-icon.folder.expanded::before {
+  background: #a09a93;
+  top: 4px;
+  height: 8px;
+}
+
+.file-tree-icon.folder.expanded::after {
+  background: #a09a93;
+}
+
+/* File icon - colored bullet */
+.file-tree-icon.file {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+
+.file-tree-icon.file::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6b6560;
+}
+
+/* File type colors */
+.file-tree-icon.file.source::before { background: #0a9dff; }
+.file-tree-icon.file.markup::before { background: #aeee00; }
+.file-tree-icon.file.config::before { background: #ffa724; }
+.file-tree-icon.file.style::before { background: #ff9eb8; }
 
 .file-tree-name {
   flex: 1;

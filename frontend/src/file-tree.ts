@@ -138,12 +138,10 @@ export class FileTree implements Component {
 
       const chevron = document.createElement("span");
       chevron.className = `file-tree-chevron ${isExpanded ? "expanded" : ""}`;
-      chevron.textContent = "▶";
       row.appendChild(chevron);
 
       const icon = document.createElement("span");
-      icon.className = "file-tree-icon folder";
-      icon.textContent = isExpanded ? "📂" : "📁";
+      icon.className = `file-tree-icon folder${isExpanded ? " expanded" : ""}`;
       row.appendChild(icon);
 
       row.addEventListener("click", (e) => {
@@ -165,8 +163,8 @@ export class FileTree implements Component {
       row.appendChild(spacer);
 
       const icon = document.createElement("span");
-      icon.className = "file-tree-icon file";
-      icon.textContent = this.getFileIcon(node.name);
+      const typeClass = this.getFileTypeClass(node.name);
+      icon.className = `file-tree-icon file${typeClass ? ` ${typeClass}` : ""}`;
       row.appendChild(icon);
 
       row.addEventListener("click", (e) => {
@@ -183,34 +181,6 @@ export class FileTree implements Component {
     li.insertBefore(row, li.firstChild);
 
     return li;
-  }
-
-  /**
-   * Get icon for file type.
-   */
-  private getFileIcon(filename: string): string {
-    const ext = filename.split(".").pop()?.toLowerCase() ?? "";
-
-    const iconMap: Record<string, string> = {
-      ts: "📘",
-      tsx: "📘",
-      js: "📒",
-      jsx: "📒",
-      json: "📋",
-      md: "📝",
-      py: "🐍",
-      html: "🌐",
-      css: "🎨",
-      scss: "🎨",
-      yaml: "⚙️",
-      yml: "⚙️",
-      toml: "⚙️",
-      txt: "📄",
-      sh: "⚡",
-      bash: "⚡",
-    };
-
-    return iconMap[ext] ?? "📄";
   }
 
   /**
@@ -232,6 +202,23 @@ export class FileTree implements Component {
     this.selectedPath = path;
     this.render();
     this.emit("file-select", path);
+  }
+
+  /**
+   * Get CSS class for file type based on extension.
+   */
+  private getFileTypeClass(filename: string): string {
+    const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+    const typeMap: Record<string, string> = {
+      ts: "source", tsx: "source", js: "source", jsx: "source",
+      py: "source", go: "source", rs: "source", java: "source",
+      c: "source", cpp: "source", h: "source",
+      md: "markup", mdx: "markup", html: "markup", xml: "markup",
+      json: "config", yaml: "config", yml: "config", toml: "config",
+      ini: "config", env: "config",
+      css: "style", scss: "style", sass: "style", less: "style",
+    };
+    return typeMap[ext] ?? "";
   }
 
   /**
