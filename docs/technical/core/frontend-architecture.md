@@ -434,4 +434,4 @@ frontend/
 ## See Also
 
 - [[../README|Technical Documentation Index]]
-- [[../../user/mobile|Mobile User Guide]]
+- [[../../user/README|User Guide]]

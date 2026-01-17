@@ -57,6 +57,7 @@ See [[blocking-issues]] for critical issues that must be resolved before major p
 ## Contents
 
 - [[claude-code-hooks-integration]] - Claude Code hooks integration
+- [[mobile-interface]] - Mobile-optimized interface for phones and tablets
 
 ## See Also
 

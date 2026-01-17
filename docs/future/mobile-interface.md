@@ -1,12 +1,15 @@
 ---
-title: Mobile Usage Guide
+title: Mobile Interface
 created: 2026-01-17
 updated: 2026-01-17
-status: active
-tags: [user, mobile, guide]
+status: planned
+tags: [future, mobile, planned]
 ---
 
-# Mobile Usage Guide
+# Mobile Interface
+
+> [!NOTE]
+> This feature is planned but not yet implemented.
 
 ccplus provides a mobile-optimized interface for accessing your development session from phones and tablets.
 
@@ -114,5 +117,5 @@ For full functionality, use a desktop browser.
 
 ## See Also
 
-- [[README|User Guide Index]]
+- [[README|Future Plans Index]]
 - [[../technical/core/frontend-architecture|Frontend Architecture]]
