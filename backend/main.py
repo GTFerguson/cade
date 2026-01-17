@@ -16,7 +16,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from backend.config import Config, get_config, set_config
+from backend.session_registry import get_registry
 from backend.websocket import websocket_handler
+from backend.wsl_session_unifier import unify_sessions
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -34,6 +36,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan handler."""
     config = get_config()
 
+    try:
+        unify_sessions(config.working_dir)
+    except Exception as e:
+        logger.debug("Session unification skipped: %s", e)
+
+    registry = get_registry()
+    await registry.start()
+
     if config.auto_open_browser:
         webbrowser.open(config.server_url)
 
@@ -43,6 +53,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     logger.info("ccplus shutting down")
+    await registry.stop()
 
 
 def create_app(config: Config | None = None) -> FastAPI:
