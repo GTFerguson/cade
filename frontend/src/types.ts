@@ -95,6 +95,7 @@ export interface SaveSessionMessage extends BaseMessage {
 export interface SetProjectMessage extends BaseMessage {
   type: "set-project";
   path: string;
+  sessionId?: string;
 }
 
 /**
@@ -151,6 +152,16 @@ export interface ConnectedMessage extends BaseMessage {
 }
 
 /**
+ * Session restored message (server -> client).
+ * Sent when reconnecting to an existing PTY session.
+ */
+export interface SessionRestoredMessage extends BaseMessage {
+  type: "session-restored";
+  sessionId: string;
+  scrollback: string;
+}
+
+/**
  * Union of all client -> server messages.
  */
 export type ClientMessage =
@@ -170,7 +181,8 @@ export type ServerMessage =
   | FileChangeMessage
   | FileContentMessage
   | ErrorMessage
-  | ConnectedMessage;
+  | ConnectedMessage
+  | SessionRestoredMessage;
 
 /**
  * Event handler type.

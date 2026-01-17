@@ -152,6 +152,31 @@ export class Terminal implements Component {
   }
 
   /**
+   * Reset terminal state and clear screen.
+   *
+   * Clears screen and scrollback buffer for clean slate before replay.
+   * Avoids DECSTR (\x1b[!p) which triggers DA1 responses in xterm.js.
+   */
+  reset(): void {
+    if (this.terminal == null) {
+      return;
+    }
+
+    // Reset to initial state without triggering device queries:
+    // - SGR 0: Reset text attributes
+    // - Cursor home + clear screen
+    // - Exit alternate screen buffer if active (to normal buffer)
+    // - Reset scroll margins
+    this.terminal.write(
+      "\x1b[0m" +       // SGR reset (text attributes)
+      "\x1b[?1049l" +   // Exit alternate screen buffer (if in it)
+      "\x1b[r" +        // Reset scroll margins (DECSTBM)
+      "\x1b[H\x1b[2J"   // Cursor home + clear screen
+    );
+    this.terminal.clear();
+  }
+
+  /**
    * Dispose of terminal resources.
    */
   dispose(): void {

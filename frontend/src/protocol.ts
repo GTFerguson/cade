@@ -21,6 +21,7 @@ export const MessageType = {
   FILE_CONTENT: "file-content",
   ERROR: "error",
   CONNECTED: "connected",
+  SESSION_RESTORED: "session-restored",
 } as const;
 
 export type MessageTypeValue = (typeof MessageType)[keyof typeof MessageType];

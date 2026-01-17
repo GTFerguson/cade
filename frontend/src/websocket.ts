@@ -14,7 +14,9 @@ import type {
   FileTreeMessage,
   OutputMessage,
   ServerMessage,
+  SessionRestoredMessage,
   SessionState,
+  SetProjectMessage,
 } from "./types";
 
 type ConnectionState = "disconnected" | "connecting" | "connected";
@@ -26,6 +28,7 @@ interface WebSocketEvents {
   "file-tree": FileTreeMessage;
   "file-change": FileChangeMessage;
   "file-content": FileContentMessage;
+  "session-restored": SessionRestoredMessage;
   error: ErrorMessage;
 }
 
@@ -37,6 +40,7 @@ export class WebSocketClient {
   private handlers: Map<keyof WebSocketEvents, Set<EventHandler<unknown>>> =
     new Map();
   private pendingProjectPath: string | null = null;
+  private pendingSessionId: string | null = null;
 
   constructor(private url: string = config.wsUrl) {}
 
@@ -96,7 +100,14 @@ export class WebSocketClient {
       console.log("WebSocket connected");
 
       if (this.pendingProjectPath !== null) {
-        this.send({ type: MessageType.SET_PROJECT, path: this.pendingProjectPath });
+        const message: SetProjectMessage = {
+          type: MessageType.SET_PROJECT,
+          path: this.pendingProjectPath,
+        };
+        if (this.pendingSessionId !== null) {
+          message.sessionId = this.pendingSessionId;
+        }
+        this.send(message);
       }
     };
 
@@ -184,10 +195,18 @@ export class WebSocketClient {
    * Set project directory for this connection.
    * If not connected yet, the path is stored and sent on connect.
    */
-  sendSetProject(path: string): void {
+  sendSetProject(path: string, sessionId?: string): void {
     this.pendingProjectPath = path;
+    this.pendingSessionId = sessionId ?? null;
     if (this.state === "connected") {
-      this.send({ type: MessageType.SET_PROJECT, path });
+      const message: SetProjectMessage = {
+        type: MessageType.SET_PROJECT,
+        path,
+      };
+      if (sessionId !== undefined) {
+        message.sessionId = sessionId;
+      }
+      this.send(message);
     }
   }
 
@@ -235,6 +254,10 @@ export class WebSocketClient {
       case MessageType.ERROR:
         this.emit("error", message);
         console.error("Server error:", message.code, message.message);
+        break;
+
+      case MessageType.SESSION_RESTORED:
+        this.emit("session-restored", message);
         break;
 
       default:

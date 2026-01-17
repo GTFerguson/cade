@@ -3,7 +3,7 @@ title: Frontend Architecture
 created: 2026-01-17
 updated: 2026-01-17
 status: active
-tags: [technical, frontend, architecture, wiki-links, tabs]
+tags: [technical, frontend, architecture, wiki-links, tabs, session-persistence]
 ---
 
 # Frontend Architecture
@@ -149,16 +149,27 @@ Wraps xterm.js to provide terminal emulation.
 
 **Features:**
 
-- VS Code-inspired dark theme
+- Badwolf-inspired dark theme
 - Automatic fit to container with ResizeObserver
 - Keyboard input forwarded to server via WebSocket
 - Receives output from server PTY
+- Session restoration with scrollback replay
+
+**Key Methods:**
+
+| Method | Description |
+|--------|-------------|
+| `write(data)` | Write data to terminal |
+| `clear()` | Clear scrollback buffer |
+| `reset()` | Reset terminal state and clear for session replay |
+| `focus()` | Focus the terminal |
 
 **Dependencies:**
 
 - `@xterm/xterm` - Terminal emulator
 - `@xterm/addon-fit` - Auto-resize support
 - `@xterm/addon-web-links` - Clickable URLs
+- `@xterm/addon-webgl` - WebGL renderer (with canvas fallback)
 
 ### FileTree (`file-tree.ts`)
 
@@ -268,6 +279,7 @@ The `WebSocketClient` class manages server communication with automatic reconnec
 | Type | Purpose |
 |------|---------|
 | `connected` | Confirms connection, provides working directory and session |
+| `session-restored` | Sent when reconnecting to existing PTY, includes scrollback |
 | `output` | Terminal output data |
 | `file-tree` | Directory structure |
 | `file-content` | Requested file content |
@@ -282,7 +294,47 @@ The `WebSocketClient` class manages server communication with automatic reconnec
 
 ## Session Persistence
 
-Session state is persisted per-project in `.ccplus/session.json`. This allows UI state to survive browser refreshes.
+### Terminal Session Persistence
+
+PTY sessions persist across browser refreshes and reconnections. When a WebSocket disconnects, the backend keeps the PTY process alive and captures output to a scrollback buffer.
+
+**How it works:**
+
+1. Each tab has a unique session ID (UUID) stored in localStorage
+2. On reconnect, the frontend sends this ID with `SET_PROJECT`
+3. Backend finds the existing PTY session and sends accumulated scrollback
+4. Frontend receives `session-restored` message and replays scrollback
+
+**Scrollback Sanitization:**
+
+Before replaying scrollback, the backend filters terminal query sequences that would cause xterm.js to send responses back to the PTY. These sequences would otherwise appear as typed input.
+
+Filtered sequences include:
+
+| Sequence | Name | Description |
+|----------|------|-------------|
+| `ESC c` | RIS | Reset to Initial State |
+| `CSI c` | DA1 | Primary Device Attributes |
+| `CSI > c` | DA2 | Secondary Device Attributes |
+| `CSI n` | DSR | Device Status Report |
+| `CSI ? n` | DECXCPR | Extended Cursor Position Report |
+
+**Frontend Reset:**
+
+Before writing scrollback, the terminal resets its state to avoid corruption from partial escape sequences:
+
+```
+SGR 0        - Reset text attributes
+CSI ?1049l   - Exit alternate screen buffer
+CSI r        - Reset scroll margins
+CSI H CSI 2J - Cursor home + clear screen
+```
+
+This ensures clean replay regardless of what state the terminal was in when captured.
+
+### UI Session Persistence
+
+UI state is persisted per-project in `.ccplus/session.json`. This allows layout and file tree state to survive browser refreshes.
 
 **Persisted State:**
 

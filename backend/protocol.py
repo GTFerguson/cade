@@ -16,7 +16,7 @@ class MessageType:
     GET_FILE = "get-file"  # Request file content: { type, path: str }
     GET_TREE = "get-tree"  # Request file tree: { type }
     SAVE_SESSION = "save-session"  # Save session state: { type, state: SessionState }
-    SET_PROJECT = "set-project"  # Set project directory: { type, path: str }
+    SET_PROJECT = "set-project"  # Set project directory: { type, path: str, sessionId?: str }
 
     # Server -> Client
     OUTPUT = "output"  # Terminal output: { type, data: str }
@@ -25,6 +25,7 @@ class MessageType:
     FILE_CONTENT = "file-content"  # File content: { type, path: str, content: str }
     ERROR = "error"  # Error message: { type, code: str, message: str }
     CONNECTED = "connected"  # Connection established: { type, working_dir: str }
+    SESSION_RESTORED = "session-restored"  # Session reattached: { type, sessionId: str, scrollback: str }
 
 
 class ErrorCode:

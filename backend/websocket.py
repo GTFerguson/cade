@@ -15,8 +15,8 @@ from backend.errors import CCPlusError, ProtocolError
 from backend.file_tree import build_file_tree, get_file_type, read_file_content
 from backend.file_watcher import FileWatcher
 from backend.protocol import ErrorCode, MessageType
-from backend.pty_manager import PTYManager
 from backend.session import load_session, save_session
+from backend.session_registry import PTYSession, get_registry
 from backend.types import FileChangeEvent, TerminalSize
 
 if TYPE_CHECKING:
@@ -36,12 +36,14 @@ class ConnectionHandler:
         self._ws = websocket
         self._config = config
         self._working_dir: Path = config.working_dir
-        self._pty: PTYManager | None = None
+        self._session: PTYSession | None = None
+        self._session_id: str | None = None
         self._watcher: FileWatcher | None = None
         self._closed = False
         self._suppress_output = False
         self._suppress_start_time: float | None = None
         self._project_set = asyncio.Event()
+        self._is_new_session = True
 
     async def handle(self) -> None:
         """Main connection handler loop."""
@@ -93,6 +95,9 @@ class ConnectionHandler:
                                 logger.info("Project set to: %s", self._working_dir)
                             else:
                                 logger.warning("Invalid project path: %s", path)
+                        self._session_id = data.get("sessionId")
+                        if self._session_id:
+                            logger.debug("Session ID: %s", self._session_id)
                         self._project_set.set()
                         return
                 except asyncio.TimeoutError:
@@ -108,39 +113,56 @@ class ConnectionHandler:
             self._project_set.set()
 
     async def _setup(self) -> None:
-        """Initialize PTY and file watcher."""
-        self._pty = PTYManager()
+        """Initialize PTY session and file watcher."""
+        registry = get_registry()
 
-        if self._config.auto_start_claude and not self._config.dummy_mode:
-            self._suppress_output = True
-            self._suppress_start_time = time.monotonic()
-
-        await self._pty.spawn(
-            self._config.shell_command,
-            self._working_dir,
-            TerminalSize(cols=80, rows=24),
-        )
-
-        if self._config.dummy_mode:
-            await asyncio.sleep(0.5)
-            dummy_output = (
-                "\x1b[H\x1b[2J"  # Clear screen (stay in normal buffer for scrollback)
-                "\x1b[38;5;75m ▐▛███▜▌\x1b[0m   Claude Code (dummy mode)\r\n"
-                "\x1b[38;5;75m▝▜█████▛▘\x1b[0m  Development UI Preview\r\n"
-                "\x1b[38;5;75m  ▘▘ ▝▝\x1b[0m\r\n"
-                "\r\n"
-                "─────────────────────────────────────────────────────────────────\r\n"
-                "\x1b[38;5;245m❯\x1b[0m Dummy mode - no actual Claude running\r\n"
-                "─────────────────────────────────────────────────────────────────\r\n"
+        if self._session_id:
+            self._session, self._is_new_session = await registry.get_or_create(
+                self._session_id,
+                self._working_dir,
+                self._config.shell_command,
+                TerminalSize(cols=80, rows=24),
+                auto_start_claude=self._config.auto_start_claude,
+                dummy_mode=self._config.dummy_mode,
             )
-            # Send directly to the output stream, not as a shell command
-            await self._send({
-                "type": MessageType.OUTPUT,
-                "data": dummy_output,
-            })
-        elif self._config.auto_start_claude:
-            await asyncio.sleep(0.5)
-            await self._pty.write("claude\n")
+            self._session.connected_clients.add(self._ws)
+        else:
+            from backend.pty_manager import PTYManager
+            pty = PTYManager()
+            await pty.spawn(
+                self._config.shell_command,
+                self._working_dir,
+                TerminalSize(cols=80, rows=24),
+            )
+            self._session = PTYSession(
+                id="",
+                pty=pty,
+                project_path=self._working_dir,
+            )
+            self._is_new_session = True
+
+        if self._is_new_session:
+            if self._config.auto_start_claude and not self._config.dummy_mode:
+                self._suppress_output = True
+                self._suppress_start_time = time.monotonic()
+
+            if self._config.dummy_mode:
+                await asyncio.sleep(0.5)
+                dummy_output = (
+                    "\x1b[H\x1b[2J"
+                    "\x1b[38;5;75m ▐▛███▜▌\x1b[0m   Claude Code (dummy mode)\r\n"
+                    "\x1b[38;5;75m▝▜█████▛▘\x1b[0m  Development UI Preview\r\n"
+                    "\x1b[38;5;75m  ▘▘ ▝▝\x1b[0m\r\n"
+                    "\r\n"
+                    "─────────────────────────────────────────────────────────────────\r\n"
+                    "\x1b[38;5;245m❯\x1b[0m Dummy mode - no actual Claude running\r\n"
+                    "─────────────────────────────────────────────────────────────────\r\n"
+                )
+                await self._send({
+                    "type": MessageType.OUTPUT,
+                    "data": dummy_output,
+                })
+                self._session.capture_output(dummy_output)
 
         self._watcher = FileWatcher(self._working_dir)
 
@@ -152,9 +174,14 @@ class ConnectionHandler:
             self._watcher.stop()
             self._watcher = None
 
-        if self._pty is not None:
-            await self._pty.close()
-            self._pty = None
+        if self._session is not None:
+            self._session.connected_clients.discard(self._ws)
+            if self._session_id:
+                registry = get_registry()
+                await registry.detach(self._session_id, self._ws)
+            else:
+                await self._session.pty.close()
+            self._session = None
 
     async def _send(self, message: dict) -> None:
         """Send a message to the client."""
@@ -174,6 +201,15 @@ class ConnectionHandler:
 
     async def _send_connected(self) -> None:
         """Send connected message with working directory and session state."""
+        if not self._is_new_session and self._session is not None:
+            scrollback = self._session.get_scrollback()
+            if scrollback:
+                await self._send({
+                    "type": MessageType.SESSION_RESTORED,
+                    "sessionId": self._session_id,
+                    "scrollback": scrollback,
+                })
+
         message: dict = {
             "type": MessageType.CONNECTED,
             "workingDir": str(self._working_dir),
@@ -224,21 +260,21 @@ class ConnectionHandler:
 
     async def _handle_input(self, data: dict) -> None:
         """Handle terminal input."""
-        if self._pty is None:
+        if self._session is None:
             return
 
         input_data = data.get("data", "")
         if input_data:
-            await self._pty.write(input_data)
+            await self._session.pty.write(input_data)
 
     async def _handle_resize(self, data: dict) -> None:
         """Handle terminal resize."""
-        if self._pty is None:
+        if self._session is None:
             return
 
         cols = data.get("cols", 80)
         rows = data.get("rows", 24)
-        await self._pty.resize(cols, rows)
+        await self._session.pty.resize(cols, rows)
 
     async def _handle_get_tree(self) -> None:
         """Handle file tree request."""
@@ -271,13 +307,15 @@ class ConnectionHandler:
 
     async def _pty_output_loop(self) -> None:
         """Read and send PTY output to client."""
-        if self._pty is None:
+        if self._session is None:
             return
 
         try:
-            async for data in self._pty.read():
+            async for data in self._session.pty.read():
                 if self._closed:
                     break
+
+                self._session.capture_output(data)
 
                 if self._suppress_output:
                     # Detect Claude startup via:

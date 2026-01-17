@@ -96,6 +96,14 @@ export class ProjectContextImpl implements IProjectContext {
       this.scheduleSave();
     });
 
+    this.ws.on("session-restored", (message) => {
+      console.log(`[${this.name}] Session restored:`, message.sessionId);
+      if (message.scrollback) {
+        this.terminal?.reset();
+        this.terminal?.write(message.scrollback);
+      }
+    });
+
     this.ws.on("connected", (message) => {
       console.log(`[${this.name}] Connected to server:`, message.workingDir);
       if (message.session != null) {
