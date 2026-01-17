@@ -1,22 +1,90 @@
 /**
- * Markdown rendering component.
+ * Markdown rendering component using mertex.md for Obsidian-like viewing.
  *
- * Uses highlight.js for syntax highlighting.
- * Can be extended to use mertex.md for full markdown rendering.
+ * Features:
+ * - Full GFM support via marked
+ * - Wiki-links ([[path]]) with navigation
+ * - YAML frontmatter display
+ * - Syntax highlighting via highlight.js
+ * - Tables, code blocks, and all markdown features
  */
 
+import { MertexMD } from "mertex.md";
+import { marked, type TokenizerExtension, type RendererExtension } from "marked";
 import hljs from "highlight.js";
 import type { Component, EventHandler } from "./types";
 import type { WebSocketClient } from "./websocket";
 
+// Make libraries available globally for mertex.md
+declare global {
+  interface Window {
+    marked: typeof marked;
+    hljs: typeof hljs;
+  }
+}
+
 interface MarkdownEvents {
   "link-click": string;
+}
+
+interface Frontmatter {
+  [key: string]: unknown;
+}
+
+interface ParsedContent {
+  frontmatter: Frontmatter | null;
+  content: string;
+}
+
+/**
+ * Wiki-link extension for marked.
+ * Transforms [[path]] and [[path|display]] syntax into clickable links.
+ */
+const wikiLinkExtension: TokenizerExtension & RendererExtension = {
+  name: "wikiLink",
+  level: "inline",
+  start(src: string) {
+    return src.indexOf("[[");
+  },
+  tokenizer(src: string) {
+    const match = /^\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/.exec(src);
+    if (match && match[1] !== undefined) {
+      const path = match[1].trim();
+      const display = match[2]?.trim() ?? path;
+      return {
+        type: "wikiLink",
+        raw: match[0],
+        path,
+        display,
+      };
+    }
+    return undefined;
+  },
+  renderer(token) {
+    const t = token as unknown as { path: string; display: string };
+    const escapedPath = t.path.replace(/"/g, "&quot;");
+    const escapedDisplay = t.display
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    return `<a href="#" class="wiki-link" data-path="${escapedPath}">${escapedDisplay}</a>`;
+  },
+};
+
+// Register wiki-link extension with marked
+marked.use({ extensions: [wikiLinkExtension] });
+
+// Make libraries available globally for mertex.md AFTER extensions are registered
+if (typeof window !== "undefined") {
+  window.marked = marked;
+  window.hljs = hljs;
 }
 
 export class MarkdownViewer implements Component {
   private currentPath: string | null = null;
   private currentContent: string = "";
   private currentFileType: string = "plaintext";
+  private mertex: MertexMD;
   private handlers: Map<
     keyof MarkdownEvents,
     Set<EventHandler<MarkdownEvents[keyof MarkdownEvents]>>
@@ -25,7 +93,17 @@ export class MarkdownViewer implements Component {
   constructor(
     private container: HTMLElement,
     private ws: WebSocketClient
-  ) {}
+  ) {
+    this.mertex = new MertexMD({
+      breaks: true,
+      gfm: true,
+      headerIds: true,
+      highlight: true,
+      sanitize: true,
+      katex: false, // Disable KaTeX for now (can be enabled later)
+      mermaid: false, // Disable Mermaid for now (can be enabled later)
+    });
+  }
 
   /**
    * Initialize the viewer.
@@ -134,7 +212,19 @@ export class MarkdownViewer implements Component {
     content.className = "viewer-content";
 
     if (this.currentFileType === "markdown") {
-      content.innerHTML = this.renderMarkdown(this.currentContent);
+      const { frontmatter, content: markdown } = this.extractFrontmatter(
+        this.currentContent
+      );
+
+      if (frontmatter !== null) {
+        content.appendChild(this.renderFrontmatter(frontmatter));
+      }
+
+      const markdownContent = document.createElement("div");
+      markdownContent.className = "markdown-body";
+      markdownContent.innerHTML = this.mertex.render(markdown);
+      content.appendChild(markdownContent);
+
       this.attachLinkHandlers(content);
     } else {
       content.appendChild(
@@ -148,65 +238,111 @@ export class MarkdownViewer implements Component {
   }
 
   /**
-   * Basic markdown to HTML conversion.
+   * Extract YAML frontmatter from markdown content.
    */
-  private renderMarkdown(text: string): string {
-    let html = this.escapeHtml(text);
+  private extractFrontmatter(text: string): ParsedContent {
+    const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+    if (!match || match[1] === undefined || match[2] === undefined) {
+      return { frontmatter: null, content: text };
+    }
 
-    html = html.replace(
-      /```(\w+)?\n([\s\S]*?)```/g,
-      (_, lang: string | undefined, code: string) => {
-        const language = lang ?? "plaintext";
-        let highlighted: string;
-        try {
-          highlighted = hljs.highlight(code.trim(), { language }).value;
-        } catch {
-          highlighted = this.escapeHtml(code.trim());
-        }
-        return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
+    const frontmatter = this.parseYaml(match[1]);
+    return { frontmatter, content: match[2] };
+  }
+
+  /**
+   * Simple YAML parser for frontmatter.
+   * Handles basic key: value pairs, arrays, and nested objects.
+   */
+  private parseYaml(yaml: string): Frontmatter {
+    const result: Frontmatter = {};
+    const lines = yaml.split(/\r?\n/);
+
+    for (const line of lines) {
+      // Skip empty lines and comments
+      if (!line.trim() || line.trim().startsWith("#")) {
+        continue;
       }
-    );
 
-    html = html.replace(
-      /`([^`]+)`/g,
-      '<code class="inline-code">$1</code>'
-    );
+      const colonIndex = line.indexOf(":");
+      if (colonIndex === -1) continue;
 
-    html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>");
-    html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");
-    html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>");
+      const key = line.slice(0, colonIndex).trim();
+      let value: unknown = line.slice(colonIndex + 1).trim();
 
-    html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-    html = html.replace(/__(.+?)__/g, "<strong>$1</strong>");
-    html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
-    html = html.replace(/_(.+?)_/g, "<em>$1</em>");
+      // Handle inline arrays: [item1, item2]
+      if (typeof value === "string" && value.startsWith("[") && value.endsWith("]")) {
+        value = value
+          .slice(1, -1)
+          .split(",")
+          .map((v) => v.trim().replace(/^["']|["']$/g, ""));
+      }
+      // Handle quoted strings
+      else if (typeof value === "string" && /^["'].*["']$/.test(value)) {
+        value = value.slice(1, -1);
+      }
+      // Handle booleans
+      else if (value === "true") {
+        value = true;
+      } else if (value === "false") {
+        value = false;
+      }
+      // Handle numbers
+      else if (typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value)) {
+        value = parseFloat(value);
+      }
 
-    html = html.replace(
-      /\[([^\]]+)\]\(([^)]+)\)/g,
-      '<a href="$2" class="md-link">$1</a>'
-    );
+      if (key) {
+        result[key] = value;
+      }
+    }
 
-    html = html.replace(
-      /\[\[([^\]]+)\]\]/g,
-      '<a href="#" class="wiki-link" data-path="$1">$1</a>'
-    );
+    return result;
+  }
 
-    html = html.replace(/^[-*] (.+)$/gm, "<li>$1</li>");
-    html = html.replace(/(<li>.*<\/li>\n?)+/g, "<ul>$&</ul>");
+  /**
+   * Render frontmatter as a styled block.
+   */
+  private renderFrontmatter(frontmatter: Frontmatter): HTMLElement {
+    const container = document.createElement("div");
+    container.className = "frontmatter";
 
-    html = html.replace(/^\d+\. (.+)$/gm, "<li>$1</li>");
+    for (const [key, value] of Object.entries(frontmatter)) {
+      const row = document.createElement("div");
+      row.className = "frontmatter-row";
 
-    html = html.replace(/^&gt; (.+)$/gm, "<blockquote>$1</blockquote>");
+      const keySpan = document.createElement("span");
+      keySpan.className = "frontmatter-key";
+      keySpan.textContent = key;
 
-    html = html.replace(
-      /\n\n/g,
-      '</p><p class="md-paragraph">'
-    );
-    html = `<p class="md-paragraph">${html}</p>`;
+      const separator = document.createElement("span");
+      separator.className = "frontmatter-separator";
+      separator.textContent = ": ";
 
-    html = html.replace(/<p class="md-paragraph"><\/p>/g, "");
+      const valueSpan = document.createElement("span");
+      valueSpan.className = "frontmatter-value";
+      valueSpan.textContent = this.formatFrontmatterValue(value);
 
-    return html;
+      row.appendChild(keySpan);
+      row.appendChild(separator);
+      row.appendChild(valueSpan);
+      container.appendChild(row);
+    }
+
+    return container;
+  }
+
+  /**
+   * Format a frontmatter value for display.
+   */
+  private formatFrontmatterValue(value: unknown): string {
+    if (Array.isArray(value)) {
+      return value.join(", ");
+    }
+    if (value === null || value === undefined) {
+      return "";
+    }
+    return String(value);
   }
 
   /**
@@ -241,12 +377,9 @@ export class MarkdownViewer implements Component {
     wikiLinks.forEach((link) => {
       link.addEventListener("click", (e) => {
         e.preventDefault();
-        const path = (link as HTMLElement).dataset["path"];
-        if (path != null) {
-          let targetPath = path;
-          if (!path.endsWith(".md")) {
-            targetPath = `${path}.md`;
-          }
+        const linkPath = (link as HTMLElement).dataset["path"];
+        if (linkPath != null) {
+          const targetPath = this.resolveWikiLink(linkPath);
           this.emit("link-click", targetPath);
         }
       });
@@ -254,12 +387,58 @@ export class MarkdownViewer implements Component {
   }
 
   /**
-   * Escape HTML entities.
+   * Resolve a wiki-link path relative to the current file.
    */
-  private escapeHtml(text: string): string {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
+  private resolveWikiLink(linkPath: string): string {
+    let targetPath = linkPath;
+
+    // Handle directory links (ending with /)
+    if (targetPath.endsWith("/")) {
+      targetPath = `${targetPath}README.md`;
+    } else {
+      // Get filename (last segment after /)
+      const lastSlash = targetPath.lastIndexOf("/");
+      const filename = lastSlash === -1 ? targetPath : targetPath.slice(lastSlash + 1);
+
+      // Add .md if filename has no extension (no . or only leading .)
+      if (!filename.includes(".") || filename.startsWith(".")) {
+        targetPath = `${targetPath}.md`;
+      }
+    }
+
+    // If it's an absolute path (starts with /), use as-is
+    if (targetPath.startsWith("/")) {
+      return this.normalizePath(targetPath);
+    }
+
+    // Resolve relative to current file's directory
+    if (this.currentPath != null) {
+      const lastSlash = this.currentPath.lastIndexOf("/");
+      if (lastSlash !== -1) {
+        const currentDir = this.currentPath.slice(0, lastSlash + 1);
+        targetPath = currentDir + targetPath;
+      }
+    }
+
+    return this.normalizePath(targetPath);
+  }
+
+  /**
+   * Normalize a path by resolving . and .. segments.
+   */
+  private normalizePath(path: string): string {
+    const parts = path.split("/");
+    const result: string[] = [];
+
+    for (const part of parts) {
+      if (part === "..") {
+        result.pop();
+      } else if (part !== "." && part !== "") {
+        result.push(part);
+      }
+    }
+
+    return result.join("/");
   }
 
   /**
