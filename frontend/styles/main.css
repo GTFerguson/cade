@@ -160,7 +160,7 @@ body {
 
 .tab.active .tab-name {
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .tab-close {
@@ -257,7 +257,7 @@ body {
 
 /* Terminal pane */
 .terminal-pane {
-  padding: 8px 12px;
+  padding: 8px 4px 8px 12px;
   overflow: hidden;
   position: relative;
 }
@@ -272,10 +272,10 @@ body {
 .terminal-status-indicator {
   position: absolute;
   top: 8px;
-  right: 24px;
+  right: 16px;
   font-size: 10px;
   font-family: var(--font-mono);
-  font-weight: 500;
+  font-weight: 600;
   z-index: 10;
   pointer-events: none;
 }
@@ -372,7 +372,7 @@ body {
 
 /* Expanded folder name emphasis */
 .file-tree-row:has(.file-tree-chevron.expanded) .file-tree-name {
-  font-weight: 500;
+  font-weight: 600;
 }
 
 /* Spacer for alignment */
@@ -945,11 +945,9 @@ body {
   border-bottom: 4px solid var(--accent-red);
 }
 
-/* File tree keyboard selection */
-.file-tree-row.keyboard-selected {
-  background: var(--bg-selected);
-  outline: 1px solid var(--border-focus);
-  outline-offset: -1px;
+/* File tree keyboard selection - only visible when pane is focused */
+.pane.pane-focused .file-tree-row.keyboard-selected {
+  background: rgba(255, 44, 75, 0.15);
 }
 
 /* File tree search input */

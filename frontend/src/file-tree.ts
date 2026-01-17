@@ -20,6 +20,7 @@ export class FileTree implements Component, PaneKeyHandler {
   private tree: FileNode[] = [];
   private expandedPaths: Set<string> = new Set();
   private selectedPath: string | null = null;
+  private openPath: string | null = null;
   private recentlyChanged: Set<string> = new Set();
   private handlers: Map<
     keyof FileTreeEvents,
@@ -180,8 +181,10 @@ export class FileTree implements Component, PaneKeyHandler {
     row.className = "file-tree-row";
     row.style.paddingLeft = `${depth * 16 + 8}px`;
 
-    if (node.path === this.selectedPath) {
+    if (node.path === this.openPath) {
       row.classList.add("selected");
+    }
+    if (node.path === this.selectedPath) {
       row.classList.add("keyboard-selected");
     }
 
@@ -257,6 +260,7 @@ export class FileTree implements Component, PaneKeyHandler {
    */
   private selectFile(path: string): void {
     this.selectedPath = path;
+    this.openPath = path;
     this.render();
     this.emit("file-select", path);
   }
@@ -284,6 +288,7 @@ export class FileTree implements Component, PaneKeyHandler {
    */
   revealFile(path: string): void {
     this.selectedPath = path;
+    this.openPath = path;
 
     // Expand all parent folders
     const parts = path.split("/");
@@ -322,10 +327,17 @@ export class FileTree implements Component, PaneKeyHandler {
   }
 
   /**
-   * Get the currently selected file path.
+   * Get the keyboard-focused path.
    */
   getSelectedPath(): string | null {
     return this.selectedPath;
+  }
+
+  /**
+   * Get the currently open file path.
+   */
+  getOpenPath(): string | null {
+    return this.openPath;
   }
 
   /**
@@ -413,6 +425,8 @@ export class FileTree implements Component, PaneKeyHandler {
         this.onExpandChangeCallback?.();
       }
     } else {
+      this.openPath = item.node.path;
+      this.render();
       this.emit("file-select", item.node.path);
     }
   }
@@ -525,6 +539,7 @@ export class FileTree implements Component, PaneKeyHandler {
         if (item) {
           this.selectedPath = item.node.path;
           if (item.node.type === "file") {
+            this.openPath = item.node.path;
             this.emit("file-select", item.node.path);
           }
         }
