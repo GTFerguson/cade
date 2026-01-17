@@ -3,7 +3,7 @@ title: Frontend Architecture
 created: 2026-01-17
 updated: 2026-01-17
 status: active
-tags: [technical, frontend, architecture]
+tags: [technical, frontend, architecture, wiki-links]
 ---
 
 # Frontend Architecture
@@ -127,6 +127,31 @@ Renders file content with syntax highlighting.
 - Unordered and ordered lists
 - Blockquotes
 - Standard and wiki-style links
+
+**Wiki-link Syntax:**
+
+| Syntax | Description |
+|--------|-------------|
+| `[[path]]` | Link using path as display text |
+| `[[path\|display]]` | Link with custom display text |
+
+**Wiki-link Path Resolution:**
+
+Wiki-links are resolved relative to the current file's directory.
+
+| Link | From File | Resolves To |
+|------|-----------|-------------|
+| `[[sibling]]` | `docs/user/README.md` | `docs/user/sibling.md` |
+| `[[../README]]` | `docs/user/README.md` | `docs/README.md` |
+| `[[subfolder/]]` | `docs/README.md` | `docs/subfolder/README.md` |
+| `[[file.md]]` | Any | No extension added (already has one) |
+
+Resolution rules:
+
+1. **Extension handling**: `.md` is added automatically if the filename has no extension
+2. **Directory links**: Paths ending with `/` resolve to `README.md` in that directory
+3. **Relative paths**: `..` and `.` segments are normalized correctly
+4. **Absolute paths**: Paths starting with `/` are used as-is (from project root)
 
 ### MobileUI (`mobile.ts`)
 
