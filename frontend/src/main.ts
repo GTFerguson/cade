@@ -7,6 +7,8 @@ import "highlight.js/styles/vs2015.css";
 import "../styles/main.css";
 
 import { config } from "./config";
+import { HelpOverlay } from "./help-overlay";
+import { KeybindingManager } from "./keybindings";
 import { MobileUI } from "./mobile";
 import { ProjectContextImpl, TabBar, TabManager } from "./tabs";
 import type { TabState } from "./tabs";
@@ -17,10 +19,14 @@ class App {
   private mobileUI: MobileUI | null = null;
   private tabContentContainer: HTMLElement | null = null;
   private defaultProjectPath: string;
+  private keybindingManager: KeybindingManager;
+  private helpOverlay: HelpOverlay;
 
   constructor() {
     this.tabManager = new TabManager();
     this.defaultProjectPath = this.getDefaultProjectPath();
+    this.keybindingManager = new KeybindingManager();
+    this.helpOverlay = new HelpOverlay();
   }
 
   /**
@@ -48,6 +54,11 @@ class App {
     if (this.tabContentContainer == null) {
       throw new Error("Tab content container not found");
     }
+
+    // Initialize keybinding manager and help overlay FIRST
+    // This ensures event listeners are ready before any other UI components
+    this.keybindingManager.initialize();
+    this.helpOverlay.initialize();
 
     this.tabBar = new TabBar(tabBarContainer);
     this.tabBar.initialize();
@@ -99,6 +110,51 @@ class App {
       this.mobileUI.initialize();
     }
 
+    // Set up keybinding callbacks (manager already initialized above)
+    this.keybindingManager.setCallbacks({
+      focusPane: (direction) => {
+        const activeTab = this.tabManager.getActiveTab();
+        activeTab?.context?.cycleFocus(direction);
+      },
+      resizePane: (direction) => {
+        const activeTab = this.tabManager.getActiveTab();
+        activeTab?.context?.getLayout()?.adjustByKeyboard(direction);
+      },
+      nextTab: () => {
+        this.tabManager.nextTab();
+      },
+      previousTab: () => {
+        this.tabManager.previousTab();
+      },
+      goToTab: (index) => {
+        this.tabManager.goToTab(index);
+      },
+      createTab: () => {
+        this.handleAddTab();
+      },
+      closeTab: () => {
+        const activeId = this.tabManager.getActiveTabId();
+        if (activeId) {
+          this.handleTabClose(activeId);
+        }
+      },
+      showHelp: () => {
+        this.helpOverlay.show();
+      },
+      toggleTerminal: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        activeTab?.context?.toggleTerminal();
+      },
+      getFocusedPane: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        return activeTab?.context?.getFocusedPane() ?? "terminal";
+      },
+      getPaneHandler: (pane) => {
+        const activeTab = this.tabManager.getActiveTab();
+        return activeTab?.context?.getPaneHandler(pane) ?? null;
+      },
+    });
+
     window.addEventListener("beforeunload", () => {
       this.dispose();
     });
@@ -135,8 +191,21 @@ class App {
       this.tabManager.setConnected(tab.id, false);
     });
 
-    tab.ws.sendSetProject(tab.projectPath);
+    tab.ws.sendSetProject(tab.projectPath, tab.id);
     tab.ws.connect();
+
+    // Set up terminal key handler for prefix key interception
+    context.setTerminalKeyHandler((e) => {
+      // Intercept Ctrl-a (prefix key)
+      if (e.ctrlKey && e.key === "a" && !e.shiftKey && !e.altKey && !e.metaKey) {
+        return true; // Prevent terminal from handling, let keybinding manager handle it
+      }
+      // If prefix is active, intercept all keys
+      if (this.keybindingManager.isPrefixActive()) {
+        return true;
+      }
+      return false;
+    });
 
     if (this.tabManager.getActiveTabId() === tab.id) {
       context.show();
@@ -196,6 +265,8 @@ class App {
    * Dispose of all resources.
    */
   async dispose(): Promise<void> {
+    this.keybindingManager.dispose();
+    this.helpOverlay.dispose();
     this.mobileUI?.dispose();
     this.tabBar?.dispose();
     this.tabManager.dispose();

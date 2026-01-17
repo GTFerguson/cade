@@ -6,6 +6,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { SessionKey, type SessionKeyValue } from "./protocol";
 import type { Component } from "./types";
 import type { WebSocketClient } from "./websocket";
 
@@ -41,15 +42,29 @@ const BADWOLF_THEME = {
   brightWhite: "#ffffff", // snow
 };
 
+export type CustomKeyHandler = (e: KeyboardEvent) => boolean;
+
+export interface TerminalOptions {
+  sessionKey?: SessionKeyValue;
+  subscribeToOutput?: boolean;
+}
+
 export class Terminal implements Component {
   private terminal: XTerm | null = null;
   private fitAddon: FitAddon | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private customKeyHandler: CustomKeyHandler | null = null;
+  private sessionKey: SessionKeyValue;
+  private subscribeToOutput: boolean;
 
   constructor(
     private container: HTMLElement,
-    private ws: WebSocketClient
-  ) {}
+    private ws: WebSocketClient,
+    options: TerminalOptions = {}
+  ) {
+    this.sessionKey = options.sessionKey ?? SessionKey.CLAUDE;
+    this.subscribeToOutput = options.subscribeToOutput ?? true;
+  }
 
   /**
    * Initialize the terminal.
@@ -80,19 +95,34 @@ export class Terminal implements Component {
       // WebGL not available, fall back to canvas renderer
     }
 
+    // Allow external key interception (e.g., for prefix key)
+    this.terminal.attachCustomKeyEventHandler((e) => {
+      if (this.customKeyHandler) {
+        // Return false to prevent xterm from handling the key
+        return !this.customKeyHandler(e);
+      }
+      return true;
+    });
+
     this.fit();
 
     this.terminal.onData((data) => {
-      this.ws.sendInput(data);
+      this.ws.sendInput(data, this.sessionKey);
     });
 
     this.terminal.onResize(({ cols, rows }) => {
-      this.ws.sendResize(cols, rows);
+      this.ws.sendResize(cols, rows, this.sessionKey);
     });
 
-    this.ws.on("output", (message) => {
-      this.terminal?.write(message.data);
-    });
+    if (this.subscribeToOutput) {
+      this.ws.on("output", (message) => {
+        // Only handle output for our sessionKey
+        const msgSessionKey = message.sessionKey ?? SessionKey.CLAUDE;
+        if (msgSessionKey === this.sessionKey) {
+          this.terminal?.write(message.data);
+        }
+      });
+    }
 
     this.ws.on("connected", () => {
       this.sendSize();
@@ -135,6 +165,21 @@ export class Terminal implements Component {
    */
   focus(): void {
     this.terminal?.focus();
+  }
+
+  /**
+   * Set a custom key handler that can intercept keys before xterm.
+   * Return true from the handler to prevent xterm from processing the key.
+   */
+  setCustomKeyHandler(handler: CustomKeyHandler | null): void {
+    this.customKeyHandler = handler;
+  }
+
+  /**
+   * Get the session key for this terminal.
+   */
+  getSessionKey(): SessionKeyValue {
+    return this.sessionKey;
   }
 
   /**

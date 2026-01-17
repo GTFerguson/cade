@@ -279,6 +279,45 @@ export class Layout implements Component {
   }
 
   /**
+   * Adjust proportions via keyboard shortcut.
+   * Direction "left" shrinks left pane / grows right.
+   * Direction "right" grows left pane / shrinks right.
+   */
+  adjustByKeyboard(direction: "left" | "right"): void {
+    const STEP = 0.05;
+    const MIN_PROPORTION = 0.1;
+    const MAX_PROPORTION = 0.6;
+
+    if (direction === "left") {
+      // Shrink file tree, grow viewer
+      const newFileTree = Math.max(MIN_PROPORTION, this.proportions.fileTree - STEP);
+      const diff = this.proportions.fileTree - newFileTree;
+      const newViewer = Math.min(MAX_PROPORTION, this.proportions.viewer + diff);
+
+      this.proportions = {
+        fileTree: newFileTree,
+        terminal: 1 - newFileTree - newViewer,
+        viewer: newViewer,
+      };
+    } else {
+      // Grow file tree, shrink viewer
+      const newFileTree = Math.min(MAX_PROPORTION, this.proportions.fileTree + STEP);
+      const diff = newFileTree - this.proportions.fileTree;
+      const newViewer = Math.max(MIN_PROPORTION, this.proportions.viewer - diff);
+
+      this.proportions = {
+        fileTree: newFileTree,
+        terminal: 1 - newFileTree - newViewer,
+        viewer: newViewer,
+      };
+    }
+
+    this.applyProportions();
+    this.onChangeCallback?.();
+    window.dispatchEvent(new Event("resize"));
+  }
+
+  /**
    * Dispose of resources.
    */
   dispose(): void {

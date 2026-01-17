@@ -1,7 +1,8 @@
 /**
- * File tree UI component.
+ * File tree UI component with vim-style keyboard navigation.
  */
 
+import type { PaneKeyHandler } from "./keybindings";
 import type { Component, EventHandler, FileNode } from "./types";
 import type { WebSocketClient } from "./websocket";
 
@@ -9,7 +10,13 @@ interface FileTreeEvents {
   "file-select": string;
 }
 
-export class FileTree implements Component {
+interface FlatNode {
+  node: FileNode;
+  depth: number;
+  parentPath: string | null;
+}
+
+export class FileTree implements Component, PaneKeyHandler {
   private tree: FileNode[] = [];
   private expandedPaths: Set<string> = new Set();
   private selectedPath: string | null = null;
@@ -19,6 +26,14 @@ export class FileTree implements Component {
     Set<EventHandler<FileTreeEvents[keyof FileTreeEvents]>>
   > = new Map();
   private onExpandChangeCallback: (() => void) | null = null;
+
+  // Keyboard navigation state
+  private flatList: FlatNode[] = [];
+  private selectedIndex = 0;
+  private searchMode = false;
+  private searchQuery = "";
+  private searchInput: HTMLInputElement | null = null;
+  private lastGPress = 0;
 
   constructor(
     private container: HTMLElement,
@@ -104,6 +119,45 @@ export class FileTree implements Component {
   private render(): void {
     this.container.innerHTML = "";
 
+    // Build flat list for keyboard navigation
+    this.flatList = this.buildFlatList();
+
+    // Sync selectedIndex with selectedPath
+    if (this.selectedPath) {
+      const idx = this.flatList.findIndex(
+        (f) => f.node.path === this.selectedPath
+      );
+      if (idx >= 0) {
+        this.selectedIndex = idx;
+      }
+    }
+
+    // Ensure selectedIndex is valid
+    if (this.selectedIndex >= this.flatList.length) {
+      this.selectedIndex = Math.max(0, this.flatList.length - 1);
+    }
+
+    // Search input
+    if (this.searchMode) {
+      const searchContainer = document.createElement("div");
+      searchContainer.className = "file-tree-search";
+
+      this.searchInput = document.createElement("input");
+      this.searchInput.type = "text";
+      this.searchInput.className = "file-tree-search-input";
+      this.searchInput.placeholder = "Filter...";
+      this.searchInput.value = this.searchQuery;
+      this.searchInput.addEventListener("input", (e) => {
+        this.onSearchInputChange((e.target as HTMLInputElement).value);
+      });
+
+      searchContainer.appendChild(this.searchInput);
+      this.container.appendChild(searchContainer);
+
+      // Focus after appending
+      setTimeout(() => this.searchInput?.focus(), 0);
+    }
+
     const ul = document.createElement("ul");
     ul.className = "file-tree-root";
 
@@ -128,6 +182,7 @@ export class FileTree implements Component {
 
     if (node.path === this.selectedPath) {
       row.classList.add("selected");
+      row.classList.add("keyboard-selected");
     }
 
     if (this.recentlyChanged.has(node.path)) {
@@ -278,6 +333,270 @@ export class FileTree implements Component {
    */
   onExpandChange(callback: () => void): void {
     this.onExpandChangeCallback = callback;
+  }
+
+  /**
+   * Handle keyboard navigation (called by KeybindingManager).
+   * Returns true if the key was handled.
+   */
+  handleKeydown(e: KeyboardEvent): boolean {
+    if (this.searchMode) {
+      return this.handleSearchInput(e);
+    }
+
+    switch (e.key) {
+      case "j":
+      case "ArrowDown":
+        this.moveSelection(1);
+        return true;
+      case "k":
+      case "ArrowUp":
+        this.moveSelection(-1);
+        return true;
+      case "l":
+      case "Enter":
+        this.expandOrOpen();
+        return true;
+      case "h":
+        this.collapseOrParent();
+        return true;
+      case "g":
+        return this.handleGKey();
+      case "G":
+        this.jumpToBottom();
+        return true;
+      case "/":
+        this.enterSearchMode();
+        return true;
+      case "Escape":
+        this.clearSearch();
+        return true;
+    }
+    return false;
+  }
+
+  /**
+   * Move selection by delta items.
+   */
+  private moveSelection(delta: number): void {
+    if (this.flatList.length === 0) {
+      return;
+    }
+
+    const newIndex = Math.max(
+      0,
+      Math.min(this.flatList.length - 1, this.selectedIndex + delta)
+    );
+
+    this.selectedIndex = newIndex;
+    const item = this.flatList[newIndex];
+    if (item) {
+      this.selectedPath = item.node.path;
+      this.render();
+      this.scrollSelectedIntoView();
+    }
+  }
+
+  /**
+   * Expand folder or open file at current selection.
+   */
+  private expandOrOpen(): void {
+    const item = this.flatList[this.selectedIndex];
+    if (!item) {
+      return;
+    }
+
+    if (item.node.type === "directory") {
+      if (!this.expandedPaths.has(item.node.path)) {
+        this.expandedPaths.add(item.node.path);
+        this.render();
+        this.onExpandChangeCallback?.();
+      }
+    } else {
+      this.emit("file-select", item.node.path);
+    }
+  }
+
+  /**
+   * Collapse folder or navigate to parent.
+   */
+  private collapseOrParent(): void {
+    const item = this.flatList[this.selectedIndex];
+    if (!item) {
+      return;
+    }
+
+    if (item.node.type === "directory" && this.expandedPaths.has(item.node.path)) {
+      this.expandedPaths.delete(item.node.path);
+      this.render();
+      this.onExpandChangeCallback?.();
+    } else if (item.parentPath) {
+      // Navigate to parent
+      const parentIndex = this.flatList.findIndex(
+        (f) => f.node.path === item.parentPath
+      );
+      if (parentIndex >= 0) {
+        this.selectedIndex = parentIndex;
+        this.selectedPath = item.parentPath;
+        this.render();
+        this.scrollSelectedIntoView();
+      }
+    }
+  }
+
+  /**
+   * Handle 'g' key for gg detection.
+   */
+  private handleGKey(): boolean {
+    const now = Date.now();
+    if (now - this.lastGPress < 500) {
+      this.jumpToTop();
+      this.lastGPress = 0;
+      return true;
+    }
+    this.lastGPress = now;
+    return true;
+  }
+
+  /**
+   * Jump to top of list.
+   */
+  private jumpToTop(): void {
+    if (this.flatList.length === 0) {
+      return;
+    }
+    this.selectedIndex = 0;
+    const item = this.flatList[0];
+    if (item) {
+      this.selectedPath = item.node.path;
+      this.render();
+      this.scrollSelectedIntoView();
+    }
+  }
+
+  /**
+   * Jump to bottom of list.
+   */
+  private jumpToBottom(): void {
+    if (this.flatList.length === 0) {
+      return;
+    }
+    this.selectedIndex = this.flatList.length - 1;
+    const item = this.flatList[this.selectedIndex];
+    if (item) {
+      this.selectedPath = item.node.path;
+      this.render();
+      this.scrollSelectedIntoView();
+    }
+  }
+
+  /**
+   * Enter search/filter mode.
+   */
+  private enterSearchMode(): void {
+    this.searchMode = true;
+    this.searchQuery = "";
+    this.render();
+    this.searchInput?.focus();
+  }
+
+  /**
+   * Clear search and exit search mode.
+   */
+  private clearSearch(): void {
+    this.searchMode = false;
+    this.searchQuery = "";
+    this.render();
+  }
+
+  /**
+   * Handle input in search mode.
+   */
+  private handleSearchInput(e: KeyboardEvent): boolean {
+    if (e.key === "Escape") {
+      this.clearSearch();
+      return true;
+    }
+    if (e.key === "Enter") {
+      // Select first matching item
+      if (this.flatList.length > 0) {
+        this.selectedIndex = 0;
+        const item = this.flatList[0];
+        if (item) {
+          this.selectedPath = item.node.path;
+          if (item.node.type === "file") {
+            this.emit("file-select", item.node.path);
+          }
+        }
+      }
+      this.searchMode = false;
+      this.render();
+      return true;
+    }
+    // Let the input handle the key
+    return false;
+  }
+
+  /**
+   * Handle search input change.
+   */
+  private onSearchInputChange(query: string): void {
+    this.searchQuery = query.toLowerCase();
+    this.render();
+  }
+
+  /**
+   * Scroll the selected item into view.
+   */
+  private scrollSelectedIntoView(): void {
+    const selectedRow = this.container.querySelector(
+      `.file-tree-row.keyboard-selected`
+    );
+    if (selectedRow) {
+      selectedRow.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  /**
+   * Build a flat list of visible nodes for keyboard navigation.
+   */
+  private buildFlatList(): FlatNode[] {
+    const result: FlatNode[] = [];
+    const searchLower = this.searchQuery.toLowerCase();
+
+    const traverse = (
+      nodes: FileNode[],
+      depth: number,
+      parentPath: string | null
+    ): void => {
+      for (const node of nodes) {
+        // If searching, filter by name match
+        if (
+          this.searchMode &&
+          searchLower &&
+          !node.name.toLowerCase().includes(searchLower)
+        ) {
+          // Still recurse into directories to find matching children
+          if (node.type === "directory" && node.children) {
+            traverse(node.children, depth + 1, node.path);
+          }
+          continue;
+        }
+
+        result.push({ node, depth, parentPath });
+
+        if (
+          node.type === "directory" &&
+          this.expandedPaths.has(node.path) &&
+          node.children
+        ) {
+          traverse(node.children, depth + 1, node.path);
+        }
+      }
+    };
+
+    traverse(this.tree, 0, null);
+    return result;
   }
 
   /**
