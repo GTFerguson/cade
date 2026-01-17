@@ -65,6 +65,12 @@ plans/ (active) --> docs/technical/ (complete)
                 --> docs/future/ (deferred)
 ```
 
+## Git Commits
+
+- **Do NOT include `Co-Authored-By` lines** in commit messages
+- Write clear, concise commit messages describing what changed and why
+- Follow existing commit style (see `git log --oneline`)
+
 ## Build Commands
 
 *To be added once build system is established.*

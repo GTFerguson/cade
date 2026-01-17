@@ -16,3 +16,9 @@ nul
 # Environment
 .env
 .env.local
+
+# Project session data
+.ccplus/
+
+# Claude Code local settings
+.claude/settings.local.json
