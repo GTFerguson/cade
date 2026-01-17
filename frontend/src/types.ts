@@ -90,6 +90,14 @@ export interface SaveSessionMessage extends BaseMessage {
 }
 
 /**
+ * Set project directory (client -> server).
+ */
+export interface SetProjectMessage extends BaseMessage {
+  type: "set-project";
+  path: string;
+}
+
+/**
  * Terminal output message (server -> client).
  */
 export interface OutputMessage extends BaseMessage {
@@ -150,7 +158,8 @@ export type ClientMessage =
   | ResizeMessage
   | GetFileMessage
   | GetTreeMessage
-  | SaveSessionMessage;
+  | SaveSessionMessage
+  | SetProjectMessage;
 
 /**
  * Union of all server -> client messages.

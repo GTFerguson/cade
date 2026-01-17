@@ -16,6 +16,7 @@ class MessageType:
     GET_FILE = "get-file"  # Request file content: { type, path: str }
     GET_TREE = "get-tree"  # Request file tree: { type }
     SAVE_SESSION = "save-session"  # Save session state: { type, state: SessionState }
+    SET_PROJECT = "set-project"  # Set project directory: { type, path: str }
 
     # Server -> Client
     OUTPUT = "output"  # Terminal output: { type, data: str }

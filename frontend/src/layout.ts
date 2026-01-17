@@ -110,6 +110,20 @@ export class Layout implements Component {
       "4px",
       `${viewer * 100}%`,
     ].join(" ");
+
+    // Sync proportions to CSS custom properties for tab bar alignment
+    document.documentElement.style.setProperty(
+      "--layout-file-tree",
+      `${fileTree * 100}%`
+    );
+    document.documentElement.style.setProperty(
+      "--layout-terminal",
+      `${terminal * 100}%`
+    );
+    document.documentElement.style.setProperty(
+      "--layout-viewer",
+      `${viewer * 100}%`
+    );
   }
 
   /**

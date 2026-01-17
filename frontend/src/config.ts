@@ -9,6 +9,11 @@ export const config = {
   wsUrl: `ws://${window.location.host}/ws`,
 
   /**
+   * Default project path when no tabs exist.
+   */
+  defaultProjectPath: ".",
+
+  /**
    * Maximum reconnection attempts before giving up.
    */
   reconnectMaxAttempts: 5,

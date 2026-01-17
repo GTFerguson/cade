@@ -12,6 +12,7 @@ export const MessageType = {
   GET_FILE: "get-file",
   GET_TREE: "get-tree",
   SAVE_SESSION: "save-session",
+  SET_PROJECT: "set-project",
 
   // Server -> Client
   OUTPUT: "output",

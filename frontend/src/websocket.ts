@@ -36,6 +36,7 @@ export class WebSocketClient {
   private reconnectTimer: number | null = null;
   private handlers: Map<keyof WebSocketEvents, Set<EventHandler<unknown>>> =
     new Map();
+  private pendingProjectPath: string | null = null;
 
   constructor(private url: string = config.wsUrl) {}
 
@@ -93,6 +94,10 @@ export class WebSocketClient {
       this.state = "connected";
       this.reconnectAttempts = 0;
       console.log("WebSocket connected");
+
+      if (this.pendingProjectPath !== null) {
+        this.send({ type: MessageType.SET_PROJECT, path: this.pendingProjectPath });
+      }
     };
 
     this.ws.onclose = () => {
@@ -173,6 +178,17 @@ export class WebSocketClient {
    */
   saveSession(state: Partial<SessionState>): void {
     this.send({ type: MessageType.SAVE_SESSION, state });
+  }
+
+  /**
+   * Set project directory for this connection.
+   * If not connected yet, the path is stored and sent on connect.
+   */
+  sendSetProject(path: string): void {
+    this.pendingProjectPath = path;
+    if (this.state === "connected") {
+      this.send({ type: MessageType.SET_PROJECT, path });
+    }
   }
 
   /**

@@ -6,179 +6,199 @@ import "@xterm/xterm/css/xterm.css";
 import "highlight.js/styles/vs2015.css";
 import "../styles/main.css";
 
-import { FileTree } from "./file-tree";
-import { Layout } from "./layout";
-import { MarkdownViewer } from "./markdown";
+import { config } from "./config";
 import { MobileUI } from "./mobile";
-import { Terminal } from "./terminal";
-import { WebSocketClient } from "./websocket";
-import type { Component, SessionState } from "./types";
+import { ProjectContextImpl, TabBar, TabManager } from "./tabs";
+import type { TabState } from "./tabs";
 
 class App {
-  private components: Component[] = [];
-  private ws: WebSocketClient;
-  private layout: Layout | null = null;
-  private terminal: Terminal | null = null;
-  private fileTree: FileTree | null = null;
-  private viewer: MarkdownViewer | null = null;
+  private tabManager: TabManager;
+  private tabBar: TabBar | null = null;
   private mobileUI: MobileUI | null = null;
-  private saveTimeout: number | null = null;
-  private pendingSession: SessionState | null = null;
+  private tabContentContainer: HTMLElement | null = null;
+  private defaultProjectPath: string;
 
   constructor() {
-    this.ws = new WebSocketClient();
+    this.tabManager = new TabManager();
+    this.defaultProjectPath = this.getDefaultProjectPath();
+  }
+
+  /**
+   * Get the default project path from config or use a fallback.
+   */
+  private getDefaultProjectPath(): string {
+    const searchParams = new URLSearchParams(window.location.search);
+    const pathParam = searchParams.get("project");
+    if (pathParam) {
+      return pathParam;
+    }
+    return config.defaultProjectPath || ".";
   }
 
   /**
    * Initialize the application.
    */
   async initialize(): Promise<void> {
-    const appContainer = document.getElementById("app");
-    if (appContainer == null) {
-      throw new Error("App container not found");
+    const tabBarContainer = document.getElementById("tab-bar");
+    if (tabBarContainer == null) {
+      throw new Error("Tab bar container not found");
     }
 
-    this.layout = new Layout(appContainer);
-    this.layout.initialize();
-    this.components.push(this.layout);
+    this.tabContentContainer = document.getElementById("tab-content");
+    if (this.tabContentContainer == null) {
+      throw new Error("Tab content container not found");
+    }
 
-    const containers = this.layout.getContainers();
+    this.tabBar = new TabBar(tabBarContainer);
+    this.tabBar.initialize();
 
-    this.terminal = new Terminal(containers.terminal, this.ws);
-    this.terminal.initialize();
-    this.components.push(this.terminal);
+    await this.tabManager.initialize();
 
-    this.fileTree = new FileTree(containers.fileTree, this.ws);
-    this.fileTree.initialize();
-    this.components.push(this.fileTree);
-
-    this.viewer = new MarkdownViewer(containers.viewer, this.ws);
-    this.viewer.initialize();
-    this.components.push(this.viewer);
-
-    this.mobileUI = new MobileUI(this.ws);
-    this.mobileUI.initialize();
-    this.components.push(this.mobileUI);
-
-    this.fileTree.on("file-select", (path) => {
-      this.viewer?.loadFile(path);
-      this.scheduleSave();
+    this.tabBar.on("tab-select", (id) => {
+      this.tabManager.switchTab(id);
     });
 
-    this.fileTree.onExpandChange(() => {
-      this.scheduleSave();
+    this.tabBar.on("tab-close", (id) => {
+      this.handleTabClose(id);
     });
 
-    this.viewer.on("link-click", (path) => {
-      this.viewer?.loadFile(path);
-      this.fileTree?.revealFile(path);
-      this.scheduleSave();
+    this.tabBar.on("tab-add", () => {
+      this.handleAddTab();
     });
 
-    this.layout.onChange(() => {
-      this.scheduleSave();
+    this.tabManager.on("tab-created", (tab) => {
+      this.initializeTabContext(tab);
     });
 
-    this.ws.on("connected", (message) => {
-      console.log("Connected to server:", message.workingDir);
-      if (message.session != null) {
-        this.pendingSession = message.session;
+    this.tabManager.on("tab-switched", (tab) => {
+      this.handleTabSwitch(tab);
+    });
+
+    this.tabManager.on("tabs-changed", (tabs) => {
+      this.tabBar?.render(tabs, this.tabManager.getActiveTabId());
+    });
+
+    if (!this.tabManager.hasTabs()) {
+      this.tabManager.createTab(this.defaultProjectPath);
+    } else {
+      const tabs = this.tabManager.getTabs();
+      for (const tab of tabs) {
+        await this.initializeTabContext(tab);
       }
-    });
+      this.tabBar.render(tabs, this.tabManager.getActiveTabId());
 
-    this.ws.on("file-tree", () => {
-      if (this.pendingSession != null) {
-        this.restoreSession(this.pendingSession);
-        this.pendingSession = null;
+      const restoredActiveTab = this.tabManager.getActiveTab();
+      if (restoredActiveTab) {
+        this.handleTabSwitch(restoredActiveTab);
       }
-    });
+    }
 
-    this.ws.on("disconnected", () => {
-      console.log("Disconnected from server");
-    });
-
-    this.ws.on("error", (message) => {
-      console.error("Server error:", message.code, message.message);
-    });
-
-    this.ws.connect();
+    const initialActiveTab = this.tabManager.getActiveTab();
+    if (initialActiveTab) {
+      this.mobileUI = new MobileUI(initialActiveTab.ws);
+      this.mobileUI.initialize();
+    }
 
     window.addEventListener("beforeunload", () => {
-      this.saveSessionNow();
       this.dispose();
     });
-
-    this.terminal.focus();
   }
 
   /**
-   * Restore session state.
+   * Initialize context for a tab.
    */
-  private restoreSession(session: SessionState): void {
-    if (session.expandedPaths != null && this.fileTree != null) {
-      this.fileTree.setExpandedPaths(session.expandedPaths);
+  private async initializeTabContext(tab: TabState): Promise<void> {
+    if (tab.context != null || this.tabContentContainer == null) {
+      return;
     }
 
-    if (session.layout != null && this.layout != null) {
-      this.layout.setProportions(session.layout);
-    }
+    const context = new ProjectContextImpl(
+      tab.id,
+      tab.projectPath,
+      tab.name,
+      tab.ws,
+      this.tabContentContainer
+    );
 
-    if (session.viewerPath != null && this.viewer != null) {
-      this.viewer.loadFile(session.viewerPath);
-      this.fileTree?.revealFile(session.viewerPath);
+    tab.context = context;
+
+    await context.initialize();
+
+    tab.ws.on("connected", (message) => {
+      this.tabManager.setConnected(tab.id, true);
+      if (message.workingDir) {
+        this.tabManager.updateTabPath(tab.id, message.workingDir);
+      }
+    });
+
+    tab.ws.on("disconnected", () => {
+      this.tabManager.setConnected(tab.id, false);
+    });
+
+    tab.ws.sendSetProject(tab.projectPath);
+    tab.ws.connect();
+
+    if (this.tabManager.getActiveTabId() === tab.id) {
+      context.show();
+      context.focus();
     }
   }
 
   /**
-   * Build current session state.
+   * Handle tab switch.
    */
-  private buildSessionState(): Partial<SessionState> {
-    return {
-      expandedPaths: this.fileTree?.getExpandedPaths() ?? [],
-      viewerPath: this.viewer?.getCurrentPath() ?? null,
-      layout: this.layout?.getProportions() ?? null,
-    };
-  }
-
-  /**
-   * Schedule a debounced session save.
-   */
-  private scheduleSave(): void {
-    if (this.saveTimeout != null) {
-      window.clearTimeout(this.saveTimeout);
-    }
-    this.saveTimeout = window.setTimeout(() => {
-      this.saveTimeout = null;
-      this.saveSessionNow();
-    }, 500);
-  }
-
-  /**
-   * Save session immediately.
-   */
-  private saveSessionNow(): void {
-    if (this.saveTimeout != null) {
-      window.clearTimeout(this.saveTimeout);
-      this.saveTimeout = null;
-    }
-    this.ws.saveSession(this.buildSessionState());
-  }
-
-  /**
-   * Dispose of all components.
-   */
-  async dispose(): Promise<void> {
-    this.ws.disconnect();
-
-    for (const component of this.components) {
-      try {
-        await component.dispose();
-      } catch (e) {
-        console.error("Error disposing component:", e);
+  private handleTabSwitch(tab: TabState): void {
+    for (const t of this.tabManager.getTabs()) {
+      if (t.id === tab.id) {
+        t.context?.show();
+      } else {
+        t.context?.hide();
       }
     }
 
-    this.components = [];
+    tab.context?.focus();
+
+    this.tabBar?.render(
+      this.tabManager.getTabs(),
+      this.tabManager.getActiveTabId()
+    );
+  }
+
+  /**
+   * Handle tab close.
+   */
+  private handleTabClose(id: string): void {
+    const tabs = this.tabManager.getTabs();
+
+    if (tabs.length <= 1) {
+      return;
+    }
+
+    this.tabManager.closeTab(id);
+  }
+
+  /**
+   * Handle add tab button click.
+   */
+  private handleAddTab(): void {
+    const path = window.prompt(
+      "Enter project path:",
+      this.defaultProjectPath
+    );
+
+    if (path) {
+      const tab = this.tabManager.createTab(path);
+      this.tabManager.switchTab(tab.id);
+    }
+  }
+
+  /**
+   * Dispose of all resources.
+   */
+  async dispose(): Promise<void> {
+    this.mobileUI?.dispose();
+    this.tabBar?.dispose();
+    this.tabManager.dispose();
   }
 }
 

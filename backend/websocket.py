@@ -35,17 +35,20 @@ class ConnectionHandler:
     ) -> None:
         self._ws = websocket
         self._config = config
+        self._working_dir: Path = config.working_dir
         self._pty: PTYManager | None = None
         self._watcher: FileWatcher | None = None
         self._closed = False
         self._suppress_output = False
         self._suppress_start_time: float | None = None
+        self._project_set = asyncio.Event()
 
     async def handle(self) -> None:
         """Main connection handler loop."""
         await self._ws.accept()
 
         try:
+            await self._wait_for_project()
             await self._setup()
             await self._send_connected()
 
@@ -71,6 +74,39 @@ class ConnectionHandler:
         finally:
             await self._cleanup()
 
+    async def _wait_for_project(self) -> None:
+        """Wait for SET_PROJECT message or timeout to default.
+
+        Waits up to 2 seconds for the client to send a SET_PROJECT message.
+        If no message is received, falls back to the configured working directory.
+        """
+        async def wait_for_set_project():
+            while not self._project_set.is_set():
+                try:
+                    data = await asyncio.wait_for(self._ws.receive_json(), timeout=0.1)
+                    if data.get("type") == MessageType.SET_PROJECT:
+                        path = data.get("path")
+                        if path:
+                            project_path = Path(path).resolve()
+                            if project_path.is_dir():
+                                self._working_dir = project_path
+                                logger.info("Project set to: %s", self._working_dir)
+                            else:
+                                logger.warning("Invalid project path: %s", path)
+                        self._project_set.set()
+                        return
+                except asyncio.TimeoutError:
+                    continue
+                except WebSocketDisconnect:
+                    self._project_set.set()
+                    raise
+
+        try:
+            await asyncio.wait_for(wait_for_set_project(), timeout=2.0)
+        except asyncio.TimeoutError:
+            logger.debug("No SET_PROJECT received, using default working directory")
+            self._project_set.set()
+
     async def _setup(self) -> None:
         """Initialize PTY and file watcher."""
         self._pty = PTYManager()
@@ -81,7 +117,7 @@ class ConnectionHandler:
 
         await self._pty.spawn(
             self._config.shell_command,
-            self._config.working_dir,
+            self._working_dir,
             TerminalSize(cols=80, rows=24),
         )
 
@@ -106,7 +142,7 @@ class ConnectionHandler:
             await asyncio.sleep(0.5)
             await self._pty.write("claude\n")
 
-        self._watcher = FileWatcher(self._config.working_dir)
+        self._watcher = FileWatcher(self._working_dir)
 
     async def _cleanup(self) -> None:
         """Clean up resources."""
@@ -140,10 +176,10 @@ class ConnectionHandler:
         """Send connected message with working directory and session state."""
         message: dict = {
             "type": MessageType.CONNECTED,
-            "workingDir": str(self._config.working_dir),
+            "workingDir": str(self._working_dir),
         }
 
-        session = load_session(self._config.working_dir)
+        session = load_session(self._working_dir)
         if session is not None:
             message["session"] = session
 
@@ -206,7 +242,7 @@ class ConnectionHandler:
 
     async def _handle_get_tree(self) -> None:
         """Handle file tree request."""
-        tree = build_file_tree(self._config.working_dir)
+        tree = build_file_tree(self._working_dir)
         await self._send({
             "type": MessageType.FILE_TREE,
             "data": [node.to_dict() for node in tree],
@@ -218,7 +254,7 @@ class ConnectionHandler:
         if not path:
             raise ProtocolError.invalid_message("Missing path")
 
-        content = read_file_content(self._config.working_dir, path)
+        content = read_file_content(self._working_dir, path)
         file_type = get_file_type(path)
 
         await self._send({
@@ -231,7 +267,7 @@ class ConnectionHandler:
     async def _handle_save_session(self, data: dict) -> None:
         """Handle session save request."""
         state = data.get("state", {})
-        save_session(self._config.working_dir, state)
+        save_session(self._working_dir, state)
 
     async def _pty_output_loop(self) -> None:
         """Read and send PTY output to client."""
