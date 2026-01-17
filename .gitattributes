@@ -1,0 +1,20 @@
+# Normalize line endings to LF in repo, auto-convert on checkout
+* text=auto eol=lf
+
+# Ensure these are always LF
+*.ts text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.toml text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.ico binary
