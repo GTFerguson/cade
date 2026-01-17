@@ -53,7 +53,7 @@ export class TabManager {
       if (this.tabs.has(activeId)) {
         this.activeTabId = activeId;
       } else {
-        this.activeTabId = state.tabs[0].id;
+        this.activeTabId = state.tabs[0]!.id;
       }
     }
   }
@@ -124,7 +124,7 @@ export class TabManager {
 
     if (this.activeTabId === id) {
       const remaining = this.getTabs();
-      this.activeTabId = remaining.length > 0 ? remaining[0].id : null;
+      this.activeTabId = remaining.length > 0 ? remaining[0]!.id : null;
       if (this.activeTabId) {
         const newActive = this.tabs.get(this.activeTabId);
         if (newActive) {

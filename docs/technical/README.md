@@ -16,6 +16,7 @@ Technical documentation for ccplus developers. This section covers implemented s
 
 Architecture and essential developer documentation.
 
+- [[core/development-setup|Development Setup]] - Running ccplus for development
 - [[core/frontend-architecture|Frontend Architecture]] - Component architecture and mobile support
 
 ### Reference
