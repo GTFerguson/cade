@@ -23,7 +23,8 @@
       "Bash(uv run python:*)",
       "Bash(cmd //c:*)",
       "Bash(timeout:*)",
-      "Bash(ping:*)"
+      "Bash(ping:*)",
+      "Bash(.venvScriptspython.exe -m backend.main --dummy --no-browser)"
     ]
   }
 }
