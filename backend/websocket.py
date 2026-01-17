@@ -230,8 +230,16 @@ class ConnectionHandler:
                     break
 
                 if self._suppress_output:
-                    # Detect Claude startup via alternate screen escape sequence
-                    if "\x1b[?1049h" in data or "\x1b[?47h" in data:
+                    # Detect Claude startup via:
+                    # - Alternate screen buffer: \x1b[?1049h or \x1b[?47h
+                    # - Clear screen: \x1b[2J (often with \x1b[H cursor home)
+                    # - Claude logo start (the block characters)
+                    if (
+                        "\x1b[?1049h" in data
+                        or "\x1b[?47h" in data
+                        or "\x1b[2J" in data
+                        or "▐▛███▜▌" in data
+                    ):
                         self._suppress_output = False
                         # Fall through to send this chunk (contains Claude's TUI)
                     # Timeout fallback after 4 seconds
