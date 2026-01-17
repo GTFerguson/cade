@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ccplus</title>
+  </head>
+  <body>
+    <div id="app" class="app-container">
+      <div id="file-tree" class="pane file-tree-pane"></div>
+      <div class="resize-handle resize-handle-left"></div>
+      <div id="terminal" class="pane terminal-pane"></div>
+      <div class="resize-handle resize-handle-right"></div>
+      <div id="viewer" class="pane viewer-pane"></div>
+    </div>
+
+    <!-- Mobile UI elements -->
+    <button id="md-button" class="md-button" aria-label="View markdown">
+      <span class="md-button-icon">MD</span>
+    </button>
+    <div id="viewer-slideout" class="viewer-slideout">
+      <div class="viewer-slideout-header">
+        <span id="slideout-title" class="slideout-title"></span>
+        <button id="slideout-close" class="slideout-close" aria-label="Close viewer">&times;</button>
+      </div>
+      <div id="slideout-content" class="viewer-slideout-content"></div>
+    </div>
+    <div id="slideout-backdrop" class="slideout-backdrop"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

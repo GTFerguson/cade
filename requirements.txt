@@ -1,0 +1,9 @@
+# ccplus dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+websockets>=12.0
+watchfiles>=0.21.0
+
+# Platform-specific PTY support
+pexpect>=4.9.0;sys_platform!='win32'
+pywinpty>=2.0.0;sys_platform=='win32'

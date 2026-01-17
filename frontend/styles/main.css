@@ -1,0 +1,614 @@
+/**
+ * ccplus dark theme styles
+ * Badwolf-inspired color scheme
+ * @see https://github.com/sjl/badwolf
+ */
+
+/* Reset and base styles */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Background colors - badwolf gravel palette */
+  --bg-primary: #1c1b1a; /* blackgravel */
+  --bg-secondary: #242321; /* darkgravel */
+  --bg-tertiary: #35322d; /* deepergravel */
+  --bg-hover: #45413b; /* deepgravel */
+  --bg-selected: #45413b; /* deepgravel */
+
+  /* Text colors - badwolf text palette */
+  --text-primary: #f8f6f2; /* plain */
+  --text-secondary: #d9cec3; /* brightgravel */
+  --text-muted: #857f78; /* gravel */
+
+  /* Accent colors - badwolf highlights */
+  --accent-blue: #0a9dff; /* tardis */
+  --accent-green: #aeee00; /* lime */
+  --accent-orange: #ffa724; /* orange */
+  --accent-yellow: #fade3e; /* dalespale */
+  --accent-purple: #ff9eb8; /* dress */
+  --accent-red: #ff2c4b; /* taffy */
+  --accent-cyan: #8cffba; /* saltwatertaffy */
+
+  /* Border colors */
+  --border-color: #45413b; /* deepgravel */
+  --border-focus: #aeee00; /* lime */
+
+  /* Scrollbar */
+  --scrollbar-bg: #1c1b1a; /* blackgravel */
+  --scrollbar-thumb: #45413b; /* deepgravel */
+  --scrollbar-thumb-hover: #857f78; /* gravel */
+
+  /* Font */
+  --font-mono: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* App container - three pane layout */
+.app-container {
+  display: grid;
+  grid-template-columns: 20% 4px 50% 4px 30%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Pane base styles */
+.pane {
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+/* File tree pane */
+.file-tree-pane {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  overflow-y: auto;
+}
+
+/* Terminal pane */
+.terminal-pane {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+}
+
+.terminal-pane .xterm {
+  height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.terminal-pane .xterm-viewport {
+  overflow-y: auto !important;
+}
+
+/* Viewer pane */
+.viewer-pane {
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Resize handles */
+.resize-handle {
+  background: var(--border-color);
+  cursor: col-resize;
+  transition: background 0.15s ease;
+}
+
+.resize-handle:hover {
+  background: var(--border-focus);
+}
+
+/* File tree styles */
+.file-tree-root {
+  list-style: none;
+  padding: 8px 0;
+}
+
+.file-tree-item {
+  list-style: none;
+}
+
+.file-tree-row {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.file-tree-row:hover {
+  background: var(--bg-hover);
+}
+
+.file-tree-row.selected {
+  background: var(--bg-selected);
+}
+
+.file-tree-row.recently-changed {
+  background: rgba(78, 154, 6, 0.2);
+}
+
+.file-tree-chevron {
+  width: 16px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  transition: transform 0.1s ease;
+  display: inline-block;
+  text-align: center;
+}
+
+.file-tree-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.file-tree-spacer {
+  width: 16px;
+}
+
+.file-tree-icon {
+  width: 20px;
+  text-align: center;
+  margin-right: 4px;
+}
+
+.file-tree-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-tree-children {
+  list-style: none;
+}
+
+/* Viewer styles */
+.viewer-header {
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.viewer-content {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.viewer-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+}
+
+/* Code highlighting */
+.viewer-content pre {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.viewer-content code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.viewer-content .inline-code {
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* Markdown styles */
+.viewer-content h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 16px 0 8px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+}
+
+.viewer-content h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 16px 0 8px;
+  color: var(--text-primary);
+}
+
+.viewer-content h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 12px 0 8px;
+  color: var(--text-primary);
+}
+
+.viewer-content p {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.viewer-content ul,
+.viewer-content ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.viewer-content li {
+  margin: 4px 0;
+  line-height: 1.6;
+}
+
+.viewer-content blockquote {
+  border-left: 4px solid var(--accent-blue);
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--text-secondary);
+}
+
+.viewer-content a {
+  color: var(--accent-blue);
+  text-decoration: none;
+}
+
+.viewer-content a:hover {
+  text-decoration: underline;
+}
+
+.viewer-content .wiki-link {
+  color: var(--accent-purple);
+}
+
+.viewer-content strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.viewer-content em {
+  font-style: italic;
+}
+
+/* Connection status */
+.connection-status {
+  position: fixed;
+  bottom: 8px;
+  right: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.connection-status.connected {
+  color: var(--accent-green);
+}
+
+.connection-status.disconnected {
+  color: #f14c4c;
+}
+
+/* Focus styles */
+.pane:focus-within {
+  outline: none;
+}
+
+/* ==========================================================================
+   Mobile Layout
+   ========================================================================== */
+
+/* Mobile breakpoint - hide file tree and viewer panes */
+@media (max-width: 768px) {
+  .app-container {
+    display: block;
+  }
+
+  .file-tree-pane,
+  .resize-handle,
+  .viewer-pane {
+    display: none;
+  }
+
+  .terminal-pane {
+    width: 100%;
+    height: 100vh;
+  }
+}
+
+/* Mobile layout class for programmatic control */
+.app-container.mobile-layout {
+  display: block;
+}
+
+.app-container.mobile-layout .file-tree-pane,
+.app-container.mobile-layout .resize-handle,
+.app-container.mobile-layout .viewer-pane {
+  display: none;
+}
+
+.app-container.mobile-layout .terminal-pane {
+  width: 100%;
+  height: 100vh;
+}
+
+/* MD Button - floating action button */
+.md-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--text-secondary);
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: bold;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 100;
+  display: none;
+}
+
+.md-button:hover {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.md-button:active {
+  transform: scale(0.95);
+}
+
+.md-button.has-update {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: white;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(86, 156, 214, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(86, 156, 214, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(86, 156, 214, 0);
+  }
+}
+
+/* Show MD button only on mobile */
+@media (max-width: 768px) {
+  .md-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Slide-out viewer panel */
+.viewer-slideout {
+  position: fixed;
+  top: 0;
+  right: -100%;
+  width: 85%;
+  max-width: 400px;
+  height: 100vh;
+  background: var(--bg-primary);
+  transition: right 0.3s ease;
+  z-index: 101;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.viewer-slideout.open {
+  right: 0;
+}
+
+.viewer-slideout-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.slideout-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.slideout-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0 8px;
+  line-height: 1;
+}
+
+.slideout-close:hover {
+  color: var(--text-primary);
+}
+
+.viewer-slideout-content {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+/* Reuse viewer content styles in slideout */
+.viewer-slideout-content h1,
+.viewer-slideout-content h2,
+.viewer-slideout-content h3,
+.viewer-slideout-content p,
+.viewer-slideout-content ul,
+.viewer-slideout-content ol,
+.viewer-slideout-content li,
+.viewer-slideout-content blockquote,
+.viewer-slideout-content a,
+.viewer-slideout-content code,
+.viewer-slideout-content pre {
+  /* Inherit styles from .viewer-content */
+}
+
+.viewer-slideout-content h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 16px 0 8px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+}
+
+.viewer-slideout-content h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 16px 0 8px;
+  color: var(--text-primary);
+}
+
+.viewer-slideout-content h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 12px 0 8px;
+  color: var(--text-primary);
+}
+
+.viewer-slideout-content p {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.viewer-slideout-content ul,
+.viewer-slideout-content ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.viewer-slideout-content li {
+  margin: 4px 0;
+  line-height: 1.6;
+}
+
+.viewer-slideout-content blockquote {
+  border-left: 4px solid var(--accent-blue);
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--text-secondary);
+}
+
+.viewer-slideout-content a {
+  color: var(--accent-blue);
+  text-decoration: none;
+}
+
+.viewer-slideout-content a:hover {
+  text-decoration: underline;
+}
+
+.viewer-slideout-content pre {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.viewer-slideout-content code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.viewer-slideout-content .inline-code {
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* Backdrop for slide-out */
+.slideout-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  z-index: 100;
+}
+
+.slideout-backdrop.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Hide slideout elements on desktop */
+@media (min-width: 769px) {
+  .md-button,
+  .viewer-slideout,
+  .slideout-backdrop {
+    display: none !important;
+  }
+}

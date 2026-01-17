@@ -1,0 +1,37 @@
+"""WebSocket protocol message types - single source of truth.
+
+This module defines all message type constants used in client-server communication.
+The frontend mirrors these constants in protocol.ts.
+"""
+
+from __future__ import annotations
+
+
+class MessageType:
+    """Message type constants for WebSocket protocol."""
+
+    # Client -> Server
+    INPUT = "input"  # Terminal input: { type, data: str }
+    RESIZE = "resize"  # Terminal resize: { type, cols: int, rows: int }
+    GET_FILE = "get-file"  # Request file content: { type, path: str }
+    GET_TREE = "get-tree"  # Request file tree: { type }
+
+    # Server -> Client
+    OUTPUT = "output"  # Terminal output: { type, data: str }
+    FILE_TREE = "file-tree"  # File tree response: { type, data: FileNode[] }
+    FILE_CHANGE = "file-change"  # File changed: { type, event: str, path: str }
+    FILE_CONTENT = "file-content"  # File content: { type, path: str, content: str }
+    ERROR = "error"  # Error message: { type, code: str, message: str }
+    CONNECTED = "connected"  # Connection established: { type, working_dir: str }
+
+
+class ErrorCode:
+    """Error codes for structured error responses."""
+
+    PTY_SPAWN_FAILED = "pty-spawn-failed"
+    PTY_READ_FAILED = "pty-read-failed"
+    PTY_WRITE_FAILED = "pty-write-failed"
+    FILE_NOT_FOUND = "file-not-found"
+    FILE_READ_FAILED = "file-read-failed"
+    INVALID_MESSAGE = "invalid-message"
+    INTERNAL_ERROR = "internal-error"
