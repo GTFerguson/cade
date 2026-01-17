@@ -3,25 +3,29 @@ title: Frontend Architecture
 created: 2026-01-17
 updated: 2026-01-17
 status: active
-tags: [technical, frontend, architecture, wiki-links]
+tags: [technical, frontend, architecture, wiki-links, tabs]
 ---
 
 # Frontend Architecture
 
-This document describes the ccplus frontend component architecture, including the responsive layout system and mobile support.
+This document describes the ccplus frontend component architecture, including the multi-tab system, responsive layout, and mobile support.
 
 ## Overview
 
-The frontend is a TypeScript application built with Vite. It provides a unified terminal environment with file navigation and document viewing capabilities.
+The frontend is a TypeScript application built with Vite. It provides a tabbed terminal environment where each tab is an independent project context with its own terminal, file tree, and viewer.
 
 ```mermaid
 graph TD
-    App[App] --> Layout[Layout]
-    App --> Terminal[Terminal]
-    App --> FileTree[FileTree]
-    App --> MarkdownViewer[MarkdownViewer]
+    App[App] --> TabManager[TabManager]
+    App --> TabBar[TabBar]
     App --> MobileUI[MobileUI]
-    App --> WebSocketClient[WebSocketClient]
+
+    TabManager --> |creates| ProjectContext[ProjectContext]
+    ProjectContext --> Layout[Layout]
+    ProjectContext --> Terminal[Terminal]
+    ProjectContext --> FileTree[FileTree]
+    ProjectContext --> MarkdownViewer[MarkdownViewer]
+    ProjectContext --> WebSocketClient[WebSocketClient]
 
     Layout --> |containers| Terminal
     Layout --> |containers| FileTree
@@ -30,21 +34,75 @@ graph TD
     WebSocketClient --> Terminal
     WebSocketClient --> FileTree
     WebSocketClient --> MarkdownViewer
-    WebSocketClient --> MobileUI
 ```
+
+## Tab System
+
+The tab system enables multiple projects to be open simultaneously, each with isolated state.
+
+### TabManager (`tabs/tab-manager.ts`)
+
+Manages the collection of open tabs and persists tab state to localStorage.
+
+**Responsibilities:**
+
+- Creates and destroys project tabs
+- Tracks active tab
+- Persists tab list to localStorage
+- Emits events for tab lifecycle changes
+
+**Events:**
+
+| Event | Data | Description |
+|-------|------|-------------|
+| `tab-created` | `TabState` | New tab was created |
+| `tab-switched` | `TabState` | Active tab changed |
+| `tabs-changed` | `TabState[]` | Tab list modified |
+
+### TabBar (`tabs/tab-bar.ts`)
+
+Renders the tab bar UI above the terminal pane.
+
+**Features:**
+
+- Displays project name for each tab
+- Active tab styled to connect with content below (Obsidian aesthetic)
+- Close button on hover
+- Add (+) button to open new projects
+- Tab bar grid syncs with layout proportions via CSS custom properties
+
+### ProjectContext (`tabs/project-context.ts`)
+
+Container for a single project's components. Each tab has one ProjectContext.
+
+**Contains:**
+
+- Layout instance
+- Terminal instance
+- FileTree instance
+- MarkdownViewer instance
+- WebSocketClient instance
+
+**Lifecycle:**
+
+1. Created when tab is added
+2. Sends `SET_PROJECT` message to set working directory
+3. Connects WebSocket
+4. Shows/hides based on active tab
+5. Disposed when tab is closed
 
 ## Components
 
 ### App (`main.ts`)
 
-The main application orchestrator. Initializes all components and manages their lifecycle.
+The main application orchestrator. Initializes the tab system and manages top-level lifecycle.
 
 **Responsibilities:**
 
-- Creates and connects the WebSocketClient
-- Initializes Layout to determine desktop/mobile mode
-- Instantiates Terminal, FileTree, MarkdownViewer, and MobileUI
-- Wires up inter-component events (file selection, link clicks)
+- Creates TabManager and TabBar
+- Handles tab events (create, switch, close)
+- Initializes ProjectContext for each tab
+- Manages MobileUI
 - Handles application disposal on page unload
 
 ### Layout (`layout.ts`)
@@ -56,11 +114,24 @@ Manages the three-pane desktop layout and responsive switching to mobile mode.
 - Three resizable panes: FileTree (20%), Terminal (50%), Viewer (30%)
 - Draggable resize handles between panes
 - Proportions persisted via session (see [[#Session Persistence]])
+- Updates CSS custom properties for tab bar alignment
+
+**CSS Custom Properties:**
+
+When pane proportions change, Layout updates these CSS variables on `:root`:
+
+| Variable | Description |
+|----------|-------------|
+| `--layout-file-tree` | File tree pane width (e.g., `20%`) |
+| `--layout-terminal` | Terminal pane width (e.g., `50%`) |
+| `--layout-viewer` | Viewer pane width (e.g., `30%`) |
+
+The tab bar uses these variables for its grid columns, keeping tabs aligned above the terminal pane during resize.
 
 **Mobile Layout:**
 
 - Activated when viewport width <= 768px
-- Hides FileTree, resize handles, and Viewer panes
+- Hides FileTree, resize handles, Viewer panes, and tab bar
 - Terminal expands to full viewport
 - Adds `mobile-layout` class to container
 
@@ -185,6 +256,7 @@ The `WebSocketClient` class manages server communication with automatic reconnec
 
 | Type | Purpose |
 |------|---------|
+| `set-project` | Set working directory for this connection |
 | `input` | Send terminal keystrokes |
 | `resize` | Send terminal dimensions |
 | `get-tree` | Request file tree |
@@ -287,17 +359,23 @@ Mobile and desktop clients can connect to the same server session simultaneously
 frontend/
 ├── src/
 │   ├── main.ts           # App entry point
+│   ├── tabs/             # Tab system
+│   │   ├── index.ts      # Public exports
+│   │   ├── tab-manager.ts    # Tab state management
+│   │   ├── tab-bar.ts        # Tab bar UI
+│   │   ├── project-context.ts # Per-project container
+│   │   └── types.ts          # Tab-related types
 │   ├── layout.ts         # Layout management
 │   ├── terminal.ts       # Terminal component
 │   ├── file-tree.ts      # File tree component
-│   ├── markdown.ts       # Markdown viewer
+│   ├── markdown.ts       # Markdown viewer (mertex.md)
 │   ├── mobile.ts         # Mobile UI component
 │   ├── websocket.ts      # WebSocket client
 │   ├── types.ts          # TypeScript interfaces
 │   ├── protocol.ts       # Message type constants
 │   └── config.ts         # Configuration
 ├── styles/
-│   └── main.css          # All styles including mobile
+│   └── main.css          # All styles including tabs and mobile
 └── index.html            # HTML template
 ```
 

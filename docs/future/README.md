@@ -22,22 +22,21 @@ ccplus aims to create a unified terminal development environment that seamlessly
 
 ## Current Status
 
-Project is in early planning phase. Core conventions and documentation structure are being established.
+Core MVP is functional with multi-project tabs, three-pane layout, and session persistence.
+
+## Recently Implemented
+
+### Multi-Project Tabs ✓
+
+Implemented in [[../technical/core/frontend-architecture#Tab System|Frontend Architecture]].
+
+- Separate terminal session (PTY) per tab
+- Independent file tree per project
+- Isolated viewer content
+- Session state persisted in `.ccplus/session.json`
+- Obsidian-style tab bar above terminal pane
 
 ## Planned Features
-
-### Multi-Project Tabs
-
-Open multiple projects simultaneously as tabs, similar to tmux windows. Each tab maintains independent state:
-
-- Separate terminal session (PTY)
-- Independent file tree
-- Isolated viewer content
-- Persisted layout per project
-
-Session state stored in `.ccplus/` directory within each project enables pause/resume workflows.
-
-See [[multi-project-tabs]] for detailed design.
 
 ### Claude Code Hooks Integration
 
@@ -57,7 +56,6 @@ See [[blocking-issues]] for critical issues that must be resolved before major p
 
 ## Contents
 
-- [[multi-project-tabs]] - Tabbed multi-project support
 - [[claude-code-hooks-integration]] - Claude Code hooks integration
 
 ## See Also

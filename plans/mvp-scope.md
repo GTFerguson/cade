@@ -1,7 +1,7 @@
 ---
 title: MVP Scope
 created: 2026-01-16
-updated: 2026-01-16
+updated: 2026-01-17
 status: active
 tags: [mvp, scope, planning]
 ---
@@ -48,17 +48,20 @@ $ ccplus
 
 ### Core Features
 
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| Embedded terminal | xterm.js running Claude Code | P0 |
-| File tree | See project structure, watch for changes | P0 |
-| Markdown rendering | mertex.md with streaming | P0 |
-| Multi-pane layout | File tree + terminal + markdown | P0 |
-| Auto-launch | `ccplus` command opens browser | P0 |
-| File viewer | Click file → see contents | P1 |
-| Basic styling | Clean, readable dark theme | P1 |
-| Resize panes | Drag dividers to resize | P1 |
-| File change highlighting | Visual indicator when files change | P1 |
+| Feature | Description | Priority | Status |
+|---------|-------------|----------|--------|
+| Embedded terminal | xterm.js running Claude Code | P0 | ✓ Done |
+| File tree | See project structure, watch for changes | P0 | ✓ Done |
+| Markdown rendering | mertex.md with wiki-links | P0 | ✓ Done |
+| Multi-pane layout | File tree + terminal + markdown | P0 | ✓ Done |
+| Auto-launch | `ccplus` command opens browser | P0 | Partial (manual) |
+| File viewer | Click file → see contents | P1 | ✓ Done |
+| Basic styling | Clean, readable dark theme | P1 | ✓ Done |
+| Resize panes | Drag dividers to resize | P1 | ✓ Done |
+| File change highlighting | Visual indicator when files change | P1 | ✓ Done |
+| **Multi-project tabs** | Multiple projects open as tabs | Bonus | ✓ Done |
+| **Session persistence** | UI state survives refresh | Bonus | ✓ Done |
+| **Mobile support** | Responsive layout + slide-out viewer | Bonus | ✓ Done |
 
 ### Terminal Pane
 
@@ -141,20 +144,19 @@ When Claude enters plan mode, it writes to `.claude/plans/`. The markdown viewer
 
 ## Out of Scope (MVP)
 
-These are future features, not MVP:
+Future features not in MVP:
 
-| Feature | Why deferred |
-|---------|--------------|
-| Multiple panes (>2) | Complexity; two panes proves concept |
-| Tabs/workspaces | Adds state management complexity |
-| Editor integration | Separate priority; terminal is enough for MVP |
-| Vim keybindings | Depends on editor integration |
-| Configuration file | Hardcode sensible defaults first |
-| Session persistence | Nice-to-have, not essential |
-| Tauri desktop wrapper | Phase 2 |
-| Pure terminal mode | Phase 3 |
-| nkrdn integration | Long-term |
-| Obsidian/Notion sync | Long-term |
+| Feature | Status | Notes |
+|---------|--------|-------|
+| ~~Tabs/workspaces~~ | ✓ Done | Implemented with multi-project tabs |
+| ~~Session persistence~~ | ✓ Done | Per-project `.ccplus/session.json` |
+| Editor integration | Deferred | Terminal is enough for MVP |
+| Vim keybindings | Deferred | Depends on editor integration |
+| Configuration file | Deferred | Hardcode sensible defaults first |
+| Tauri desktop wrapper | Phase 2 | |
+| Pure terminal mode | Phase 3 | |
+| nkrdn integration | Long-term | |
+| Obsidian/Notion sync | Long-term | |
 
 ## Technical Requirements
 
@@ -190,12 +192,15 @@ This also enables general markdown viewing - any `.md` file can be opened and vi
 MVP is complete when:
 
 - [ ] `ccplus` command starts server and opens browser
-- [ ] Terminal pane shows Claude Code running
-- [ ] Can type prompts and see Claude respond
-- [ ] Markdown pane renders Claude's output in real-time
-- [ ] Code blocks have syntax highlighting
-- [ ] Tables render as actual tables
-- [ ] Panes can be resized
+- [x] Terminal pane shows Claude Code running
+- [x] Can type prompts and see Claude respond
+- [x] Markdown pane renders files in real-time
+- [x] Code blocks have syntax highlighting
+- [x] Tables render as actual tables
+- [x] Panes can be resized
+- [x] Wiki-links work for navigation
+- [x] File tree updates on file changes
+- [x] Multiple projects can be open as tabs
 
 ## Resolved Questions
 
@@ -256,10 +261,12 @@ ccplus/
 
 ## Next Steps
 
-1. Scaffold project structure
-2. Get FastAPI + WebSocket working
-3. Get xterm.js + PTY working
-4. Add file watcher + tree
-5. Integrate mertex.md
-6. Build three-pane layout
-7. Polish and iterate
+1. ~~Scaffold project structure~~ ✓
+2. ~~Get FastAPI + WebSocket working~~ ✓
+3. ~~Get xterm.js + PTY working~~ ✓
+4. ~~Add file watcher + tree~~ ✓
+5. ~~Integrate mertex.md~~ ✓
+6. ~~Build three-pane layout~~ ✓
+7. ~~Add multi-project tabs~~ ✓
+8. Add `ccplus` CLI command for auto-launch
+9. Package for distribution
