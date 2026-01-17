@@ -18,6 +18,7 @@ class Config:
     auto_start_claude: bool = True
     auto_open_browser: bool = True
     debug: bool = False
+    dummy_mode: bool = False
 
     @classmethod
     def from_env(cls) -> Config:
@@ -31,6 +32,7 @@ class Config:
             CCPLUS_AUTO_START_CLAUDE: Auto-run claude on shell start (default: true)
             CCPLUS_AUTO_OPEN_BROWSER: Open browser on start (default: true)
             CCPLUS_DEBUG: Enable debug mode (default: false)
+            CCPLUS_DUMMY_MODE: Show fake Claude UI for development (default: false)
         """
         return cls(
             port=int(os.getenv("CCPLUS_PORT", "3000")),
@@ -40,6 +42,7 @@ class Config:
             auto_start_claude=os.getenv("CCPLUS_AUTO_START_CLAUDE", "true").lower() == "true",
             auto_open_browser=os.getenv("CCPLUS_AUTO_OPEN_BROWSER", "true").lower() == "true",
             debug=os.getenv("CCPLUS_DEBUG", "false").lower() == "true",
+            dummy_mode=os.getenv("CCPLUS_DUMMY_MODE", "false").lower() == "true",
         )
 
     def update_from_args(
@@ -51,6 +54,7 @@ class Config:
         auto_start_claude: bool | None = None,
         auto_open_browser: bool | None = None,
         debug: bool | None = None,
+        dummy_mode: bool | None = None,
     ) -> Config:
         """Return a new config with CLI argument overrides applied."""
         return Config(
@@ -65,6 +69,7 @@ class Config:
                 auto_open_browser if auto_open_browser is not None else self.auto_open_browser
             ),
             debug=debug if debug is not None else self.debug,
+            dummy_mode=dummy_mode if dummy_mode is not None else self.dummy_mode,
         )
 
     @property

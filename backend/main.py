@@ -140,6 +140,12 @@ def parse_args() -> argparse.Namespace:
         help="Enable debug mode",
     )
 
+    parser.add_argument(
+        "--dummy",
+        action="store_true",
+        help="Show fake Claude UI for development",
+    )
+
     return parser.parse_args()
 
 
@@ -170,6 +176,7 @@ def main() -> None:
         auto_start_claude=not args.no_claude if args.no_claude else None,
         auto_open_browser=not args.no_browser if args.no_browser else None,
         debug=args.debug if args.debug else None,
+        dummy_mode=args.dummy if args.dummy else None,
     )
     set_config(config)
 

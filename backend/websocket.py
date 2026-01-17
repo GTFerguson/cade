@@ -74,7 +74,7 @@ class ConnectionHandler:
         """Initialize PTY and file watcher."""
         self._pty = PTYManager()
 
-        if self._config.auto_start_claude:
+        if self._config.auto_start_claude and not self._config.dummy_mode:
             self._suppress_output = True
             self._suppress_start_time = time.monotonic()
 
@@ -84,7 +84,24 @@ class ConnectionHandler:
             TerminalSize(cols=80, rows=24),
         )
 
-        if self._config.auto_start_claude:
+        if self._config.dummy_mode:
+            await asyncio.sleep(0.5)
+            dummy_output = (
+                "\x1b[?1049h\x1b[H\x1b[2J"  # Switch to alternate screen and clear
+                "\x1b[38;5;75m ▐▛███▜▌\x1b[0m   Claude Code (dummy mode)\r\n"
+                "\x1b[38;5;75m▝▜█████▛▘\x1b[0m  Development UI Preview\r\n"
+                "\x1b[38;5;75m  ▘▘ ▝▝\x1b[0m\r\n"
+                "\r\n"
+                "─────────────────────────────────────────────────────────────────\r\n"
+                "\x1b[38;5;245m❯\x1b[0m Dummy mode - no actual Claude running\r\n"
+                "─────────────────────────────────────────────────────────────────\r\n"
+            )
+            # Send directly to the output stream, not as a shell command
+            await self._send({
+                "type": MessageType.OUTPUT,
+                "data": dummy_output,
+            })
+        elif self._config.auto_start_claude:
             await asyncio.sleep(0.5)
             await self._pty.write("claude\n")
 
