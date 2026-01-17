@@ -15,6 +15,7 @@ class MessageType:
     RESIZE = "resize"  # Terminal resize: { type, cols: int, rows: int }
     GET_FILE = "get-file"  # Request file content: { type, path: str }
     GET_TREE = "get-tree"  # Request file tree: { type }
+    SAVE_SESSION = "save-session"  # Save session state: { type, state: SessionState }
 
     # Server -> Client
     OUTPUT = "output"  # Terminal output: { type, data: str }

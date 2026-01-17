@@ -55,7 +55,7 @@ Manages the three-pane desktop layout and responsive switching to mobile mode.
 
 - Three resizable panes: FileTree (20%), Terminal (50%), Viewer (30%)
 - Draggable resize handles between panes
-- Proportions persisted to localStorage
+- Proportions persisted via session (see [[#Session Persistence]])
 
 **Mobile Layout:**
 
@@ -189,12 +189,13 @@ The `WebSocketClient` class manages server communication with automatic reconnec
 | `resize` | Send terminal dimensions |
 | `get-tree` | Request file tree |
 | `get-file` | Request file content |
+| `save-session` | Persist session state |
 
 **Server Messages:**
 
 | Type | Purpose |
 |------|---------|
-| `connected` | Confirms connection, provides working directory |
+| `connected` | Confirms connection, provides working directory and session |
 | `output` | Terminal output data |
 | `file-tree` | Directory structure |
 | `file-content` | Requested file content |
@@ -206,6 +207,45 @@ The `WebSocketClient` class manages server communication with automatic reconnec
 - Exponential backoff starting at base delay
 - Maximum attempts before giving up
 - Configuration via `config.ts`
+
+## Session Persistence
+
+Session state is persisted per-project in `.ccplus/session.json`. This allows UI state to survive browser refreshes.
+
+**Persisted State:**
+
+| Property | Description |
+|----------|-------------|
+| `expandedPaths` | Array of expanded folder paths in file tree |
+| `viewerPath` | Currently viewed file path |
+| `layout` | Pane proportions (fileTree, terminal, viewer) |
+
+**Session Schema:**
+
+```json
+{
+  "version": 1,
+  "expandedPaths": ["docs", "docs/technical"],
+  "viewerPath": "docs/README.md",
+  "layout": {
+    "fileTree": 0.2,
+    "terminal": 0.5,
+    "viewer": 0.3
+  }
+}
+```
+
+**Lifecycle:**
+
+1. On `connected`, server sends existing session (if any)
+2. After `file-tree` loads, session state is restored
+3. State changes trigger debounced save (500ms)
+4. On `beforeunload`, session is saved immediately
+
+**Storage Location:**
+
+- File: `<project>/.ccplus/session.json`
+- The `.ccplus` directory is hidden from the file tree
 
 ## Mobile Support
 

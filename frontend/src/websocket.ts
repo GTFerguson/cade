@@ -14,6 +14,7 @@ import type {
   FileTreeMessage,
   OutputMessage,
   ServerMessage,
+  SessionState,
 } from "./types";
 
 type ConnectionState = "disconnected" | "connecting" | "connected";
@@ -165,6 +166,13 @@ export class WebSocketClient {
    */
   requestFile(path: string): void {
     this.send({ type: MessageType.GET_FILE, path });
+  }
+
+  /**
+   * Save session state.
+   */
+  saveSession(state: Partial<SessionState>): void {
+    this.send({ type: MessageType.SAVE_SESSION, state });
   }
 
   /**

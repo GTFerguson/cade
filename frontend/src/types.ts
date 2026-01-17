@@ -63,6 +63,33 @@ export interface GetTreeMessage extends BaseMessage {
 }
 
 /**
+ * Layout pane proportions.
+ */
+export interface LayoutProportions {
+  fileTree: number;
+  terminal: number;
+  viewer: number;
+}
+
+/**
+ * Session state for persistence.
+ */
+export interface SessionState {
+  version: number;
+  expandedPaths: string[];
+  viewerPath: string | null;
+  layout: LayoutProportions | null;
+}
+
+/**
+ * Save session request (client -> server).
+ */
+export interface SaveSessionMessage extends BaseMessage {
+  type: "save-session";
+  state: Partial<SessionState>;
+}
+
+/**
  * Terminal output message (server -> client).
  */
 export interface OutputMessage extends BaseMessage {
@@ -112,6 +139,7 @@ export interface ErrorMessage extends BaseMessage {
 export interface ConnectedMessage extends BaseMessage {
   type: "connected";
   workingDir: string;
+  session?: SessionState;
 }
 
 /**
@@ -121,7 +149,8 @@ export type ClientMessage =
   | InputMessage
   | ResizeMessage
   | GetFileMessage
-  | GetTreeMessage;
+  | GetTreeMessage
+  | SaveSessionMessage;
 
 /**
  * Union of all server -> client messages.

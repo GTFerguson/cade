@@ -3,14 +3,7 @@
  * Supports both desktop (three-pane) and mobile (terminal-only) layouts.
  */
 
-import { config } from "./config";
-import type { Component } from "./types";
-
-interface LayoutProportions {
-  fileTree: number;
-  terminal: number;
-  viewer: number;
-}
+import type { Component, LayoutProportions } from "./types";
 
 const DEFAULT_PROPORTIONS: LayoutProportions = {
   fileTree: 0.2,
@@ -27,9 +20,10 @@ export class Layout implements Component {
   private startX = 0;
   private startProportions: LayoutProportions | null = null;
   private mobileMode = false;
+  private onChangeCallback: (() => void) | null = null;
 
   constructor(private container: HTMLElement) {
-    this.proportions = this.loadProportions();
+    this.proportions = { ...DEFAULT_PROPORTIONS };
   }
 
   /**
@@ -228,45 +222,37 @@ export class Layout implements Component {
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
 
-    this.saveProportions();
+    this.onChangeCallback?.();
 
     window.dispatchEvent(new Event("resize"));
   }
 
   /**
-   * Load proportions from localStorage.
+   * Get current layout proportions.
    */
-  private loadProportions(): LayoutProportions {
-    try {
-      const stored = localStorage.getItem(config.layoutStorageKey);
-      if (stored != null) {
-        const parsed = JSON.parse(stored) as LayoutProportions;
-        if (
-          typeof parsed.fileTree === "number" &&
-          typeof parsed.terminal === "number" &&
-          typeof parsed.viewer === "number"
-        ) {
-          return parsed;
-        }
-      }
-    } catch {
-      // Ignore errors, use defaults
-    }
-    return { ...DEFAULT_PROPORTIONS };
+  getProportions(): LayoutProportions {
+    return { ...this.proportions };
   }
 
   /**
-   * Save proportions to localStorage.
+   * Set layout proportions.
    */
-  private saveProportions(): void {
-    try {
-      localStorage.setItem(
-        config.layoutStorageKey,
-        JSON.stringify(this.proportions)
-      );
-    } catch {
-      // Ignore storage errors
+  setProportions(proportions: LayoutProportions): void {
+    if (
+      typeof proportions.fileTree === "number" &&
+      typeof proportions.terminal === "number" &&
+      typeof proportions.viewer === "number"
+    ) {
+      this.proportions = { ...proportions };
+      this.applyProportions();
     }
+  }
+
+  /**
+   * Register callback for proportion changes.
+   */
+  onChange(callback: () => void): void {
+    this.onChangeCallback = callback;
   }
 
   /**
@@ -275,7 +261,7 @@ export class Layout implements Component {
   resetProportions(): void {
     this.proportions = { ...DEFAULT_PROPORTIONS };
     this.applyProportions();
-    this.saveProportions();
+    this.onChangeCallback?.();
   }
 
   /**

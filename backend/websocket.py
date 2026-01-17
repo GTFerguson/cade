@@ -16,6 +16,7 @@ from backend.file_tree import build_file_tree, get_file_type, read_file_content
 from backend.file_watcher import FileWatcher
 from backend.protocol import ErrorCode, MessageType
 from backend.pty_manager import PTYManager
+from backend.session import load_session, save_session
 from backend.types import FileChangeEvent, TerminalSize
 
 if TYPE_CHECKING:
@@ -136,11 +137,17 @@ class ConnectionHandler:
         })
 
     async def _send_connected(self) -> None:
-        """Send connected message with working directory."""
-        await self._send({
+        """Send connected message with working directory and session state."""
+        message: dict = {
             "type": MessageType.CONNECTED,
             "workingDir": str(self._config.working_dir),
-        })
+        }
+
+        session = load_session(self._config.working_dir)
+        if session is not None:
+            message["session"] = session
+
+        await self._send(message)
 
     async def _receive_loop(self) -> None:
         """Receive and handle messages from the client."""
@@ -168,6 +175,8 @@ class ConnectionHandler:
                 await self._handle_get_tree()
             elif msg_type == MessageType.GET_FILE:
                 await self._handle_get_file(data)
+            elif msg_type == MessageType.SAVE_SESSION:
+                await self._handle_save_session(data)
             else:
                 raise ProtocolError.invalid_message(f"Unknown message type: {msg_type}")
 
@@ -218,6 +227,11 @@ class ConnectionHandler:
             "content": content,
             "fileType": file_type,
         })
+
+    async def _handle_save_session(self, data: dict) -> None:
+        """Handle session save request."""
+        state = data.get("state", {})
+        save_session(self._config.working_dir, state)
 
     async def _pty_output_loop(self) -> None:
         """Read and send PTY output to client."""

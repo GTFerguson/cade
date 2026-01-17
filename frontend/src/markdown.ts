@@ -185,6 +185,13 @@ export class MarkdownViewer implements Component {
   }
 
   /**
+   * Get the currently viewed file path.
+   */
+  getCurrentPath(): string | null {
+    return this.currentPath;
+  }
+
+  /**
    * Render empty state.
    */
   private renderEmpty(): void {

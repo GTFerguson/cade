@@ -18,6 +18,7 @@ export class FileTree implements Component {
     keyof FileTreeEvents,
     Set<EventHandler<FileTreeEvents[keyof FileTreeEvents]>>
   > = new Map();
+  private onExpandChangeCallback: (() => void) | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -193,6 +194,7 @@ export class FileTree implements Component {
       this.expandedPaths.add(path);
     }
     this.render();
+    this.onExpandChangeCallback?.();
   }
 
   /**
@@ -222,10 +224,60 @@ export class FileTree implements Component {
   }
 
   /**
+   * Reveal and select a file in the tree, expanding parent folders.
+   * Does not emit file-select event (use when file is already being loaded).
+   */
+  revealFile(path: string): void {
+    this.selectedPath = path;
+
+    // Expand all parent folders
+    const parts = path.split("/");
+    let currentPath = "";
+    for (let i = 0; i < parts.length - 1; i++) {
+      const part = parts[i];
+      if (part !== undefined) {
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        this.expandedPaths.add(currentPath);
+      }
+    }
+
+    this.render();
+  }
+
+  /**
    * Refresh the tree.
    */
   refresh(): void {
     this.ws.requestTree();
+  }
+
+  /**
+   * Get the list of expanded folder paths.
+   */
+  getExpandedPaths(): string[] {
+    return Array.from(this.expandedPaths);
+  }
+
+  /**
+   * Set the expanded folder paths.
+   */
+  setExpandedPaths(paths: string[]): void {
+    this.expandedPaths = new Set(paths);
+    this.render();
+  }
+
+  /**
+   * Get the currently selected file path.
+   */
+  getSelectedPath(): string | null {
+    return this.selectedPath;
+  }
+
+  /**
+   * Register callback for expand/collapse changes.
+   */
+  onExpandChange(callback: () => void): void {
+    this.onExpandChangeCallback = callback;
   }
 
   /**

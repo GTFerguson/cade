@@ -11,6 +11,7 @@ export const MessageType = {
   RESIZE: "resize",
   GET_FILE: "get-file",
   GET_TREE: "get-tree",
+  SAVE_SESSION: "save-session",
 
   // Server -> Client
   OUTPUT: "output",

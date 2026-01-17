@@ -12,7 +12,7 @@ import { MarkdownViewer } from "./markdown";
 import { MobileUI } from "./mobile";
 import { Terminal } from "./terminal";
 import { WebSocketClient } from "./websocket";
-import type { Component } from "./types";
+import type { Component, SessionState } from "./types";
 
 class App {
   private components: Component[] = [];
@@ -22,6 +22,8 @@ class App {
   private fileTree: FileTree | null = null;
   private viewer: MarkdownViewer | null = null;
   private mobileUI: MobileUI | null = null;
+  private saveTimeout: number | null = null;
+  private pendingSession: SessionState | null = null;
 
   constructor() {
     this.ws = new WebSocketClient();
@@ -60,14 +62,35 @@ class App {
 
     this.fileTree.on("file-select", (path) => {
       this.viewer?.loadFile(path);
+      this.scheduleSave();
+    });
+
+    this.fileTree.onExpandChange(() => {
+      this.scheduleSave();
     });
 
     this.viewer.on("link-click", (path) => {
       this.viewer?.loadFile(path);
+      this.fileTree?.revealFile(path);
+      this.scheduleSave();
+    });
+
+    this.layout.onChange(() => {
+      this.scheduleSave();
     });
 
     this.ws.on("connected", (message) => {
       console.log("Connected to server:", message.workingDir);
+      if (message.session != null) {
+        this.pendingSession = message.session;
+      }
+    });
+
+    this.ws.on("file-tree", () => {
+      if (this.pendingSession != null) {
+        this.restoreSession(this.pendingSession);
+        this.pendingSession = null;
+      }
     });
 
     this.ws.on("disconnected", () => {
@@ -81,10 +104,64 @@ class App {
     this.ws.connect();
 
     window.addEventListener("beforeunload", () => {
+      this.saveSessionNow();
       this.dispose();
     });
 
     this.terminal.focus();
+  }
+
+  /**
+   * Restore session state.
+   */
+  private restoreSession(session: SessionState): void {
+    if (session.expandedPaths != null && this.fileTree != null) {
+      this.fileTree.setExpandedPaths(session.expandedPaths);
+    }
+
+    if (session.layout != null && this.layout != null) {
+      this.layout.setProportions(session.layout);
+    }
+
+    if (session.viewerPath != null && this.viewer != null) {
+      this.viewer.loadFile(session.viewerPath);
+      this.fileTree?.revealFile(session.viewerPath);
+    }
+  }
+
+  /**
+   * Build current session state.
+   */
+  private buildSessionState(): Partial<SessionState> {
+    return {
+      expandedPaths: this.fileTree?.getExpandedPaths() ?? [],
+      viewerPath: this.viewer?.getCurrentPath() ?? null,
+      layout: this.layout?.getProportions() ?? null,
+    };
+  }
+
+  /**
+   * Schedule a debounced session save.
+   */
+  private scheduleSave(): void {
+    if (this.saveTimeout != null) {
+      window.clearTimeout(this.saveTimeout);
+    }
+    this.saveTimeout = window.setTimeout(() => {
+      this.saveTimeout = null;
+      this.saveSessionNow();
+    }, 500);
+  }
+
+  /**
+   * Save session immediately.
+   */
+  private saveSessionNow(): void {
+    if (this.saveTimeout != null) {
+      window.clearTimeout(this.saveTimeout);
+      this.saveTimeout = null;
+    }
+    this.ws.saveSession(this.buildSessionState());
   }
 
   /**
