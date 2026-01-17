@@ -102,9 +102,8 @@ body {
 
 /* Terminal pane */
 .terminal-pane {
-  display: flex;
-  flex-direction: column;
   padding: 8px 12px;
+  overflow: hidden;
 }
 
 .terminal-pane .xterm {
@@ -112,10 +111,6 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-}
-
-.terminal-pane .xterm-viewport {
-  overflow-y: auto !important;
 }
 
 /* Viewer pane */

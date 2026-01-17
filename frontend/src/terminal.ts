@@ -62,8 +62,9 @@ export class Terminal implements Component {
       fontFamily: '"JetBrains Mono", "Fira Code", Consolas, monospace',
       fontWeight: "400",
       fontWeightBold: "600",
-      letterSpacing: 1,
+      letterSpacing: 0.5,
       lineHeight: 1.3,
+      scrollback: 10000,
       theme: BADWOLF_THEME,
     });
 
@@ -73,12 +74,10 @@ export class Terminal implements Component {
 
     this.terminal.open(this.container);
 
-    // WebGL renderer for smoother scrolling and better performance
     try {
-      const webgl = new WebglAddon();
-      this.terminal.loadAddon(webgl);
+      this.terminal.loadAddon(new WebglAddon());
     } catch {
-      // WebGL not available, fall back to default canvas renderer
+      // WebGL not available, fall back to canvas renderer
     }
 
     this.fit();

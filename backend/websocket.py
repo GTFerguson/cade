@@ -87,7 +87,7 @@ class ConnectionHandler:
         if self._config.dummy_mode:
             await asyncio.sleep(0.5)
             dummy_output = (
-                "\x1b[?1049h\x1b[H\x1b[2J"  # Switch to alternate screen and clear
+                "\x1b[H\x1b[2J"  # Clear screen (stay in normal buffer for scrollback)
                 "\x1b[38;5;75m ▐▛███▜▌\x1b[0m   Claude Code (dummy mode)\r\n"
                 "\x1b[38;5;75m▝▜█████▛▘\x1b[0m  Development UI Preview\r\n"
                 "\x1b[38;5;75m  ▘▘ ▝▝\x1b[0m\r\n"
