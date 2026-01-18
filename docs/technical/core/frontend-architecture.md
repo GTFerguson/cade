@@ -1,9 +1,9 @@
 ---
 title: Frontend Architecture
 created: 2026-01-17
-updated: 2026-01-17
+updated: 2026-01-18
 status: active
-tags: [technical, frontend, architecture, wiki-links, tabs, session-persistence]
+tags: [technical, frontend, architecture, wiki-links, tabs, session-persistence, keybindings, state-machine]
 ---
 
 # Frontend Architecture
@@ -173,20 +173,38 @@ Wraps xterm.js to provide terminal emulation.
 
 ### FileTree (`file-tree.ts`)
 
-Displays the project directory structure.
+Displays the project directory structure with vim-style keyboard navigation.
 
 **Features:**
 
 - Collapsible folder navigation
+- Vim-style keyboard navigation (j/k/h/l/g/G)
+- Incremental search with `/` key
 - File type icons based on extension
 - Visual highlight for recently changed files (2s duration)
 - Emits `file-select` event when a file is clicked
+
+**State Management:**
+
+The file tree maintains navigation and search state internally. A pure state machine implementation exists in `file-tree-state.ts` for testing (see [[#File Tree State Machine]]).
+
+**Key State:**
+
+| Property | Description |
+|----------|-------------|
+| `selectedIndex` | Currently highlighted item index |
+| `selectedPath` | Path of highlighted item |
+| `expandedPaths` | Set of expanded directory paths |
+| `searchMode` | Whether search is active |
+| `searchInputFocused` | Whether typing in search input |
+| `searchQuery` | Current filter text |
+| `flatList` | Computed list of visible nodes |
 
 **WebSocket Events:**
 
 | Event | Action |
 |-------|--------|
-| `file-tree` | Updates and re-renders the tree |
+| `file-tree` | Updates tree data and re-renders |
 | `file-change` | Highlights changed file, refreshes tree |
 
 ### MarkdownViewer (`markdown.ts`)
@@ -258,6 +276,129 @@ Provides mobile-specific interface elements.
 2. If updates pending, loads the changed file
 3. Otherwise, shows previously viewed file
 4. Tap backdrop or close button to dismiss
+
+## Keyboard Input Handling
+
+The keyboard system routes input based on context: prefix mode for global commands, pane handlers for focused component actions.
+
+### KeybindingManager (`keybindings.ts`)
+
+Central keyboard input router. Uses capture phase to intercept before xterm.js.
+
+**Responsibilities:**
+
+- Detect prefix key (`Ctrl+a`) and activate prefix mode
+- Route post-prefix keys to global commands
+- Delegate non-prefix keys to focused pane's handler
+- Respect input elements (skip when typing in forms)
+
+**Prefix Mode State:**
+
+```
+┌──────────────┐  Ctrl+a   ┌──────────────┐
+│    NORMAL    │ ────────► │    PREFIX    │
+│              │           │  (2s timeout) │
+└──────────────┘           └──────┬───────┘
+       ▲                          │
+       │        any key           │
+       └──────────────────────────┘
+```
+
+**PaneKeyHandler Interface:**
+
+Components that handle keyboard input implement this interface:
+
+```typescript
+interface PaneKeyHandler {
+  handleKeydown(e: KeyboardEvent): boolean;
+}
+```
+
+Returns `true` if the key was handled (prevents propagation).
+
+**Key Routing Logic:**
+
+1. Prefix key (`Ctrl+a`) → activate prefix mode, consume event
+2. Prefix active + any key → route to global command, consume event
+3. Input element focused → let event through
+4. Terminal focused → let event through (terminal handles it)
+5. Other pane focused → delegate to pane's `handleKeydown()`
+
+### File Tree State Machine
+
+The file tree has three keyboard modes for search and navigation.
+
+**States:**
+
+| State | Description |
+|-------|-------------|
+| `off` | Normal tree navigation, vim keys active |
+| `typing` | Search input focused, typing filters tree |
+| `navigating` | Search visible but unfocused, vim keys navigate filtered results |
+
+**State Transitions:**
+
+```
+┌─────────────────┐
+│       OFF       │  (normal tree view)
+│  vim keys work  │
+└────────┬────────┘
+         │ press /
+         ▼
+┌─────────────────┐
+│     TYPING      │  (search input focused)
+│  type to filter │
+└────────┬────────┘
+         │ press Enter
+         ▼
+┌─────────────────┐
+│   NAVIGATING    │  (search visible, vim keys work)
+│ filtered results│
+└─────────────────┘
+```
+
+**Transitions:**
+
+| From | Event | To | Action |
+|------|-------|----|--------|
+| OFF | `/` | TYPING | Show search input, focus it |
+| TYPING | `Enter` | NAVIGATING | Select first result, blur input |
+| TYPING | `Escape` | OFF | Clear search, hide input |
+| NAVIGATING | `/` | TYPING | Refocus input for refinement |
+| NAVIGATING | `Escape` | OFF | Clear search, hide input |
+| NAVIGATING | `j`/`k` | NAVIGATING | Move selection in filtered list |
+
+**Implementation Notes:**
+
+- State tracked via `searchMode` and `searchInputFocused` properties
+- `render()` recreates DOM each time; focus managed by state flags, not DOM queries
+- `buildFlatList()` filters tree based on search query
+- Pure state logic extracted to `file-tree-state.ts` for testability
+
+### Vim Navigation Keys
+
+Both FileTree and Viewer support vim-style navigation when focused.
+
+**FileTree Keys:**
+
+| Key | Action |
+|-----|--------|
+| `j` / `↓` | Move selection down |
+| `k` / `↑` | Move selection up |
+| `l` / `Enter` | Expand directory or open file |
+| `h` | Collapse directory or go to parent |
+| `gg` | Jump to top (two `g` presses within 500ms) |
+| `G` | Jump to bottom |
+| `/` | Enter search mode |
+
+**Viewer Keys:**
+
+| Key | Action |
+|-----|--------|
+| `j` / `↓` | Scroll down |
+| `k` / `↑` | Scroll up |
+| `gg` | Scroll to top |
+| `G` | Scroll to bottom |
 
 ## WebSocket Communication
 
@@ -410,25 +551,31 @@ Mobile and desktop clients can connect to the same server session simultaneously
 ```
 frontend/
 ├── src/
-│   ├── main.ts           # App entry point
-│   ├── tabs/             # Tab system
-│   │   ├── index.ts      # Public exports
-│   │   ├── tab-manager.ts    # Tab state management
-│   │   ├── tab-bar.ts        # Tab bar UI
+│   ├── main.ts              # App entry point
+│   ├── tabs/                # Tab system
+│   │   ├── index.ts         # Public exports
+│   │   ├── tab-manager.ts   # Tab state management
+│   │   ├── tab-bar.ts       # Tab bar UI
 │   │   ├── project-context.ts # Per-project container
-│   │   └── types.ts          # Tab-related types
-│   ├── layout.ts         # Layout management
-│   ├── terminal.ts       # Terminal component
-│   ├── file-tree.ts      # File tree component
-│   ├── markdown.ts       # Markdown viewer (mertex.md)
-│   ├── mobile.ts         # Mobile UI component
-│   ├── websocket.ts      # WebSocket client
-│   ├── types.ts          # TypeScript interfaces
-│   ├── protocol.ts       # Message type constants
-│   └── config.ts         # Configuration
+│   │   └── types.ts         # Tab-related types
+│   ├── layout.ts            # Layout management
+│   ├── terminal.ts          # Terminal component
+│   ├── terminal-manager.ts  # Terminal instance management
+│   ├── file-tree.ts         # File tree component
+│   ├── file-tree-state.ts   # Pure file tree state machine (testable)
+│   ├── file-tree-state.test.ts # File tree state tests
+│   ├── keybindings.ts       # Keyboard input routing
+│   ├── user-config.ts       # User configuration loading
+│   ├── markdown.ts          # Markdown viewer (mertex.md)
+│   ├── mobile.ts            # Mobile UI component
+│   ├── websocket.ts         # WebSocket client
+│   ├── types.ts             # TypeScript interfaces
+│   ├── protocol.ts          # Message type constants
+│   └── config.ts            # Configuration
 ├── styles/
-│   └── main.css          # All styles including tabs and mobile
-└── index.html            # HTML template
+│   └── main.css             # All styles including tabs and mobile
+├── vitest.config.ts         # Test configuration
+└── index.html               # HTML template
 ```
 
 ## See Also

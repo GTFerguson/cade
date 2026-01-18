@@ -1,7 +1,7 @@
 ---
 title: Roadmap & Future Plans
 created: 2026-01-16
-updated: 2026-01-17
+updated: 2026-01-18
 status: active
 tags: [index, roadmap, future]
 ---
@@ -58,6 +58,7 @@ See [[blocking-issues]] for critical issues that must be resolved before major p
 
 - [[claude-code-hooks-integration]] - Claude Code hooks integration
 - [[mobile-interface]] - Mobile-optimized interface for phones and tablets
+- [[state-management-refactor]] - Extract state logic into testable state machines
 
 ## See Also
 

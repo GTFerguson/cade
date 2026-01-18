@@ -32,6 +32,7 @@ export class FileTree implements Component, PaneKeyHandler {
   private flatList: FlatNode[] = [];
   private selectedIndex = 0;
   private searchMode = false;
+  private searchInputFocused = false;
   private searchQuery = "";
   private searchInput: HTMLInputElement | null = null;
   private lastGPress = 0;
@@ -151,32 +152,51 @@ export class FileTree implements Component, PaneKeyHandler {
       this.searchInput.addEventListener("input", (e) => {
         this.onSearchInputChange((e.target as HTMLInputElement).value);
       });
+      this.searchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          this.clearSearch();
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          this.selectFirstResult();
+        }
+      });
 
       searchContainer.appendChild(this.searchInput);
       this.container.appendChild(searchContainer);
 
-      // Focus after appending
-      setTimeout(() => this.searchInput?.focus(), 0);
+      if (this.searchInputFocused) {
+        this.searchInput.focus();
+      }
     }
 
     const ul = document.createElement("ul");
     ul.className = "file-tree-root";
 
-    for (const node of this.tree) {
-      ul.appendChild(this.renderNode(node, 0));
+    if (this.searchMode && this.searchQuery) {
+      // Render filtered results flat (no hierarchy during search)
+      for (const item of this.flatList) {
+        const li = document.createElement("li");
+        li.className = "file-tree-item";
+        li.dataset["path"] = item.node.path;
+        const row = this.createRowElement(item.node, item.depth);
+        li.appendChild(row);
+        ul.appendChild(li);
+      }
+    } else {
+      // Normal hierarchical render
+      for (const node of this.tree) {
+        ul.appendChild(this.renderNode(node, 0));
+      }
     }
 
     this.container.appendChild(ul);
   }
 
   /**
-   * Render a single node.
+   * Create a row element for a node (used by both renderNode and flat search rendering).
    */
-  private renderNode(node: FileNode, depth: number): HTMLLIElement {
-    const li = document.createElement("li");
-    li.className = "file-tree-item";
-    li.dataset["path"] = node.path;
-
+  private createRowElement(node: FileNode, depth: number): HTMLDivElement {
     const row = document.createElement("div");
     row.className = "file-tree-row";
     row.style.paddingLeft = `${depth * 16 + 8}px`;
@@ -207,15 +227,6 @@ export class FileTree implements Component, PaneKeyHandler {
         e.stopPropagation();
         this.toggleFolder(node.path);
       });
-
-      if (isExpanded && node.children != null && node.children.length > 0) {
-        const childList = document.createElement("ul");
-        childList.className = "file-tree-children";
-        for (const child of node.children) {
-          childList.appendChild(this.renderNode(child, depth + 1));
-        }
-        li.appendChild(childList);
-      }
     } else {
       const spacer = document.createElement("span");
       spacer.className = "file-tree-spacer";
@@ -236,6 +247,33 @@ export class FileTree implements Component, PaneKeyHandler {
     name.className = "file-tree-name";
     name.textContent = node.name;
     row.appendChild(name);
+
+    return row;
+  }
+
+  /**
+   * Render a single node.
+   */
+  private renderNode(node: FileNode, depth: number): HTMLLIElement {
+    const li = document.createElement("li");
+    li.className = "file-tree-item";
+    li.dataset["path"] = node.path;
+
+    const row = this.createRowElement(node, depth);
+
+    if (
+      node.type === "directory" &&
+      this.expandedPaths.has(node.path) &&
+      node.children != null &&
+      node.children.length > 0
+    ) {
+      const childList = document.createElement("ul");
+      childList.className = "file-tree-children";
+      for (const child of node.children) {
+        childList.appendChild(this.renderNode(child, depth + 1));
+      }
+      li.appendChild(childList);
+    }
 
     li.insertBefore(row, li.firstChild);
 
@@ -352,10 +390,16 @@ export class FileTree implements Component, PaneKeyHandler {
    * Returns true if the key was handled.
    */
   handleKeydown(e: KeyboardEvent): boolean {
-    if (this.searchMode) {
-      return this.handleSearchInput(e);
+    // In search typing mode - only handle Escape, let input handle all other keys
+    if (this.searchMode && this.searchInputFocused) {
+      if (e.key === "Escape") {
+        this.clearSearch();
+        return true;
+      }
+      return false;
     }
 
+    // In search-nav mode or normal mode - vim keys work
     switch (e.key) {
       case "j":
       case "ArrowDown":
@@ -381,8 +425,11 @@ export class FileTree implements Component, PaneKeyHandler {
         this.enterSearchMode();
         return true;
       case "Escape":
-        this.clearSearch();
-        return true;
+        if (this.searchMode) {
+          this.clearSearch();
+          return true;
+        }
+        return false;
     }
     return false;
   }
@@ -509,9 +556,9 @@ export class FileTree implements Component, PaneKeyHandler {
    */
   private enterSearchMode(): void {
     this.searchMode = true;
+    this.searchInputFocused = true;
     this.searchQuery = "";
     this.render();
-    this.searchInput?.focus();
   }
 
   /**
@@ -519,37 +566,29 @@ export class FileTree implements Component, PaneKeyHandler {
    */
   private clearSearch(): void {
     this.searchMode = false;
+    this.searchInputFocused = false;
     this.searchQuery = "";
     this.render();
   }
 
   /**
-   * Handle input in search mode.
+   * Select the first search result (keeps search open but unfocused).
    */
-  private handleSearchInput(e: KeyboardEvent): boolean {
-    if (e.key === "Escape") {
-      this.clearSearch();
-      return true;
+  private selectFirstResult(): void {
+    if (this.flatList.length === 0) {
+      return;
     }
-    if (e.key === "Enter") {
-      // Select first matching item
-      if (this.flatList.length > 0) {
-        this.selectedIndex = 0;
-        const item = this.flatList[0];
-        if (item) {
-          this.selectedPath = item.node.path;
-          if (item.node.type === "file") {
-            this.openPath = item.node.path;
-            this.emit("file-select", item.node.path);
-          }
-        }
+    this.selectedIndex = 0;
+    const item = this.flatList[0];
+    if (item) {
+      this.selectedPath = item.node.path;
+      if (item.node.type === "file") {
+        this.openPath = item.node.path;
+        this.emit("file-select", item.node.path);
       }
-      this.searchMode = false;
-      this.render();
-      return true;
     }
-    // Let the input handle the key
-    return false;
+    this.searchInputFocused = false;
+    this.render();
   }
 
   /**
