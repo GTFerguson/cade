@@ -7,11 +7,13 @@
  * - YAML frontmatter display
  * - Syntax highlighting via highlight.js
  * - Tables, code blocks, and all markdown features
+ * - Vim-style keyboard scrolling
  */
 
 import { MertexMD } from "mertex.md";
 import { marked, type TokenizerExtension, type RendererExtension } from "marked";
 import hljs from "highlight.js";
+import type { PaneKeyHandler } from "./keybindings";
 import type { Component, EventHandler } from "./types";
 import type { WebSocketClient } from "./websocket";
 
@@ -80,7 +82,10 @@ if (typeof window !== "undefined") {
   window.hljs = hljs;
 }
 
-export class MarkdownViewer implements Component {
+const SCROLL_LINE_HEIGHT = 40;
+const SCROLL_PAGE_FACTOR = 0.8;
+
+export class MarkdownViewer implements Component, PaneKeyHandler {
   private currentPath: string | null = null;
   private currentContent: string = "";
   private currentFileType: string = "plaintext";
@@ -89,6 +94,8 @@ export class MarkdownViewer implements Component {
     keyof MarkdownEvents,
     Set<EventHandler<MarkdownEvents[keyof MarkdownEvents]>>
   > = new Map();
+  private contentContainer: HTMLElement | null = null;
+  private lastGPress = 0;
 
   constructor(
     private container: HTMLElement,
@@ -242,6 +249,7 @@ export class MarkdownViewer implements Component {
     this.container.innerHTML = "";
     this.container.appendChild(header);
     this.container.appendChild(content);
+    this.contentContainer = content;
   }
 
   /**
@@ -449,6 +457,60 @@ export class MarkdownViewer implements Component {
   }
 
   /**
+   * Handle keyboard navigation (called by KeybindingManager).
+   * Returns true if the key was handled.
+   */
+  handleKeydown(e: KeyboardEvent): boolean {
+    const container = this.contentContainer;
+    if (!container) {
+      return false;
+    }
+
+    switch (e.key) {
+      case "j":
+      case "ArrowDown":
+        container.scrollBy(0, SCROLL_LINE_HEIGHT);
+        return true;
+      case "k":
+      case "ArrowUp":
+        container.scrollBy(0, -SCROLL_LINE_HEIGHT);
+        return true;
+      case "g":
+        return this.handleGKey(container);
+      case "G":
+        container.scrollTo(0, container.scrollHeight);
+        return true;
+      case "d":
+        if (e.ctrlKey) {
+          container.scrollBy(0, container.clientHeight * SCROLL_PAGE_FACTOR);
+          return true;
+        }
+        return false;
+      case "u":
+        if (e.ctrlKey) {
+          container.scrollBy(0, -container.clientHeight * SCROLL_PAGE_FACTOR);
+          return true;
+        }
+        return false;
+    }
+    return false;
+  }
+
+  /**
+   * Handle 'g' key for gg detection.
+   */
+  private handleGKey(container: HTMLElement): boolean {
+    const now = Date.now();
+    if (now - this.lastGPress < 500) {
+      container.scrollTo(0, 0);
+      this.lastGPress = 0;
+      return true;
+    }
+    this.lastGPress = now;
+    return true;
+  }
+
+  /**
    * Dispose of resources.
    */
   dispose(): void {
@@ -456,5 +518,6 @@ export class MarkdownViewer implements Component {
     this.handlers.clear();
     this.currentPath = null;
     this.currentContent = "";
+    this.contentContainer = null;
   }
 }
