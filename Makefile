@@ -19,6 +19,7 @@ ifeq ($(OS),Windows_NT)
     KILL_VITE = cmd /c "taskkill /f /im node.exe 2>nul || echo."
     RM_RF = cmd /c "if exist frontend\dist rmdir /s /q frontend\dist"
     SET_CLEAR_SESSION = set VITE_CLEAR_SESSION=true &&
+    SET_BACKEND_PORT = set BACKEND_PORT=$(DEV_PORT) &&
     define run_bg
     $(BG) $(1)
     endef
@@ -28,6 +29,7 @@ else
     KILL_VITE = pkill -f "vite" 2>/dev/null || true
     RM_RF = rm -rf frontend/dist
     SET_CLEAR_SESSION = VITE_CLEAR_SESSION=true
+    SET_BACKEND_PORT = BACKEND_PORT=$(DEV_PORT)
     define run_bg
     $(1) &
     endef
@@ -52,15 +54,16 @@ build:
 
 # Run stable version (built frontend served by backend)
 stable: build
-	$(PYTHON) -m backend.main --port $(STABLE_PORT)
+	$(PYTHON) -m backend.main serve --port $(STABLE_PORT)
 
 # Run dev version (Vite hot reload + backend)
 dev:
 	@echo "Starting dev backend on port $(DEV_PORT)..."
 	@echo "Starting Vite on port $(VITE_PORT)..."
 	@echo "Access dev at http://localhost:$(VITE_PORT)"
-	$(call run_bg,$(PYTHON) -m backend.main --port $(DEV_PORT) --no-browser)
-	cd frontend && npm run dev -- --port $(VITE_PORT)
+	@echo "To view files: ccplus view -p $(DEV_PORT) <path>"
+	$(call run_bg,$(PYTHON) -m backend.main serve --port $(DEV_PORT) --no-browser --debug)
+	cd frontend && $(SET_BACKEND_PORT) npm run dev -- --port $(VITE_PORT)
 
 # Run dev version with dummy Claude UI (no real Claude connection)
 # Clears session state on each restart for clean testing
@@ -68,8 +71,9 @@ dev-dummy:
 	@echo "Starting dev backend in DUMMY mode on port $(DEV_PORT)..."
 	@echo "Starting Vite on port $(VITE_PORT) (sessions will be cleared)..."
 	@echo "Access dev at http://localhost:$(VITE_PORT)"
-	$(call run_bg,$(PYTHON) -m backend.main --port $(DEV_PORT) --no-browser --dummy)
-	cd frontend && $(SET_CLEAR_SESSION) npm run dev -- --port $(VITE_PORT)
+	@echo "To view files: ccplus view -p $(DEV_PORT) <path>"
+	$(call run_bg,$(PYTHON) -m backend.main serve --port $(DEV_PORT) --no-browser --debug --dummy)
+	cd frontend && $(SET_BACKEND_PORT) $(SET_CLEAR_SESSION) npm run dev -- --port $(VITE_PORT)
 
 # Run both stable and dev
 both: build
@@ -80,9 +84,9 @@ both: build
 	@echo "Stable: http://localhost:$(STABLE_PORT)"
 	@echo "Dev:    http://localhost:$(VITE_PORT)"
 	@echo ""
-	$(call run_bg,$(PYTHON) -m backend.main --port $(STABLE_PORT) --no-browser)
-	$(call run_bg,$(PYTHON) -m backend.main --port $(DEV_PORT) --no-browser)
-	cd frontend && npm run dev -- --port $(VITE_PORT)
+	$(call run_bg,$(PYTHON) -m backend.main serve --port $(STABLE_PORT) --no-browser)
+	$(call run_bg,$(PYTHON) -m backend.main serve --port $(DEV_PORT) --no-browser)
+	cd frontend && $(SET_BACKEND_PORT) npm run dev -- --port $(VITE_PORT)
 
 # Stop all ccplus processes
 kill:

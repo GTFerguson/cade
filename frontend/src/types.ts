@@ -138,6 +138,17 @@ export interface FileContentMessage extends BaseMessage {
 }
 
 /**
+ * View file message (server -> client).
+ * Pushed from CLI `ccplus view` command to display external files.
+ */
+export interface ViewFileMessage extends BaseMessage {
+  type: "view-file";
+  path: string;
+  content: string;
+  fileType: string;
+}
+
+/**
  * Error message (server -> client).
  */
 export interface ErrorMessage extends BaseMessage {
@@ -198,6 +209,7 @@ export type ServerMessage =
   | FileTreeMessage
   | FileChangeMessage
   | FileContentMessage
+  | ViewFileMessage
   | ErrorMessage
   | ConnectedMessage
   | SessionRestoredMessage

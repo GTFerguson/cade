@@ -56,9 +56,19 @@ See [[blocking-issues]] for critical issues that must be resolved before major p
 
 ## Contents
 
+### Integration & Architecture
+
 - [[claude-code-hooks-integration]] - Claude Code hooks integration
 - [[mobile-interface]] - Mobile-optimized interface for phones and tablets
 - [[state-management-refactor]] - Extract state logic into testable state machines
+- [[rename-to-cade]] - Plan for renaming project from ccplus to CADE
+
+### User Interface & Experience
+
+- [[ui-enhancements]] - Tab renaming, lock screen, help modal fix, terminal focus, tab numbering
+- [[terminal-ui-issues]] - Cursor duplication, copy/paste, context menu, splash screen
+- [[pane-focus-mode]] - Temporary pane expansion for focused reading/working
+- [[plan-viewer-improvements]] - Horizontal scrolling, frontmatter display, Obsidian callouts
 
 ## See Also
 

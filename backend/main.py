@@ -14,11 +14,16 @@ import uvicorn
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from backend.config import Config, get_config, set_config
+from backend.connection_manager import get_connection_manager
+from backend.file_tree import get_file_type
+from backend.protocol import MessageType
 from backend.session_registry import get_registry
 from backend.websocket import websocket_handler
 from backend.wsl_health import ensure_wsl_ready
+from backend.wsl_path import wsl_to_windows_path
 from backend.wsl_session_unifier import unify_sessions
 
 if TYPE_CHECKING:
@@ -86,6 +91,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await registry.stop()
 
 
+class ViewFileRequest(BaseModel):
+    """Request body for /api/view endpoint."""
+
+    path: str
+
+
 def create_app(config: Config | None = None) -> FastAPI:
     """Create and configure the FastAPI application."""
     if config is not None:
@@ -102,6 +113,49 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def ws_endpoint(websocket: WebSocket) -> None:
         """WebSocket endpoint for terminal and file operations."""
         await websocket_handler(websocket, get_config())
+
+    @app.post("/api/view")
+    async def view_file(request: ViewFileRequest) -> dict:
+        """Broadcast a file to all connected clients for viewing.
+
+        This endpoint is called by external tools (like Claude Code hooks)
+        to display a file in the markdown viewer.
+        """
+        logger.info("API /api/view called with path: %s", request.path)
+
+        # Translate WSL paths to Windows UNC paths
+        path_str = wsl_to_windows_path(request.path)
+        if path_str != request.path:
+            logger.info("Translated to Windows path: %s", path_str)
+
+        file_path = Path(path_str).expanduser().resolve()
+
+        if not file_path.exists():
+            return {"error": "File not found", "path": str(file_path)}
+
+        if not file_path.is_file():
+            return {"error": "Not a file", "path": str(file_path)}
+
+        try:
+            content = file_path.read_text(encoding="utf-8")
+        except Exception as e:
+            return {"error": f"Failed to read file: {e}", "path": str(file_path)}
+
+        file_type = get_file_type(str(file_path))
+
+        manager = get_connection_manager()
+        await manager.broadcast({
+            "type": MessageType.VIEW_FILE,
+            "path": str(file_path),
+            "content": content,
+            "fileType": file_type,
+        })
+
+        return {
+            "success": True,
+            "path": str(file_path),
+            "connections": manager.connection_count,
+        }
 
     if FRONTEND_DIST.exists():
         @app.get("/")
@@ -133,58 +187,106 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    parser.add_argument(
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Serve command (default)
+    serve_parser = subparsers.add_parser(
+        "serve",
+        help="Start the CADE server (default)",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    serve_parser.add_argument(
         "-p", "--port",
         type=int,
         default=None,
         help="Server port (default: 3000, or CCPLUS_PORT env var)",
     )
-
-    parser.add_argument(
+    serve_parser.add_argument(
         "-H", "--host",
         type=str,
         default=None,
         help="Server host (default: localhost, or CCPLUS_HOST env var)",
     )
-
-    parser.add_argument(
+    serve_parser.add_argument(
         "-d", "--dir",
         type=str,
         default=None,
         dest="working_dir",
         help="Working directory (default: current directory)",
     )
-
-    parser.add_argument(
+    serve_parser.add_argument(
         "-c", "--command",
         type=str,
         default=None,
         dest="shell_command",
         help="Shell command to run (default: claude)",
     )
-
-    parser.add_argument(
+    serve_parser.add_argument(
         "--no-claude",
         action="store_true",
         help="Don't auto-start claude in shell",
     )
-
-    parser.add_argument(
+    serve_parser.add_argument(
         "--no-browser",
         action="store_true",
         help="Don't open browser automatically",
     )
-
-    parser.add_argument(
+    serve_parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable debug mode",
     )
-
-    parser.add_argument(
+    serve_parser.add_argument(
         "--dummy",
         action="store_true",
         help="Show fake Claude UI for development",
+    )
+
+    # View command
+    view_parser = subparsers.add_parser(
+        "view",
+        help="Send a file to the viewer",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    view_parser.add_argument(
+        "path",
+        type=str,
+        help="Path to the file to view",
+    )
+    view_parser.add_argument(
+        "-p", "--port",
+        type=int,
+        default=None,
+        help="Server port (default: 3000, or CCPLUS_PORT env var)",
+    )
+    view_parser.add_argument(
+        "-H", "--host",
+        type=str,
+        default=None,
+        help="Server host (default: localhost, or CCPLUS_HOST env var)",
+    )
+
+    # Setup-hook command
+    setup_hook_parser = subparsers.add_parser(
+        "setup-hook",
+        help="Configure Claude Code hook for plan file viewing",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    setup_hook_parser.add_argument(
+        "--all-files",
+        action="store_true",
+        help="View all file edits, not just plan files",
+    )
+    setup_hook_parser.add_argument(
+        "-p", "--port",
+        type=int,
+        default=3001,
+        help="ccplus server port for the hook",
+    )
+    setup_hook_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be changed without modifying settings",
     )
 
     return parser.parse_args()
@@ -204,20 +306,18 @@ def setup_logging(debug: bool = False) -> None:
         logging.getLogger("watchfiles").setLevel(logging.WARNING)
 
 
-def main() -> None:
-    """Main entry point."""
-    args = parse_args()
-
+def run_serve(args: argparse.Namespace) -> None:
+    """Run the server."""
     config = Config.from_env()
     config = config.update_from_args(
-        port=args.port,
-        host=args.host,
-        working_dir=args.working_dir,
-        shell_command=args.shell_command,
-        auto_start_claude=not args.no_claude if args.no_claude else None,
-        auto_open_browser=not args.no_browser if args.no_browser else None,
-        debug=args.debug if args.debug else None,
-        dummy_mode=args.dummy if args.dummy else None,
+        port=getattr(args, "port", None),
+        host=getattr(args, "host", None),
+        working_dir=getattr(args, "working_dir", None),
+        shell_command=getattr(args, "shell_command", None),
+        auto_start_claude=not args.no_claude if getattr(args, "no_claude", False) else None,
+        auto_open_browser=not args.no_browser if getattr(args, "no_browser", False) else None,
+        debug=args.debug if getattr(args, "debug", False) else None,
+        dummy_mode=args.dummy if getattr(args, "dummy", False) else None,
     )
     set_config(config)
 
@@ -235,6 +335,227 @@ def main() -> None:
     except KeyboardInterrupt:
         logger.info("Interrupted by user")
         sys.exit(0)
+
+
+def run_view(args: argparse.Namespace) -> None:
+    """Send a file to the viewer via HTTP API."""
+    import json
+    import os
+    import urllib.error
+    import urllib.request
+
+    config = Config.from_env()
+    host = args.host if args.host is not None else config.host
+    port = args.port if args.port is not None else config.port
+
+    file_path = os.path.abspath(os.path.expanduser(args.path))
+    url = f"http://{host}:{port}/api/view"
+
+    data = json.dumps({"path": file_path}).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=5) as response:
+            result = json.loads(response.read())
+            if "error" in result:
+                print(f"Error: {result['error']}", file=sys.stderr)
+                sys.exit(1)
+            elif result.get("success"):
+                connections = result.get("connections", 0)
+                if connections > 0:
+                    print(f"Sent to {connections} client(s): {file_path}")
+                else:
+                    print(f"No clients connected. File: {file_path}")
+    except urllib.error.URLError as e:
+        print(f"Failed to connect to server at {url}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _get_wsl_settings_path() -> tuple[Path, bool]:
+    """Get the Claude Code settings path, handling Windows/WSL correctly.
+
+    Returns:
+        Tuple of (settings_path, is_wsl_via_windows).
+        is_wsl_via_windows is True if running on Windows and need to write to WSL.
+    """
+    import subprocess
+
+    if sys.platform != "win32":
+        # Running in WSL or native Linux - use standard path
+        return Path.home() / ".claude" / "settings.json", False
+
+    # Running on Windows - need to write to WSL home
+    try:
+        # Get default WSL distro
+        result = subprocess.run(
+            ["wsl", "-l", "-q"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            print("Warning: Could not detect WSL distro, using Windows path")
+            return Path.home() / ".claude" / "settings.json", False
+
+        # Parse output - first non-empty line is the default distro
+        lines = [line.strip().replace("\x00", "") for line in result.stdout.split("\n")]
+        distro = next((line for line in lines if line), None)
+        if not distro:
+            print("Warning: No WSL distro found, using Windows path")
+            return Path.home() / ".claude" / "settings.json", False
+
+        # Get WSL username
+        result = subprocess.run(
+            ["wsl", "-d", distro, "whoami"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            print("Warning: Could not get WSL username, using Windows path")
+            return Path.home() / ".claude" / "settings.json", False
+
+        wsl_user = result.stdout.strip()
+
+        # Construct UNC path
+        wsl_path = Path(f"\\\\wsl$\\{distro}\\home\\{wsl_user}\\.claude\\settings.json")
+        return wsl_path, True
+
+    except subprocess.TimeoutExpired:
+        print("Warning: WSL command timed out, using Windows path")
+        return Path.home() / ".claude" / "settings.json", False
+    except FileNotFoundError:
+        print("Warning: WSL not available, using Windows path")
+        return Path.home() / ".claude" / "settings.json", False
+
+
+def run_setup_hook(args: argparse.Namespace) -> None:
+    """Configure Claude Code hook for plan file viewing."""
+    import json
+    import shutil
+
+    settings_path, is_wsl = _get_wsl_settings_path()
+    backup_path = settings_path.parent / "settings.json.backup"
+
+    port = args.port
+    all_files = args.all_files
+    dry_run = args.dry_run
+
+    # Hook command reads JSON from stdin (Claude Code passes tool input via stdin)
+    # Use Python since it's always available
+    # Use Windows host IP from default gateway for WSL->Windows connectivity
+    get_host_ip = "$(ip route show default | awk '{print $3}')"
+
+    if all_files:
+        # View all file edits
+        hook_command = (
+            f"python3 -c \"import sys,json; print(json.load(sys.stdin)['tool_input']['file_path'])\" "
+            f"| xargs -I {{}} curl -s -X POST -H 'Content-Type: application/json' "
+            f"-d '{{\"path\":\"{{}}\"}}' http://{get_host_ip}:{port}/api/view > /dev/null"
+        )
+    else:
+        # Only trigger for files in plans/ with .md extension
+        hook_command = (
+            f"python3 -c \"import sys,json; p=json.load(sys.stdin)['tool_input']['file_path']; "
+            f"print(p) if 'plans/' in p and p.endswith('.md') else None\" 2>/dev/null "
+            f"| xargs -r -I {{}} curl -s -X POST -H 'Content-Type: application/json' "
+            f"-d '{{\"path\":\"{{}}\"}}' http://{get_host_ip}:{port}/api/view > /dev/null"
+        )
+
+    new_hook = {
+        "matcher": "Edit|Write",
+        "hooks": [
+            {
+                "type": "command",
+                "command": hook_command,
+            }
+        ],
+    }
+
+    # Load existing settings or create empty
+    if settings_path.exists():
+        try:
+            settings = json.loads(settings_path.read_text())
+        except json.JSONDecodeError as e:
+            print(f"Error: Invalid JSON in {settings_path}: {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        settings = {}
+
+    # Ensure hooks structure exists
+    if "hooks" not in settings:
+        settings["hooks"] = {}
+    if "PostToolUse" not in settings["hooks"]:
+        settings["hooks"]["PostToolUse"] = []
+
+    # Check if a similar hook already exists and update/add as needed
+    existing_hooks = settings["hooks"]["PostToolUse"]
+    hook_exists = False
+    for i, hook in enumerate(existing_hooks):
+        if hook.get("matcher") == "Edit|Write":
+            # Check if this is our hook (contains api/view)
+            hook_cmds = hook.get("hooks", [])
+            for cmd in hook_cmds:
+                if "api/view" in cmd.get("command", ""):
+                    hook_exists = True
+                    existing_hooks[i] = new_hook
+                    if dry_run:
+                        print(f"Would update existing hook at index {i}")
+                    else:
+                        print("Updated existing plan viewer hook")
+                    break
+            if hook_exists:
+                break
+
+    if not hook_exists:
+        existing_hooks.append(new_hook)
+        if dry_run:
+            print("Would add new PostToolUse hook")
+
+    if dry_run:
+        print(f"\nSettings path: {settings_path}")
+        if is_wsl:
+            print("(Writing to WSL home directory from Windows)")
+        print("\nSettings that would be written:")
+        print(json.dumps(settings, indent=2))
+        return
+
+    # Backup existing settings
+    if settings_path.exists():
+        shutil.copy2(settings_path, backup_path)
+        print(f"Backed up existing settings to {backup_path}")
+
+    # Ensure .claude directory exists
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Write updated settings
+    settings_path.write_text(json.dumps(settings, indent=2) + "\n")
+
+    if not hook_exists:
+        print("Added PostToolUse hook for plan file viewing")
+
+    file_filter = "all file edits" if all_files else "plan files (plans/*.md)"
+    print(f"Hook configured to POST {file_filter} to http://localhost:{port}/api/view")
+    if is_wsl:
+        print(f"Settings written to WSL path: {settings_path}")
+
+
+def main() -> None:
+    """Main entry point."""
+    args = parse_args()
+
+    if args.command == "view":
+        run_view(args)
+    elif args.command == "setup-hook":
+        run_setup_hook(args)
+    else:
+        # Default to serve (either explicit "serve" or no command)
+        run_serve(args)
 
 
 if __name__ == "__main__":

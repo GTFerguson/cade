@@ -18,6 +18,7 @@ import type {
   SessionState,
   SetProjectMessage,
   StartupStatusMessage,
+  ViewFileMessage,
 } from "./types";
 
 type ConnectionState = "disconnected" | "connecting" | "connected";
@@ -29,6 +30,7 @@ interface WebSocketEvents {
   "file-tree": FileTreeMessage;
   "file-change": FileChangeMessage;
   "file-content": FileContentMessage;
+  "view-file": ViewFileMessage;
   "session-restored": SessionRestoredMessage;
   "startup-status": StartupStatusMessage;
   error: ErrorMessage;
@@ -205,6 +207,13 @@ export class WebSocketClient {
   }
 
   /**
+   * Request the most recent plan file.
+   */
+  requestLatestPlan(): void {
+    this.send({ type: MessageType.GET_LATEST_PLAN });
+  }
+
+  /**
    * Set project directory for this connection.
    * If not connected yet, the path is stored and sent on connect.
    */
@@ -262,6 +271,10 @@ export class WebSocketClient {
 
       case MessageType.FILE_CONTENT:
         this.emit("file-content", message);
+        break;
+
+      case MessageType.VIEW_FILE:
+        this.emit("view-file", message as ViewFileMessage);
         break;
 
       case MessageType.ERROR:

@@ -40,7 +40,7 @@ class Config:
     """Application configuration loaded from environment variables."""
 
     port: int = 3000
-    host: str = "localhost"
+    host: str = "0.0.0.0"  # Listen on all interfaces for WSL connectivity
     working_dir: Path = field(default_factory=Path.cwd)
     shell_command: str = "wsl"
     auto_start_claude: bool = True
@@ -54,7 +54,7 @@ class Config:
 
         Environment variables:
             CCPLUS_PORT: Server port (default: 3000)
-            CCPLUS_HOST: Server host (default: localhost)
+            CCPLUS_HOST: Server host (default: 0.0.0.0 for WSL connectivity)
             CCPLUS_WORKING_DIR: Working directory (default: cwd)
             CCPLUS_SHELL_COMMAND: Shell command to run (default: wsl)
             CCPLUS_AUTO_START_CLAUDE: Auto-run claude on shell start (default: true)
@@ -64,7 +64,7 @@ class Config:
         """
         return cls(
             port=int(os.getenv("CCPLUS_PORT", "3000")),
-            host=os.getenv("CCPLUS_HOST", "localhost"),
+            host=os.getenv("CCPLUS_HOST", "0.0.0.0"),
             working_dir=Path(os.getenv("CCPLUS_WORKING_DIR", str(Path.cwd()))),
             shell_command=os.getenv("CCPLUS_SHELL_COMMAND", "wsl"),
             auto_start_claude=os.getenv("CCPLUS_AUTO_START_CLAUDE", "true").lower() == "true",

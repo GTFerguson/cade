@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.config import load_user_config
+from backend.connection_manager import get_connection_manager
 from backend.errors import CCPlusError, ProtocolError
 from backend.file_tree import build_file_tree, get_file_type, read_file_content
 from backend.file_watcher import FileWatcher
@@ -58,6 +59,7 @@ class ConnectionHandler:
     async def handle(self) -> None:
         """Main connection handler loop."""
         await self._ws.accept()
+        get_connection_manager().register(self._ws)
 
         try:
             await self._wait_for_project()
@@ -183,6 +185,7 @@ class ConnectionHandler:
     async def _cleanup(self) -> None:
         """Clean up resources."""
         self._closed = True
+        get_connection_manager().unregister(self._ws)
 
         if self._watcher is not None:
             self._watcher.stop()
@@ -295,6 +298,12 @@ class ConnectionHandler:
                 await self._handle_message(data)
             except WebSocketDisconnect:
                 break
+            except RuntimeError as e:
+                # WebSocket closed unexpectedly
+                if "not connected" in str(e).lower():
+                    break
+                logger.exception("Runtime error in receive loop: %s", e)
+                break
             except json.JSONDecodeError:
                 await self._send_error(ErrorCode.INVALID_MESSAGE, "Invalid JSON")
             except Exception as e:
@@ -315,6 +324,8 @@ class ConnectionHandler:
                 await self._handle_get_file(data)
             elif msg_type == MessageType.SAVE_SESSION:
                 await self._handle_save_session(data)
+            elif msg_type == MessageType.GET_LATEST_PLAN:
+                await self._handle_get_latest_plan()
             else:
                 raise ProtocolError.invalid_message(f"Unknown message type: {msg_type}")
 
@@ -391,6 +402,55 @@ class ConnectionHandler:
         """Handle session save request."""
         state = data.get("state", {})
         save_session(self._working_dir, state)
+
+    async def _handle_get_latest_plan(self) -> None:
+        """Handle request for most recent plan file.
+
+        Finds the most recently modified .md file in ~/.claude/plans/
+        and sends it to the client for viewing.
+        """
+        import asyncio
+        import sys
+        from backend.wsl_path import get_wsl_home_as_windows_path
+
+        # On Windows, look in WSL home directory
+        if sys.platform == "win32":
+            # Run subprocess in thread to avoid blocking event loop
+            wsl_home = await asyncio.to_thread(get_wsl_home_as_windows_path)
+            if wsl_home:
+                plans_dir = Path(wsl_home) / ".claude" / "plans"
+            else:
+                plans_dir = Path.home() / ".claude" / "plans"
+        else:
+            plans_dir = Path.home() / ".claude" / "plans"
+
+        if not plans_dir.exists():
+            logger.debug("Plans directory does not exist: %s", plans_dir)
+            return
+
+        md_files = list(plans_dir.glob("*.md"))
+        if not md_files:
+            logger.debug("No plan files found in: %s", plans_dir)
+            return
+
+        # Find most recently modified file
+        latest = max(md_files, key=lambda f: f.stat().st_mtime)
+        logger.info("Viewing latest plan file: %s", latest)
+
+        try:
+            content = latest.read_text(encoding="utf-8")
+        except Exception as e:
+            logger.exception("Failed to read plan file: %s", e)
+            return
+
+        file_type = get_file_type(str(latest))
+
+        await self._send({
+            "type": MessageType.VIEW_FILE,
+            "path": str(latest),
+            "content": content,
+            "fileType": file_type,
+        })
 
     def _start_output_loop(self, session_key: str) -> None:
         """Start the output loop for a terminal."""

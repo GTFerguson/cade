@@ -25,6 +25,7 @@ export interface KeybindingCallbacks {
   closeTab: () => void;
   showHelp: () => void;
   toggleTerminal: () => void;
+  viewLatestPlan: () => void;
   getFocusedPane: () => PaneType;
   getPaneHandler: (pane: PaneType) => PaneKeyHandler | null;
 }
@@ -102,6 +103,14 @@ export class KeybindingManager implements Component {
       (target.tagName === "INPUT" ||
         target.tagName === "TEXTAREA" ||
         target.isContentEditable);
+
+    // Ctrl+g: View latest plan file (intercept before prefix check)
+    if (e.ctrlKey && e.key === "g" && !isInput) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.callbacks?.viewLatestPlan();
+      return;
+    }
 
     // Prefix key (always intercept, even in terminal)
     if (this.isPrefixKey(e)) {

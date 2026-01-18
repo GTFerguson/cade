@@ -125,6 +125,20 @@ ccplus can be customized through TOML configuration files:
 
 See [[configuration|Configuration Guide]] for details.
 
+## Claude Code Integration
+
+ccplus integrates with Claude Code through hooks that automatically display files in the viewer.
+
+### Plan Viewer Hook
+
+Automatically display plan files when Claude creates or edits them:
+
+```bash
+python -m backend.main setup-hook
+```
+
+This configures a PostToolUse hook that sends plan file edits to the markdown viewer. See [[plan-viewer|Plan Viewer Hook]] for setup options and troubleshooting.
+
 ## See Also
 
 - [[../README|Documentation Hub]]

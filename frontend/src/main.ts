@@ -146,6 +146,10 @@ class App {
         const activeTab = this.tabManager.getActiveTab();
         activeTab?.context?.toggleTerminal();
       },
+      viewLatestPlan: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        activeTab?.ws.requestLatestPlan();
+      },
       getFocusedPane: () => {
         const activeTab = this.tabManager.getActiveTab();
         return activeTab?.context?.getFocusedPane() ?? "terminal";

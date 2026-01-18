@@ -17,12 +17,14 @@ class MessageType:
     GET_TREE = "get-tree"  # Request file tree: { type }
     SAVE_SESSION = "save-session"  # Save session state: { type, state: SessionState }
     SET_PROJECT = "set-project"  # Set project directory: { type, path: str, sessionId?: str }
+    GET_LATEST_PLAN = "get-latest-plan"  # Request most recent plan file: { type }
 
     # Server -> Client
     OUTPUT = "output"  # Terminal output: { type, data: str, sessionKey?: str }
     FILE_TREE = "file-tree"  # File tree response: { type, data: FileNode[] }
     FILE_CHANGE = "file-change"  # File changed: { type, event: str, path: str }
     FILE_CONTENT = "file-content"  # File content: { type, path: str, content: str }
+    VIEW_FILE = "view-file"  # External view request: { type, path: str, content: str }
     ERROR = "error"  # Error message: { type, code: str, message: str }
     CONNECTED = "connected"  # Connection established: { type, working_dir: str }
     SESSION_RESTORED = "session-restored"  # Session reattached: { type, sessionId: str, scrollback: str }

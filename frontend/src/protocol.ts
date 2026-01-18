@@ -20,12 +20,14 @@ export const MessageType = {
   GET_TREE: "get-tree",
   SAVE_SESSION: "save-session",
   SET_PROJECT: "set-project",
+  GET_LATEST_PLAN: "get-latest-plan",
 
   // Server -> Client
   OUTPUT: "output",
   FILE_TREE: "file-tree",
   FILE_CHANGE: "file-change",
   FILE_CONTENT: "file-content",
+  VIEW_FILE: "view-file",
   ERROR: "error",
   CONNECTED: "connected",
   SESSION_RESTORED: "session-restored",

@@ -123,6 +123,13 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       this.render();
     });
 
+    this.ws.on("view-file", (message) => {
+      this.currentPath = message.path;
+      this.currentContent = message.content;
+      this.currentFileType = message.fileType;
+      this.render();
+    });
+
     this.ws.on("file-change", (message) => {
       if (message.path === this.currentPath) {
         this.refresh();
