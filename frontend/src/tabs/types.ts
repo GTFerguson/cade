@@ -2,6 +2,9 @@
  * Type definitions for multi-project tab support.
  */
 
+import type { PaneKeyHandler, PaneType } from "../keybindings";
+import type { Layout } from "../layout";
+import type { CustomKeyHandler } from "../terminal";
 import type { WebSocketClient } from "../websocket";
 
 /**
@@ -44,6 +47,13 @@ export interface ProjectContext {
   hide(): void;
   focus(): void;
   dispose(): void;
+  getFocusedPane(): PaneType;
+  focusPane(pane: PaneType): void;
+  cycleFocus(direction: "left" | "right"): void;
+  getPaneHandler(pane: PaneType): PaneKeyHandler | null;
+  getLayout(): Layout | null;
+  setTerminalKeyHandler(handler: CustomKeyHandler | null): void;
+  toggleTerminal(): void;
 }
 
 /**

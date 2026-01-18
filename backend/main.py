@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse
 from backend.config import Config, get_config, set_config
 from backend.session_registry import get_registry
 from backend.websocket import websocket_handler
+from backend.wsl_health import ensure_wsl_ready
 from backend.wsl_session_unifier import unify_sessions
 
 if TYPE_CHECKING:
@@ -29,6 +30,26 @@ logger = logging.getLogger(__name__)
 BACKEND_DIR = Path(__file__).parent
 PROJECT_ROOT = BACKEND_DIR.parent
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
+
+
+async def _check_wsl_health_async() -> None:
+    """Run WSL health check in a thread to avoid blocking."""
+    import asyncio
+
+    config = get_config()
+
+    # Skip WSL check in dummy mode or if not using WSL
+    if config.dummy_mode:
+        return
+    if "wsl" not in config.shell_command.lower():
+        return
+
+    logger.info("Checking WSL health...")
+    ready, msg = await asyncio.to_thread(ensure_wsl_ready)
+    if ready:
+        logger.info("WSL ready")
+    else:
+        logger.warning("WSL not ready: %s", msg)
 
 
 @asynccontextmanager
@@ -44,15 +65,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     registry = get_registry()
     await registry.start()
 
+    # Start WSL health check in background (non-blocking)
+    import asyncio
+    wsl_task = asyncio.create_task(_check_wsl_health_async())
+
     if config.auto_open_browser:
         webbrowser.open(config.server_url)
 
-    logger.info("ccplus started at %s", config.server_url)
+    logger.info("CADE started at %s", config.server_url)
     logger.info("Working directory: %s", config.working_dir)
 
     yield
 
-    logger.info("ccplus shutting down")
+    logger.info("CADE shutting down")
+    wsl_task.cancel()
+    try:
+        await wsl_task
+    except asyncio.CancelledError:
+        pass
     await registry.stop()
 
 
@@ -62,7 +92,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         set_config(config)
 
     app = FastAPI(
-        title="ccplus",
+        title="CADE",
         description="Unified terminal environment",
         version="0.1.0",
         lifespan=lifespan,
@@ -99,7 +129,7 @@ def create_app(config: Config | None = None) -> FastAPI:
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="ccplus - Unified terminal environment",
+        description="CADE - Unified terminal environment",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 

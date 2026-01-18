@@ -1,5 +1,5 @@
 /**
- * Main entry point for ccplus frontend.
+ * Main entry point for CADE frontend.
  */
 
 import "@xterm/xterm/css/xterm.css";

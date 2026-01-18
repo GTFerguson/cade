@@ -3,7 +3,7 @@
  */
 
 import { config } from "./config";
-import { MessageType } from "./protocol";
+import { MessageType, type SessionKeyValue } from "./protocol";
 import type {
   ClientMessage,
   ConnectedMessage,
@@ -17,6 +17,7 @@ import type {
   SessionRestoredMessage,
   SessionState,
   SetProjectMessage,
+  StartupStatusMessage,
 } from "./types";
 
 type ConnectionState = "disconnected" | "connecting" | "connected";
@@ -29,6 +30,7 @@ interface WebSocketEvents {
   "file-change": FileChangeMessage;
   "file-content": FileContentMessage;
   "session-restored": SessionRestoredMessage;
+  "startup-status": StartupStatusMessage;
   error: ErrorMessage;
 }
 
@@ -159,15 +161,26 @@ export class WebSocketClient {
   /**
    * Send terminal input.
    */
-  sendInput(data: string): void {
-    this.send({ type: MessageType.INPUT, data });
+  sendInput(data: string, sessionKey?: SessionKeyValue): void {
+    const message = {
+      type: MessageType.INPUT,
+      data,
+      ...(sessionKey !== undefined && { sessionKey }),
+    } as const;
+    this.send(message);
   }
 
   /**
    * Send terminal resize.
    */
-  sendResize(cols: number, rows: number): void {
-    this.send({ type: MessageType.RESIZE, cols, rows });
+  sendResize(cols: number, rows: number, sessionKey?: SessionKeyValue): void {
+    const message = {
+      type: MessageType.RESIZE,
+      cols,
+      rows,
+      ...(sessionKey !== undefined && { sessionKey }),
+    } as const;
+    this.send(message);
   }
 
   /**
@@ -258,6 +271,10 @@ export class WebSocketClient {
 
       case MessageType.SESSION_RESTORED:
         this.emit("session-restored", message);
+        break;
+
+      case MessageType.STARTUP_STATUS:
+        this.emit("startup-status", message);
         break;
 
       default:

@@ -5,6 +5,13 @@
  * Keep in sync with backend/protocol.py.
  */
 
+export const SessionKey = {
+  CLAUDE: "claude",
+  MANUAL: "manual",
+} as const;
+
+export type SessionKeyValue = (typeof SessionKey)[keyof typeof SessionKey];
+
 export const MessageType = {
   // Client -> Server
   INPUT: "input",
@@ -22,6 +29,7 @@ export const MessageType = {
   ERROR: "error",
   CONNECTED: "connected",
   SESSION_RESTORED: "session-restored",
+  STARTUP_STATUS: "startup-status",
 } as const;
 
 export type MessageTypeValue = (typeof MessageType)[keyof typeof MessageType];

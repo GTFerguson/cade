@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, AsyncIterator
 
 from backend.errors import PTYError
 from backend.types import TerminalSize
+from backend.wsl_health import is_wsl_error, restart_wsl
 
 logger = logging.getLogger(__name__)
 
@@ -148,10 +149,31 @@ class WindowsPTY(BasePTY):
         try:
             self._pty = PTY(size.cols, size.rows)
             self._pty.spawn(command, cwd=str(cwd))
-        except WinptyError as e:
-            raise PTYError.spawn_failed(command, str(e)) from e
-        except Exception as e:
-            raise PTYError.spawn_failed(command, str(e)) from e
+        except (WinptyError, Exception) as e:
+            error_msg = str(e)
+
+            # Check if this is a WSL error that might be recoverable
+            if "wsl" in command.lower() and is_wsl_error(error_msg):
+                logger.warning("WSL spawn failed, attempting recovery: %s", error_msg)
+
+                # Attempt WSL restart
+                success, restart_msg = restart_wsl()
+                if success:
+                    logger.info("WSL recovered, retrying spawn")
+                    try:
+                        self._pty = PTY(size.cols, size.rows)
+                        self._pty.spawn(command, cwd=str(cwd))
+                        return
+                    except Exception as retry_e:
+                        raise PTYError.spawn_failed(
+                            command, f"Retry after WSL recovery failed: {retry_e}"
+                        ) from retry_e
+                else:
+                    raise PTYError.spawn_failed(
+                        command, f"WSL recovery failed: {restart_msg}"
+                    ) from e
+
+            raise PTYError.spawn_failed(command, error_msg) from e
 
     async def read(self) -> AsyncIterator[str]:
         if self._pty is None:

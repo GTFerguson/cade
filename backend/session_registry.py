@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from backend.protocol import SessionKey
 from backend.pty_manager import PTYManager
 from backend.types import TerminalSize
 
@@ -54,35 +55,25 @@ TERMINAL_QUERY_PATTERN = re.compile(
 
 
 @dataclass
-class PTYSession:
-    """Represents a persistent PTY session."""
+class TerminalState:
+    """State for a single terminal (claude or manual)."""
 
-    id: str
     pty: PTYManager
-    project_path: Path
     scrollback: deque[str] = field(default_factory=deque)
     scrollback_size: int = 0
-    last_activity: float = field(default_factory=time.time)
-    connected_clients: set[WebSocket] = field(default_factory=set)
-    created_at: float = field(default_factory=time.time)
-    _output_task: asyncio.Task | None = field(default=None, repr=False)
+    output_task: asyncio.Task | None = field(default=None, repr=False)
 
     def capture_output(self, data: str) -> None:
         """Add output to scrollback buffer, trimming if necessary."""
         self.scrollback.append(data)
         self.scrollback_size += len(data)
-        self.last_activity = time.time()
 
         while self.scrollback_size > MAX_SCROLLBACK_SIZE and len(self.scrollback) > 1:
             removed = self.scrollback.popleft()
             self.scrollback_size -= len(removed)
 
     def get_scrollback(self) -> str:
-        """Get concatenated scrollback content, sanitized for replay.
-
-        Removes terminal query sequences that would cause xterm.js to send
-        responses back to the PTY when the scrollback is replayed.
-        """
+        """Get concatenated scrollback content, sanitized for replay."""
         raw = "".join(self.scrollback)
         return TERMINAL_QUERY_PATTERN.sub("", raw)
 
@@ -90,6 +81,61 @@ class PTYSession:
         """Clear the scrollback buffer."""
         self.scrollback.clear()
         self.scrollback_size = 0
+
+
+@dataclass
+class PTYSession:
+    """Represents a persistent PTY session with dual terminal support."""
+
+    id: str
+    project_path: Path
+    terminals: dict[str, TerminalState] = field(default_factory=dict)
+    last_activity: float = field(default_factory=time.time)
+    connected_clients: set[WebSocket] = field(default_factory=set)
+    created_at: float = field(default_factory=time.time)
+
+    @property
+    def pty(self) -> PTYManager:
+        """Get the primary (claude) PTY for backwards compatibility."""
+        return self.terminals[SessionKey.CLAUDE].pty
+
+    def get_terminal(self, session_key: str) -> TerminalState | None:
+        """Get terminal state by session key."""
+        return self.terminals.get(session_key)
+
+    def has_terminal(self, session_key: str) -> bool:
+        """Check if a terminal exists for the given session key."""
+        return session_key in self.terminals
+
+    def add_terminal(self, session_key: str, pty: PTYManager) -> TerminalState:
+        """Add a new terminal with the given session key."""
+        terminal = TerminalState(pty=pty)
+        self.terminals[session_key] = terminal
+        return terminal
+
+    def capture_output(self, data: str, session_key: str = SessionKey.CLAUDE) -> None:
+        """Add output to the appropriate terminal's scrollback buffer."""
+        terminal = self.terminals.get(session_key)
+        if terminal:
+            terminal.capture_output(data)
+        self.last_activity = time.time()
+
+    def get_scrollback(self, session_key: str = SessionKey.CLAUDE) -> str:
+        """Get scrollback for a specific terminal."""
+        terminal = self.terminals.get(session_key)
+        if terminal:
+            return terminal.get_scrollback()
+        return ""
+
+    def clear_scrollback(self, session_key: str = SessionKey.CLAUDE) -> None:
+        """Clear scrollback for a specific terminal."""
+        terminal = self.terminals.get(session_key)
+        if terminal:
+            terminal.clear_scrollback()
+
+    def is_alive(self) -> bool:
+        """Check if at least one PTY is alive."""
+        return any(t.pty.is_alive() for t in self.terminals.values())
 
 
 class SessionRegistry:
@@ -153,7 +199,7 @@ class SessionRegistry:
         async with self._lock:
             if session_id in self._sessions:
                 session = self._sessions[session_id]
-                if session.pty.is_alive():
+                if session.is_alive():
                     logger.info("Reattaching to existing session: %s", session_id)
                     return session, False
                 else:
@@ -182,7 +228,7 @@ class SessionRegistry:
         auto_start_claude: bool,
         dummy_mode: bool,
     ) -> PTYSession:
-        """Create a new PTY session."""
+        """Create a new PTY session with the primary (claude) terminal."""
         pty = PTYManager()
         await pty.spawn(
             shell_command,
@@ -192,9 +238,9 @@ class SessionRegistry:
 
         session = PTYSession(
             id=session_id,
-            pty=pty,
             project_path=project_path,
         )
+        session.add_terminal(SessionKey.CLAUDE, pty)
 
         if dummy_mode:
             dummy_output = (
@@ -207,12 +253,47 @@ class SessionRegistry:
                 "\x1b[38;5;245m❯\x1b[0m Dummy mode - no actual Claude running\r\n"
                 "─────────────────────────────────────────────────────────────────\r\n"
             )
-            session.capture_output(dummy_output)
+            session.capture_output(dummy_output, SessionKey.CLAUDE)
         elif auto_start_claude:
             await asyncio.sleep(0.5)
             await pty.write("claude\n")
 
         return session
+
+    async def create_manual_terminal(
+        self,
+        session_id: str,
+        shell_command: str,
+        size: TerminalSize | None = None,
+    ) -> TerminalState | None:
+        """Create the manual terminal for an existing session.
+
+        Args:
+            session_id: Session identifier
+            shell_command: Command to spawn in the PTY
+            size: Terminal size
+
+        Returns:
+            The created terminal state, or None if session not found
+        """
+        async with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None:
+                return None
+
+            if session.has_terminal(SessionKey.MANUAL):
+                return session.get_terminal(SessionKey.MANUAL)
+
+            pty = PTYManager()
+            await pty.spawn(
+                shell_command,
+                session.project_path,
+                size or TerminalSize(cols=80, rows=24),
+            )
+
+            terminal = session.add_terminal(SessionKey.MANUAL, pty)
+            logger.info("Created manual terminal for session: %s", session_id)
+            return terminal
 
     async def attach(self, session_id: str, websocket: WebSocket) -> PTYSession | None:
         """Attach a WebSocket to an existing session.
@@ -261,15 +342,15 @@ class SessionRegistry:
         return self._sessions.get(session_id)
 
     async def _close_session(self, session: PTYSession) -> None:
-        """Close a session and its PTY."""
-        if session._output_task is not None:
-            session._output_task.cancel()
-            try:
-                await session._output_task
-            except asyncio.CancelledError:
-                pass
-
-        await session.pty.close()
+        """Close a session and all its terminals."""
+        for terminal in session.terminals.values():
+            if terminal.output_task is not None:
+                terminal.output_task.cancel()
+                try:
+                    await terminal.output_task
+                except asyncio.CancelledError:
+                    pass
+            await terminal.pty.close()
 
     async def _cleanup_loop(self) -> None:
         """Periodically clean up orphaned sessions."""
@@ -292,7 +373,7 @@ class SessionRegistry:
                 age = now - session.created_at
                 if age > self._session_max_age:
                     to_remove.append(session_id)
-                elif not session.pty.is_alive():
+                elif not session.is_alive():
                     to_remove.append(session_id)
 
             for session_id in to_remove:
@@ -303,7 +384,7 @@ class SessionRegistry:
                         "Cleaned up session %s (age=%ds, alive=%s)",
                         session_id,
                         now - session.created_at,
-                        session.pty.is_alive() if session.pty else False,
+                        session.is_alive(),
                     )
 
 

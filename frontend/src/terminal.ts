@@ -47,15 +47,19 @@ export type CustomKeyHandler = (e: KeyboardEvent) => boolean;
 export interface TerminalOptions {
   sessionKey?: SessionKeyValue;
   subscribeToOutput?: boolean;
+  hideCursor?: boolean;
 }
 
 export class Terminal implements Component {
   private terminal: XTerm | null = null;
   private fitAddon: FitAddon | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private resizeDebounceTimer: number | null = null;
   private customKeyHandler: CustomKeyHandler | null = null;
   private sessionKey: SessionKeyValue;
   private subscribeToOutput: boolean;
+  private hideCursor: boolean;
+  private lastSentSize: { cols: number; rows: number } | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -64,14 +68,19 @@ export class Terminal implements Component {
   ) {
     this.sessionKey = options.sessionKey ?? SessionKey.CLAUDE;
     this.subscribeToOutput = options.subscribeToOutput ?? true;
+    this.hideCursor = options.hideCursor ?? false;
   }
 
   /**
    * Initialize the terminal.
    */
   initialize(): void {
+    const theme = this.hideCursor
+      ? { ...BADWOLF_THEME, cursor: "transparent", cursorAccent: "transparent" }
+      : BADWOLF_THEME;
+
     this.terminal = new XTerm({
-      cursorBlink: true,
+      cursorBlink: !this.hideCursor,
       cursorStyle: "block",
       fontSize: 14,
       fontFamily: '"JetBrains Mono", "Fira Code", Consolas, monospace',
@@ -80,7 +89,7 @@ export class Terminal implements Component {
       letterSpacing: 0.5,
       lineHeight: 1.3,
       scrollback: 10000,
-      theme: BADWOLF_THEME,
+      theme,
     });
 
     this.fitAddon = new FitAddon();
@@ -111,6 +120,7 @@ export class Terminal implements Component {
     });
 
     this.terminal.onResize(({ cols, rows }) => {
+      this.lastSentSize = { cols, rows };
       this.ws.sendResize(cols, rows, this.sessionKey);
     });
 
@@ -129,9 +139,24 @@ export class Terminal implements Component {
     });
 
     this.resizeObserver = new ResizeObserver(() => {
-      this.fit();
+      // Debounce resize to avoid flooding backend during drag-resize
+      if (this.resizeDebounceTimer !== null) {
+        window.clearTimeout(this.resizeDebounceTimer);
+      }
+      this.resizeDebounceTimer = window.setTimeout(() => {
+        this.resizeDebounceTimer = null;
+        this.fit();
+      }, 150);
     });
     this.resizeObserver.observe(this.container);
+
+    // Scroll to bottom on click if no text is selected
+    this.container.addEventListener("click", () => {
+      const selection = this.terminal?.getSelection();
+      if (!selection) {
+        this.scrollToBottom();
+      }
+    });
   }
 
   /**
@@ -142,7 +167,27 @@ export class Terminal implements Component {
       return;
     }
 
+    // Don't fit when container is hidden - would send bad dimensions
+    if (this.container.offsetWidth === 0 || this.container.offsetHeight === 0) {
+      return;
+    }
+
     try {
+      // Check if dimensions would actually change
+      const dims = this.fitAddon.proposeDimensions();
+      if (!dims) {
+        return;
+      }
+
+      // Skip if dimensions haven't changed
+      if (
+        this.lastSentSize !== null &&
+        dims.cols === this.lastSentSize.cols &&
+        dims.rows === this.lastSentSize.rows
+      ) {
+        return;
+      }
+
       this.fitAddon.fit();
     } catch {
       // Ignore fit errors during initialization
@@ -157,14 +202,27 @@ export class Terminal implements Component {
       return;
     }
 
-    this.ws.sendResize(this.terminal.cols, this.terminal.rows);
+    // Don't send size when container is hidden - would send stale/bad dimensions
+    if (this.container.offsetWidth === 0 || this.container.offsetHeight === 0) {
+      return;
+    }
+
+    this.ws.sendResize(this.terminal.cols, this.terminal.rows, this.sessionKey);
   }
 
   /**
-   * Focus the terminal.
+   * Focus the terminal and scroll to bottom.
    */
   focus(): void {
     this.terminal?.focus();
+    this.scrollToBottom();
+  }
+
+  /**
+   * Scroll terminal to the bottom of the buffer.
+   */
+  scrollToBottom(): void {
+    this.terminal?.scrollToBottom();
   }
 
   /**
@@ -225,6 +283,11 @@ export class Terminal implements Component {
    * Dispose of terminal resources.
    */
   dispose(): void {
+    if (this.resizeDebounceTimer !== null) {
+      window.clearTimeout(this.resizeDebounceTimer);
+      this.resizeDebounceTimer = null;
+    }
+
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
 

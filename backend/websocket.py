@@ -355,6 +355,10 @@ class ConnectionHandler:
         # Store size for lazy terminal creation
         self._terminal_sizes[session_key] = TerminalSize(cols=cols, rows=rows)
 
+        # Lazily create manual terminal on first resize
+        if session_key == SessionKey.MANUAL and not self._session.has_terminal(SessionKey.MANUAL):
+            await self._create_manual_terminal()
+
         terminal = self._session.get_terminal(session_key)
         if terminal:
             await terminal.pty.resize(cols, rows)

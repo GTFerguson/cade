@@ -10,6 +10,9 @@ import type { AppState, TabInfo, TabManagerEvents, TabState } from "./types";
 const STORAGE_KEY = "ccplus-app-state";
 const STATE_VERSION = 1;
 
+// Clear session state in dev-dummy mode for clean testing
+const CLEAR_SESSION = import.meta.env.VITE_CLEAR_SESSION === "true";
+
 /**
  * Generates a unique tab ID.
  */
@@ -153,6 +156,51 @@ export class TabManager {
   }
 
   /**
+   * Switch to the next tab (cycling).
+   */
+  nextTab(): void {
+    const tabs = this.getTabs();
+    if (tabs.length <= 1) {
+      return;
+    }
+
+    const currentIndex = tabs.findIndex((t) => t.id === this.activeTabId);
+    const nextIndex = (currentIndex + 1) % tabs.length;
+    const nextTab = tabs[nextIndex];
+    if (nextTab) {
+      this.switchTab(nextTab.id);
+    }
+  }
+
+  /**
+   * Switch to the previous tab (cycling).
+   */
+  previousTab(): void {
+    const tabs = this.getTabs();
+    if (tabs.length <= 1) {
+      return;
+    }
+
+    const currentIndex = tabs.findIndex((t) => t.id === this.activeTabId);
+    const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    const prevTab = tabs[prevIndex];
+    if (prevTab) {
+      this.switchTab(prevTab.id);
+    }
+  }
+
+  /**
+   * Switch to a tab by index (0-9).
+   */
+  goToTab(index: number): void {
+    const tabs = this.getTabs();
+    const tab = tabs[index];
+    if (tab) {
+      this.switchTab(tab.id);
+    }
+  }
+
+  /**
    * Update a tab's connection status.
    */
   setConnected(id: string, connected: boolean): void {
@@ -236,6 +284,12 @@ export class TabManager {
    * Load state from localStorage.
    */
   private loadState(): AppState | null {
+    // Clear session state in dev-dummy mode for clean testing
+    if (CLEAR_SESSION) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+
     try {
       const json = localStorage.getItem(STORAGE_KEY);
       if (!json) {
