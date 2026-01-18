@@ -133,12 +133,22 @@ export interface LayoutBehaviorConfig {
 }
 
 /**
+ * Splash screen behavior configuration.
+ */
+export interface SplashBehaviorConfig {
+  mode: "auto" | "always" | "never";
+  idleThreshold: number;
+  healthCheckTimeout: number;
+}
+
+/**
  * Behavior configuration.
  */
 export interface BehaviorConfig {
   session: SessionBehaviorConfig;
   fileTree: FileTreeBehaviorConfig;
   layout: LayoutBehaviorConfig;
+  splash: SplashBehaviorConfig;
 }
 
 /**
@@ -223,6 +233,11 @@ export const defaultUserConfig: UserConfig = {
       fileTree: 0.2,
       terminal: 0.5,
       viewer: 0.3,
+    },
+    splash: {
+      mode: "auto",
+      idleThreshold: 1800,
+      healthCheckTimeout: 3,
     },
   },
 };

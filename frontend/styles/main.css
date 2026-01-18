@@ -1,5 +1,5 @@
 /**
- * ccplus dark theme styles
+ * CADE dark theme styles
  * Badwolf-inspired color scheme
  * @see https://github.com/sjl/badwolf
  */
@@ -67,8 +67,8 @@ body {
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -293,6 +293,16 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/* Ensure xterm helper textarea is clipped within terminal bounds */
+.terminal-pane .xterm-helper-textarea {
+  left: 0 !important;
+  top: 0 !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* Viewer pane */
@@ -968,10 +978,6 @@ body {
   outline: none;
 }
 
-.file-tree-search-input:focus {
-  border-color: var(--border-focus);
-}
-
 .file-tree-search-input::placeholder {
   color: var(--text-muted);
 }
@@ -1074,4 +1080,49 @@ body {
   font-size: 12px;
   margin-top: 16px;
   margin-bottom: 0;
+}
+
+/* ==========================================================================
+   Splash Screen
+   ========================================================================== */
+
+.splash {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  transition: opacity 0.3s ease;
+}
+
+.splash.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-logo {
+  color: var(--accent-red);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.2;
+  text-align: center;
+  margin: 0;
+}
+
+.splash-status {
+  margin-top: 24px;
+  color: var(--accent-red);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.splash-status.blink {
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
 }

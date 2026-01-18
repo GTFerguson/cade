@@ -26,6 +26,7 @@ from backend.user_config import (
     MiscKeybindingsConfig,
     PaneKeybindingsConfig,
     SessionBehaviorConfig,
+    SplashBehaviorConfig,
     TabKeybindingsConfig,
     TerminalAppearanceConfig,
     UserConfig,
@@ -350,6 +351,18 @@ def _apply_layout_behavior_config(data: dict) -> LayoutBehaviorConfig:
     return config
 
 
+def _apply_splash_behavior_config(data: dict) -> SplashBehaviorConfig:
+    """Create SplashBehaviorConfig from TOML data."""
+    config = SplashBehaviorConfig()
+    if "mode" in data:
+        config.mode = data["mode"]
+    if "idle-threshold" in data:
+        config.idle_threshold = data["idle-threshold"]
+    if "health-check-timeout" in data:
+        config.health_check_timeout = data["health-check-timeout"]
+    return config
+
+
 def _load_behavior_config(paths: list[Path]) -> BehaviorConfig:
     """Load behavior config from multiple paths, merging them."""
     merged: dict[str, Any] = {}
@@ -366,6 +379,8 @@ def _load_behavior_config(paths: list[Path]) -> BehaviorConfig:
         config.file_tree = _apply_file_tree_behavior_config(merged["file-tree"])
     if "layout" in merged:
         config.layout = _apply_layout_behavior_config(merged["layout"])
+    if "splash" in merged:
+        config.splash = _apply_splash_behavior_config(merged["splash"])
 
     return config
 

@@ -140,12 +140,22 @@ class LayoutBehaviorConfig:
 
 
 @dataclass
+class SplashBehaviorConfig:
+    """Splash screen behavior settings."""
+
+    mode: str = "auto"  # "auto" | "always" | "never"
+    idle_threshold: int = 1800  # seconds (30 min default)
+    health_check_timeout: int = 3  # seconds
+
+
+@dataclass
 class BehaviorConfig:
     """Behavior configuration."""
 
     session: SessionBehaviorConfig = field(default_factory=SessionBehaviorConfig)
     file_tree: FileTreeBehaviorConfig = field(default_factory=FileTreeBehaviorConfig)
     layout: LayoutBehaviorConfig = field(default_factory=LayoutBehaviorConfig)
+    splash: SplashBehaviorConfig = field(default_factory=SplashBehaviorConfig)
 
 
 @dataclass
@@ -228,6 +238,11 @@ class UserConfig:
                     "fileTree": self.behavior.layout.file_tree,
                     "terminal": self.behavior.layout.terminal,
                     "viewer": self.behavior.layout.viewer,
+                },
+                "splash": {
+                    "mode": self.behavior.splash.mode,
+                    "idleThreshold": self.behavior.splash.idle_threshold,
+                    "healthCheckTimeout": self.behavior.splash.health_check_timeout,
                 },
             },
         }

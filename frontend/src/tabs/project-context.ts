@@ -6,22 +6,29 @@
  */
 
 import { FileTree } from "../file-tree";
+import type { PaneKeyHandler, PaneType } from "../keybindings";
 import { Layout } from "../layout";
 import { MarkdownViewer } from "../markdown";
-import { Terminal } from "../terminal";
-import type { SessionState } from "../types";
+import { Splash } from "../splash";
+import { TerminalManager } from "../terminal-manager";
+import type { CustomKeyHandler } from "../terminal";
+import type { ConnectedMessage, SessionState } from "../types";
 import type { WebSocketClient } from "../websocket";
 import type { ProjectContext as IProjectContext } from "./types";
+
+const PANE_ORDER: PaneType[] = ["file-tree", "terminal", "viewer"];
 
 export class ProjectContextImpl implements IProjectContext {
   readonly container: HTMLElement;
   private layout: Layout | null = null;
-  private terminal: Terminal | null = null;
+  private terminalManager: TerminalManager | null = null;
   private fileTree: FileTree | null = null;
   private viewer: MarkdownViewer | null = null;
+  private splash: Splash | null = null;
   private saveTimeout: number | null = null;
   private pendingSession: SessionState | null = null;
   private isVisible = false;
+  private focusedPane: PaneType = "terminal";
 
   constructor(
     readonly id: string,
@@ -68,8 +75,11 @@ export class ProjectContextImpl implements IProjectContext {
       ".viewer-pane"
     ) as HTMLElement;
 
-    this.terminal = new Terminal(terminalEl, this.ws);
-    this.terminal.initialize();
+    this.terminalManager = new TerminalManager(terminalEl, this.ws);
+    this.terminalManager.initialize();
+
+    // Create splash overlay in terminal pane
+    this.splash = new Splash(terminalEl);
 
     this.fileTree = new FileTree(fileTreeEl, this.ws);
     this.fileTree.initialize();
@@ -96,18 +106,30 @@ export class ProjectContextImpl implements IProjectContext {
       this.scheduleSave();
     });
 
-    this.ws.on("session-restored", (message) => {
-      console.log(`[${this.name}] Session restored:`, message.sessionId);
-      if (message.scrollback) {
-        this.terminal?.reset();
-        this.terminal?.write(message.scrollback);
+    this.ws.on("startup-status", (message) => {
+      if (this.splash?.isVisible()) {
+        this.splash.setStatus(message.message);
       }
+    });
+
+    this.ws.on("session-restored", (message) => {
+      console.log(`[${this.name}] Session restored:`, message.sessionId, message.sessionKey);
+      // TerminalManager handles session-restored internally
     });
 
     this.ws.on("connected", (message) => {
       console.log(`[${this.name}] Connected to server:`, message.workingDir);
       if (message.session != null) {
         this.pendingSession = message.session;
+      }
+      // Handle splash screen based on session state
+      if (this.splash?.isVisible()) {
+        const shouldSkip = this.shouldSkipSplash(message);
+        if (shouldSkip) {
+          this.splash.autoSkip(() => this.terminalManager?.focus());
+        } else {
+          this.splash.setReady(() => this.terminalManager?.focus());
+        }
       }
     });
 
@@ -148,12 +170,112 @@ export class ProjectContextImpl implements IProjectContext {
   }
 
   /**
-   * Focus the terminal.
+   * Focus the terminal (default focus action).
    */
   focus(): void {
     if (this.isVisible) {
-      this.terminal?.focus();
+      this.focusPane("terminal");
     }
+  }
+
+  /**
+   * Get the currently focused pane type.
+   */
+  getFocusedPane(): PaneType {
+    return this.focusedPane;
+  }
+
+  /**
+   * Focus a specific pane.
+   */
+  focusPane(pane: PaneType): void {
+    this.focusedPane = pane;
+    this.updatePaneFocusVisual();
+
+    if (pane === "terminal") {
+      this.terminalManager?.focus();
+    }
+  }
+
+  /**
+   * Cycle focus to an adjacent pane.
+   * Direction "left" moves focus left, "right" moves right.
+   */
+  cycleFocus(direction: "left" | "right"): void {
+    const currentIndex = PANE_ORDER.indexOf(this.focusedPane);
+    const delta = direction === "left" ? -1 : 1;
+    const newIndex =
+      (currentIndex + delta + PANE_ORDER.length) % PANE_ORDER.length;
+    const newPane = PANE_ORDER[newIndex];
+    if (newPane) {
+      this.focusPane(newPane);
+    }
+  }
+
+  /**
+   * Update visual indicators for focused pane.
+   */
+  private updatePaneFocusVisual(): void {
+    const fileTreePane = this.container.querySelector(".file-tree-pane");
+    const terminalPane = this.container.querySelector(".terminal-pane");
+    const viewerPane = this.container.querySelector(".viewer-pane");
+
+    fileTreePane?.classList.toggle("pane-focused", this.focusedPane === "file-tree");
+    terminalPane?.classList.toggle("pane-focused", this.focusedPane === "terminal");
+    viewerPane?.classList.toggle("pane-focused", this.focusedPane === "viewer");
+  }
+
+  /**
+   * Determine if splash screen should be skipped based on session state.
+   */
+  private shouldSkipSplash(message: ConnectedMessage): boolean {
+    const splash = message.config?.behavior?.splash;
+    const mode = splash?.mode ?? "auto";
+
+    if (mode === "always") return false;
+    if (mode === "never") return true;
+
+    // "auto" mode logic
+    if (!message.sessionRestored) return false;
+    if (!message.wslHealthy) return false;
+
+    const idleThreshold = splash?.idleThreshold ?? 1800;
+    return (message.idleSeconds ?? 0) < idleThreshold;
+  }
+
+  /**
+   * Get the keyboard handler for a specific pane.
+   */
+  getPaneHandler(pane: PaneType): PaneKeyHandler | null {
+    switch (pane) {
+      case "file-tree":
+        return this.fileTree;
+      case "viewer":
+        return this.viewer;
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Get the layout instance for resize operations.
+   */
+  getLayout(): Layout | null {
+    return this.layout;
+  }
+
+  /**
+   * Set a custom key handler for the terminal.
+   */
+  setTerminalKeyHandler(handler: CustomKeyHandler | null): void {
+    this.terminalManager?.setCustomKeyHandler(handler);
+  }
+
+  /**
+   * Toggle between Claude and Manual terminals.
+   */
+  toggleTerminal(): void {
+    this.terminalManager?.toggle();
   }
 
   /**
@@ -219,7 +341,7 @@ export class ProjectContextImpl implements IProjectContext {
 
     this.saveSessionNow();
 
-    this.terminal?.dispose();
+    this.terminalManager?.dispose();
     this.fileTree?.dispose();
     this.viewer?.dispose();
     this.layout?.dispose();

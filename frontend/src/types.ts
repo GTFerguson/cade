@@ -1,5 +1,5 @@
 /**
- * TypeScript interfaces for ccplus frontend.
+ * TypeScript interfaces for CADE frontend.
  */
 
 import type { ErrorCodeValue, MessageTypeValue, SessionKeyValue } from "./protocol";
@@ -154,6 +154,9 @@ export interface ConnectedMessage extends BaseMessage {
   workingDir: string;
   session?: SessionState;
   config?: UserConfig;
+  sessionRestored?: boolean;
+  idleSeconds?: number;
+  wslHealthy?: boolean;
 }
 
 /**
@@ -165,6 +168,15 @@ export interface SessionRestoredMessage extends BaseMessage {
   sessionId: string;
   scrollback: string;
   sessionKey?: SessionKeyValue;
+}
+
+/**
+ * Startup status message (server -> client).
+ * Sent during initialization to update splash screen.
+ */
+export interface StartupStatusMessage extends BaseMessage {
+  type: "startup-status";
+  message: string;
 }
 
 /**
@@ -188,7 +200,8 @@ export type ServerMessage =
   | FileContentMessage
   | ErrorMessage
   | ConnectedMessage
-  | SessionRestoredMessage;
+  | SessionRestoredMessage
+  | StartupStatusMessage;
 
 /**
  * Event handler type.

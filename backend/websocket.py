@@ -48,13 +48,22 @@ class ConnectionHandler:
         self._output_tasks: dict[str, asyncio.Task] = {}
         self._terminal_sizes: dict[str, TerminalSize] = {}
 
+    async def _send_status(self, message: str) -> None:
+        """Send a startup status message."""
+        await self._send({
+            "type": MessageType.STARTUP_STATUS,
+            "message": message,
+        })
+
     async def handle(self) -> None:
         """Main connection handler loop."""
         await self._ws.accept()
 
         try:
             await self._wait_for_project()
+            await self._send_status("Starting terminal...")
             await self._setup()
+            await self._send_status("Connected")
             await self._send_connected()
 
             # Start output loop for claude terminal
@@ -223,7 +232,13 @@ class ConnectionHandler:
 
     async def _send_connected(self) -> None:
         """Send connected message with working directory, session state, and user config."""
-        if not self._is_new_session and self._session is not None:
+        session_restored = not self._is_new_session
+        idle_seconds = 0
+
+        if session_restored and self._session is not None:
+            # Calculate idle time before updating last_activity
+            idle_seconds = int(time.time() - self._session.last_activity)
+
             # Send scrollback for claude terminal
             scrollback = self._session.get_scrollback(SessionKey.CLAUDE)
             if scrollback:
@@ -250,10 +265,20 @@ class ConnectionHandler:
         # Load user config for this working directory
         user_config = load_user_config(self._working_dir)
 
+        # Perform WSL health check for restored sessions
+        wsl_healthy = True
+        if session_restored and not self._config.dummy_mode:
+            health_check_timeout = user_config.behavior.splash.health_check_timeout
+            from backend.wsl_health import check_wsl_health
+            wsl_healthy, _ = check_wsl_health(timeout=float(health_check_timeout))
+
         message: dict = {
             "type": MessageType.CONNECTED,
             "workingDir": str(self._working_dir),
             "config": user_config.to_dict(),
+            "sessionRestored": session_restored,
+            "idleSeconds": idle_seconds,
+            "wslHealthy": wsl_healthy,
         }
 
         session = load_session(self._working_dir)
