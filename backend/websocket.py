@@ -11,12 +11,13 @@ from typing import TYPE_CHECKING
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from backend.config import load_user_config
 from backend.errors import CCPlusError, ProtocolError
 from backend.file_tree import build_file_tree, get_file_type, read_file_content
 from backend.file_watcher import FileWatcher
-from backend.protocol import ErrorCode, MessageType
+from backend.protocol import ErrorCode, MessageType, SessionKey
 from backend.session import load_session, save_session
-from backend.session_registry import PTYSession, get_registry
+from backend.session_registry import PTYSession, TerminalState, get_registry
 from backend.types import FileChangeEvent, TerminalSize
 
 if TYPE_CHECKING:
@@ -44,6 +45,8 @@ class ConnectionHandler:
         self._suppress_start_time: float | None = None
         self._project_set = asyncio.Event()
         self._is_new_session = True
+        self._output_tasks: dict[str, asyncio.Task] = {}
+        self._terminal_sizes: dict[str, TerminalSize] = {}
 
     async def handle(self) -> None:
         """Main connection handler loop."""
@@ -54,7 +57,8 @@ class ConnectionHandler:
             await self._setup()
             await self._send_connected()
 
-            pty_output_task = asyncio.create_task(self._pty_output_loop())
+            # Start output loop for claude terminal
+            self._start_output_loop(SessionKey.CLAUDE)
             watch_task = asyncio.create_task(self._watch_loop())
 
             # Receive loop controls connection lifetime
@@ -63,10 +67,11 @@ class ConnectionHandler:
                 await self._receive_loop()
             finally:
                 # Cancel background tasks when receive ends
-                pty_output_task.cancel()
+                for task in self._output_tasks.values():
+                    task.cancel()
                 watch_task.cancel()
                 await asyncio.gather(
-                    pty_output_task, watch_task, return_exceptions=True
+                    *self._output_tasks.values(), watch_task, return_exceptions=True
                 )
 
         except WebSocketDisconnect:
@@ -136,9 +141,9 @@ class ConnectionHandler:
             )
             self._session = PTYSession(
                 id="",
-                pty=pty,
                 project_path=self._working_dir,
             )
+            self._session.add_terminal(SessionKey.CLAUDE, pty)
             self._is_new_session = True
 
         if self._is_new_session:
@@ -199,20 +204,56 @@ class ConnectionHandler:
             "message": message,
         })
 
+    async def _create_manual_terminal(self) -> None:
+        """Create the manual terminal for this session."""
+        if self._session is None or self._session_id is None:
+            return
+
+        size = self._terminal_sizes.get(SessionKey.MANUAL, TerminalSize(cols=80, rows=24))
+        registry = get_registry()
+        await registry.create_manual_terminal(
+            self._session_id,
+            self._config.shell_command,
+            size,
+        )
+
+        # Start output loop for the new terminal
+        self._start_output_loop(SessionKey.MANUAL)
+        logger.info("Created manual terminal for session: %s", self._session_id)
+
     async def _send_connected(self) -> None:
-        """Send connected message with working directory and session state."""
+        """Send connected message with working directory, session state, and user config."""
         if not self._is_new_session and self._session is not None:
-            scrollback = self._session.get_scrollback()
+            # Send scrollback for claude terminal
+            scrollback = self._session.get_scrollback(SessionKey.CLAUDE)
             if scrollback:
                 await self._send({
                     "type": MessageType.SESSION_RESTORED,
                     "sessionId": self._session_id,
                     "scrollback": scrollback,
+                    "sessionKey": SessionKey.CLAUDE,
                 })
+
+            # Send scrollback for manual terminal if it exists
+            if self._session.has_terminal(SessionKey.MANUAL):
+                # Start output loop for existing manual terminal
+                self._start_output_loop(SessionKey.MANUAL)
+                manual_scrollback = self._session.get_scrollback(SessionKey.MANUAL)
+                if manual_scrollback:
+                    await self._send({
+                        "type": MessageType.SESSION_RESTORED,
+                        "sessionId": self._session_id,
+                        "scrollback": manual_scrollback,
+                        "sessionKey": SessionKey.MANUAL,
+                    })
+
+        # Load user config for this working directory
+        user_config = load_user_config(self._working_dir)
 
         message: dict = {
             "type": MessageType.CONNECTED,
             "workingDir": str(self._working_dir),
+            "config": user_config.to_dict(),
         }
 
         session = load_session(self._working_dir)
@@ -263,18 +304,35 @@ class ConnectionHandler:
         if self._session is None:
             return
 
+        session_key = data.get("sessionKey", SessionKey.CLAUDE)
         input_data = data.get("data", "")
-        if input_data:
-            await self._session.pty.write(input_data)
+
+        if not input_data:
+            return
+
+        # Lazily create manual terminal on first input
+        if session_key == SessionKey.MANUAL and not self._session.has_terminal(SessionKey.MANUAL):
+            await self._create_manual_terminal()
+
+        terminal = self._session.get_terminal(session_key)
+        if terminal:
+            await terminal.pty.write(input_data)
 
     async def _handle_resize(self, data: dict) -> None:
         """Handle terminal resize."""
         if self._session is None:
             return
 
+        session_key = data.get("sessionKey", SessionKey.CLAUDE)
         cols = data.get("cols", 80)
         rows = data.get("rows", 24)
-        await self._session.pty.resize(cols, rows)
+
+        # Store size for lazy terminal creation
+        self._terminal_sizes[session_key] = TerminalSize(cols=cols, rows=rows)
+
+        terminal = self._session.get_terminal(session_key)
+        if terminal:
+            await terminal.pty.resize(cols, rows)
 
     async def _handle_get_tree(self) -> None:
         """Handle file tree request."""
@@ -305,19 +363,32 @@ class ConnectionHandler:
         state = data.get("state", {})
         save_session(self._working_dir, state)
 
-    async def _pty_output_loop(self) -> None:
+    def _start_output_loop(self, session_key: str) -> None:
+        """Start the output loop for a terminal."""
+        if session_key in self._output_tasks:
+            return
+
+        task = asyncio.create_task(self._pty_output_loop(session_key))
+        self._output_tasks[session_key] = task
+
+    async def _pty_output_loop(self, session_key: str) -> None:
         """Read and send PTY output to client."""
         if self._session is None:
             return
 
+        terminal = self._session.get_terminal(session_key)
+        if terminal is None:
+            return
+
         try:
-            async for data in self._session.pty.read():
+            async for data in terminal.pty.read():
                 if self._closed:
                     break
 
-                self._session.capture_output(data)
+                self._session.capture_output(data, session_key)
 
-                if self._suppress_output:
+                # Only apply startup suppression to claude terminal
+                if session_key == SessionKey.CLAUDE and self._suppress_output:
                     # Detect Claude startup via:
                     # - Alternate screen buffer: \x1b[?1049h or \x1b[?47h
                     # - Clear screen: \x1b[2J (often with \x1b[H cursor home)
@@ -340,10 +411,11 @@ class ConnectionHandler:
                 await self._send({
                     "type": MessageType.OUTPUT,
                     "data": data,
+                    "sessionKey": session_key,
                 })
         except Exception as e:
             if not self._closed:
-                logger.exception("PTY output error: %s", e)
+                logger.exception("PTY output error for %s: %s", session_key, e)
 
     async def _watch_loop(self) -> None:
         """Watch for file changes and notify client."""

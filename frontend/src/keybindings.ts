@@ -6,6 +6,12 @@
  */
 
 import type { Component } from "./types";
+import {
+  getUserConfig,
+  matchesKeybinding,
+  parseKeybinding,
+  type KeybindingsConfig,
+} from "./user-config";
 
 export type PaneType = "file-tree" | "terminal" | "viewer";
 
@@ -27,8 +33,6 @@ export interface PaneKeyHandler {
   handleKeydown(e: KeyboardEvent): boolean;
 }
 
-const PREFIX_TIMEOUT = 1500;
-
 export class KeybindingManager implements Component {
   private prefixActive = false;
   private prefixTimeout: number | null = null;
@@ -37,6 +41,28 @@ export class KeybindingManager implements Component {
 
   constructor() {
     this.boundHandleKeydown = this.handleKeydown.bind(this);
+  }
+
+  /**
+   * Get the current keybindings configuration.
+   */
+  private getConfig(): KeybindingsConfig {
+    return getUserConfig().keybindings;
+  }
+
+  /**
+   * Get the prefix timeout from config.
+   */
+  private getPrefixTimeout(): number {
+    return this.getConfig().global.prefixTimeout;
+  }
+
+  /**
+   * Check if the given key event matches the configured prefix key.
+   */
+  private isPrefixKey(e: KeyboardEvent): boolean {
+    const prefix = this.getConfig().global.prefix;
+    return matchesKeybinding(e, prefix);
   }
 
   /**
@@ -77,8 +103,8 @@ export class KeybindingManager implements Component {
         target.tagName === "TEXTAREA" ||
         target.isContentEditable);
 
-    // Prefix key: Ctrl-a (always intercept, even in terminal)
-    if (e.ctrlKey && e.key === "a" && !e.shiftKey && !e.altKey && !e.metaKey) {
+    // Prefix key (always intercept, even in terminal)
+    if (this.isPrefixKey(e)) {
       // Don't intercept in actual input elements
       if (isInput) {
         return;
@@ -121,7 +147,7 @@ export class KeybindingManager implements Component {
     console.log("[keybindings] Prefix mode activated");
     this.prefixTimeout = window.setTimeout(() => {
       this.deactivatePrefix();
-    }, PREFIX_TIMEOUT);
+    }, this.getPrefixTimeout());
   }
 
   /**
@@ -143,6 +169,23 @@ export class KeybindingManager implements Component {
   }
 
   /**
+   * Check if a key matches a configured binding (for use after prefix).
+   * Binding format: "h" for simple key, "C-h" for Ctrl+h, etc.
+   */
+  private matchesBinding(e: KeyboardEvent, binding: string): boolean {
+    const parsed = parseKeybinding(binding);
+
+    // For post-prefix bindings, we match the key and modifiers
+    return (
+      e.ctrlKey === parsed.ctrl &&
+      e.altKey === parsed.alt &&
+      e.shiftKey === parsed.shift &&
+      e.metaKey === parsed.meta &&
+      e.key.toLowerCase() === parsed.key
+    );
+  }
+
+  /**
    * Handle shortcuts after prefix key.
    */
   private handlePrefixShortcut(e: KeyboardEvent): void {
@@ -151,76 +194,85 @@ export class KeybindingManager implements Component {
       return;
     }
 
+    const config = this.getConfig();
     console.log("[keybindings] Prefix shortcut:", e.key, "ctrl:", e.ctrlKey);
     // Always deactivate prefix after handling
     this.deactivatePrefix();
 
-    // Pane resize: prefix + Ctrl-h/l
-    if (e.ctrlKey && (e.key === "h" || e.key === "l")) {
+    // Pane resize: uses config pane.resizeLeft/resizeRight (default: C-h/C-l)
+    if (this.matchesBinding(e, config.pane.resizeLeft)) {
       e.preventDefault();
-      this.callbacks?.resizePane(e.key === "h" ? "left" : "right");
+      this.callbacks?.resizePane("left");
+      return;
+    }
+    if (this.matchesBinding(e, config.pane.resizeRight)) {
+      e.preventDefault();
+      this.callbacks?.resizePane("right");
       return;
     }
 
-    // Don't process if Ctrl is still held (except for resize above)
+    // Don't process simple keys if Ctrl is still held (resize was already checked)
     if (e.ctrlKey) {
       return;
     }
 
     e.preventDefault();
 
-    switch (e.key) {
-      // Pane focus: prefix + f/g/h/l/arrows
-      case "f":
-      case "h":
-      case "ArrowLeft":
-        this.callbacks?.focusPane("left");
-        break;
-      case "g":
-      case "l":
-      case "ArrowRight":
-        this.callbacks?.focusPane("right");
-        break;
+    // Pane focus: uses config pane.focusLeft/focusRight (default: h/l)
+    // Also support f/g and arrow keys as aliases
+    if (
+      this.matchesBinding(e, config.pane.focusLeft) ||
+      e.key === "f" ||
+      e.key === "ArrowLeft"
+    ) {
+      this.callbacks?.focusPane("left");
+      return;
+    }
+    if (
+      this.matchesBinding(e, config.pane.focusRight) ||
+      e.key === "g" ||
+      e.key === "ArrowRight"
+    ) {
+      this.callbacks?.focusPane("right");
+      return;
+    }
 
-      // Tab navigation: prefix + r/t
-      case "r":
-        this.callbacks?.previousTab();
-        break;
-      case "t":
-        this.callbacks?.nextTab();
-        break;
+    // Tab navigation: uses config tab.previous/next (default: r/t)
+    if (this.matchesBinding(e, config.tab.previous)) {
+      this.callbacks?.previousTab();
+      return;
+    }
+    if (this.matchesBinding(e, config.tab.next)) {
+      this.callbacks?.nextTab();
+      return;
+    }
 
-      // Tab direct access: prefix + 0-9
-      case "0":
-      case "1":
-      case "2":
-      case "3":
-      case "4":
-      case "5":
-      case "6":
-      case "7":
-      case "8":
-      case "9":
-        this.callbacks?.goToTab(parseInt(e.key, 10));
-        break;
+    // Tab create/close: uses config tab.create/close (default: c/x)
+    if (this.matchesBinding(e, config.tab.create)) {
+      this.callbacks?.createTab();
+      return;
+    }
+    if (this.matchesBinding(e, config.tab.close)) {
+      this.callbacks?.closeTab();
+      return;
+    }
 
-      // Tab create/close: prefix + c/x
-      case "c":
-        this.callbacks?.createTab();
-        break;
-      case "x":
-        this.callbacks?.closeTab();
-        break;
+    // Help: uses config misc.help (default: ?)
+    if (this.matchesBinding(e, config.misc.help)) {
+      this.callbacks?.showHelp();
+      return;
+    }
 
-      // Help: prefix + ?
-      case "?":
-        this.callbacks?.showHelp();
-        break;
+    // Terminal toggle: uses config misc.toggleTerminal (default: s)
+    if (this.matchesBinding(e, config.misc.toggleTerminal)) {
+      this.callbacks?.toggleTerminal();
+      return;
+    }
 
-      // Terminal toggle: prefix + s
-      case "s":
-        this.callbacks?.toggleTerminal();
-        break;
+    // Tab direct access: 0-9 (always hardcoded for convenience)
+    if (/^[0-9]$/.test(e.key)) {
+      this.callbacks?.goToTab(parseInt(e.key, 10));
+      return;
     }
   }
 

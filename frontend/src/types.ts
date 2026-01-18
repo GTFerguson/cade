@@ -2,7 +2,8 @@
  * TypeScript interfaces for ccplus frontend.
  */
 
-import type { ErrorCodeValue, MessageTypeValue } from "./protocol";
+import type { ErrorCodeValue, MessageTypeValue, SessionKeyValue } from "./protocol";
+import type { UserConfig } from "./user-config";
 
 /**
  * Represents a file or directory in the file tree.
@@ -36,6 +37,7 @@ export interface BaseMessage {
 export interface InputMessage extends BaseMessage {
   type: "input";
   data: string;
+  sessionKey?: SessionKeyValue;
 }
 
 /**
@@ -45,6 +47,7 @@ export interface ResizeMessage extends BaseMessage {
   type: "resize";
   cols: number;
   rows: number;
+  sessionKey?: SessionKeyValue;
 }
 
 /**
@@ -104,6 +107,7 @@ export interface SetProjectMessage extends BaseMessage {
 export interface OutputMessage extends BaseMessage {
   type: "output";
   data: string;
+  sessionKey?: SessionKeyValue;
 }
 
 /**
@@ -149,6 +153,7 @@ export interface ConnectedMessage extends BaseMessage {
   type: "connected";
   workingDir: string;
   session?: SessionState;
+  config?: UserConfig;
 }
 
 /**
@@ -159,6 +164,7 @@ export interface SessionRestoredMessage extends BaseMessage {
   type: "session-restored";
   sessionId: string;
   scrollback: string;
+  sessionKey?: SessionKeyValue;
 }
 
 /**

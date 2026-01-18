@@ -12,6 +12,7 @@ import { KeybindingManager } from "./keybindings";
 import { MobileUI } from "./mobile";
 import { ProjectContextImpl, TabBar, TabManager } from "./tabs";
 import type { TabState } from "./tabs";
+import { setUserConfig, getUserConfig, matchesKeybinding } from "./user-config";
 
 class App {
   private tabManager: TabManager;
@@ -185,6 +186,11 @@ class App {
       if (message.workingDir) {
         this.tabManager.updateTabPath(tab.id, message.workingDir);
       }
+      // Apply user config from server
+      if (message.config) {
+        setUserConfig(message.config);
+        console.log("[main] Applied user config from server");
+      }
     });
 
     tab.ws.on("disconnected", () => {
@@ -196,8 +202,9 @@ class App {
 
     // Set up terminal key handler for prefix key interception
     context.setTerminalKeyHandler((e) => {
-      // Intercept Ctrl-a (prefix key)
-      if (e.ctrlKey && e.key === "a" && !e.shiftKey && !e.altKey && !e.metaKey) {
+      // Intercept configured prefix key
+      const prefixKey = getUserConfig().keybindings.global.prefix;
+      if (matchesKeybinding(e, prefixKey)) {
         return true; // Prevent terminal from handling, let keybinding manager handle it
       }
       // If prefix is active, intercept all keys

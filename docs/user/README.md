@@ -101,9 +101,29 @@ Your workspace state is automatically saved and restored:
 
 Session data is stored in `.ccplus/session.json` within your project directory.
 
-## Keyboard Shortcuts
+## Keyboard Navigation
 
-The terminal captures most keyboard input. Standard browser shortcuts work when the terminal is not focused.
+ccplus uses a tmux-style prefix key system combined with vim-style navigation. The terminal receives all keystrokes except the prefix key (`Ctrl+a`), which activates global shortcuts.
+
+### Quick Reference
+
+| Context | Common Keys |
+|---------|-------------|
+| Global (after `Ctrl+a`) | `h`/`l` focus pane, `t`/`r` switch tabs, `?` help |
+| File Tree | `j`/`k` move, `h`/`l` collapse/expand, `/` search |
+| Viewer | `j`/`k` scroll, `Enter` follow link |
+
+See [[keybindings|Keyboard Navigation Guide]] for complete documentation including workflow examples and customization.
+
+## Configuration
+
+ccplus can be customized through TOML configuration files:
+
+- **appearance.toml** - Colors, fonts, terminal settings
+- **keybindings.toml** - Keyboard shortcuts and prefix key
+- **behavior.toml** - Session, file tree, and layout defaults
+
+See [[configuration|Configuration Guide]] for details.
 
 ## See Also
 
