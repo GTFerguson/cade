@@ -5,6 +5,9 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Backend port for WebSocket proxy (default: 3001 for dev)
+const backendPort = process.env.BACKEND_PORT || "3001";
+
 export default defineConfig({
   root: ".",
   publicDir: "public",
@@ -22,7 +25,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/ws": {
-        target: "ws://localhost:3000",
+        target: `ws://localhost:${backendPort}`,
         ws: true,
       },
     },
