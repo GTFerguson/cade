@@ -20,5 +20,5 @@ nul
 # Project session data
 .ccplus/
 
-# Claude Code local settings
-.claude/settings.local.json
+# Build artifacts
+frontend/dist/
