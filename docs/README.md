@@ -6,16 +6,13 @@ status: active
 tags: [index, navigation]
 ---
 
-# ccplus Documentation
+# CADE Documentation
 
-Welcome to the ccplus documentation. This is the main navigation hub for all project documentation.
+Welcome to the CADE documentation. This is the main navigation hub for all project documentation.
 
-> [!NOTE]
-> "ccplus" is a working name. The project will be renamed once the vision is clearer.
+## What is CADE?
 
-## What is ccplus?
-
-ccplus is a unified terminal environment combining tmux, vim, and Claude Code into a cohesive development experience. The goal is to create a seamless CLI/TUI workflow where these tools integrate naturally.
+**CADE** (Claude Agentic Development Environment) is an agent-first development environment with Claude Code in a terminal shell as its centerpiece. The interface provides a unified workspace where AI-assisted development is the primary workflow.
 
 ## Documentation Structure
 

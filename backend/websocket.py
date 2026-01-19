@@ -13,7 +13,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.config import load_user_config
 from backend.connection_manager import get_connection_manager
-from backend.errors import CCPlusError, ProtocolError
+from backend.errors import CADEError, ProtocolError
 from backend.file_tree import build_file_tree, get_file_type, read_file_content
 from backend.file_watcher import FileWatcher
 from backend.protocol import ErrorCode, MessageType, SessionKey
@@ -329,7 +329,7 @@ class ConnectionHandler:
             else:
                 raise ProtocolError.invalid_message(f"Unknown message type: {msg_type}")
 
-        except CCPlusError as e:
+        except CADEError as e:
             await self._send(e.to_message())
         except Exception as e:
             logger.exception("Error handling message type %s: %s", msg_type, e)

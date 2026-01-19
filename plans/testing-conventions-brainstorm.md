@@ -30,9 +30,9 @@ Challenges:
 Testing complete command flows:
 ```bash
 # Example test structure
-ccplus session new test-session
-ccplus session list | grep test-session
-ccplus session delete test-session
+cade session new test-session
+cade session list | grep test-session
+cade session delete test-session
 ```
 
 Tools to consider:
@@ -116,7 +116,7 @@ Options:
 
 ## Questions to Resolve
 
-1. What language/framework will ccplus use? (determines test tooling)
+1. What language/framework will cade use? (determines test tooling)
 2. How important is test coverage?
 3. CI/CD pipeline - what tests run when?
 4. Performance testing needs?

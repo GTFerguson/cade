@@ -12,7 +12,7 @@ IGNORED_DIRS = {
     ".git",
     ".hg",
     ".svn",
-    ".ccplus",
+    ".cade",
     "node_modules",
     "__pycache__",
     ".pytest_cache",

@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for ccplus backend tests."""
+"""Shared pytest fixtures for CADE backend tests."""
 
 from __future__ import annotations
 

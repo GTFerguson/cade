@@ -8,7 +8,7 @@ tags: [technical, frontend, architecture, wiki-links, tabs, session-persistence,
 
 # Frontend Architecture
 
-This document describes the ccplus frontend component architecture, including the multi-tab system, responsive layout, and mobile support.
+This document describes the CADE frontend component architecture, including the multi-tab system, responsive layout, and mobile support.
 
 ## Overview
 
@@ -475,7 +475,7 @@ This ensures clean replay regardless of what state the terminal was in when capt
 
 ### UI Session Persistence
 
-UI state is persisted per-project in `.ccplus/session.json`. This allows layout and file tree state to survive browser refreshes.
+UI state is persisted per-project in `.cade/session.json`. This allows layout and file tree state to survive browser refreshes.
 
 **Persisted State:**
 
@@ -509,8 +509,8 @@ UI state is persisted per-project in `.ccplus/session.json`. This allows layout 
 
 **Storage Location:**
 
-- File: `<project>/.ccplus/session.json`
-- The `.ccplus` directory is hidden from the file tree
+- File: `<project>/.cade/session.json`
+- The `.CADE` directory is hidden from the file tree
 
 ## Mobile Support
 

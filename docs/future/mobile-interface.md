@@ -11,11 +11,11 @@ tags: [future, mobile, planned]
 > [!NOTE]
 > This feature is planned but not yet implemented.
 
-ccplus provides a mobile-optimized interface for accessing your development session from phones and tablets.
+CADE provides a mobile-optimized interface for accessing your development session from phones and tablets.
 
 ## Overview
 
-The mobile interface is designed for a terminal-first experience. When you access ccplus from a device with a screen width of 768px or less, the interface automatically switches to mobile mode.
+The mobile interface is designed for a terminal-first experience. When you access CADE from a device with a screen width of 768px or less, the interface automatically switches to mobile mode.
 
 **Mobile Design Philosophy:**
 
@@ -70,7 +70,7 @@ The viewer supports:
 
 ## Multi-Device Sessions
 
-You can connect to the same ccplus session from multiple devices simultaneously. This enables workflows like:
+You can connect to the same CADE session from multiple devices simultaneously. This enables workflows like:
 
 - Start a long-running command on desktop
 - Check progress from your phone

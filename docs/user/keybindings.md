@@ -8,7 +8,7 @@ tags: [user, keybindings, navigation, vim, tmux]
 
 # Keyboard Navigation Guide
 
-ccplus is designed for keyboard-driven workflows. The keybinding system combines two philosophies:
+CADE is designed for keyboard-driven workflows. The keybinding system combines two philosophies:
 
 - **tmux-style prefix keys** for global commands (switch tabs, resize panes)
 - **vim-style modal navigation** for pane-specific actions (navigate files, search)
@@ -17,7 +17,7 @@ ccplus is designed for keyboard-driven workflows. The keybinding system combines
 
 ### Why Prefix Keys?
 
-The terminal is the center of your workflow. You need full keyboard access to your shell, editors, and Claude Code. A prefix key (`Ctrl+a`) creates a clear boundary: everything *after* the prefix is for ccplus, everything else goes to your terminal.
+The terminal is the center of your workflow. You need full keyboard access to your shell, editors, and Claude Code. A prefix key (`Ctrl+a`) creates a clear boundary: everything *after* the prefix is for CADE, everything else goes to your terminal.
 
 This is the same approach tmux uses, and for good reason—it stays out of your way until you need it.
 
@@ -35,7 +35,7 @@ Your keyboard does different things depending on where you are:
 | **File tree focused** | Vim navigation, search with `/` |
 | **Viewer focused** | Scroll, follow links |
 
-The prefix key (`Ctrl+a`) works everywhere—it's your escape hatch to ccplus commands.
+The prefix key (`Ctrl+a`) works everywhere—it's your escape hatch to CADE commands.
 
 ## Global Shortcuts (Prefix Mode)
 
@@ -143,7 +143,7 @@ The terminal uses remapped shortcuts for copy/paste to work in the browser envir
 | Right-click | Copy (with selection) / Paste (without) |
 
 > [!NOTE]
-> This differs from traditional Unix terminals where `Ctrl+C` sends SIGINT. In ccplus, use `Ctrl+X` to interrupt running commands.
+> This differs from traditional Unix terminals where `Ctrl+C` sends SIGINT. In CADE, use `Ctrl+X` to interrupt running commands.
 
 ## Workflow Examples
 
@@ -184,7 +184,7 @@ Need more terminal space:
 
 ## Customization
 
-All keybindings are configurable in `~/.config/ccplus/keybindings.toml`. See [[configuration#keybindingstoml|Configuration Guide]] for details.
+All keybindings are configurable in `~/.config/cade/keybindings.toml`. See [[configuration#keybindingstoml|Configuration Guide]] for details.
 
 Example: Change prefix to `Ctrl+b` (like tmux default):
 

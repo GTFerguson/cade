@@ -15,21 +15,21 @@ The plan viewer provides instant visibility into Claude's planning process. You 
 
 ## Keyboard Shortcut
 
-Press `Ctrl+g` anywhere in ccplus to instantly view the most recently modified plan file from `~/.claude/plans/`. This works even when Claude is actively editing plans.
+Press `Ctrl+g` anywhere in CADE to instantly view the most recently modified plan file from `~/.claude/plans/`. This works even when Claude is actively editing plans.
 
 ## Automatic Hook
 
-The plan viewer hook automatically displays plan files in the ccplus viewer whenever Claude Code creates or edits them.
+The plan viewer hook automatically displays plan files in the CADE viewer whenever Claude Code creates or edits them.
 
 ### How It Works
 
-When configured, Claude Code triggers a hook after each file edit. The hook reads the file path from stdin (JSON format) and sends a request to ccplus, which displays the file in the markdown viewer.
+When configured, Claude Code triggers a hook after each file edit. The hook reads the file path from stdin (JSON format) and sends a request to CADE, which displays the file in the markdown viewer.
 
 ```mermaid
 sequenceDiagram
     participant CC as Claude Code
     participant Hook as PostToolUse Hook
-    participant API as ccplus /api/view
+    participant API as CADE /api/view
     participant Viewer as Markdown Viewer
 
     CC->>Hook: Edit plan file (JSON via stdin)
@@ -40,7 +40,7 @@ sequenceDiagram
 
 ### Prerequisites
 
-- ccplus running (via `make dev` or `ccplus serve`)
+- CADE running (via `make dev` or `CADE serve`)
 - `curl` and `python3` available in your terminal
 - Claude Code installed and configured
 
@@ -49,8 +49,8 @@ sequenceDiagram
 Run the setup command from your terminal:
 
 ```bash
-# If ccplus is installed (pip install -e .)
-ccplus setup-hook
+# If CADE is installed (pip install -e .)
+CADE setup-hook
 
 # Or run directly from the project directory
 python -m backend.main setup-hook
@@ -143,8 +143,8 @@ For detailed troubleshooting steps, see [[hook-troubleshooting|Hook Troubleshoot
 
 ### Quick Checks
 
-1. **Check ccplus is running**: The server must be active at the configured port
-2. **Check the port**: Verify the hook uses the same port as ccplus
+1. **Check CADE is running**: The server must be active at the configured port
+2. **Check the port**: Verify the hook uses the same port as CADE
 3. **Verify WSL connectivity**: From WSL, test `curl http://$(ip route show default | awk '{print $3}'):3001/`
 4. **Restart Claude Code**: Hooks only load on startup
 

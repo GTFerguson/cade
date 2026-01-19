@@ -1,4 +1,4 @@
-# ccplus Makefile
+# CADE Makefile
 # Run stable, dev, or both versions
 
 .PHONY: stable dev dev-dummy both build kill clean help
@@ -42,7 +42,7 @@ help:
 	@echo "  make dev-dummy - Same as dev, but with fake Claude UI"
 	@echo "  make both      - Run stable and dev simultaneously"
 	@echo "  make build     - Build frontend only"
-	@echo "  make kill      - Stop all ccplus processes"
+	@echo "  make kill      - Stop all CADE processes"
 	@echo ""
 	@echo "Custom ports:"
 	@echo "  make stable STABLE_PORT=8000"
@@ -61,7 +61,7 @@ dev:
 	@echo "Starting dev backend on port $(DEV_PORT)..."
 	@echo "Starting Vite on port $(VITE_PORT)..."
 	@echo "Access dev at http://localhost:$(VITE_PORT)"
-	@echo "To view files: ccplus view -p $(DEV_PORT) <path>"
+	@echo "To view files: cade view -p $(DEV_PORT) <path>"
 	$(call run_bg,$(PYTHON) -m backend.main serve --port $(DEV_PORT) --no-browser --debug)
 	cd frontend && $(SET_BACKEND_PORT) npm run dev -- --port $(VITE_PORT)
 
@@ -71,7 +71,7 @@ dev-dummy:
 	@echo "Starting dev backend in DUMMY mode on port $(DEV_PORT)..."
 	@echo "Starting Vite on port $(VITE_PORT) (sessions will be cleared)..."
 	@echo "Access dev at http://localhost:$(VITE_PORT)"
-	@echo "To view files: ccplus view -p $(DEV_PORT) <path>"
+	@echo "To view files: cade view -p $(DEV_PORT) <path>"
 	$(call run_bg,$(PYTHON) -m backend.main serve --port $(DEV_PORT) --no-browser --debug --dummy)
 	cd frontend && $(SET_BACKEND_PORT) $(SET_CLEAR_SESSION) npm run dev -- --port $(VITE_PORT)
 
@@ -88,11 +88,11 @@ both: build
 	$(call run_bg,$(PYTHON) -m backend.main serve --port $(DEV_PORT) --no-browser)
 	cd frontend && $(SET_BACKEND_PORT) npm run dev -- --port $(VITE_PORT)
 
-# Stop all ccplus processes
+# Stop all CADE processes
 kill:
 	-$(KILL_BACKEND)
 	-$(KILL_VITE)
-	@echo "Stopped ccplus processes"
+	@echo "Stopped CADE processes"
 
 # Clean build artifacts
 clean:

@@ -14,7 +14,7 @@ Guide for debugging Claude Code hooks, especially the plan viewer hook on Window
 
 1. ✓ Hook installed in `~/.claude/settings.json`
 2. ✓ Claude Code restarted after hook installation
-3. ✓ ccplus server running
+3. ✓ CADE server running
 4. ✓ Server listening on `0.0.0.0` (not `localhost`)
 5. ✓ WSL can reach Windows host IP
 6. ✓ Windows firewall allows port 3001 (if needed)
@@ -90,7 +90,7 @@ If it shows `127.0.0.1:3001`, the server is only listening locally.
 **Fix**: Server should default to `0.0.0.0` as of commit af5f88e. If running an older version, update or set:
 
 ```bash
-export CCPLUS_HOST=0.0.0.0
+export CADE_HOST=0.0.0.0
 ```
 
 **Problem 2: Windows Firewall blocking**
@@ -98,7 +98,7 @@ export CCPLUS_HOST=0.0.0.0
 Run PowerShell as Administrator:
 
 ```powershell
-netsh advfirewall firewall add rule name="ccplus" dir=in action=allow protocol=tcp localport=3001
+netsh advfirewall firewall add rule name="CADE" dir=in action=allow protocol=tcp localport=3001
 ```
 
 Then test again:

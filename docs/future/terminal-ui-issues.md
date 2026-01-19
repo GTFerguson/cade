@@ -167,7 +167,7 @@ This ensures consistent cursor appearance across both terminals:
 | `Ctrl+X` | Send SIGINT (interrupt) |
 | `Ctrl+V` | Paste from clipboard |
 
-This breaks Unix convention but prioritizes familiar copy/paste for ccplus's browser-based environment.
+This breaks Unix convention but prioritizes familiar copy/paste for CADE's browser-based environment.
 
 **Commit:** `8b83f9b` - Remap terminal copy/paste shortcuts for browser compatibility
 

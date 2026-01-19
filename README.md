@@ -1,6 +1,6 @@
-# ccplus
+# CADE
 
-Unified terminal environment combining tmux, vim, and Claude Code into a cohesive development experience.
+**Claude Agentic Development Environment** - An agent-first development environment with Claude Code in a terminal shell as its centerpiece.
 
 ## Quick Start
 
@@ -69,12 +69,12 @@ Then open http://localhost:5173 (Vite dev server proxies WebSocket to backend).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CCPLUS_PORT` | 3000 | Server port |
-| `CCPLUS_HOST` | localhost | Server host |
-| `CCPLUS_WORKING_DIR` | cwd | Working directory |
-| `CCPLUS_SHELL_COMMAND` | claude | Shell command to run |
-| `CCPLUS_AUTO_OPEN_BROWSER` | true | Open browser on start |
-| `CCPLUS_DEBUG` | false | Enable debug mode |
+| `CADE_PORT` | 3000 | Server port |
+| `CADE_HOST` | localhost | Server host |
+| `CADE_WORKING_DIR` | cwd | Working directory |
+| `CADE_SHELL_COMMAND` | claude | Shell command to run |
+| `CADE_AUTO_OPEN_BROWSER` | true | Open browser on start |
+| `CADE_DEBUG` | false | Enable debug mode |
 
 ### CLI Arguments
 
@@ -93,7 +93,7 @@ options:
 ## Project Structure
 
 ```
-ccplus/
+cade/
 ├── backend/
 │   ├── __init__.py       # Package init
 │   ├── main.py           # Entry point, FastAPI app

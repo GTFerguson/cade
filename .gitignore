@@ -18,7 +18,7 @@ nul
 .env.local
 
 # Project session data
-.ccplus/
+.cade/
 
 # Build artifacts
 frontend/dist/

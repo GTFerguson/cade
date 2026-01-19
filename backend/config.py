@@ -1,4 +1,4 @@
-"""Configuration management for ccplus backend."""
+"""Configuration management for CADE backend."""
 
 from __future__ import annotations
 
@@ -53,24 +53,24 @@ class Config:
         """Load configuration from environment variables.
 
         Environment variables:
-            CCPLUS_PORT: Server port (default: 3000)
-            CCPLUS_HOST: Server host (default: 0.0.0.0 for WSL connectivity)
-            CCPLUS_WORKING_DIR: Working directory (default: cwd)
-            CCPLUS_SHELL_COMMAND: Shell command to run (default: wsl)
-            CCPLUS_AUTO_START_CLAUDE: Auto-run claude on shell start (default: true)
-            CCPLUS_AUTO_OPEN_BROWSER: Open browser on start (default: true)
-            CCPLUS_DEBUG: Enable debug mode (default: false)
-            CCPLUS_DUMMY_MODE: Show fake Claude UI for development (default: false)
+            CADE_PORT: Server port (default: 3000)
+            CADE_HOST: Server host (default: 0.0.0.0 for WSL connectivity)
+            CADE_WORKING_DIR: Working directory (default: cwd)
+            CADE_SHELL_COMMAND: Shell command to run (default: wsl)
+            CADE_AUTO_START_CLAUDE: Auto-run claude on shell start (default: true)
+            CADE_AUTO_OPEN_BROWSER: Open browser on start (default: true)
+            CADE_DEBUG: Enable debug mode (default: false)
+            CADE_DUMMY_MODE: Show fake Claude UI for development (default: false)
         """
         return cls(
-            port=int(os.getenv("CCPLUS_PORT", "3000")),
-            host=os.getenv("CCPLUS_HOST", "0.0.0.0"),
-            working_dir=Path(os.getenv("CCPLUS_WORKING_DIR", str(Path.cwd()))),
-            shell_command=os.getenv("CCPLUS_SHELL_COMMAND", "wsl"),
-            auto_start_claude=os.getenv("CCPLUS_AUTO_START_CLAUDE", "true").lower() == "true",
-            auto_open_browser=os.getenv("CCPLUS_AUTO_OPEN_BROWSER", "true").lower() == "true",
-            debug=os.getenv("CCPLUS_DEBUG", "false").lower() == "true",
-            dummy_mode=os.getenv("CCPLUS_DUMMY_MODE", "false").lower() == "true",
+            port=int(os.getenv("CADE_PORT", "3000")),
+            host=os.getenv("CADE_HOST", "0.0.0.0"),
+            working_dir=Path(os.getenv("CADE_WORKING_DIR", str(Path.cwd()))),
+            shell_command=os.getenv("CADE_SHELL_COMMAND", "wsl"),
+            auto_start_claude=os.getenv("CADE_AUTO_START_CLAUDE", "true").lower() == "true",
+            auto_open_browser=os.getenv("CADE_AUTO_OPEN_BROWSER", "true").lower() == "true",
+            debug=os.getenv("CADE_DEBUG", "false").lower() == "true",
+            dummy_mode=os.getenv("CADE_DUMMY_MODE", "false").lower() == "true",
         )
 
     def update_from_args(
@@ -132,8 +132,8 @@ def get_user_config_paths() -> list[Path]:
     """Get the paths to search for user configuration files.
 
     Returns paths in load order (later overrides earlier):
-    1. User config directory (~/.config/ccplus/ on Linux/macOS, %APPDATA%/ccplus/ on Windows)
-    2. Project-local config (.ccplus/ in working directory)
+    1. User config directory (~/.config/cade/ on Linux/macOS, %APPDATA%/cade/ on Windows)
+    2. Project-local config (.cade/ in working directory)
     """
     paths = []
 
@@ -141,18 +141,18 @@ def get_user_config_paths() -> list[Path]:
     if sys.platform == "win32":
         appdata = os.environ.get("APPDATA")
         if appdata:
-            paths.append(Path(appdata) / "ccplus")
+            paths.append(Path(appdata) / "cade")
     else:
         # XDG_CONFIG_HOME or default to ~/.config
         xdg_config = os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
-        paths.append(Path(xdg_config) / "ccplus")
+        paths.append(Path(xdg_config) / "cade")
 
     return paths
 
 
 def get_project_config_path(working_dir: Path) -> Path:
     """Get the project-local config path."""
-    return working_dir / ".ccplus"
+    return working_dir / ".cade"
 
 
 def _load_toml_file(path: Path) -> dict[str, Any]:
@@ -390,9 +390,9 @@ def load_user_config(working_dir: Path | None = None) -> UserConfig:
 
     Load order (later overrides earlier):
     1. Hardcoded defaults
-    2. User config (~/.config/ccplus/)
-    3. Project config (.ccplus/ in working directory)
-    4. Environment variables (CCPLUS_*)
+    2. User config (~/.config/cade/)
+    3. Project config (.cade/ in working directory)
+    4. Environment variables (CADE_*)
 
     Args:
         working_dir: Working directory for project-local config. If None, only loads user config.
@@ -414,9 +414,9 @@ def load_user_config(working_dir: Path | None = None) -> UserConfig:
     behavior = _load_behavior_config(paths)
 
     # Apply environment variable overrides
-    if os.getenv("CCPLUS_AUTO_START_CLAUDE") is not None:
+    if os.getenv("CADE_AUTO_START_CLAUDE") is not None:
         behavior.session.auto_start_claude = (
-            os.getenv("CCPLUS_AUTO_START_CLAUDE", "true").lower() == "true"
+            os.getenv("CADE_AUTO_START_CLAUDE", "true").lower() == "true"
         )
 
     return UserConfig(

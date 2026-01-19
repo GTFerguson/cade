@@ -8,7 +8,7 @@ tags: [index, user, guide]
 
 # User Guide
 
-ccplus is a unified terminal environment for development with Claude Code. It provides a three-pane layout with file navigation, an integrated terminal, and a document viewer.
+CADE (Claude Agentic Development Environment) is an agent-first development environment with Claude Code in a terminal shell as its centerpiece. It provides a three-pane layout with file navigation, an integrated terminal, and a document viewer.
 
 ## Interface Overview
 
@@ -99,11 +99,11 @@ Your workspace state is automatically saved and restored:
 - **Pane sizes**: Your layout proportions are preserved
 - **Terminal session**: Your shell/Claude session continues where you left off
 
-Session data is stored in `.ccplus/session.json` within your project directory.
+Session data is stored in `.CADE/session.json` within your project directory.
 
 ## Keyboard Navigation
 
-ccplus uses a tmux-style prefix key system combined with vim-style navigation. The terminal receives all keystrokes except the prefix key (`Ctrl+a`), which activates global shortcuts.
+CADE uses a tmux-style prefix key system combined with vim-style navigation. The terminal receives all keystrokes except the prefix key (`Ctrl+a`), which activates global shortcuts.
 
 ### Quick Reference
 
@@ -117,7 +117,7 @@ See [[keybindings|Keyboard Navigation Guide]] for complete documentation includi
 
 ## Configuration
 
-ccplus can be customized through TOML configuration files:
+CADE can be customized through TOML configuration files:
 
 - **appearance.toml** - Colors, fonts, terminal settings
 - **keybindings.toml** - Keyboard shortcuts and prefix key
@@ -127,7 +127,7 @@ See [[configuration|Configuration Guide]] for details.
 
 ## Claude Code Integration
 
-ccplus integrates with Claude Code through hooks that automatically display files in the viewer.
+CADE integrates with Claude Code through hooks that automatically display files in the viewer.
 
 ### Plan Viewer Hook
 

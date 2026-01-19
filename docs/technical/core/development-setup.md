@@ -8,7 +8,7 @@ tags: [technical, development, setup, makefile]
 
 # Development Setup
 
-This guide covers running ccplus for development and testing.
+This guide covers running CADE for development and testing.
 
 ## Prerequisites
 
@@ -27,7 +27,7 @@ The project includes a Makefile for common development tasks.
 | `make dev-dummy` | Same as dev, but with fake Claude UI |
 | `make both` | Run stable and dev simultaneously |
 | `make build` | Build frontend only |
-| `make kill` | Stop all ccplus processes |
+| `make kill` | Stop all CADE processes |
 | `make clean` | Remove build artifacts |
 
 ### Port Configuration

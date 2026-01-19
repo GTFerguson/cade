@@ -1,18 +1,15 @@
 # Agent Onboarding Guide
 
-Quick orientation for AI agents working on ccplus. This is a signpost document - detailed information lives in the referenced docs.
-
-> [!NOTE]
-> "ccplus" is a working name. The project will be renamed once the vision is clearer.
+Quick orientation for AI agents working on CADE. This is a signpost document - detailed information lives in the referenced docs.
 
 ## Project Identity
 
-ccplus is a unified terminal environment combining tmux, vim, and Claude Code into a cohesive development experience. The goal is to create a seamless CLI/TUI workflow where these tools integrate naturally rather than operating as separate programs.
+**CADE** (Claude Agentic Development Environment) is an agent-first development environment with Claude Code in a terminal shell as its centerpiece. The interface provides a unified workspace where AI-assisted development is the primary workflow, not an afterthought.
 
 ## Codebase Orientation
 
 ```
-ccplus/
+cade/
 ├── docs/                    # Maintained documentation (approval required)
 │   ├── README.md            # Navigation hub
 │   ├── technical/           # Implemented systems

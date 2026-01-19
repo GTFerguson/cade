@@ -1,1 +1,1 @@
-"""ccplus backend tests."""
+"""CADE backend tests."""

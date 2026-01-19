@@ -19,7 +19,7 @@ Defines what's in and out of scope for the minimum viable product.
 - Hard to follow along as Claude works
 - Manual context switching to check on changes
 
-**ccplus gives both user and Claude better visibility into the work.**
+**cade gives both user and Claude better visibility into the work.**
 
 ## Goal
 
@@ -33,7 +33,7 @@ A working local web app where you can:
 ## User Flow
 
 ```
-$ ccplus
+$ cade
   → Local server starts (Bun)
   → Browser opens to localhost:3000
   → Three-pane layout:
@@ -54,7 +54,7 @@ $ ccplus
 | File tree | See project structure, watch for changes | P0 | ✓ Done |
 | Markdown rendering | mertex.md with wiki-links | P0 | ✓ Done |
 | Multi-pane layout | File tree + terminal + markdown | P0 | ✓ Done |
-| Auto-launch | `ccplus` command opens browser | P0 | Partial (manual) |
+| Auto-launch | `cade` command opens browser | P0 | Partial (manual) |
 | File viewer | Click file → see contents | P1 | ✓ Done |
 | Basic styling | Clean, readable dark theme | P1 | ✓ Done |
 | Resize panes | Drag dividers to resize | P1 | ✓ Done |
@@ -76,7 +76,7 @@ $ ccplus
 
 **Default behavior:**
 ```
-$ ccplus
+$ cade
   → Terminal opens with Claude Code running
   → Exit Claude (Ctrl+C or /exit) → drops to shell
   → Run git status, npm install, whatever
@@ -149,7 +149,7 @@ Future features not in MVP:
 | Feature | Status | Notes |
 |---------|--------|-------|
 | ~~Tabs/workspaces~~ | ✓ Done | Implemented with multi-project tabs |
-| ~~Session persistence~~ | ✓ Done | Per-project `.ccplus/session.json` |
+| ~~Session persistence~~ | ✓ Done | Per-project `.cade/session.json` |
 | Editor integration | Deferred | Terminal is enough for MVP |
 | Vim keybindings | Deferred | Depends on editor integration |
 | Configuration file | Deferred | Hardcode sensible defaults first |
@@ -191,7 +191,7 @@ This also enables general markdown viewing - any `.md` file can be opened and vi
 
 MVP is complete when:
 
-- [ ] `ccplus` command starts server and opens browser
+- [ ] `cade` command starts server and opens browser
 - [x] Terminal pane shows Claude Code running
 - [x] Can type prompts and see Claude respond
 - [x] Markdown pane renders files in real-time
@@ -237,7 +237,7 @@ MVP is complete when:
 ## File Structure (Proposed)
 
 ```
-ccplus/
+cade/
 ├── backend/                  # FastAPI Python backend
 │   ├── main.py               # Entry point
 │   ├── pty_manager.py        # PTY management
@@ -268,5 +268,5 @@ ccplus/
 5. ~~Integrate mertex.md~~ ✓
 6. ~~Build three-pane layout~~ ✓
 7. ~~Add multi-project tabs~~ ✓
-8. Add `ccplus` CLI command for auto-launch
+8. Add `cade` CLI command for auto-launch
 9. Package for distribution

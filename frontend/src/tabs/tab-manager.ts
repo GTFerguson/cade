@@ -7,7 +7,7 @@ import { WebSocketClient } from "../websocket";
 import type { EventHandler } from "../types";
 import type { AppState, TabInfo, TabManagerEvents, TabState } from "./types";
 
-const STORAGE_KEY = "ccplus-app-state";
+const STORAGE_KEY = "cade-app-state";
 const STATE_VERSION = 1;
 
 // Clear session state in dev-dummy mode for clean testing

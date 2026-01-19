@@ -8,7 +8,7 @@ tags: [cli, conventions, brainstorm]
 
 # CLI Conventions Brainstorm
 
-Exploring conventions for command-line interface design in ccplus. This document captures ideas before formalizing into `.roo/rules/cli-conventions.md`.
+Exploring conventions for command-line interface design in cade. This document captures ideas before formalizing into `.roo/rules/cli-conventions.md`.
 
 ## Command-Line Flag Patterns
 
@@ -22,12 +22,12 @@ Questions to consider:
 Common patterns:
 ```bash
 # GNU style
-ccplus --config ~/.ccplus.toml
-ccplus -c ~/.ccplus.toml
+cade --config ~/.cade.toml
+cade -c ~/.cade.toml
 
 # Subcommands
-ccplus session new
-ccplus session list
+cade session new
+cade session list
 ```
 
 ### Flag Value Syntax
@@ -35,10 +35,10 @@ ccplus session list
 Options to explore:
 ```bash
 # Space separated
-ccplus --config config.toml
+cade --config config.toml
 
 # Equals sign
-ccplus --config=config.toml
+cade --config=config.toml
 
 # Support both?
 ```
@@ -73,7 +73,7 @@ Ideas:
 ```
 Error: Could not connect to session "main"
   Reason: Session does not exist
-  Hint: Use `ccplus session list` to see available sessions
+  Hint: Use `cade session list` to see available sessions
 ```
 
 vs minimal:

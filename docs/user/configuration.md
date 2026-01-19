@@ -8,7 +8,7 @@ tags: [user, configuration, customization]
 
 # Configuration Guide
 
-ccplus uses TOML configuration files for customizing appearance, keybindings, and behavior. Configuration is split across three files for clarity and modularity.
+CADE uses TOML configuration files for customizing appearance, keybindings, and behavior. Configuration is split across three files for clarity and modularity.
 
 ## Configuration Files
 
@@ -22,7 +22,7 @@ ccplus uses TOML configuration files for customizing appearance, keybindings, an
 
 Configuration files are loaded in order, with later sources overriding earlier ones:
 
-1. **Hardcoded defaults** - Built into ccplus
+1. **Hardcoded defaults** - Built into CADE
 2. **User config** - Personal settings that apply everywhere
 3. **Project config** - Project-specific overrides
 
@@ -30,16 +30,16 @@ Configuration files are loaded in order, with later sources overriding earlier o
 
 | Platform | Location |
 |----------|----------|
-| Linux/macOS | `~/.config/ccplus/` |
-| Windows | `%APPDATA%\ccplus\` |
+| Linux/macOS | `~/.config/cade/` |
+| Windows | `%APPDATA%\cade\` |
 
 ### Project Config Directory
 
-Place a `.ccplus/` folder in your project root for project-specific settings. These override your user config.
+Place a `.cade/` folder in your project root for project-specific settings. These override your user config.
 
 ```
 my-project/
-├── .ccplus/
+├── .cade/
 │   ├── appearance.toml
 │   ├── keybindings.toml
 │   └── behavior.toml
@@ -48,7 +48,7 @@ my-project/
 
 ## appearance.toml
 
-Customize the visual appearance of ccplus.
+Customize the visual appearance of CADE.
 
 ### Colors
 
@@ -197,11 +197,11 @@ Some settings can be overridden via environment variables:
 
 | Variable | Description |
 |----------|-------------|
-| `CCPLUS_AUTO_START_CLAUDE` | `true` or `false` - Override auto-start setting |
+| `CADE_AUTO_START_CLAUDE` | `true` or `false` - Override auto-start setting |
 
 ## Example: Custom Theme
 
-Create `~/.config/ccplus/appearance.toml`:
+Create `~/.config/cade/appearance.toml`:
 
 ```toml
 # Solarized Dark-inspired theme
@@ -218,7 +218,7 @@ accent-orange = "#cb4b16"
 
 ## Example: Vim-style Keybindings
 
-Create `~/.config/ccplus/keybindings.toml`:
+Create `~/.config/cade/keybindings.toml`:
 
 ```toml
 [global]

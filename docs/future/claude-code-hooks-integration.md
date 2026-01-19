@@ -8,14 +8,14 @@ tags: [feature, integration, claude-code, hooks]
 
 # Claude Code Hooks Integration
 
-Lightweight integration between ccplus and Claude Code using hooks instead of MCP.
+Lightweight integration between CADE and Claude Code using hooks instead of MCP.
 
 ## Why Hooks Over MCP
 
 - **Minimal overhead** - No additional server processes or protocol negotiation
 - **Simple implementation** - Shell commands, easy to debug
 - **Composable** - Works with existing Unix tools
-- **No dependencies** - Just the ccplus CLI
+- **No dependencies** - Just the CADE CLI
 
 ## Claude Code Hooks Overview
 
@@ -36,62 +36,62 @@ Hooks are configured in `.claude/settings.json`:
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
-        "command": "ccplus notify file-changed \"$CLAUDE_FILE_PATH\""
+        "command": "CADE notify file-changed \"$CLAUDE_FILE_PATH\""
       }
     ]
   }
 }
 ```
 
-## Proposed ccplus CLI Commands
+## Proposed CADE CLI Commands
 
 ### File Viewing
 
 ```bash
-# Open file in ccplus viewer pane
-ccplus view <path>
+# Open file in CADE viewer pane
+CADE view <path>
 
 # Open file at specific line
-ccplus view <path>:<line>
+CADE view <path>:<line>
 
 # Open in slide-out on mobile
-ccplus view --mobile <path>
+CADE view --mobile <path>
 ```
 
 ### Notifications
 
 ```bash
-# Notify ccplus of file change (triggers viewer refresh)
-ccplus notify file-changed <path>
+# Notify CADE of file change (triggers viewer refresh)
+CADE notify file-changed <path>
 
-# Show status message in ccplus
-ccplus notify status "Building project..."
+# Show status message in CADE
+CADE notify status "Building project..."
 
 # Clear status
-ccplus notify clear
+CADE notify clear
 ```
 
 ### Terminal Integration
 
 ```bash
 # Focus terminal pane
-ccplus focus terminal
+CADE focus terminal
 
 # Focus viewer pane
-ccplus focus viewer
+CADE focus viewer
 
 # Focus file tree
-ccplus focus tree
+CADE focus tree
 ```
 
 ### File Tree
 
 ```bash
 # Expand to and highlight a file
-ccplus tree reveal <path>
+CADE tree reveal <path>
 
 # Collapse all folders
-ccplus tree collapse
+CADE tree collapse
 ```
 
 ## Hook Configuration Examples
@@ -106,7 +106,7 @@ When Claude writes or edits a file, automatically show it in the viewer:
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
-        "command": "ccplus view \"$CLAUDE_FILE_PATH\""
+        "command": "CADE view \"$CLAUDE_FILE_PATH\""
       }
     ]
   }
@@ -115,7 +115,7 @@ When Claude writes or edits a file, automatically show it in the viewer:
 
 ### Show Build Output
 
-After running build commands, notify ccplus:
+After running build commands, notify CADE:
 
 ```json
 {
@@ -123,7 +123,7 @@ After running build commands, notify ccplus:
     "PostToolUse": [
       {
         "matcher": "Bash",
-        "command": "ccplus notify status \"Command completed\""
+        "command": "CADE notify status \"Command completed\""
       }
     ]
   }
@@ -140,7 +140,7 @@ When Claude reads a file, reveal it in the file tree:
     "PostToolUse": [
       {
         "matcher": "Read",
-        "command": "ccplus tree reveal \"$CLAUDE_FILE_PATH\""
+        "command": "CADE tree reveal \"$CLAUDE_FILE_PATH\""
       }
     ]
   }
@@ -152,7 +152,7 @@ When Claude reads a file, reveal it in the file tree:
 ### CLI Architecture
 
 ```
-ccplus (main binary)
+CADE (main binary)
 ├── serve          # Start the web server (existing)
 ├── view <path>    # Send view command to running server
 ├── notify <type>  # Send notification to running server
@@ -162,7 +162,7 @@ ccplus (main binary)
 
 ### Communication
 
-CLI commands communicate with the running ccplus server via:
+CLI commands communicate with the running CADE server via:
 
 1. **HTTP POST** to localhost endpoint (simplest)
 2. **WebSocket message** (reuse existing connection)
@@ -171,7 +171,7 @@ CLI commands communicate with the running ccplus server via:
 Example HTTP approach:
 
 ```bash
-# ccplus view docs/README.md internally does:
+# CADE view docs/README.md internally does:
 curl -X POST http://localhost:3000/api/view \
   -H "Content-Type: application/json" \
   -d '{"path": "docs/README.md"}'
@@ -208,13 +208,13 @@ Claude Code hooks receive context via environment variables:
 
 ## Future Enhancements
 
-- **Bidirectional** - ccplus could trigger Claude Code actions
-- **Custom panels** - Show Claude-specific UI in ccplus
-- **Session sync** - Share context between Claude Code and ccplus
+- **Bidirectional** - CADE could trigger Claude Code actions
+- **Custom panels** - Show Claude-specific UI in CADE
+- **Session sync** - Share context between Claude Code and CADE
 
 ## Open Questions
 
-1. Should the CLI be a separate binary or subcommand of main ccplus?
+1. Should the CLI be a separate binary or subcommand of main CADE?
 2. HTTP vs WebSocket vs IPC for CLI-to-server communication?
 3. What other hook events would be useful?
 

@@ -25,7 +25,7 @@ Future enhancements for the plan viewer feature.
 ### Challenges
 
 - Claude Code hooks don't currently expose session_id in a straightforward way
-- Would require changes to how ccplus tracks which Claude session is connected
+- Would require changes to how CADE tracks which Claude session is connected
 - The mapping file would need cleanup when sessions end
 
 ### Alternative: Project-Based Plans

@@ -8,7 +8,7 @@ tags: [architecture, technical, spec]
 
 # Architecture Specification
 
-Technical architecture for ccplus MVP.
+Technical architecture for cade MVP.
 
 ## Tech Stack
 
@@ -282,7 +282,7 @@ interface FileNode {
 ## File Structure
 
 ```
-ccplus/
+cade/
 ├── backend/                      # FastAPI Python backend
 │   ├── __init__.py
 │   ├── main.py                   # FastAPI app entry, static serving
@@ -351,7 +351,7 @@ ccplus/
 For MVP, hardcode defaults. Future config structure:
 
 ```toml
-# ~/.config/ccplus/config.toml
+# ~/.config/cade/config.toml
 
 [general]
 theme = "dark"

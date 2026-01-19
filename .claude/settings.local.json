@@ -51,7 +51,10 @@
       "Bash(npm test:*)",
       "Bash(node:*)",
       "Bash(./node_modules/.bin/vitest run:*)",
-      "Bash(powershell.exe -Command \"cd C:\\\\Users\\\\hitsu.LAPTOP-QI6ABC3K\\\\Documents\\\\projects\\\\ccplus\\\\frontend; npx tsc --noEmit\")"
+      "Bash(powershell.exe -Command \"cd C:\\\\Users\\\\hitsu.LAPTOP-QI6ABC3K\\\\Documents\\\\projects\\\\ccplus\\\\frontend; npx tsc --noEmit\")",
+      "Bash(npx vite build)",
+      "Bash(grep:*)",
+      "Bash(git grep:*)"
     ]
   }
 }

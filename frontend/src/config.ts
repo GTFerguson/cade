@@ -31,5 +31,5 @@ export const config = {
   /**
    * LocalStorage key for layout preferences.
    */
-  layoutStorageKey: "ccplus-layout",
+  layoutStorageKey: "cade-layout",
 } as const;

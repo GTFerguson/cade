@@ -1,5 +1,5 @@
 /**
- * Mobile UI component for ccplus.
+ * Mobile UI component for CADE.
  *
  * Provides a mobile-friendly interface with a floating MD button
  * and slide-out viewer panel.

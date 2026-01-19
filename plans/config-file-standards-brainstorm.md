@@ -8,7 +8,7 @@ tags: [config, conventions, brainstorm]
 
 # Config File Standards Brainstorm
 
-Exploring configuration file standards for ccplus. This document captures ideas before formalizing into rules.
+Exploring configuration file standards for cade. This document captures ideas before formalizing into rules.
 
 ## Format Choice
 
@@ -80,37 +80,37 @@ TOML seems best for CLI tool configuration:
 
 Standard locations:
 ```
-$XDG_CONFIG_HOME/ccplus/config.toml  # User config
-$XDG_DATA_HOME/ccplus/               # User data
-$XDG_CACHE_HOME/ccplus/              # Cache files
+$XDG_CONFIG_HOME/cade/config.toml  # User config
+$XDG_DATA_HOME/cade/               # User data
+$XDG_CACHE_HOME/cade/              # Cache files
 ```
 
 Defaults (when XDG vars not set):
 ```
-~/.config/ccplus/config.toml
-~/.local/share/ccplus/
-~/.cache/ccplus/
+~/.config/cade/config.toml
+~/.local/share/cade/
+~/.cache/cade/
 ```
 
 ### Alternative: Dotfile
 
 ```
-~/.ccplus.toml        # Single file
-~/.ccplus/config.toml # Directory
+~/.cade.toml        # Single file
+~/.cade/config.toml # Directory
 ```
 
 ### Project-Local Config
 
 ```
-.ccplus.toml          # In project root
-.ccplus/config.toml   # Directory version
+.cade.toml          # In project root
+.cade/config.toml   # Directory version
 ```
 
 ### Windows Considerations
 
 ```
-%APPDATA%\ccplus\config.toml
-%LOCALAPPDATA%\ccplus\
+%APPDATA%\cade\config.toml
+%LOCALAPPDATA%\cade\
 ```
 
 ## Config Inheritance/Layering
@@ -118,10 +118,10 @@ Defaults (when XDG vars not set):
 ### Load Order
 
 1. Built-in defaults (in binary)
-2. System-wide config (`/etc/ccplus/config.toml`)
-3. User config (`~/.config/ccplus/config.toml`)
-4. Project config (`.ccplus.toml`)
-5. Environment variables (`CCPLUS_*`)
+2. System-wide config (`/etc/cade/config.toml`)
+3. User config (`~/.config/cade/config.toml`)
+4. Project config (`.cade.toml`)
+5. Environment variables (`CADE_*`)
 6. Command-line flags
 
 ### Merge Strategy
@@ -133,12 +133,12 @@ Options:
 
 Example with deep merge:
 ```toml
-# ~/.config/ccplus/config.toml
+# ~/.config/cade/config.toml
 [keybindings]
 prefix = "C-a"
 split_h = "C-a |"
 
-# .ccplus.toml (project)
+# .cade.toml (project)
 [keybindings]
 prefix = "C-b"  # Overrides user config
 # split_h inherited from user config
@@ -167,7 +167,7 @@ prefix = "C-b"  # Overrides user config
 
 Good error reporting:
 ```
-Error: Invalid configuration in ~/.config/ccplus/config.toml
+Error: Invalid configuration in ~/.config/cade/config.toml
   Line 15: Unknown key "sesion" in [general]
   Hint: Did you mean "session"?
 ```
@@ -177,32 +177,32 @@ Error: Invalid configuration in ~/.config/ccplus/config.toml
 ### Naming Convention
 
 ```bash
-CCPLUS_THEME=dark
-CCPLUS_SESSION_DEFAULT_NAME=main
-CCPLUS_KEYBINDINGS_PREFIX="C-a"
+CADE_THEME=dark
+CADE_SESSION_DEFAULT_NAME=main
+CADE_KEYBINDINGS_PREFIX="C-a"
 ```
 
-Pattern: `CCPLUS_` + section + key in SCREAMING_SNAKE_CASE
+Pattern: `CADE_` + section + key in SCREAMING_SNAKE_CASE
 
 ### Special Variables
 
 ```bash
-CCPLUS_CONFIG=/path/to/config.toml  # Override config path
-CCPLUS_NO_CONFIG=1                   # Skip config loading
-CCPLUS_DEBUG=1                       # Enable debug mode
+CADE_CONFIG=/path/to/config.toml  # Override config path
+CADE_NO_CONFIG=1                   # Skip config loading
+CADE_DEBUG=1                       # Enable debug mode
 ```
 
 ## Questions to Resolve
 
 1. Should we support multiple formats or pick one?
 2. How important is Windows support initially?
-3. Should project config be hidden (`.ccplus.toml`) or visible (`ccplus.toml`)?
+3. Should project config be hidden (`.cade.toml`) or visible (`cade.toml`)?
 4. How strict should validation be by default?
 
 ## Example Config Structure
 
 ```toml
-# ccplus configuration
+# cade configuration
 
 [general]
 theme = "dark"          # "dark" | "light" | "auto"

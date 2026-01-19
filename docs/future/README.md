@@ -15,10 +15,7 @@ This section contains planned features, improvements, and the project roadmap.
 
 ## Vision
 
-ccplus aims to create a unified terminal development environment that seamlessly integrates:
-- **tmux** - Terminal multiplexing and session management
-- **vim** - Text editing and navigation
-- **Claude Code** - AI-assisted development
+CADE (Claude Agentic Development Environment) is an agent-first development environment with Claude Code in a terminal shell as its centerpiece. The interface provides a unified workspace where AI-assisted development is the primary workflow.
 
 ## Current Status
 
@@ -33,7 +30,7 @@ Implemented in [[../technical/core/frontend-architecture#Tab System|Frontend Arc
 - Separate terminal session (PTY) per tab
 - Independent file tree per project
 - Isolated viewer content
-- Session state persisted in `.ccplus/session.json`
+- Session state persisted in `.cade/session.json`
 - Obsidian-style tab bar above terminal pane
 
 ## Planned Features
@@ -42,7 +39,7 @@ Implemented in [[../technical/core/frontend-architecture#Tab System|Frontend Arc
 
 Lightweight integration with Claude Code using hooks instead of MCP:
 
-- CLI commands (`ccplus view`, `ccplus notify`, `ccplus tree reveal`)
+- CLI commands (`cade view`, `cade notify`, `cade tree reveal`)
 - Hook into PostToolUse events to auto-display edited files
 - No additional server processes or protocol overhead
 
@@ -61,7 +58,6 @@ See [[blocking-issues]] for critical issues that must be resolved before major p
 - [[claude-code-hooks-integration]] - Claude Code hooks integration
 - [[mobile-interface]] - Mobile-optimized interface for phones and tablets
 - [[state-management-refactor]] - Extract state logic into testable state machines
-- [[rename-to-cade]] - Plan for renaming project from ccplus to CADE
 
 ### User Interface & Experience
 

@@ -21,7 +21,7 @@ Pain points:
 - Context switching between terminal, editor, and file browser
 - Hard to follow along as Claude works
 
-**ccplus solves this by giving both user and Claude better visibility into the work.**
+**cade solves this by giving both user and Claude better visibility into the work.**
 
 ## The Idea
 
@@ -49,7 +49,7 @@ Instead of three separate programs that happen to run in the same terminal:
 
 ```
 ┌─────────────────────────────────────────┐
-│ ccplus                                  │
+│ cade                                  │
 ├─────────────────┬───────────────────────┤
 │                 │                       │
 │  [vim-like     │  [Claude Code         │
@@ -69,7 +69,7 @@ One application that provides all three capabilities with:
 
 ## Built-in Markdown Renderer
 
-Claude outputs markdown. Rather than showing raw syntax, ccplus should render it properly.
+Claude outputs markdown. Rather than showing raw syntax, cade should render it properly.
 
 ### Requirements
 
@@ -81,7 +81,7 @@ Claude outputs markdown. Rather than showing raw syntax, ccplus should render it
 
 ### mertex.md
 
-Previous work on a streaming markdown renderer with KaTeX and Mermaid support. Potential foundation for ccplus rendering.
+Previous work on a streaming markdown renderer with KaTeX and Mermaid support. Potential foundation for cade rendering.
 
 *TODO: Assess mertex.md for integration - language, architecture, terminal rendering approach*
 
@@ -99,7 +99,7 @@ Previous work on a streaming markdown renderer with KaTeX and Mermaid support. P
 
 ```
                     ┌─────────────────────────────────────┐
-                    │         ccplus core                 │
+                    │         cade core                 │
                     │  (pane management, routing, state)  │
                     └─────────────────────────────────────┘
                                     │
@@ -138,7 +138,7 @@ This gives us:
 
 - **Obsidian** - Sync notes, use vault as context, render with Obsidian themes
 - **Notion** - Similar knowledge management integration
-- **VS Code** - Extension that embeds ccplus?
+- **VS Code** - Extension that embeds cade?
 
 ## Built-in Vim-Like Editor
 
@@ -199,7 +199,7 @@ User presses 'j'
 - Explicit mode switching (`i`, `Esc`)
 - Downside: mode confusion, learning curve
 
-### Possible Approaches for ccplus
+### Possible Approaches for cade
 
 **Option A: Hierarchical Modes**
 ```
@@ -328,7 +328,7 @@ This is a significant addition. Keep as future phase - don't let it block MVP.
 - Streaming support for incremental rendering
 - Syntax highlighting via highlight.js
 
-**Challenge for ccplus:**
+**Challenge for cade:**
 - Outputs HTML, designed for browsers
 - Options:
   1. Run in embedded browser view (electron-like approach)
@@ -356,7 +356,7 @@ nkrdn/
 └── code_explorer/      # Web UI
 ```
 
-**Relevant for ccplus:**
+**Relevant for cade:**
 - Could provide structured codebase context to Claude
 - Symbol extraction, call graphs, dependencies
 - Already has code retrieval functionality
@@ -377,7 +377,7 @@ Phase 1 (MVP)                    Phase 2                      Phase 3
 ─────────────────────────────    ─────────────────────────    ─────────────────
 Local web app                    Tauri desktop app            Pure terminal mode
 
-$ ccplus                         Click icon → opens           $ ccplus --tui
+$ cade                         Click icon → opens           $ cade --tui
   → browser opens                Native window                  → works over SSH
   → ready to work                Same codebase                  Fallback mode
 ```
@@ -431,7 +431,7 @@ See [[mvp-scope]] for detailed requirements.
 
 **Scope:**
 - Monaco or CodeMirror with vim keybindings
-- File editing within ccplus
+- File editing within cade
 - Integration with Claude context
 
 ### Priority 4+ (Future)

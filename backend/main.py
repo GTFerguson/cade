@@ -1,4 +1,4 @@
-"""Main entry point for ccplus backend."""
+"""Main entry point for CADE backend."""
 
 from __future__ import annotations
 
@@ -199,13 +199,13 @@ def parse_args() -> argparse.Namespace:
         "-p", "--port",
         type=int,
         default=None,
-        help="Server port (default: 3000, or CCPLUS_PORT env var)",
+        help="Server port (default: 3000, or CADE_PORT env var)",
     )
     serve_parser.add_argument(
         "-H", "--host",
         type=str,
         default=None,
-        help="Server host (default: localhost, or CCPLUS_HOST env var)",
+        help="Server host (default: localhost, or CADE_HOST env var)",
     )
     serve_parser.add_argument(
         "-d", "--dir",
@@ -257,13 +257,13 @@ def parse_args() -> argparse.Namespace:
         "-p", "--port",
         type=int,
         default=None,
-        help="Server port (default: 3000, or CCPLUS_PORT env var)",
+        help="Server port (default: 3000, or CADE_PORT env var)",
     )
     view_parser.add_argument(
         "-H", "--host",
         type=str,
         default=None,
-        help="Server host (default: localhost, or CCPLUS_HOST env var)",
+        help="Server host (default: localhost, or CADE_HOST env var)",
     )
 
     # Setup-hook command
@@ -281,7 +281,7 @@ def parse_args() -> argparse.Namespace:
         "-p", "--port",
         type=int,
         default=3001,
-        help="ccplus server port for the hook",
+        help="CADE server port for the hook",
     )
     setup_hook_parser.add_argument(
         "--dry-run",

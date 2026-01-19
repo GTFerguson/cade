@@ -146,7 +146,7 @@ export interface FileContentMessage extends BaseMessage {
 
 /**
  * View file message (server -> client).
- * Pushed from CLI `ccplus view` command to display external files.
+ * Pushed from CLI `cade view` command to display external files.
  */
 export interface ViewFileMessage extends BaseMessage {
   type: "view-file";

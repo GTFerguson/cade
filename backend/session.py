@@ -9,7 +9,7 @@ from typing import Any, TypedDict
 
 logger = logging.getLogger(__name__)
 
-SESSION_DIR = ".ccplus"
+SESSION_DIR = ".cade"
 SESSION_FILE = "session.json"
 SESSION_VERSION = 1
 
@@ -37,7 +37,7 @@ def _get_session_path(working_dir: Path) -> Path:
 
 
 def load_session(working_dir: Path) -> SessionState | None:
-    """Load session state from .ccplus/session.json.
+    """Load session state from .cade/session.json.
 
     Args:
         working_dir: Project root directory
@@ -70,7 +70,7 @@ def load_session(working_dir: Path) -> SessionState | None:
 
 
 def save_session(working_dir: Path, state: SessionState) -> bool:
-    """Save session state to .ccplus/session.json.
+    """Save session state to .cade/session.json.
 
     Args:
         working_dir: Project root directory

@@ -1,12 +1,12 @@
-"""Custom exceptions for ccplus backend."""
+"""Custom exceptions for CADE backend."""
 
 from __future__ import annotations
 
 from backend.protocol import ErrorCode, MessageType
 
 
-class CCPlusError(Exception):
-    """Base exception for ccplus errors with structured error response."""
+class CADEError(Exception):
+    """Base exception for CADE errors with structured error response."""
 
     def __init__(self, code: str, message: str) -> None:
         self.code = code
@@ -22,7 +22,7 @@ class CCPlusError(Exception):
         }
 
 
-class PTYError(CCPlusError):
+class PTYError(CADEError):
     """PTY-related errors."""
 
     @classmethod
@@ -41,7 +41,7 @@ class PTYError(CCPlusError):
         return cls(ErrorCode.PTY_WRITE_FAILED, f"Failed to write to PTY: {reason}")
 
 
-class FileError(CCPlusError):
+class FileError(CADEError):
     """File system related errors."""
 
     @classmethod
@@ -53,7 +53,7 @@ class FileError(CCPlusError):
         return cls(ErrorCode.FILE_READ_FAILED, f"Failed to read '{path}': {reason}")
 
 
-class ProtocolError(CCPlusError):
+class ProtocolError(CADEError):
     """Protocol-related errors."""
 
     @classmethod

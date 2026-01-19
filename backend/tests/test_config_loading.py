@@ -46,18 +46,18 @@ from backend.user_config import (
 @pytest.fixture
 def temp_config_dir(temp_dir: Path) -> Path:
     """Create a temporary config directory structure."""
-    config_dir = temp_dir / "config" / "ccplus"
+    config_dir = temp_dir / "config" / "cade"
     config_dir.mkdir(parents=True)
     return config_dir
 
 
 @pytest.fixture
 def temp_project_dir(temp_dir: Path) -> Path:
-    """Create a temporary project directory with .ccplus folder."""
+    """Create a temporary project directory with .cade folder."""
     project_dir = temp_dir / "project"
     project_dir.mkdir(parents=True)
-    ccplus_dir = project_dir / ".ccplus"
-    ccplus_dir.mkdir()
+    cade_dir = project_dir / ".cade"
+    cade_dir.mkdir()
     return project_dir
 
 
@@ -298,7 +298,7 @@ class TestGetUserConfigPaths:
         with patch("backend.config.sys.platform", "linux"):
             with patch.dict(os.environ, {"XDG_CONFIG_HOME": "/home/user/.config"}):
                 paths = get_user_config_paths()
-                assert Path("/home/user/.config/ccplus") in paths
+                assert Path("/home/user/.config/cade") in paths
 
     def test_linux_default_xdg(self) -> None:
         """Should use default ~/.config when XDG_CONFIG_HOME not set."""
@@ -306,7 +306,7 @@ class TestGetUserConfigPaths:
             with patch.dict(os.environ, {}, clear=True):
                 with patch("backend.config.Path.home", return_value=Path("/home/user")):
                     paths = get_user_config_paths()
-                    assert Path("/home/user/.config/ccplus") in paths
+                    assert Path("/home/user/.config/cade") in paths
 
     def test_windows_paths(self) -> None:
         """Should return APPDATA path on Windows."""
@@ -315,16 +315,16 @@ class TestGetUserConfigPaths:
                 paths = get_user_config_paths()
                 # Path separators vary by platform running the test
                 path_strs = [str(p) for p in paths]
-                assert any("ccplus" in p and "AppData" in p for p in path_strs)
+                assert any("cade" in p and "AppData" in p for p in path_strs)
 
 
 class TestGetProjectConfigPath:
     """Tests for get_project_config_path function."""
 
-    def test_returns_ccplus_dir(self) -> None:
-        """Should return .ccplus subdirectory."""
+    def test_returns_cade_dir(self) -> None:
+        """Should return .cade subdirectory."""
         result = get_project_config_path(Path("/path/to/project"))
-        assert result == Path("/path/to/project/.ccplus")
+        assert result == Path("/path/to/project/.cade")
 
 
 class TestLoadAppearanceConfig:
@@ -398,8 +398,8 @@ class TestLoadUserConfig:
 
     def test_load_with_project_config(self, temp_project_dir: Path) -> None:
         """Should load project-local config."""
-        ccplus_dir = temp_project_dir / ".ccplus"
-        (ccplus_dir / "appearance.toml").write_text('[colors]\nbg-primary = "#333333"\n')
+        cade_dir = temp_project_dir / ".cade"
+        (cade_dir / "appearance.toml").write_text('[colors]\nbg-primary = "#333333"\n')
 
         # Mock user config paths to return empty list
         with patch("backend.config.get_user_config_paths", return_value=[]):
@@ -407,8 +407,8 @@ class TestLoadUserConfig:
             assert config.appearance.colors.bg_primary == "#333333"
 
     def test_environment_variable_override(self) -> None:
-        """Should respect CCPLUS_AUTO_START_CLAUDE env var."""
-        with patch.dict(os.environ, {"CCPLUS_AUTO_START_CLAUDE": "false"}):
+        """Should respect CADE_AUTO_START_CLAUDE env var."""
+        with patch.dict(os.environ, {"CADE_AUTO_START_CLAUDE": "false"}):
             with patch("backend.config.get_user_config_paths", return_value=[]):
                 config = load_user_config(None)
                 assert config.behavior.session.auto_start_claude is False
@@ -424,9 +424,9 @@ class TestLoadUserConfig:
         # Create project config directory
         project_dir = temp_dir / "project"
         project_dir.mkdir()
-        ccplus_dir = project_dir / ".ccplus"
-        ccplus_dir.mkdir()
-        (ccplus_dir / "appearance.toml").write_text('[colors]\nbg-secondary = "#222222"\n')
+        cade_dir = project_dir / ".cade"
+        cade_dir.mkdir()
+        (cade_dir / "appearance.toml").write_text('[colors]\nbg-secondary = "#222222"\n')
 
         with patch("backend.config.get_user_config_paths", return_value=[user_dir]):
             config = load_user_config(project_dir)

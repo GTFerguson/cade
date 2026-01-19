@@ -1,4 +1,4 @@
-"""Data types for ccplus backend."""
+"""Data types for CADE backend."""
 
 from __future__ import annotations
 

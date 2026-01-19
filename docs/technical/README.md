@@ -8,7 +8,7 @@ tags: [index, technical]
 
 # Technical Documentation
 
-Technical documentation for ccplus developers. This section covers implemented systems, APIs, and design decisions.
+Technical documentation for CADE developers. This section covers implemented systems, APIs, and design decisions.
 
 ## Contents
 
@@ -16,7 +16,7 @@ Technical documentation for ccplus developers. This section covers implemented s
 
 Architecture and essential developer documentation.
 
-- [[core/development-setup|Development Setup]] - Running ccplus for development
+- [[core/development-setup|Development Setup]] - Running CADE for development
 - [[core/frontend-architecture|Frontend Architecture]] - Component architecture and mobile support
 
 ### Reference
