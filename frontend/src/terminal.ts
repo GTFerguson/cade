@@ -106,6 +106,38 @@ export class Terminal implements Component {
 
     // Allow external key interception (e.g., for prefix key)
     this.terminal.attachCustomKeyEventHandler((e) => {
+      // Handle Ctrl+C (copy) - intercept before terminal sends SIGINT
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyC') {
+        const selection = this.terminal?.getSelection();
+        if (selection) {
+          navigator.clipboard.writeText(selection).catch(err => {
+            console.error('Failed to copy to clipboard:', err);
+          });
+        }
+        return false; // Prevent xterm from processing (no SIGINT)
+      }
+
+      // Handle Ctrl+X (SIGINT - replacement for Ctrl+C interrupt)
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyX') {
+        this.ws.sendInput('\x03', this.sessionKey); // Send ETX (Ctrl+C)
+        return false;
+      }
+
+      // Handle Ctrl+V (paste)
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyV') {
+        e.preventDefault();
+        navigator.clipboard.readText()
+          .then(text => {
+            if (text) {
+              this.ws.sendInput(text, this.sessionKey);
+            }
+          })
+          .catch(err => {
+            console.error('Failed to read from clipboard:', err);
+          });
+        return false;
+      }
+
       if (this.customKeyHandler) {
         // Return false to prevent xterm from handling the key
         return !this.customKeyHandler(e);
@@ -155,6 +187,31 @@ export class Terminal implements Component {
       const selection = this.terminal?.getSelection();
       if (!selection) {
         this.scrollToBottom();
+      }
+    });
+
+    // Handle right-click context menu
+    this.container.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+
+      const selection = this.terminal?.getSelection();
+
+      if (selection) {
+        // Copy selected text to clipboard
+        navigator.clipboard.writeText(selection).catch(err => {
+          console.error('Failed to copy to clipboard:', err);
+        });
+      } else {
+        // If no selection, paste from clipboard
+        navigator.clipboard.readText()
+          .then(text => {
+            if (text) {
+              this.ws.sendInput(text, this.sessionKey);
+            }
+          })
+          .catch(err => {
+            console.error('Failed to read from clipboard:', err);
+          });
       }
     });
   }
