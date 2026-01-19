@@ -66,6 +66,13 @@ export interface GetTreeMessage extends BaseMessage {
 }
 
 /**
+ * Get latest plan request (client -> server).
+ */
+export interface GetLatestPlanMessage extends BaseMessage {
+  type: "get-latest-plan";
+}
+
+/**
  * Layout pane proportions.
  */
 export interface LayoutProportions {
@@ -198,6 +205,7 @@ export type ClientMessage =
   | ResizeMessage
   | GetFileMessage
   | GetTreeMessage
+  | GetLatestPlanMessage
   | SaveSessionMessage
   | SetProjectMessage;
 
