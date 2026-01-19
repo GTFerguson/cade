@@ -13,6 +13,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.config import load_user_config
 from backend.connection_manager import get_connection_manager
+from backend.connection_registry import get_connection_registry
 from backend.errors import CADEError, ProtocolError
 from backend.file_tree import build_file_tree, get_file_type, read_file_content
 from backend.file_watcher import FileWatcher
@@ -63,6 +64,12 @@ class ConnectionHandler:
 
         try:
             await self._wait_for_project()
+            # Register with connection registry for project-aware routing
+            get_connection_registry().register(
+                self._ws,
+                self._working_dir,
+                session_id=self._session_id,
+            )
             await self._send_status("Starting terminal...")
             await self._setup()
             await self._send_status("Connected")
@@ -186,6 +193,7 @@ class ConnectionHandler:
         """Clean up resources."""
         self._closed = True
         get_connection_manager().unregister(self._ws)
+        get_connection_registry().unregister(self._ws)
 
         if self._watcher is not None:
             self._watcher.stop()

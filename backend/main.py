@@ -18,10 +18,12 @@ from pydantic import BaseModel
 
 from backend.config import Config, get_config, set_config
 from backend.connection_manager import get_connection_manager
+from backend.connection_registry import get_connection_registry
 from backend.file_tree import get_file_type
 from backend.protocol import MessageType
 from backend.session_registry import get_registry
 from backend.websocket import websocket_handler
+from backend.cc_session_resolver import resolve_slug_to_project
 from backend.wsl_health import ensure_wsl_ready
 from backend.wsl_path import wsl_to_windows_path
 from backend.wsl_session_unifier import unify_sessions
@@ -97,6 +99,26 @@ class ViewFileRequest(BaseModel):
     path: str
 
 
+async def _send_to_connections(connections: list, message: dict) -> int:
+    """Send a message to a list of WebSocket connections.
+
+    Args:
+        connections: List of WebSocket connections.
+        message: The message to send.
+
+    Returns:
+        Number of successful sends.
+    """
+    sent_count = 0
+    for ws in connections:
+        try:
+            await ws.send_json(message)
+            sent_count += 1
+        except Exception as e:
+            logger.warning("Failed to send to client: %s", e)
+    return sent_count
+
+
 def create_app(config: Config | None = None) -> FastAPI:
     """Create and configure the FastAPI application."""
     if config is not None:
@@ -143,18 +165,61 @@ def create_app(config: Config | None = None) -> FastAPI:
 
         file_type = get_file_type(str(file_path))
 
-        manager = get_connection_manager()
-        await manager.broadcast({
+        message = {
             "type": MessageType.VIEW_FILE,
             "path": str(file_path),
             "content": content,
             "fileType": file_type,
-        })
+        }
 
+        # Use targeted routing: only send to connections whose project contains this file
+        registry = get_connection_registry()
+        target_connections = registry.get_connections_for_file(file_path)
+
+        if target_connections:
+            # Send to matching project connections
+            sent_count = await _send_to_connections(target_connections, message)
+            logger.info(
+                "Sent VIEW_FILE to %d connection(s) for project containing: %s",
+                sent_count,
+                file_path,
+            )
+            return {
+                "success": True,
+                "path": str(file_path),
+                "connections": sent_count,
+            }
+
+        # Try slug-based routing for plan files (outside project directories)
+        if "/.claude/plans/" in str(file_path):
+            slug = file_path.stem  # e.g., "jazzy-crunching-moonbeam"
+            project_path = resolve_slug_to_project(slug)
+
+            if project_path:
+                target_connections = registry.get_connections_for_project(project_path)
+                if target_connections:
+                    sent_count = await _send_to_connections(target_connections, message)
+                    logger.info(
+                        "Sent VIEW_FILE to %d connection(s) via slug '%s' for project: %s",
+                        sent_count,
+                        slug,
+                        project_path,
+                    )
+                    return {
+                        "success": True,
+                        "path": str(file_path),
+                        "connections": sent_count,
+                    }
+
+        # No routing match - don't broadcast to avoid cross-project leakage
+        logger.warning(
+            "No routing match for %s - not broadcasting",
+            file_path,
+        )
         return {
             "success": True,
             "path": str(file_path),
-            "connections": manager.connection_count,
+            "connections": 0,
         }
 
     if FRONTEND_DIST.exists():
@@ -378,173 +443,63 @@ def run_view(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
-def _get_wsl_settings_path() -> tuple[Path, bool]:
-    """Get the Claude Code settings path, handling Windows/WSL correctly.
-
-    Returns:
-        Tuple of (settings_path, is_wsl_via_windows).
-        is_wsl_via_windows is True if running on Windows and need to write to WSL.
-    """
-    import subprocess
-
-    if sys.platform != "win32":
-        # Running in WSL or native Linux - use standard path
-        return Path.home() / ".claude" / "settings.json", False
-
-    # Running on Windows - need to write to WSL home
-    try:
-        # Get default WSL distro
-        result = subprocess.run(
-            ["wsl", "-l", "-q"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            print("Warning: Could not detect WSL distro, using Windows path")
-            return Path.home() / ".claude" / "settings.json", False
-
-        # Parse output - first non-empty line is the default distro
-        lines = [line.strip().replace("\x00", "") for line in result.stdout.split("\n")]
-        distro = next((line for line in lines if line), None)
-        if not distro:
-            print("Warning: No WSL distro found, using Windows path")
-            return Path.home() / ".claude" / "settings.json", False
-
-        # Get WSL username
-        result = subprocess.run(
-            ["wsl", "-d", distro, "whoami"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            print("Warning: Could not get WSL username, using Windows path")
-            return Path.home() / ".claude" / "settings.json", False
-
-        wsl_user = result.stdout.strip()
-
-        # Construct UNC path
-        wsl_path = Path(f"\\\\wsl$\\{distro}\\home\\{wsl_user}\\.claude\\settings.json")
-        return wsl_path, True
-
-    except subprocess.TimeoutExpired:
-        print("Warning: WSL command timed out, using Windows path")
-        return Path.home() / ".claude" / "settings.json", False
-    except FileNotFoundError:
-        print("Warning: WSL not available, using Windows path")
-        return Path.home() / ".claude" / "settings.json", False
-
-
 def run_setup_hook(args: argparse.Namespace) -> None:
     """Configure Claude Code hook for plan file viewing."""
     import json
-    import shutil
 
-    settings_path, is_wsl = _get_wsl_settings_path()
-    backup_path = settings_path.parent / "settings.json.backup"
+    from backend.hooks import CADEHookOptions, setup_cade_hooks
+    from backend.hooks.settings import ClaudeSettings
+    from backend.hooks.wsl_path import get_wsl_settings_path
 
-    port = args.port
-    all_files = args.all_files
-    dry_run = args.dry_run
+    options = CADEHookOptions(port=args.port, all_files=args.all_files)
 
-    # Hook command reads JSON from stdin (Claude Code passes tool input via stdin)
-    # Use Python since it's always available
-    # Use Windows host IP from default gateway for WSL->Windows connectivity
-    get_host_ip = "$(ip route show default | awk '{print $3}')"
+    if args.dry_run:
+        # For dry run, show what would be written
+        settings_path, is_wsl = get_wsl_settings_path()
+        settings = ClaudeSettings(settings_path)
 
-    if all_files:
-        # View all file edits
-        hook_command = (
-            f"python3 -c \"import sys,json; print(json.load(sys.stdin)['tool_input']['file_path'])\" "
-            f"| xargs -I {{}} curl -s -X POST -H 'Content-Type: application/json' "
-            f"-d '{{\"path\":\"{{}}\"}}' http://{get_host_ip}:{port}/api/view > /dev/null"
-        )
-    else:
-        # Only trigger for files in plans/ with .md extension
-        hook_command = (
-            f"python3 -c \"import sys,json; p=json.load(sys.stdin)['tool_input']['file_path']; "
-            f"print(p) if 'plans/' in p and p.endswith('.md') else None\" 2>/dev/null "
-            f"| xargs -r -I {{}} curl -s -X POST -H 'Content-Type: application/json' "
-            f"-d '{{\"path\":\"{{}}\"}}' http://{get_host_ip}:{port}/api/view > /dev/null"
-        )
-
-    new_hook = {
-        "matcher": "Edit|Write",
-        "hooks": [
-            {
-                "type": "command",
-                "command": hook_command,
-            }
-        ],
-    }
-
-    # Load existing settings or create empty
-    if settings_path.exists():
         try:
-            settings = json.loads(settings_path.read_text())
+            settings.load()
         except json.JSONDecodeError as e:
             print(f"Error: Invalid JSON in {settings_path}: {e}", file=sys.stderr)
             sys.exit(1)
-    else:
-        settings = {}
 
-    # Ensure hooks structure exists
-    if "hooks" not in settings:
-        settings["hooks"] = {}
-    if "PostToolUse" not in settings["hooks"]:
-        settings["hooks"]["PostToolUse"] = []
+        from backend.hooks.commands import build_hook_config
+        from backend.hooks.config import HookType
 
-    # Check if a similar hook already exists and update/add as needed
-    existing_hooks = settings["hooks"]["PostToolUse"]
-    hook_exists = False
-    for i, hook in enumerate(existing_hooks):
-        if hook.get("matcher") == "Edit|Write":
-            # Check if this is our hook (contains api/view)
-            hook_cmds = hook.get("hooks", [])
-            for cmd in hook_cmds:
-                if "api/view" in cmd.get("command", ""):
-                    hook_exists = True
-                    existing_hooks[i] = new_hook
-                    if dry_run:
-                        print(f"Would update existing hook at index {i}")
-                    else:
-                        print("Updated existing plan viewer hook")
-                    break
-            if hook_exists:
-                break
+        hook_config = build_hook_config(options)
+        hook_updated = settings.add_hook(HookType.POST_TOOL_USE, hook_config)
 
-    if not hook_exists:
-        existing_hooks.append(new_hook)
-        if dry_run:
-            print("Would add new PostToolUse hook")
-
-    if dry_run:
+        action = "Would update existing" if hook_updated else "Would add new"
+        print(f"{action} PostToolUse hook")
         print(f"\nSettings path: {settings_path}")
         if is_wsl:
             print("(Writing to WSL home directory from Windows)")
         print("\nSettings that would be written:")
-        print(json.dumps(settings, indent=2))
+        print(json.dumps(settings.data, indent=2))
         return
 
-    # Backup existing settings
-    if settings_path.exists():
-        shutil.copy2(settings_path, backup_path)
+    try:
+        result = setup_cade_hooks(options, dry_run=False)
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON in settings: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if not result.success:
+        print(f"Error: {result.message}", file=sys.stderr)
+        sys.exit(1)
+
+    print(result.message)
+
+    if result.backup_created:
+        backup_path = result.settings_path.parent / "settings.json.backup"
         print(f"Backed up existing settings to {backup_path}")
 
-    # Ensure .claude directory exists
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    file_filter = "all file edits" if options.all_files else "plan files (plans/*.md)"
+    print(f"Hook configured to POST {file_filter} to http://localhost:{options.port}/api/view")
 
-    # Write updated settings
-    settings_path.write_text(json.dumps(settings, indent=2) + "\n")
-
-    if not hook_exists:
-        print("Added PostToolUse hook for plan file viewing")
-
-    file_filter = "all file edits" if all_files else "plan files (plans/*.md)"
-    print(f"Hook configured to POST {file_filter} to http://localhost:{port}/api/view")
-    if is_wsl:
-        print(f"Settings written to WSL path: {settings_path}")
+    if result.is_wsl:
+        print(f"Settings written to WSL path: {result.settings_path}")
 
 
 def main() -> None:
