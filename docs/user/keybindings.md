@@ -1,7 +1,7 @@
 ---
 title: Keyboard Navigation Guide
 created: 2026-01-18
-updated: 2026-01-18
+updated: 2026-01-19
 status: active
 tags: [user, keybindings, navigation, vim, tmux]
 ---
@@ -131,6 +131,20 @@ When the viewer pane is focused:
 | `G` | Scroll to bottom |
 | `Enter` | Follow link under cursor |
 
+## Terminal Copy/Paste
+
+The terminal uses remapped shortcuts for copy/paste to work in the browser environment.
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+C` | Copy selected text to clipboard |
+| `Ctrl+X` | Send interrupt signal (SIGINT) |
+| `Ctrl+V` | Paste from clipboard |
+| Right-click | Copy (with selection) / Paste (without) |
+
+> [!NOTE]
+> This differs from traditional Unix terminals where `Ctrl+C` sends SIGINT. In ccplus, use `Ctrl+X` to interrupt running commands.
+
 ## Workflow Examples
 
 ### Quick file lookup
@@ -192,6 +206,13 @@ prefix = "C-b"
 │  c/x     Create/close tab                               │
 │  s       Toggle Claude/shell                            │
 │  ?       Help                                           │
+├─────────────────────────────────────────────────────────┤
+│                    TERMINAL                             │
+├─────────────────────────────────────────────────────────┤
+│  C-c     Copy selected text                             │
+│  C-x     Send interrupt (SIGINT)                        │
+│  C-v     Paste from clipboard                           │
+│  R-click Copy (with selection) / Paste (without)        │
 ├─────────────────────────────────────────────────────────┤
 │                    FILE TREE                            │
 ├─────────────────────────────────────────────────────────┤
