@@ -331,6 +331,8 @@ def run_serve(args: argparse.Namespace) -> None:
             host=config.host,
             port=config.port,
             log_level="debug" if config.debug else "warning",
+            ws_ping_interval=30,
+            ws_ping_timeout=60,
         )
     except KeyboardInterrupt:
         logger.info("Interrupted by user")
