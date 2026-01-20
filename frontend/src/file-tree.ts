@@ -22,6 +22,8 @@ export class FileTree implements Component, PaneKeyHandler {
   private selectedPath: string | null = null;
   private openPath: string | null = null;
   private recentlyChanged: Set<string> = new Set();
+  private recentlyChangedTimers: Map<string, number> = new Map();
+  private searchDebounceTimer: number | null = null;
   private handlers: Map<
     keyof FileTreeEvents,
     Set<EventHandler<FileTreeEvents[keyof FileTreeEvents]>>
@@ -38,6 +40,41 @@ export class FileTree implements Component, PaneKeyHandler {
   private lastGPress = 0;
   private showIgnored = true;
 
+  // Event delegation - single handler on tree root instead of per-row listeners
+  private treeRoot: HTMLUListElement | null = null;
+  private delegatedClickHandler: ((e: MouseEvent) => void) | null = null;
+
+  private boundHandlers = {
+    fileTree: (message: any) => {
+      this.tree = message.data;
+      this.render();
+    },
+    fileChange: (message: any) => {
+      this.recentlyChanged.add(message.path);
+      this.render();
+
+      // Clear existing timer for this path if any
+      const existingTimer = this.recentlyChangedTimers.get(message.path);
+      if (existingTimer != null) {
+        window.clearTimeout(existingTimer);
+      }
+
+      // Track new timer
+      const timerId = window.setTimeout(() => {
+        this.recentlyChanged.delete(message.path);
+        this.recentlyChangedTimers.delete(message.path);
+        this.render();
+      }, 2000);
+
+      this.recentlyChangedTimers.set(message.path, timerId);
+
+      this.ws.requestTree(this.showIgnored);
+    },
+    connected: () => {
+      this.ws.requestTree(this.showIgnored);
+    },
+  };
+
   constructor(
     private container: HTMLElement,
     private ws: WebSocketClient
@@ -47,26 +84,27 @@ export class FileTree implements Component, PaneKeyHandler {
    * Initialize the file tree.
    */
   initialize(): void {
-    this.ws.on("file-tree", (message) => {
-      this.tree = message.data;
-      this.render();
-    });
+    this.ws.on("file-tree", this.boundHandlers.fileTree);
+    this.ws.on("file-change", this.boundHandlers.fileChange);
+    this.ws.on("connected", this.boundHandlers.connected);
 
-    this.ws.on("file-change", (message) => {
-      this.recentlyChanged.add(message.path);
-      this.render();
+    // Setup delegated click handler once - handles all row clicks via event bubbling
+    this.delegatedClickHandler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const row = target.closest(".file-tree-row") as HTMLElement;
+      if (!row) return;
 
-      setTimeout(() => {
-        this.recentlyChanged.delete(message.path);
-        this.render();
-      }, 2000);
+      const path = row.dataset["path"];
+      if (!path) return;
 
-      this.ws.requestTree(this.showIgnored);
-    });
+      e.stopPropagation();
 
-    this.ws.on("connected", () => {
-      this.ws.requestTree(this.showIgnored);
-    });
+      if (row.dataset["type"] === "directory") {
+        this.toggleFolder(path);
+      } else {
+        this.selectFile(path);
+      }
+    };
 
     if (this.ws.isConnected()) {
       this.ws.requestTree(this.showIgnored);
@@ -174,6 +212,12 @@ export class FileTree implements Component, PaneKeyHandler {
     const ul = document.createElement("ul");
     ul.className = "file-tree-root";
 
+    // Attach delegated click handler to tree root (single listener handles all rows)
+    if (this.delegatedClickHandler) {
+      ul.addEventListener("click", this.delegatedClickHandler);
+    }
+    this.treeRoot = ul;
+
     if (this.searchMode && this.searchQuery) {
       // Render filtered results flat (no hierarchy during search)
       for (const item of this.flatList) {
@@ -196,11 +240,16 @@ export class FileTree implements Component, PaneKeyHandler {
 
   /**
    * Create a row element for a node (used by both renderNode and flat search rendering).
+   * Event listeners are NOT attached here - event delegation on tree root handles all clicks.
    */
   private createRowElement(node: FileNode, depth: number): HTMLDivElement {
     const row = document.createElement("div");
     row.className = "file-tree-row";
     row.style.paddingLeft = `${depth * 16 + 8}px`;
+
+    // Data attributes for event delegation
+    row.dataset["path"] = node.path;
+    row.dataset["type"] = node.type;
 
     if (node.path === this.openPath) {
       row.classList.add("selected");
@@ -223,11 +272,6 @@ export class FileTree implements Component, PaneKeyHandler {
       const icon = document.createElement("span");
       icon.className = `file-tree-icon folder${isExpanded ? " expanded" : ""}`;
       row.appendChild(icon);
-
-      row.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.toggleFolder(node.path);
-      });
     } else {
       const spacer = document.createElement("span");
       spacer.className = "file-tree-spacer";
@@ -237,11 +281,6 @@ export class FileTree implements Component, PaneKeyHandler {
       const typeClass = this.getFileTypeClass(node.name);
       icon.className = `file-tree-icon file${typeClass ? ` ${typeClass}` : ""}`;
       row.appendChild(icon);
-
-      row.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.selectFile(node.path);
-      });
     }
 
     const name = document.createElement("span");
@@ -666,7 +705,15 @@ export class FileTree implements Component, PaneKeyHandler {
    */
   private onSearchInputChange(query: string): void {
     this.searchQuery = query.toLowerCase();
-    this.render();
+
+    if (this.searchDebounceTimer != null) {
+      window.clearTimeout(this.searchDebounceTimer);
+    }
+
+    this.searchDebounceTimer = window.setTimeout(() => {
+      this.render();
+      this.searchDebounceTimer = null;
+    }, 150);
   }
 
   /**
@@ -727,6 +774,30 @@ export class FileTree implements Component, PaneKeyHandler {
    * Dispose of resources.
    */
   dispose(): void {
+    // Remove delegated click handler from tree root
+    if (this.treeRoot && this.delegatedClickHandler) {
+      this.treeRoot.removeEventListener("click", this.delegatedClickHandler);
+    }
+    this.treeRoot = null;
+    this.delegatedClickHandler = null;
+
+    // Clear all pending timers
+    for (const timerId of this.recentlyChangedTimers.values()) {
+      window.clearTimeout(timerId);
+    }
+    this.recentlyChangedTimers.clear();
+
+    // Clear search debounce timer
+    if (this.searchDebounceTimer != null) {
+      window.clearTimeout(this.searchDebounceTimer);
+      this.searchDebounceTimer = null;
+    }
+
+    // Unregister WebSocket handlers
+    this.ws.off("file-tree", this.boundHandlers.fileTree);
+    this.ws.off("file-change", this.boundHandlers.fileChange);
+    this.ws.off("connected", this.boundHandlers.connected);
+
     this.container.innerHTML = "";
     this.handlers.clear();
   }
