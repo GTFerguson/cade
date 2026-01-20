@@ -85,6 +85,21 @@ class TestBuildPlanFilesCommand:
         command = _build_plan_files_command(9999)
         assert ":9999/" in command
 
+    def test_fallback_port_included(self) -> None:
+        """Fallback port is included for robustness."""
+        # When primary is 3001, fallback should be 3000
+        command = _build_plan_files_command(3001)
+        assert ":3001/" in command
+        assert ":3000/" in command
+        # Uses || for fallback logic
+        assert "||" in command
+
+    def test_fallback_port_swapped(self) -> None:
+        """Fallback port is swapped when primary is 3000."""
+        command = _build_plan_files_command(3000)
+        assert ":3000/" in command
+        assert ":3001/" in command
+
 
 class TestBuildAllFilesCommand:
     """Tests for all files command builder."""
@@ -104,6 +119,13 @@ class TestBuildAllFilesCommand:
         """Port is included in the command."""
         command = _build_all_files_command(7777)
         assert ":7777/" in command
+
+    def test_fallback_port_included(self) -> None:
+        """Fallback port is included for robustness."""
+        command = _build_all_files_command(3001)
+        assert ":3001/" in command
+        assert ":3000/" in command
+        assert "||" in command
 
 
 class TestBuildHookConfig:

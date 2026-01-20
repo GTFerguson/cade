@@ -15,7 +15,52 @@ from backend.cc_session_resolver import (
     _get_session_slug,
     _tail_file,
     CLAUDE_DIR,
+    _get_history_file,
+    _get_projects_dir,
+    _get_claude_dir,
 )
+
+
+class TestGetClaudeDir:
+    """Tests for _get_claude_dir function."""
+
+    def test_linux_uses_home(self, monkeypatch) -> None:
+        """On Linux, uses standard home directory."""
+        monkeypatch.setattr("backend.cc_session_resolver.sys.platform", "linux")
+        # Clear the cache to force re-evaluation
+        _get_claude_dir.cache_clear()
+
+        result = _get_claude_dir()
+        assert result == Path.home() / ".claude"
+
+    def test_windows_uses_wsl_home(self, monkeypatch) -> None:
+        """On Windows, uses WSL home directory when available."""
+        monkeypatch.setattr("backend.cc_session_resolver.sys.platform", "win32")
+        monkeypatch.setattr(
+            "backend.wsl_path.get_wsl_home_as_windows_path",
+            lambda: "\\\\wsl.localhost\\Ubuntu\\home\\testuser",
+        )
+        # Clear the cache to force re-evaluation
+        _get_claude_dir.cache_clear()
+
+        result = _get_claude_dir()
+        # Compare string representations to handle path separator differences
+        expected_base = "\\\\wsl.localhost\\Ubuntu\\home\\testuser"
+        assert str(result).replace("/", "\\").startswith(expected_base)
+        assert ".claude" in str(result)
+
+    def test_windows_falls_back_without_wsl(self, monkeypatch) -> None:
+        """On Windows without WSL, falls back to Windows home."""
+        monkeypatch.setattr("backend.cc_session_resolver.sys.platform", "win32")
+        monkeypatch.setattr(
+            "backend.wsl_path.get_wsl_home_as_windows_path",
+            lambda: None,
+        )
+        # Clear the cache to force re-evaluation
+        _get_claude_dir.cache_clear()
+
+        result = _get_claude_dir()
+        assert result == Path.home() / ".claude"
 
 
 class TestEncodeProjectPath:
@@ -94,7 +139,8 @@ class TestGetRecentSessions:
         history_file.write_text("\n".join(json.dumps(e) for e in entries))
 
         monkeypatch.setattr(
-            "backend.cc_session_resolver.HISTORY_FILE", history_file
+            "backend.cc_session_resolver._get_history_file",
+            lambda: history_file,
         )
 
         result = _get_recent_sessions()
@@ -106,8 +152,8 @@ class TestGetRecentSessions:
     def test_handles_missing_file(self, temp_dir: Path, monkeypatch) -> None:
         """Missing history file returns empty dict."""
         monkeypatch.setattr(
-            "backend.cc_session_resolver.HISTORY_FILE",
-            temp_dir / "nonexistent.jsonl",
+            "backend.cc_session_resolver._get_history_file",
+            lambda: temp_dir / "nonexistent.jsonl",
         )
 
         result = _get_recent_sessions()
@@ -124,7 +170,8 @@ class TestGetRecentSessions:
         history_file.write_text(content)
 
         monkeypatch.setattr(
-            "backend.cc_session_resolver.HISTORY_FILE", history_file
+            "backend.cc_session_resolver._get_history_file",
+            lambda: history_file,
         )
 
         result = _get_recent_sessions()
@@ -143,7 +190,8 @@ class TestGetRecentSessions:
         history_file.write_text("\n".join(json.dumps(e) for e in entries))
 
         monkeypatch.setattr(
-            "backend.cc_session_resolver.HISTORY_FILE", history_file
+            "backend.cc_session_resolver._get_history_file",
+            lambda: history_file,
         )
 
         result = _get_recent_sessions()
@@ -167,7 +215,8 @@ class TestGetSessionSlug:
         session_file.write_text("\n".join(json.dumps(e) for e in entries))
 
         monkeypatch.setattr(
-            "backend.cc_session_resolver.PROJECTS_DIR", temp_dir / "projects"
+            "backend.cc_session_resolver._get_projects_dir",
+            lambda: temp_dir / "projects",
         )
 
         result = _get_session_slug("/project/path", "sess-123")
@@ -178,7 +227,8 @@ class TestGetSessionSlug:
     ) -> None:
         """Missing session file returns None."""
         monkeypatch.setattr(
-            "backend.cc_session_resolver.PROJECTS_DIR", temp_dir / "projects"
+            "backend.cc_session_resolver._get_projects_dir",
+            lambda: temp_dir / "projects",
         )
 
         result = _get_session_slug("/project/path", "nonexistent")
@@ -197,7 +247,8 @@ class TestGetSessionSlug:
         session_file.write_text("\n".join(json.dumps(e) for e in entries))
 
         monkeypatch.setattr(
-            "backend.cc_session_resolver.PROJECTS_DIR", temp_dir / "projects"
+            "backend.cc_session_resolver._get_projects_dir",
+            lambda: temp_dir / "projects",
         )
 
         result = _get_session_slug("/project/path", "sess-123")
@@ -231,10 +282,12 @@ class TestResolveSlugToProject:
         session_file.write_text("\n".join(json.dumps(e) for e in session_entries))
 
         monkeypatch.setattr(
-            "backend.cc_session_resolver.HISTORY_FILE", history_file
+            "backend.cc_session_resolver._get_history_file",
+            lambda: history_file,
         )
         monkeypatch.setattr(
-            "backend.cc_session_resolver.PROJECTS_DIR", projects_dir
+            "backend.cc_session_resolver._get_projects_dir",
+            lambda: projects_dir,
         )
 
         result = resolve_slug_to_project("jazzy-crunching-moonbeam")
@@ -257,10 +310,12 @@ class TestResolveSlugToProject:
         session_file.write_text(json.dumps({"type": "user", "slug": "other-slug"}))
 
         monkeypatch.setattr(
-            "backend.cc_session_resolver.HISTORY_FILE", history_file
+            "backend.cc_session_resolver._get_history_file",
+            lambda: history_file,
         )
         monkeypatch.setattr(
-            "backend.cc_session_resolver.PROJECTS_DIR", projects_dir
+            "backend.cc_session_resolver._get_projects_dir",
+            lambda: projects_dir,
         )
 
         result = resolve_slug_to_project("nonexistent-slug")
@@ -271,8 +326,8 @@ class TestResolveSlugToProject:
     ) -> None:
         """Missing history.jsonl returns None."""
         monkeypatch.setattr(
-            "backend.cc_session_resolver.HISTORY_FILE",
-            temp_dir / "nonexistent.jsonl",
+            "backend.cc_session_resolver._get_history_file",
+            lambda: temp_dir / "nonexistent.jsonl",
         )
 
         result = resolve_slug_to_project("any-slug")
@@ -300,12 +355,54 @@ class TestResolveSlugToProject:
             session_file.write_text(json.dumps({"type": "user", "slug": "same-slug"}))
 
         monkeypatch.setattr(
-            "backend.cc_session_resolver.HISTORY_FILE", history_file
+            "backend.cc_session_resolver._get_history_file",
+            lambda: history_file,
         )
         monkeypatch.setattr(
-            "backend.cc_session_resolver.PROJECTS_DIR", projects_dir
+            "backend.cc_session_resolver._get_projects_dir",
+            lambda: projects_dir,
         )
 
         result = resolve_slug_to_project("same-slug")
         # Should return one of the projects (dict ordering may vary)
         assert result in [Path("/project/a"), Path("/project/b")]
+
+    def test_resolves_with_mismatched_encoding(
+        self, temp_dir: Path, monkeypatch
+    ) -> None:
+        """Resolves slug even when Claude's encoding differs from ours.
+
+        Claude may encode paths differently (e.g., '.' becomes '-'), so the
+        glob-based search should still find the session file regardless of
+        the exact encoding used.
+        """
+        history_file = temp_dir / "history.jsonl"
+        projects_dir = temp_dir / "projects"
+
+        # Project path with a dot in it (e.g., username)
+        project_path = "/mnt/c/Users/user.name/Documents/project"
+        history_entry = {"sessionId": "sess-abc", "project": project_path}
+        history_file.write_text(json.dumps(history_entry))
+
+        # Claude encodes the path with dots converted to dashes, which differs
+        # from our encode_project_path() which keeps dots
+        claude_encoded = "-mnt-c-Users-user-name-Documents-project"
+        project_subdir = projects_dir / claude_encoded
+        project_subdir.mkdir(parents=True)
+        session_file = project_subdir / "sess-abc.jsonl"
+        session_file.write_text(
+            json.dumps({"type": "user", "slug": "mismatched-encoding-test"})
+        )
+
+        monkeypatch.setattr(
+            "backend.cc_session_resolver._get_history_file",
+            lambda: history_file,
+        )
+        monkeypatch.setattr(
+            "backend.cc_session_resolver._get_projects_dir",
+            lambda: projects_dir,
+        )
+
+        result = resolve_slug_to_project("mismatched-encoding-test")
+        # Should resolve correctly despite encoding mismatch
+        assert result == Path(project_path)

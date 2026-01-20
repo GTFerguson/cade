@@ -94,6 +94,39 @@ def is_wsl_path(path: str) -> bool:
     return path.startswith("/") and not path.startswith("//")
 
 
+def wsl_mount_to_windows_path(wsl_path: str) -> str:
+    """Convert a WSL-mounted Windows path to native Windows format.
+
+    Converts paths like `/mnt/c/Users/foo` to `C:\\Users\\foo`.
+    Also handles Windows-style paths like `\\mnt\\c\\Users\\foo`.
+
+    Args:
+        wsl_path: Path starting with `/mnt/<drive>/...` or `\\mnt\\<drive>\\...`
+
+    Returns:
+        Windows path if it's a mounted path, original path otherwise.
+    """
+    import re
+
+    # Normalize to forward slashes for matching
+    normalized = wsl_path.replace("\\", "/")
+
+    # Match /mnt/<single-letter-drive>/...
+    match = re.match(r"^/mnt/([a-zA-Z])(/.*)?$", normalized)
+    if not match:
+        return wsl_path
+
+    drive_letter = match.group(1).upper()
+    rest_of_path = match.group(2) or ""
+
+    # Convert forward slashes to backslashes
+    windows_path = rest_of_path.replace("/", "\\")
+
+    result = f"{drive_letter}:{windows_path}"
+    logger.debug("Converted WSL mount path: %s -> %s", wsl_path, result)
+    return result
+
+
 @lru_cache(maxsize=1)
 def get_wsl_home_as_windows_path() -> str | None:
     """

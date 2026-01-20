@@ -242,6 +242,34 @@ class TestConnectionRegistry:
         assert connections[0] is ws
 
 
+class TestGetConnectionsForProjectWslPaths:
+    """Tests for WSL path handling in get_connections_for_project."""
+
+    def test_wsl_mount_path_conversion(self) -> None:
+        """Verifies wsl_mount_to_windows_path is called for /mnt paths."""
+        from backend.wsl_path import wsl_mount_to_windows_path
+
+        # Test the conversion function directly - forward slashes
+        assert wsl_mount_to_windows_path("/mnt/c/Users/test") == "C:\\Users\\test"
+        assert wsl_mount_to_windows_path("/mnt/d/projects") == "D:\\projects"
+        assert wsl_mount_to_windows_path("/home/user") == "/home/user"  # No change
+
+        # Test with backslashes (Windows-style from Path conversion)
+        assert wsl_mount_to_windows_path("\\mnt\\c\\Users\\test") == "C:\\Users\\test"
+        assert wsl_mount_to_windows_path("\\mnt\\d\\projects") == "D:\\projects"
+
+    def test_non_wsl_path_still_works(self, temp_dir: Path) -> None:
+        """Regular paths without /mnt/ prefix still work normally."""
+        registry = ConnectionRegistry()
+        mock_ws = MagicMock(name="ws")
+
+        registry.register(mock_ws, temp_dir)
+        connections = registry.get_connections_for_project(temp_dir)
+
+        assert len(connections) == 1
+        assert mock_ws in connections
+
+
 class TestConnectionInfo:
     """Tests for ConnectionInfo dataclass."""
 

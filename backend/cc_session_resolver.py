@@ -19,11 +19,48 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
+from functools import lru_cache
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-CLAUDE_DIR = Path.home() / ".claude"
+
+@lru_cache(maxsize=1)
+def _get_claude_dir() -> Path:
+    """Get the Claude directory, handling Windows/WSL correctly.
+
+    When running on Windows but Claude Code runs in WSL, the Claude directory
+    is in the WSL filesystem, not the Windows filesystem.
+
+    Returns:
+        Path to the .claude directory.
+    """
+    if sys.platform == "win32":
+        # On Windows, Claude Code likely runs in WSL
+        from backend.wsl_path import get_wsl_home_as_windows_path
+
+        wsl_home = get_wsl_home_as_windows_path()
+        if wsl_home:
+            claude_dir = Path(wsl_home) / ".claude"
+            logger.debug("Using WSL Claude directory: %s", claude_dir)
+            return claude_dir
+
+    # Default: use local home directory
+    return Path.home() / ".claude"
+
+
+# Lazy initialization to avoid import-time subprocess calls
+def _get_history_file() -> Path:
+    return _get_claude_dir() / "history.jsonl"
+
+
+def _get_projects_dir() -> Path:
+    return _get_claude_dir() / "projects"
+
+
+# For backwards compatibility with tests that monkeypatch these
+CLAUDE_DIR = Path.home() / ".claude"  # Default, may be overridden
 HISTORY_FILE = CLAUDE_DIR / "history.jsonl"
 PROJECTS_DIR = CLAUDE_DIR / "projects"
 
@@ -40,8 +77,11 @@ def resolve_slug_to_project(slug: str) -> Path | None:
     Returns:
         The project path if found, None otherwise.
     """
-    if not HISTORY_FILE.exists():
-        logger.debug("history.jsonl not found at %s", HISTORY_FILE)
+    history_file = _get_history_file()
+    logger.debug("Looking for slug '%s' in history at: %s", slug, history_file)
+
+    if not history_file.exists():
+        logger.debug("history.jsonl not found at %s", history_file)
         return None
 
     # Read recent history entries to find active sessions
@@ -111,9 +151,10 @@ def _get_recent_sessions(max_lines: int = 100) -> dict[str, str]:
         Dict mapping session_id to project path.
     """
     sessions: dict[str, str] = {}
+    history_file = _get_history_file()
 
     try:
-        lines = _tail_file(HISTORY_FILE, max_lines)
+        lines = _tail_file(history_file, max_lines)
         for line in lines:
             line = line.strip()
             if not line:
@@ -135,36 +176,37 @@ def _get_recent_sessions(max_lines: int = 100) -> dict[str, str]:
 def _get_session_slug(project_path: str, session_id: str) -> str | None:
     """Extract the slug from a session's jsonl file.
 
+    Searches for the session file using glob instead of encoding the project
+    path, which is more robust across platforms since Claude's path encoding
+    algorithm may vary (e.g., replacing '.' with '-' on some systems).
+
     Args:
-        project_path: The project path.
+        project_path: The project path (unused, kept for API compatibility).
         session_id: The session UUID.
 
     Returns:
         The session slug if found, None otherwise.
     """
-    projects_dir = get_cc_projects_dir(project_path)
-    session_file = projects_dir / f"{session_id}.jsonl"
+    projects_dir = _get_projects_dir()
+    logger.debug("Searching for session %s in: %s", session_id, projects_dir)
 
-    if not session_file.exists():
-        return None
-
-    try:
-        # Read through the file looking for a slug entry
-        # Slugs are stored in entries with type: "user"
-        with session_file.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                    # Slug appears in user-type entries
-                    if entry.get("slug"):
-                        return entry["slug"]
-                except json.JSONDecodeError:
-                    continue
-    except Exception as e:
-        logger.debug("Error reading session file %s: %s", session_file, e)
+    # Search for session file in any project directory using glob
+    # This avoids needing to match Claude's exact path encoding algorithm
+    for session_file in projects_dir.glob(f"*/{session_id}.jsonl"):
+        try:
+            with session_file.open("r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                        if entry.get("slug"):
+                            return entry["slug"]
+                    except json.JSONDecodeError:
+                        continue
+        except Exception as e:
+            logger.debug("Error reading session file %s: %s", session_file, e)
 
     return None
 

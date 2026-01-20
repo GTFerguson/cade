@@ -49,6 +49,7 @@ See [[blocking-issues]] for critical issues that must be resolved before major p
 
 - [[mobile-interface]] - Mobile-optimized interface for phones and tablets
 - [[state-management-refactor]] - Extract state logic into testable state machines
+- [[hook-improvements]] - Claude Code hook infrastructure improvements
 
 ### User Interface & Experience
 

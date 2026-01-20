@@ -33,35 +33,55 @@ def _get_gateway_ip_command() -> str:
 def _build_plan_files_command(port: int) -> str:
     """Build command that only triggers for plan files (plans/*.md).
 
+    The command tries multiple ports for robustness:
+    - First tries the specified port
+    - Falls back to alternative port (3000 if primary is 3001, or vice versa)
+
+    This allows the hook to work with either dev (3001) or stable (3000) server.
+
     Args:
-        port: The CADE server port.
+        port: The primary CADE server port.
 
     Returns:
         Shell command string.
     """
     host = _get_gateway_ip_command()
+    fallback_port = 3000 if port == 3001 else 3001
     return (
         f"python3 -c \"import sys,json; p=json.load(sys.stdin)['tool_input']['file_path']; "
         f"print(p) if 'plans/' in p and p.endswith('.md') else None\" 2>/dev/null "
-        f"| xargs -r -I {{}} curl -s -X POST -H 'Content-Type: application/json' "
-        f"-d '{{\"path\":\"{{}}\"}}' http://{host}:{port}/api/view > /dev/null"
+        f"| xargs -r -I {{}} sh -c '"
+        f"HOST={host}; "
+        f'curl -sf -X POST -H "Content-Type: application/json" -d "{{\\\"path\\\":\\\"{{}}\\\"}}" '
+        f"http://$HOST:{port}/api/view || "
+        f'curl -sf -X POST -H "Content-Type: application/json" -d "{{\\\"path\\\":\\\"{{}}\\\"}}" '
+        f"http://$HOST:{fallback_port}/api/view"
+        f"' > /dev/null 2>&1"
     )
 
 
 def _build_all_files_command(port: int) -> str:
     """Build command that triggers for all file edits.
 
+    The command tries multiple ports for robustness (same as plan files command).
+
     Args:
-        port: The CADE server port.
+        port: The primary CADE server port.
 
     Returns:
         Shell command string.
     """
     host = _get_gateway_ip_command()
+    fallback_port = 3000 if port == 3001 else 3001
     return (
         f"python3 -c \"import sys,json; print(json.load(sys.stdin)['tool_input']['file_path'])\" "
-        f"| xargs -I {{}} curl -s -X POST -H 'Content-Type: application/json' "
-        f"-d '{{\"path\":\"{{}}\"}}' http://{host}:{port}/api/view > /dev/null"
+        f"| xargs -I {{}} sh -c '"
+        f"HOST={host}; "
+        f'curl -sf -X POST -H "Content-Type: application/json" -d "{{\\\"path\\\":\\\"{{}}\\\"}}" '
+        f"http://$HOST:{port}/api/view || "
+        f'curl -sf -X POST -H "Content-Type: application/json" -d "{{\\\"path\\\":\\\"{{}}\\\"}}" '
+        f"http://$HOST:{fallback_port}/api/view"
+        f"' > /dev/null 2>&1"
     )
 
 

@@ -120,19 +120,37 @@ class ConnectionRegistry:
         Used for routing messages when we know the exact project (e.g., after
         resolving a plan file slug to its project).
 
+        Handles WSL/Windows path format differences by trying both the original
+        path and a converted Windows path if applicable.
+
         Args:
             project_path: The project path to match exactly.
 
         Returns:
             List of WebSocket connections for that project.
         """
-        project_path = Path(project_path).resolve()
+        from backend.wsl_path import wsl_mount_to_windows_path
 
-        return [
-            ws
-            for ws, info in self._connections.items()
-            if info.project_path == project_path
-        ]
+        path_str = str(project_path)
+        resolved_path = Path(project_path).resolve()
+
+        # Also try converting WSL mount path to Windows format
+        # e.g., /mnt/c/Users/... -> C:\Users\...
+        converted_path_str = wsl_mount_to_windows_path(path_str)
+        converted_path = (
+            Path(converted_path_str).resolve()
+            if converted_path_str != path_str
+            else None
+        )
+
+        results = []
+        for ws, info in self._connections.items():
+            if info.project_path == resolved_path:
+                results.append(ws)
+            elif converted_path and info.project_path == converted_path:
+                results.append(ws)
+
+        return results
 
     def get_all_connections(self) -> list[WebSocket]:
         """Get all registered connections.
