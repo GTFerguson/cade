@@ -482,6 +482,12 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       case "ArrowUp":
         container.scrollBy(0, -SCROLL_LINE_HEIGHT);
         return true;
+      case "h":
+        this.scrollCodeBlocksHorizontally("left");
+        return true;
+      case "l":
+        this.scrollCodeBlocksHorizontally("right");
+        return true;
       case "g":
         return this.handleGKey(container);
       case "G":
@@ -515,6 +521,32 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     }
     this.lastGPress = now;
     return true;
+  }
+
+  /**
+   * Scroll visible code blocks horizontally.
+   */
+  private scrollCodeBlocksHorizontally(direction: "left" | "right"): void {
+    const SCROLL_AMOUNT = 40;
+    const delta = direction === "left" ? -SCROLL_AMOUNT : SCROLL_AMOUNT;
+
+    const codeBlocks = this.contentContainer?.querySelectorAll("pre");
+    if (!codeBlocks) {
+      return;
+    }
+
+    codeBlocks.forEach((block) => {
+      const rect = block.getBoundingClientRect();
+      const containerRect = this.contentContainer!.getBoundingClientRect();
+
+      const isVisible =
+        rect.top < containerRect.bottom &&
+        rect.bottom > containerRect.top;
+
+      if (isVisible) {
+        block.scrollLeft += delta;
+      }
+    });
   }
 
   /**

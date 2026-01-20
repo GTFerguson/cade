@@ -1,7 +1,7 @@
 ---
 title: Keyboard Navigation Guide
 created: 2026-01-18
-updated: 2026-01-19
+updated: 2026-01-20
 status: active
 tags: [user, keybindings, navigation, vim, tmux]
 ---
@@ -92,10 +92,14 @@ When the file tree pane is focused, use vim-style keys to navigate.
 |-----|--------|
 | `j` or `↓` | Move selection down |
 | `k` or `↑` | Move selection up |
+| `J` (Shift+j) | Jump to next folder |
+| `K` (Shift+k) | Jump to previous folder |
 | `l` or `Enter` | Expand folder / Open file |
 | `h` | Collapse folder / Go to parent |
+| `c` | Collapse all folders |
 | `gg` | Jump to top of tree |
 | `G` | Jump to bottom of tree |
+| `.` | Toggle showing gitignored files |
 
 ### Search & Filter
 
@@ -127,8 +131,12 @@ When the viewer pane is focused:
 |-----|--------|
 | `j` or `↓` | Scroll down |
 | `k` or `↑` | Scroll up |
+| `h` | Scroll code blocks left |
+| `l` | Scroll code blocks right |
 | `gg` | Scroll to top |
 | `G` | Scroll to bottom |
+| `Ctrl+d` | Page down |
+| `Ctrl+u` | Page up |
 | `Enter` | Follow link under cursor |
 
 ## Terminal Copy/Paste
@@ -217,14 +225,19 @@ prefix = "C-b"
 │                    FILE TREE                            │
 ├─────────────────────────────────────────────────────────┤
 │  j/k     Move down/up                                   │
+│  J/K     Jump to next/prev folder                       │
 │  h/l     Collapse/expand (or parent/open)               │
+│  c       Collapse all folders                           │
+│  .       Toggle gitignored files                        │
 │  gg/G    Top/bottom of tree                             │
 │  /       Search, Enter to select, Esc to clear          │
 ├─────────────────────────────────────────────────────────┤
 │                    VIEWER                               │
 ├─────────────────────────────────────────────────────────┤
 │  j/k     Scroll down/up                                 │
+│  h/l     Scroll code blocks left/right                  │
 │  gg/G    Top/bottom                                     │
+│  C-d/C-u Page down/up                                   │
 │  Enter   Follow link                                    │
 └─────────────────────────────────────────────────────────┘
 ```

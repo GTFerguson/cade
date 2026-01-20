@@ -36,6 +36,7 @@ export class FileTree implements Component, PaneKeyHandler {
   private searchQuery = "";
   private searchInput: HTMLInputElement | null = null;
   private lastGPress = 0;
+  private showIgnored = true;
 
   constructor(
     private container: HTMLElement,
@@ -60,15 +61,15 @@ export class FileTree implements Component, PaneKeyHandler {
         this.render();
       }, 2000);
 
-      this.ws.requestTree();
+      this.ws.requestTree(this.showIgnored);
     });
 
     this.ws.on("connected", () => {
-      this.ws.requestTree();
+      this.ws.requestTree(this.showIgnored);
     });
 
     if (this.ws.isConnected()) {
-      this.ws.requestTree();
+      this.ws.requestTree(this.showIgnored);
     }
   }
 
@@ -346,7 +347,7 @@ export class FileTree implements Component, PaneKeyHandler {
    * Refresh the tree.
    */
   refresh(): void {
-    this.ws.requestTree();
+    this.ws.requestTree(this.showIgnored);
   }
 
   /**
@@ -386,6 +387,61 @@ export class FileTree implements Component, PaneKeyHandler {
   }
 
   /**
+   * Collapse all folders in the tree.
+   */
+  private collapseAll(): void {
+    this.expandedPaths.clear();
+    this.render();
+    this.onExpandChangeCallback?.();
+  }
+
+  /**
+   * Jump to the next folder in the list (skipping files).
+   */
+  private jumpToNextFolder(): void {
+    if (this.flatList.length === 0) {
+      return;
+    }
+
+    for (let i = this.selectedIndex + 1; i < this.flatList.length; i++) {
+      if (this.flatList[i]?.node.type === "directory") {
+        this.selectedIndex = i;
+        this.selectedPath = this.flatList[i].node.path;
+        this.render();
+        this.scrollSelectedIntoView();
+        return;
+      }
+    }
+  }
+
+  /**
+   * Jump to the previous folder in the list (skipping files).
+   */
+  private jumpToPrevFolder(): void {
+    if (this.flatList.length === 0) {
+      return;
+    }
+
+    for (let i = this.selectedIndex - 1; i >= 0; i--) {
+      if (this.flatList[i]?.node.type === "directory") {
+        this.selectedIndex = i;
+        this.selectedPath = this.flatList[i].node.path;
+        this.render();
+        this.scrollSelectedIntoView();
+        return;
+      }
+    }
+  }
+
+  /**
+   * Toggle showing gitignored files.
+   */
+  private toggleIgnored(): void {
+    this.showIgnored = !this.showIgnored;
+    this.ws.requestTree(this.showIgnored);
+  }
+
+  /**
    * Handle keyboard navigation (called by KeybindingManager).
    * Returns true if the key was handled.
    */
@@ -409,6 +465,12 @@ export class FileTree implements Component, PaneKeyHandler {
       case "ArrowUp":
         this.moveSelection(-1);
         return true;
+      case "J":
+        this.jumpToNextFolder();
+        return true;
+      case "K":
+        this.jumpToPrevFolder();
+        return true;
       case "l":
       case "Enter":
         this.expandOrOpen();
@@ -420,6 +482,12 @@ export class FileTree implements Component, PaneKeyHandler {
         return this.handleGKey();
       case "G":
         this.jumpToBottom();
+        return true;
+      case "c":
+        this.collapseAll();
+        return true;
+      case ".":
+        this.toggleIgnored();
         return true;
       case "/":
         this.enterSearchMode();

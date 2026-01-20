@@ -188,8 +188,14 @@ export class WebSocketClient {
   /**
    * Request file tree.
    */
-  requestTree(): void {
-    this.send({ type: MessageType.GET_TREE });
+  requestTree(showIgnored?: boolean): void {
+    const message: { type: string; showIgnored?: boolean } = {
+      type: MessageType.GET_TREE,
+    };
+    if (showIgnored !== undefined) {
+      message.showIgnored = showIgnored;
+    }
+    this.send(message as ClientMessage);
   }
 
   /**

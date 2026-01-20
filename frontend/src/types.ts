@@ -63,6 +63,7 @@ export interface GetFileMessage extends BaseMessage {
  */
 export interface GetTreeMessage extends BaseMessage {
   type: "get-tree";
+  showIgnored?: boolean;
 }
 
 /**

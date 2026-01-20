@@ -328,7 +328,7 @@ class ConnectionHandler:
             elif msg_type == MessageType.RESIZE:
                 await self._handle_resize(data)
             elif msg_type == MessageType.GET_TREE:
-                await self._handle_get_tree()
+                await self._handle_get_tree(data)
             elif msg_type == MessageType.GET_FILE:
                 await self._handle_get_file(data)
             elif msg_type == MessageType.SAVE_SESSION:
@@ -383,9 +383,14 @@ class ConnectionHandler:
         if terminal:
             await terminal.pty.resize(cols, rows)
 
-    async def _handle_get_tree(self) -> None:
+    async def _handle_get_tree(self, data: dict | None = None) -> None:
         """Handle file tree request."""
-        show_ignored = self._user_config.behavior.file_tree.show_ignored if self._user_config else True
+        # Use client override if provided, otherwise use config
+        if data and "showIgnored" in data:
+            show_ignored = data["showIgnored"]
+        else:
+            show_ignored = self._user_config.behavior.file_tree.show_ignored if self._user_config else True
+
         tree = build_file_tree(self._working_dir, respect_gitignore=not show_ignored)
         await self._send({
             "type": MessageType.FILE_TREE,
