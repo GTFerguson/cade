@@ -158,6 +158,8 @@ export class ProjectContextImpl implements IProjectContext {
     this.container.style.display = "block";
     this.isVisible = true;
 
+    this.layout?.syncProportions();
+
     window.dispatchEvent(new Event("resize"));
   }
 

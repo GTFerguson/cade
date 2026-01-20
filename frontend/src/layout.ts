@@ -124,6 +124,12 @@ export class Layout implements Component {
       "--layout-viewer",
       `${viewer * 100}%`
     );
+
+    // Force browser reflow so tab bar recalculates its grid layout
+    const tabBar = document.getElementById("tab-bar");
+    if (tabBar != null) {
+      void tabBar.offsetWidth;
+    }
   }
 
   /**
@@ -259,6 +265,7 @@ export class Layout implements Component {
     ) {
       this.proportions = { ...proportions };
       this.applyProportions();
+      window.dispatchEvent(new Event("resize"));
     }
   }
 
@@ -276,6 +283,14 @@ export class Layout implements Component {
     this.proportions = { ...DEFAULT_PROPORTIONS };
     this.applyProportions();
     this.onChangeCallback?.();
+  }
+
+  /**
+   * Sync current proportions to CSS custom properties.
+   * Call this when showing a hidden layout to update the tab bar.
+   */
+  syncProportions(): void {
+    this.applyProportions();
   }
 
   /**
