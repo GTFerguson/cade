@@ -19,6 +19,7 @@ nul
 
 # Project session data
 .cade/
+.ccplus/
 
 # Local settings
 .claude/settings.local.json
