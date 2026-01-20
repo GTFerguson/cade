@@ -197,33 +197,22 @@ This breaks Unix convention but prioritizes familiar copy/paste for CADE's brows
 **High Priority:** ✓ RESOLVED
 - ~~Copy/paste functionality (Issue #2, #3)~~ - Implemented in commit `8b83f9b`
 
-**Medium Priority:**
-- Splash screen ASCII art (Issue #4) - First impression issue
-  - Users see this on every startup
-  - Quick CSS fix, high visual impact
-  - Shows attention to polish and detail
+**Medium Priority:** ✓ RESOLVED
+- ~~Splash screen ASCII art (Issue #4)~~ - Removed `text-align: center` from CSS
+- ~~Tab position bug (Issue #5)~~ - Added resize event dispatch in `setProportions()`
 
 **Medium-High Priority:**
-- Duplicate cursor (Issue #1) - Visual polish and consistency issue
+- Duplicate cursor (Issue #1) - Visual polish and consistency issue (deferred)
   - Two cursors is confusing and unprofessional
-  - Quick CSS fix should resolve it permanently
+  - CSS fix would break cursor when using "exit to shell" in Claude terminal
+  - Need smarter solution that detects Claude Code TUI vs shell mode
   - Important for vim integration goals (cursor consistency)
-  - Shows attention to detail in terminal implementation
 
 ## Recommended Implementation Order
 
-1. **Phase 1: Quick CSS fixes** (Quick wins - high visual impact)
-
-   a. Splash screen ASCII art alignment
-   - Update `.splash-logo` CSS: `white-space: pre`, proper centering
-   - Estimated effort: 5 minutes
-
-   b. Cursor visibility
-   - Add CSS override: `.terminal-claude .xterm-cursor-layer { display: none !important; }`
-   - Verify manual terminal lime cursor: `.terminal-manual .xterm-cursor-layer .xterm-cursor-block`
-   - Estimated effort: 10 minutes
-
-   **Total Phase 1:** ~15 minutes, fixes 2 visual issues
+1. ~~**Phase 1: Quick CSS fixes**~~ ✓ DONE
+   - ~~Splash screen ASCII art alignment~~ - Removed `text-align: center`
+   - ~~Tab position bug~~ - Added resize event dispatch
 
 2. ~~**Phase 2: Keyboard copy/paste**~~ ✓ DONE
    - Implemented Ctrl+C (copy), Ctrl+X (SIGINT), Ctrl+V (paste)
@@ -231,90 +220,26 @@ This breaks Unix convention but prioritizes familiar copy/paste for CADE's brows
 3. ~~**Phase 3: Context menu**~~ ✓ DONE
    - Implemented right-click copy/paste (context-aware based on selection)
 
-4. **Phase 4: Cursor refinement** (Optional polish)
-   - Test if cursor control sequence filtering is needed
-   - Investigate if CSS solution is sufficient or needs augmentation
-   - Estimated effort: 30 minutes - 1 hour
+4. **Phase 4: Cursor refinement** (Deferred)
+   - CSS-only fix would break "exit to shell" functionality
+   - Need to detect Claude Code TUI vs regular shell mode
+   - Consider sequence filtering only when Claude Code is actively rendering
 
-### 4. Splash Screen ASCII Art Misaligned
+### ~~4. Splash Screen ASCII Art Misaligned~~ ✓ RESOLVED
 
-**Symptom:** ASCII art on the splash screen displays incorrectly - spaces at the start of lines aren't preserved, causing misalignment.
-
-**Root cause:**
-The `.splash-logo` CSS has `text-align: center` (main.css:1111) which can interfere with leading whitespace in `<pre>` elements. Additionally, there's no explicit `white-space: pre` declaration to guarantee whitespace preservation.
-
-**Current code:**
-```typescript
-// frontend/src/splash.ts:26-28
-const logo = document.createElement("pre");
-logo.className = "splash-logo";
-logo.textContent = CADE_LOGO;
-```
-
-```css
-/* frontend/styles/main.css:1106-1111 */
-.splash-logo {
-  color: var(--accent-red);
-  font-family: var(--font-mono);
-  font-size: 14px;
-  line-height: 1.2;
-  text-align: center;  /* This causes the issue */
-}
-```
-
-**Recommended solution:**
-
-Replace `text-align: center` with proper block centering and add explicit whitespace preservation:
-
-```css
-.splash-logo {
-  color: var(--accent-red);
-  font-family: var(--font-mono);
-  font-size: 14px;
-  line-height: 1.2;
-  white-space: pre;        /* Explicitly preserve all whitespace */
-  margin: 0 auto;          /* Center the block itself */
-  display: inline-block;   /* Allow margin auto to work */
-  text-align: left;        /* Keep text left-aligned within the block */
-}
-```
-
-This approach:
-- Explicitly preserves all spaces and newlines with `white-space: pre`
-- Centers the ASCII art block itself using `margin: 0 auto` + `inline-block`
-- Keeps the text left-aligned within the block so leading spaces are maintained
-- Prevents browser from collapsing or normalizing whitespace
-
-**Alternative approach:**
-
-If the ASCII art still doesn't align, consider wrapping it in a centered container:
-
-```html
-<div class="splash-logo-wrapper">
-  <pre class="splash-logo">...</pre>
-</div>
-```
-
-```css
-.splash-logo-wrapper {
-  display: flex;
-  justify-content: center;
-}
-
-.splash-logo {
-  color: var(--accent-red);
-  font-family: var(--font-mono);
-  font-size: 14px;
-  line-height: 1.2;
-  white-space: pre;
-  text-align: left;
-}
-```
+**Resolution:** Removed `text-align: center` from `.splash-logo` in `main.css`. The parent `.splash` container already uses flexbox centering, so the text-align was unnecessary and was interfering with `<pre>` whitespace preservation.
 
 **Related code:**
-- `frontend/src/splash.ts:6-13` - CADE_LOGO ASCII art definition
-- `frontend/src/splash.ts:26-28` - Logo element creation
-- `frontend/styles/main.css:1106-1111` - `.splash-logo` styling
+- `frontend/styles/main.css:1106-1112` - `.splash-logo` styling
+
+### ~~5. Tab Position Bug on Project Switch~~ ✓ RESOLVED
+
+**Resolution:** Added `window.dispatchEvent(new Event("resize"))` after `applyProportions()` in the `setProportions()` method in `layout.ts:261`. This ensures tabs update their positions immediately when switching between projects with different pane layouts.
+
+**Root cause:** `setProportions()` updated CSS variables but didn't dispatch a resize event. Other layout methods (`adjustByKeyboard()`, `resetProportions()`) did dispatch resize events, causing inconsistent behavior.
+
+**Related code:**
+- `frontend/src/layout.ts:254-263` - `setProportions()` method
 
 ## Future Enhancements
 

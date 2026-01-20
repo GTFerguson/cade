@@ -35,15 +35,7 @@ Implemented in [[../technical/core/frontend-architecture#Tab System|Frontend Arc
 
 ## Planned Features
 
-### Claude Code Hooks Integration
-
-Lightweight integration with Claude Code using hooks instead of MCP:
-
-- CLI commands (`cade view`, `cade notify`, `cade tree reveal`)
-- Hook into PostToolUse events to auto-display edited files
-- No additional server processes or protocol overhead
-
-See [[claude-code-hooks-integration]] for detailed design.
+*Features being actively developed have been moved to `plans/` for rapid iteration.*
 
 ## Blocking Issues
 
@@ -55,16 +47,12 @@ See [[blocking-issues]] for critical issues that must be resolved before major p
 
 ### Integration & Architecture
 
-- [[claude-code-hooks-integration]] - Claude Code hooks integration
 - [[mobile-interface]] - Mobile-optimized interface for phones and tablets
 - [[state-management-refactor]] - Extract state logic into testable state machines
 
 ### User Interface & Experience
 
-- [[ui-enhancements]] - Tab renaming, lock screen, help modal fix, terminal focus, tab numbering
-- [[terminal-ui-issues]] - Cursor duplication, copy/paste, context menu, splash screen
-- [[pane-focus-mode]] - Temporary pane expansion for focused reading/working
-- [[plan-viewer-improvements]] - Horizontal scrolling, frontmatter display, Obsidian callouts
+- [[terminal-ui-issues]] - Terminal UI polish and refinements
 
 ## See Also
 
