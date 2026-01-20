@@ -11,6 +11,7 @@ from backend.cc_session_resolver import (
     encode_project_path,
     get_cc_projects_dir,
     resolve_slug_to_project,
+    resolve_project_to_slug,
     _get_recent_sessions,
     _get_session_slug,
     _tail_file,
@@ -406,3 +407,122 @@ class TestResolveSlugToProject:
         result = resolve_slug_to_project("mismatched-encoding-test")
         # Should resolve correctly despite encoding mismatch
         assert result == Path(project_path)
+
+
+class TestResolveProjectToSlug:
+    """Tests for resolve_project_to_slug function (reverse lookup)."""
+
+    def test_resolves_project_to_slug(self, temp_dir: Path, monkeypatch) -> None:
+        """Resolves a project path to its session slug."""
+        history_file = temp_dir / "history.jsonl"
+        projects_dir = temp_dir / "projects"
+
+        project_path = "/home/user/myproject"
+        history_entry = {"sessionId": "sess-abc", "project": project_path}
+        history_file.write_text(json.dumps(history_entry))
+
+        project_subdir = projects_dir / "-home-user-myproject"
+        project_subdir.mkdir(parents=True)
+        session_file = project_subdir / "sess-abc.jsonl"
+        session_file.write_text(
+            json.dumps({"type": "user", "slug": "jazzy-crunching-moonbeam"})
+        )
+
+        monkeypatch.setattr(
+            "backend.cc_session_resolver._get_history_file",
+            lambda: history_file,
+        )
+        monkeypatch.setattr(
+            "backend.cc_session_resolver._get_projects_dir",
+            lambda: projects_dir,
+        )
+
+        result = resolve_project_to_slug(project_path)
+        assert result == "jazzy-crunching-moonbeam"
+
+    def test_returns_none_for_unknown_project(
+        self, temp_dir: Path, monkeypatch
+    ) -> None:
+        """Unknown projects return None."""
+        history_file = temp_dir / "history.jsonl"
+        history_file.write_text(
+            json.dumps({"sessionId": "sess-1", "project": "/other/project"})
+        )
+
+        monkeypatch.setattr(
+            "backend.cc_session_resolver._get_history_file",
+            lambda: history_file,
+        )
+        monkeypatch.setattr(
+            "backend.cc_session_resolver._get_projects_dir",
+            lambda: temp_dir / "projects",
+        )
+
+        result = resolve_project_to_slug("/unknown/project")
+        assert result is None
+
+    def test_handles_wsl_path_format(self, temp_dir: Path, monkeypatch) -> None:
+        """Matches WSL mount paths to Windows paths."""
+        history_file = temp_dir / "history.jsonl"
+        projects_dir = temp_dir / "projects"
+
+        # History has WSL-style path
+        history_entry = {
+            "sessionId": "sess-abc",
+            "project": "/mnt/c/Users/test/project",
+        }
+        history_file.write_text(json.dumps(history_entry))
+
+        project_subdir = projects_dir / "-mnt-c-Users-test-project"
+        project_subdir.mkdir(parents=True)
+        session_file = project_subdir / "sess-abc.jsonl"
+        session_file.write_text(
+            json.dumps({"type": "user", "slug": "wsl-test-slug"})
+        )
+
+        monkeypatch.setattr(
+            "backend.cc_session_resolver._get_history_file",
+            lambda: history_file,
+        )
+        monkeypatch.setattr(
+            "backend.cc_session_resolver._get_projects_dir",
+            lambda: projects_dir,
+        )
+
+        # Query with Windows-style path should still match
+        result = resolve_project_to_slug("C:\\Users\\test\\project")
+        assert result == "wsl-test-slug"
+
+    def test_returns_most_recent_session(self, temp_dir: Path, monkeypatch) -> None:
+        """Returns slug from most recent session for the project."""
+        history_file = temp_dir / "history.jsonl"
+        projects_dir = temp_dir / "projects"
+
+        project_path = "/home/user/project"
+        # Two sessions for same project (sess-2 is more recent, at end of file)
+        history_entries = [
+            {"sessionId": "sess-1", "project": project_path},
+            {"sessionId": "sess-2", "project": project_path},
+        ]
+        history_file.write_text("\n".join(json.dumps(e) for e in history_entries))
+
+        project_subdir = projects_dir / "-home-user-project"
+        project_subdir.mkdir(parents=True)
+
+        # Each session has different slug
+        for sess_id, slug in [("sess-1", "old-slug"), ("sess-2", "new-slug")]:
+            session_file = project_subdir / f"{sess_id}.jsonl"
+            session_file.write_text(json.dumps({"type": "user", "slug": slug}))
+
+        monkeypatch.setattr(
+            "backend.cc_session_resolver._get_history_file",
+            lambda: history_file,
+        )
+        monkeypatch.setattr(
+            "backend.cc_session_resolver._get_projects_dir",
+            lambda: projects_dir,
+        )
+
+        result = resolve_project_to_slug(project_path)
+        # Should return the most recent (sess-2's slug)
+        assert result == "new-slug"

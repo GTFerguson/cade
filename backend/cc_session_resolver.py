@@ -211,6 +211,78 @@ def _get_session_slug(project_path: str, session_id: str) -> str | None:
     return None
 
 
+def resolve_project_to_slug(project_path: Path | str) -> str | None:
+    """Find the Claude Code session slug for a given project.
+
+    This is the reverse of resolve_slug_to_project(). Given a project path,
+    finds the most recent Claude Code session for that project and returns
+    its slug.
+
+    Args:
+        project_path: The project directory path.
+
+    Returns:
+        The session slug if found, None otherwise.
+    """
+    from backend.wsl_path import wsl_mount_to_windows_path
+
+    # Normalize the project path for comparison
+    project_str = str(project_path)
+    # Also get Windows-style path for comparison
+    project_windows = wsl_mount_to_windows_path(project_str)
+
+    # Normalize both to lowercase for case-insensitive comparison on Windows
+    project_normalized = project_str.lower().replace("\\", "/")
+    project_windows_normalized = project_windows.lower().replace("\\", "/")
+
+    history_file = _get_history_file()
+    if not history_file.exists():
+        logger.debug("history.jsonl not found at %s", history_file)
+        return None
+
+    # Read history in reverse order (most recent first)
+    lines = _tail_file(history_file, 200)
+
+    # Track session_ids we've seen for this project (most recent first)
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+            session_id = entry.get("sessionId")
+            entry_project = entry.get("project", "")
+
+            if not session_id or not entry_project:
+                continue
+
+            # Normalize entry project path for comparison
+            entry_normalized = entry_project.lower().replace("\\", "/")
+            entry_windows = wsl_mount_to_windows_path(entry_project)
+            entry_windows_normalized = entry_windows.lower().replace("\\", "/")
+
+            # Check if this entry matches our project
+            if (entry_normalized == project_normalized or
+                entry_normalized == project_windows_normalized or
+                entry_windows_normalized == project_normalized or
+                entry_windows_normalized == project_windows_normalized):
+
+                # Found a matching session, get its slug
+                slug = _get_session_slug(entry_project, session_id)
+                if slug:
+                    logger.debug(
+                        "Resolved project '%s' to slug '%s'",
+                        project_path, slug
+                    )
+                    return slug
+
+        except json.JSONDecodeError:
+            continue
+
+    logger.debug("No session found for project '%s'", project_path)
+    return None
+
+
 def _tail_file(path: Path, lines: int) -> list[str]:
     """Read the last N lines from a file efficiently.
 

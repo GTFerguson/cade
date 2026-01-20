@@ -419,14 +419,16 @@ class ConnectionHandler:
         save_session(self._working_dir, state)
 
     async def _handle_get_latest_plan(self) -> None:
-        """Handle request for most recent plan file.
+        """Handle request for plan file associated with current project.
 
-        Finds the most recently modified .md file in ~/.claude/plans/
-        and sends it to the client for viewing.
+        First tries to find the Claude Code session for this project and
+        open its specific plan file. Falls back to most recently modified
+        .md file in ~/.claude/plans/ if no session-specific plan is found.
         """
         import asyncio
         import sys
         from backend.wsl_path import get_wsl_home_as_windows_path
+        from backend.cc_session_resolver import resolve_project_to_slug
 
         # On Windows, look in WSL home directory
         if sys.platform == "win32":
@@ -443,26 +445,35 @@ class ConnectionHandler:
             logger.debug("Plans directory does not exist: %s", plans_dir)
             return
 
-        md_files = list(plans_dir.glob("*.md"))
-        if not md_files:
-            logger.debug("No plan files found in: %s", plans_dir)
-            return
+        # Try to find the plan file for this specific project's CC session
+        plan_file = None
+        slug = await asyncio.to_thread(resolve_project_to_slug, self._working_dir)
+        if slug:
+            session_plan = plans_dir / f"{slug}.md"
+            if session_plan.exists():
+                plan_file = session_plan
+                logger.info("Found session-specific plan file: %s", plan_file)
 
-        # Find most recently modified file
-        latest = max(md_files, key=lambda f: f.stat().st_mtime)
-        logger.info("Viewing latest plan file: %s", latest)
+        # Fall back to most recently modified file
+        if plan_file is None:
+            md_files = list(plans_dir.glob("*.md"))
+            if not md_files:
+                logger.debug("No plan files found in: %s", plans_dir)
+                return
+            plan_file = max(md_files, key=lambda f: f.stat().st_mtime)
+            logger.info("Falling back to latest plan file: %s", plan_file)
 
         try:
-            content = latest.read_text(encoding="utf-8")
+            content = plan_file.read_text(encoding="utf-8")
         except Exception as e:
             logger.exception("Failed to read plan file: %s", e)
             return
 
-        file_type = get_file_type(str(latest))
+        file_type = get_file_type(str(plan_file))
 
         await self._send({
             "type": MessageType.VIEW_FILE,
-            "path": str(latest),
+            "path": str(plan_file),
             "content": content,
             "fileType": file_type,
         })
