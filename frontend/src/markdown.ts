@@ -225,6 +225,9 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       return;
     }
 
+    // Save scroll position before destroying DOM
+    const scrollTop = this.contentContainer?.scrollTop ?? 0;
+
     const header = document.createElement("div");
     header.className = "viewer-header";
     header.textContent = this.currentPath;
@@ -257,6 +260,15 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     this.container.appendChild(header);
     this.container.appendChild(content);
     this.contentContainer = content;
+
+    // Restore scroll position after DOM is ready
+    if (scrollTop > 0) {
+      requestAnimationFrame(() => {
+        if (this.contentContainer) {
+          this.contentContainer.scrollTop = scrollTop;
+        }
+      });
+    }
   }
 
   /**
