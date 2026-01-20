@@ -127,6 +127,7 @@ class FileTreeBehaviorConfig:
     """File tree behavior settings."""
 
     show_hidden: bool = False
+    show_ignored: bool = True
     default_expand_depth: int = 1
 
 
@@ -232,6 +233,7 @@ class UserConfig:
                 },
                 "fileTree": {
                     "showHidden": self.behavior.file_tree.show_hidden,
+                    "showIgnored": self.behavior.file_tree.show_ignored,
                     "defaultExpandDepth": self.behavior.file_tree.default_expand_depth,
                 },
                 "layout": {

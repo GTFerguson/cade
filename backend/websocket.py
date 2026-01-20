@@ -49,6 +49,7 @@ class ConnectionHandler:
         self._is_new_session = True
         self._output_tasks: dict[str, asyncio.Task] = {}
         self._terminal_sizes: dict[str, TerminalSize] = {}
+        self._user_config = None
 
     async def _send_status(self, message: str) -> None:
         """Send a startup status message."""
@@ -274,19 +275,19 @@ class ConnectionHandler:
                     })
 
         # Load user config for this working directory
-        user_config = load_user_config(self._working_dir)
+        self._user_config = load_user_config(self._working_dir)
 
         # Perform WSL health check for restored sessions
         wsl_healthy = True
         if session_restored and not self._config.dummy_mode:
-            health_check_timeout = user_config.behavior.splash.health_check_timeout
+            health_check_timeout = self._user_config.behavior.splash.health_check_timeout
             from backend.wsl_health import check_wsl_health
             wsl_healthy, _ = check_wsl_health(timeout=float(health_check_timeout))
 
         message: dict = {
             "type": MessageType.CONNECTED,
             "workingDir": str(self._working_dir),
-            "config": user_config.to_dict(),
+            "config": self._user_config.to_dict(),
             "sessionRestored": session_restored,
             "idleSeconds": idle_seconds,
             "wslHealthy": wsl_healthy,
@@ -384,7 +385,8 @@ class ConnectionHandler:
 
     async def _handle_get_tree(self) -> None:
         """Handle file tree request."""
-        tree = build_file_tree(self._working_dir)
+        show_ignored = self._user_config.behavior.file_tree.show_ignored if self._user_config else True
+        tree = build_file_tree(self._working_dir, respect_gitignore=not show_ignored)
         await self._send({
             "type": MessageType.FILE_TREE,
             "data": [node.to_dict() for node in tree],

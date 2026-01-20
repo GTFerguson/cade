@@ -105,14 +105,14 @@ def build_file_tree(
     root: Path,
     *,
     max_depth: int = 10,
-    respect_gitignore: bool = True,
+    respect_gitignore: bool = False,
 ) -> list[FileNode]:
     """Build a file tree from the given root directory.
 
     Args:
         root: Root directory to scan
         max_depth: Maximum depth to recurse
-        respect_gitignore: Whether to respect .gitignore patterns
+        respect_gitignore: Whether to respect .gitignore patterns (default: False, show all files)
 
     Returns:
         List of FileNode objects representing the tree

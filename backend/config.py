@@ -334,6 +334,8 @@ def _apply_file_tree_behavior_config(data: dict) -> FileTreeBehaviorConfig:
     config = FileTreeBehaviorConfig()
     if "show-hidden" in data:
         config.show_hidden = data["show-hidden"]
+    if "show-ignored" in data:
+        config.show_ignored = data["show-ignored"]
     if "default-expand-depth" in data:
         config.default_expand_depth = data["default-expand-depth"]
     return config
