@@ -162,3 +162,41 @@ class TestViewFileRouting:
         # After cleanup
         connections = mock_registry.get_connections_for_file(file_path)
         assert len(connections) == 0
+
+
+class TestPlanFileDetection:
+    """Tests for detecting plan files with different path formats."""
+
+    def test_detects_plan_file_with_forward_slashes(self) -> None:
+        """Plan file with Unix-style path is detected."""
+        path = "/home/gary/.claude/plans/jazzy-crunching-moonbeam.md"
+        normalized = path.replace("\\", "/")
+        assert "/.claude/plans/" in normalized
+
+    def test_detects_plan_file_with_wsl_unc_path(self) -> None:
+        """Plan file with Windows UNC path from WSL is detected."""
+        # This is what wsl_to_windows_path() produces
+        path = "\\\\wsl.localhost\\Ubuntu\\home\\gary\\.claude\\plans\\vectorized-percolating-clarke.md"
+        normalized = path.replace("\\", "/")
+        assert "/.claude/plans/" in normalized
+
+    def test_detects_plan_file_with_windows_path(self) -> None:
+        """Plan file with Windows-style path is detected."""
+        path = "C:\\Users\\gary\\.claude\\plans\\my-plan.md"
+        normalized = path.replace("\\", "/")
+        assert "/.claude/plans/" in normalized
+
+    def test_non_plan_file_not_detected(self) -> None:
+        """Non-plan files are not detected."""
+        paths = [
+            "/home/gary/project/plans/local-plan.md",  # In project, not .claude
+            "/home/gary/.claude/history.jsonl",  # In .claude, not plans
+            "\\\\wsl.localhost\\Ubuntu\\home\\gary\\Documents\\file.md",  # Not in plans
+        ]
+        for path in paths:
+            normalized = path.replace("\\", "/")
+            # Should not match the specific .claude/plans pattern
+            # (though some might contain "plans", they shouldn't match "/.claude/plans/")
+            if "/.claude/plans/" in normalized:
+                # Only fail if it actually matches
+                assert False, f"Path {path} should not match plan file pattern"

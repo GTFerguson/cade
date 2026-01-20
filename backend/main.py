@@ -191,7 +191,9 @@ def create_app(config: Config | None = None) -> FastAPI:
             }
 
         # Try slug-based routing for plan files (outside project directories)
-        if "/.claude/plans/" in str(file_path):
+        # Normalize path separators to handle Windows UNC paths from WSL
+        normalized_path = str(file_path).replace("\\", "/")
+        if "/.claude/plans/" in normalized_path:
             slug = file_path.stem  # e.g., "jazzy-crunching-moonbeam"
             project_path = resolve_slug_to_project(slug)
 
