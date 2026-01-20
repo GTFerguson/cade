@@ -34,7 +34,7 @@ cade/
 
 ## Conventions
 
-Rules are defined in `.roo/rules/` - read these files for full details:
+Rules are defined in `.claude/rules/` - read these files for full details:
 
 - **documentation-organization.md** - Doc structure and approval workflow
 
@@ -67,15 +67,3 @@ plans/ (active) --> docs/technical/ (complete)
 - **Do NOT include `Co-Authored-By` lines** in commit messages
 - Write clear, concise commit messages describing what changed and why
 - Follow existing commit style (see `git log --oneline`)
-
-## Build Commands
-
-*To be added once build system is established.*
-
-## Quick Reference
-
-| Task | Location |
-|------|----------|
-| Brainstorm CLI conventions | `plans/cli-conventions-brainstorm.md` |
-| Brainstorm testing approach | `plans/testing-conventions-brainstorm.md` |
-| Brainstorm config standards | `plans/config-file-standards-brainstorm.md` |

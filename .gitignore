@@ -20,5 +20,11 @@ nul
 # Project session data
 .cade/
 
+# Local settings
+.claude/settings.local.json
+
+# Working plans (short-term)
+plans/
+
 # Build artifacts
 frontend/dist/
