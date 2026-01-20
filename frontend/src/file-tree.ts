@@ -404,9 +404,10 @@ export class FileTree implements Component, PaneKeyHandler {
     }
 
     for (let i = this.selectedIndex + 1; i < this.flatList.length; i++) {
-      if (this.flatList[i]?.node.type === "directory") {
+      const item = this.flatList[i];
+      if (item?.node.type === "directory") {
         this.selectedIndex = i;
-        this.selectedPath = this.flatList[i].node.path;
+        this.selectedPath = item.node.path;
         this.render();
         this.scrollSelectedIntoView();
         return;
@@ -423,9 +424,10 @@ export class FileTree implements Component, PaneKeyHandler {
     }
 
     for (let i = this.selectedIndex - 1; i >= 0; i--) {
-      if (this.flatList[i]?.node.type === "directory") {
+      const item = this.flatList[i];
+      if (item?.node.type === "directory") {
         this.selectedIndex = i;
-        this.selectedPath = this.flatList[i].node.path;
+        this.selectedPath = item.node.path;
         this.render();
         this.scrollSelectedIntoView();
         return;
