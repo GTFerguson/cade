@@ -89,8 +89,8 @@ class PaneKeybindingsConfig:
 class TabKeybindingsConfig:
     """Tab navigation keybindings (used after prefix)."""
 
-    next: str = "t"
-    previous: str = "r"
+    next: str = "f"
+    previous: str = "d"
     create: str = "c"
     close: str = "x"
 

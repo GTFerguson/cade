@@ -209,8 +209,8 @@ export const defaultUserConfig: UserConfig = {
       resizeRight: "C-l",
     },
     tab: {
-      next: "t",
-      previous: "r",
+      next: "f",
+      previous: "d",
       create: "c",
       close: "x",
     },

@@ -278,9 +278,14 @@ export class KeybindingManager implements Component {
       return;
     }
 
-    // Tab direct access: 0-9 (always hardcoded for convenience)
-    if (/^[0-9]$/.test(e.key)) {
-      this.callbacks?.goToTab(parseInt(e.key, 10));
+    // Tab direct access: 1-9 for tabs 1-9, 0 for tab 10
+    // (1-indexed for ergonomics: key "1" = first tab)
+    if (/^[1-9]$/.test(e.key)) {
+      this.callbacks?.goToTab(parseInt(e.key, 10) - 1);
+      return;
+    }
+    if (e.key === "0") {
+      this.callbacks?.goToTab(9); // Tab 10
       return;
     }
   }

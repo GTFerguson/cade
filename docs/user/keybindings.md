@@ -69,9 +69,9 @@ Switch between project tabs.
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+a` then `t` | Next tab |
-| `Ctrl+a` then `r` | Previous tab |
-| `Ctrl+a` then `0-9` | Go to tab by number |
+| `Ctrl+a` then `f` | Next tab |
+| `Ctrl+a` then `d` | Previous tab |
+| `Ctrl+a` then `1-9` | Go to tab by number (1-indexed) |
 | `Ctrl+a` then `c` | Create new tab |
 | `Ctrl+a` then `x` | Close current tab |
 
@@ -209,8 +209,8 @@ prefix = "C-b"
 ├─────────────────────────────────────────────────────────┤
 │  h/l     Focus left/right pane                          │
 │  C-h/C-l Resize pane boundary                           │
-│  t/r     Next/previous tab                              │
-│  0-9     Go to tab N                                    │
+│  f/d     Next/previous tab                              │
+│  1-9     Go to tab N (1-indexed)                        │
 │  c/x     Create/close tab                               │
 │  s       Toggle Claude/shell                            │
 │  ?       Help                                           │

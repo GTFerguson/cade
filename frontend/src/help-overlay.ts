@@ -38,9 +38,9 @@ const KEYBINDINGS_HTML = `
   <div class="help-section">
     <h3>Tab Navigation</h3>
     <table>
-      <tr><td><kbd>prefix</kbd> + <kbd>r</kbd></td><td>Previous tab</td></tr>
-      <tr><td><kbd>prefix</kbd> + <kbd>t</kbd></td><td>Next tab</td></tr>
-      <tr><td><kbd>prefix</kbd> + <kbd>0-9</kbd></td><td>Go to tab N</td></tr>
+      <tr><td><kbd>prefix</kbd> + <kbd>d</kbd></td><td>Previous tab</td></tr>
+      <tr><td><kbd>prefix</kbd> + <kbd>f</kbd></td><td>Next tab</td></tr>
+      <tr><td><kbd>prefix</kbd> + <kbd>1-9</kbd></td><td>Go to tab 1-9</td></tr>
       <tr><td><kbd>prefix</kbd> + <kbd>c</kbd></td><td>Create new tab</td></tr>
       <tr><td><kbd>prefix</kbd> + <kbd>x</kbd></td><td>Close current tab</td></tr>
     </table>

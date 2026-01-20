@@ -142,14 +142,14 @@ resize-right = "C-l"    # prefix + Ctrl+l - Resize pane boundary right
 
 ```toml
 [tab]
-next = "t"              # prefix + t - Next tab
-previous = "r"          # prefix + r - Previous tab
+next = "f"              # prefix + f - Next tab
+previous = "d"          # prefix + d - Previous tab
 create = "c"            # prefix + c - Create new tab
 close = "x"             # prefix + x - Close current tab
 ```
 
 > [!NOTE]
-> Numeric keys 0-9 always jump directly to tabs (prefix + 1 goes to tab 1).
+> Numeric keys 1-9 always jump directly to tabs (1-indexed: prefix + 1 goes to first tab).
 
 ### Miscellaneous
 
