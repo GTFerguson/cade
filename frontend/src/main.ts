@@ -146,8 +146,35 @@ class App {
         const activeTab = this.tabManager.getActiveTab();
         activeTab?.context?.toggleTerminal();
       },
+      toggleViewerCycle: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        const viewer = activeTab?.context?.getViewer();
+        const layout = activeTab?.context?.getLayout();
+
+        // If plan is active, close it first
+        if (viewer?.isPlanActive()) {
+          viewer.closePlanOverlay();
+          // Hide viewer if no main content to show
+          if (!viewer.hasContent()) {
+            layout?.hideViewer();
+          }
+          return;
+        }
+
+        // Otherwise toggle viewer visibility
+        if (layout?.isViewerVisible()) {
+          layout.hideViewer();
+        } else {
+          layout?.showViewer();
+        }
+      },
       viewLatestPlan: () => {
         const activeTab = this.tabManager.getActiveTab();
+        const layout = activeTab?.context?.getLayout();
+        // Show viewer if hidden before requesting plan
+        if (!layout?.isViewerVisible()) {
+          layout?.showViewer();
+        }
         activeTab?.ws.requestLatestPlan();
       },
       getFocusedPane: () => {

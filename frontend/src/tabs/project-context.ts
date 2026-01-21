@@ -268,6 +268,13 @@ export class ProjectContextImpl implements IProjectContext {
   }
 
   /**
+   * Get the markdown viewer instance.
+   */
+  getViewer(): MarkdownViewer | null {
+    return this.viewer;
+  }
+
+  /**
    * Set a custom key handler for the terminal.
    */
   setTerminalKeyHandler(handler: CustomKeyHandler | null): void {

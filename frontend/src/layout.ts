@@ -25,6 +25,7 @@ export class Layout implements Component {
   private boundOnDrag: ((e: MouseEvent) => void) | null = null;
   private boundEndDrag: (() => void) | null = null;
   private rafId: number | null = null;
+  private savedViewerProportion: number | null = null;
 
   constructor(private container: HTMLElement) {
     this.proportions = { ...DEFAULT_PROPORTIONS };
@@ -351,6 +352,43 @@ export class Layout implements Component {
     this.applyProportions();
     this.onChangeCallback?.();
     window.dispatchEvent(new Event("resize"));
+  }
+
+  /**
+   * Hide the viewer pane by setting its proportion to 0.
+   */
+  hideViewer(): void {
+    if (this.proportions.viewer <= 0) return;
+    this.savedViewerProportion = this.proportions.viewer;
+    // Redistribute viewer space to terminal
+    this.proportions.terminal += this.proportions.viewer;
+    this.proportions.viewer = 0;
+    this.applyProportions();
+    this.onChangeCallback?.();
+    window.dispatchEvent(new Event("resize"));
+  }
+
+  /**
+   * Show the viewer pane by restoring its saved proportion.
+   */
+  showViewer(): void {
+    if (this.savedViewerProportion === null || this.savedViewerProportion <= 0) {
+      this.savedViewerProportion = DEFAULT_PROPORTIONS.viewer;
+    }
+    // Take space from terminal
+    this.proportions.terminal -= this.savedViewerProportion;
+    this.proportions.viewer = this.savedViewerProportion;
+    this.savedViewerProportion = null;
+    this.applyProportions();
+    this.onChangeCallback?.();
+    window.dispatchEvent(new Event("resize"));
+  }
+
+  /**
+   * Check if the viewer pane is visible.
+   */
+  isViewerVisible(): boolean {
+    return this.proportions.viewer > 0;
   }
 
   /**

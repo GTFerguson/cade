@@ -4,6 +4,7 @@
 
 import type { PaneKeyHandler, PaneType } from "../keybindings";
 import type { Layout } from "../layout";
+import type { MarkdownViewer } from "../markdown";
 import type { CustomKeyHandler } from "../terminal";
 import type { WebSocketClient } from "../websocket";
 
@@ -52,6 +53,7 @@ export interface ProjectContext {
   cycleFocus(direction: "left" | "right"): void;
   getPaneHandler(pane: PaneType): PaneKeyHandler | null;
   getLayout(): Layout | null;
+  getViewer(): MarkdownViewer | null;
   setTerminalKeyHandler(handler: CustomKeyHandler | null): void;
   toggleTerminal(): void;
 }

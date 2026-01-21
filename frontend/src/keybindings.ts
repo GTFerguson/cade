@@ -25,6 +25,7 @@ export interface KeybindingCallbacks {
   closeTab: () => void;
   showHelp: () => void;
   toggleTerminal: () => void;
+  toggleViewerCycle: () => void;
   viewLatestPlan: () => void;
   getFocusedPane: () => PaneType;
   getPaneHandler: (pane: PaneType) => PaneKeyHandler | null;
@@ -273,6 +274,12 @@ export class KeybindingManager implements Component {
     // Terminal toggle: uses config misc.toggleTerminal (default: s)
     if (this.matchesBinding(e, config.misc.toggleTerminal)) {
       this.callbacks?.toggleTerminal();
+      return;
+    }
+
+    // Viewer toggle: uses config misc.toggleViewer (default: v)
+    if (this.matchesBinding(e, config.misc.toggleViewer)) {
+      this.callbacks?.toggleViewerCycle();
       return;
     }
 

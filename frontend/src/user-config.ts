@@ -94,6 +94,7 @@ export interface TabKeybindingsConfig {
 export interface MiscKeybindingsConfig {
   help: string;
   toggleTerminal: string;
+  toggleViewer: string;
 }
 
 /**
@@ -217,6 +218,7 @@ export const defaultUserConfig: UserConfig = {
     misc: {
       help: "?",
       toggleTerminal: "s",
+      toggleViewer: "v",
     },
   },
   behavior: {

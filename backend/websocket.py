@@ -476,6 +476,7 @@ class ConnectionHandler:
             "path": str(plan_file),
             "content": content,
             "fileType": file_type,
+            "isPlan": True,
         })
 
     def _start_output_loop(self, session_key: str) -> None:

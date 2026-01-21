@@ -101,6 +101,7 @@ class MiscKeybindingsConfig:
 
     help: str = "?"
     toggle_terminal: str = "s"
+    toggle_viewer: str = "v"
 
 
 @dataclass
@@ -223,6 +224,7 @@ class UserConfig:
                 "misc": {
                     "help": self.keybindings.misc.help,
                     "toggleTerminal": self.keybindings.misc.toggle_terminal,
+                    "toggleViewer": self.keybindings.misc.toggle_viewer,
                 },
             },
             "behavior": {

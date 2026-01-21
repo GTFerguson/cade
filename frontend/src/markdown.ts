@@ -29,6 +29,13 @@ interface MarkdownEvents {
   "link-click": string;
 }
 
+interface ViewState {
+  path: string | null;
+  content: string;
+  fileType: string;
+  scrollTop: number;
+}
+
 interface Frontmatter {
   [key: string]: unknown;
 }
@@ -96,6 +103,9 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   > = new Map();
   private contentContainer: HTMLElement | null = null;
   private lastGPress = 0;
+  private mainView: ViewState | null = null;
+  private planView: ViewState | null = null;
+  private isPlanOverlayActive = false;
   private boundHandlers = {
     fileContent: (message: any) => {
       this.currentPath = message.path;
@@ -104,10 +114,26 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       this.render();
     },
     viewFile: (message: any) => {
-      this.currentPath = message.path;
-      this.currentContent = message.content;
-      this.currentFileType = message.fileType;
-      this.render();
+      if (message.isPlan) {
+        // Save current view as main before showing plan overlay
+        if (!this.isPlanOverlayActive && this.currentPath !== null) {
+          this.mainView = this.captureCurrentView();
+        }
+
+        this.currentPath = message.path;
+        this.currentContent = message.content;
+        this.currentFileType = message.fileType;
+        this.isPlanOverlayActive = true;
+        this.render();
+      } else {
+        // Regular view-file (main view)
+        this.currentPath = message.path;
+        this.currentContent = message.content;
+        this.currentFileType = message.fileType;
+        this.isPlanOverlayActive = false;
+        this.mainView = null;
+        this.render();
+      }
     },
     fileChange: (message: any) => {
       if (message.path === this.currentPath) {
@@ -209,6 +235,77 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   }
 
   /**
+   * Check if a plan overlay is currently active.
+   */
+  isPlanActive(): boolean {
+    return this.isPlanOverlayActive;
+  }
+
+  /**
+   * Get the plan overlay path for session persistence.
+   */
+  getPlanPath(): string | null {
+    return this.planView?.path ?? (this.isPlanOverlayActive ? this.currentPath : null);
+  }
+
+  /**
+   * Check if the viewer has content to display.
+   */
+  hasContent(): boolean {
+    return this.currentPath !== null;
+  }
+
+  /**
+   * Close the plan overlay and return to main view.
+   * Returns true if a plan was closed, false if no plan was active.
+   */
+  closePlanOverlay(): boolean {
+    if (!this.isPlanOverlayActive) return false;
+
+    // Save plan state
+    this.planView = this.captureCurrentView();
+    this.isPlanOverlayActive = false;
+
+    // Restore main view
+    if (this.mainView) {
+      this.restoreView(this.mainView);
+    } else {
+      this.renderEmpty();
+    }
+    return true;
+  }
+
+  /**
+   * Capture current view state including scroll position.
+   */
+  private captureCurrentView(): ViewState {
+    return {
+      path: this.currentPath,
+      content: this.currentContent,
+      fileType: this.currentFileType,
+      scrollTop: this.contentContainer?.scrollTop ?? 0,
+    };
+  }
+
+  /**
+   * Restore a saved view state and re-render.
+   */
+  private restoreView(state: ViewState): void {
+    this.currentPath = state.path;
+    this.currentContent = state.content;
+    this.currentFileType = state.fileType;
+    this.render();
+
+    if (state.scrollTop > 0) {
+      requestAnimationFrame(() => {
+        if (this.contentContainer) {
+          this.contentContainer.scrollTop = state.scrollTop;
+        }
+      });
+    }
+  }
+
+  /**
    * Render empty state.
    */
   private renderEmpty(): void {
@@ -233,7 +330,20 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
     const header = document.createElement("div");
     header.className = "viewer-header";
-    header.textContent = this.currentPath;
+
+    const filename = document.createElement("span");
+    filename.className = "viewer-filename";
+    filename.textContent = this.currentPath;
+    header.appendChild(filename);
+
+    if (this.isPlanOverlayActive) {
+      const closeBtn = document.createElement("button");
+      closeBtn.className = "viewer-close-btn";
+      closeBtn.innerHTML = "&times;";
+      closeBtn.title = "Close plan (Esc)";
+      closeBtn.addEventListener("click", () => this.closePlanOverlay());
+      header.appendChild(closeBtn);
+    }
 
     const content = document.createElement("div");
     content.className = "viewer-content";
@@ -483,6 +593,12 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
    * Returns true if the key was handled.
    */
   handleKeydown(e: KeyboardEvent): boolean {
+    // ESC closes plan overlay regardless of content container
+    if (e.key === "Escape" && this.isPlanOverlayActive) {
+      this.closePlanOverlay();
+      return true;
+    }
+
     const container = this.contentContainer;
     if (!container) {
       return false;

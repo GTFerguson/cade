@@ -89,6 +89,8 @@ export interface SessionState {
   version: number;
   expandedPaths: string[];
   viewerPath: string | null;
+  viewerPlanPath: string | null;
+  viewerHidden: boolean;
   layout: LayoutProportions | null;
 }
 
@@ -154,6 +156,7 @@ export interface ViewFileMessage extends BaseMessage {
   path: string;
   content: string;
   fileType: string;
+  isPlan?: boolean;
 }
 
 /**
