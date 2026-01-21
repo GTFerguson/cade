@@ -1,7 +1,7 @@
 ---
 title: Keyboard Navigation Guide
 created: 2026-01-18
-updated: 2026-01-20
+updated: 2026-01-21
 status: active
 tags: [user, keybindings, navigation, vim, tmux]
 ---
@@ -49,8 +49,6 @@ Move focus between the three panes.
 |----------|--------|
 | `Ctrl+a` then `h` | Focus pane to the left |
 | `Ctrl+a` then `l` | Focus pane to the right |
-| `Ctrl+a` then `f` | Focus pane to the left (alias) |
-| `Ctrl+a` then `g` | Focus pane to the right (alias) |
 | `Ctrl+a` then `←` | Focus pane to the left (arrow) |
 | `Ctrl+a` then `→` | Focus pane to the right (arrow) |
 
@@ -60,8 +58,8 @@ Adjust the boundaries between panes.
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+a` then `Ctrl+h` | Move divider left (shrink left pane) |
-| `Ctrl+a` then `Ctrl+l` | Move divider right (shrink right pane) |
+| `Ctrl+a` then `Alt+h` | Move divider left (shrink left pane) |
+| `Ctrl+a` then `Alt+l` | Move divider right (shrink right pane) |
 
 ### Tab Management
 
@@ -74,6 +72,15 @@ Switch between project tabs.
 | `Ctrl+a` then `1-9` | Go to tab by number (1-indexed) |
 | `Ctrl+a` then `c` | Create new tab |
 | `Ctrl+a` then `x` | Close current tab |
+
+### Terminal Navigation
+
+Scroll the terminal output when Claude or shell has generated a lot of text.
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+a` then `g` | Scroll terminal to top |
+| `Ctrl+a` then `G` | Scroll terminal to bottom |
 
 ### Other
 
@@ -185,10 +192,10 @@ Working across frontend and backend:
 
 Need more terminal space:
 
-1. `Ctrl+a` `Ctrl+h` — shrink file tree
-2. `Ctrl+a` `Ctrl+h` — shrink more
+1. `Ctrl+a` `Alt+h` — shrink file tree
+2. `Ctrl+a` `Alt+h` — shrink more
 3. *(work in terminal)*
-4. `Ctrl+a` `Ctrl+l` — restore when done
+4. `Ctrl+a` `Alt+l` — restore when done
 
 ## Customization
 
@@ -208,11 +215,12 @@ prefix = "C-b"
 │                    GLOBAL (Ctrl+a +)                    │
 ├─────────────────────────────────────────────────────────┤
 │  h/l     Focus left/right pane                          │
-│  C-h/C-l Resize pane boundary                           │
+│  A-h/A-l Resize pane boundary                           │
 │  f/d     Next/previous tab                              │
 │  1-9     Go to tab N (1-indexed)                        │
 │  c/x     Create/close tab                               │
 │  s       Toggle Claude/shell                            │
+│  g/G     Scroll terminal to top/bottom                  │
 │  ?       Help                                           │
 ├─────────────────────────────────────────────────────────┤
 │                    TERMINAL                             │

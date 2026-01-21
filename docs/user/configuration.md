@@ -134,8 +134,8 @@ All pane shortcuts require the prefix key first.
 [pane]
 focus-left = "h"        # prefix + h - Focus pane to the left
 focus-right = "l"       # prefix + l - Focus pane to the right
-resize-left = "C-h"     # prefix + Ctrl+h - Resize pane boundary left
-resize-right = "C-l"    # prefix + Ctrl+l - Resize pane boundary right
+resize-left = "A-h"     # prefix + Alt+h - Resize pane boundary left
+resize-right = "A-l"    # prefix + Alt+l - Resize pane boundary right
 ```
 
 ### Tab Navigation
@@ -157,6 +157,16 @@ close = "x"             # prefix + x - Close current tab
 [misc]
 help = "?"              # prefix + ? - Show help overlay
 toggle-terminal = "s"   # prefix + s - Toggle between Claude and shell terminal
+```
+
+### Navigation
+
+Shared navigation shortcuts that work across all panes (file tree, viewer, and terminal with prefix).
+
+```toml
+[navigation]
+scroll-to-top = "g"     # gg in file tree/viewer, prefix + g in terminal
+scroll-to-bottom = "G"  # G in file tree/viewer, prefix + G in terminal
 ```
 
 ## behavior.toml
