@@ -81,8 +81,8 @@ class PaneKeybindingsConfig:
 
     focus_left: str = "h"
     focus_right: str = "l"
-    resize_left: str = "C-h"
-    resize_right: str = "C-l"
+    resize_left: str = "A-h"
+    resize_right: str = "A-l"
 
 
 @dataclass
@@ -105,6 +105,14 @@ class MiscKeybindingsConfig:
 
 
 @dataclass
+class NavigationKeybindingsConfig:
+    """Navigation keybindings (shared across all panes)."""
+
+    scroll_to_top: str = "g"
+    scroll_to_bottom: str = "G"
+
+
+@dataclass
 class KeybindingsConfig:
     """Keybindings configuration."""
 
@@ -112,6 +120,7 @@ class KeybindingsConfig:
     pane: PaneKeybindingsConfig = field(default_factory=PaneKeybindingsConfig)
     tab: TabKeybindingsConfig = field(default_factory=TabKeybindingsConfig)
     misc: MiscKeybindingsConfig = field(default_factory=MiscKeybindingsConfig)
+    navigation: NavigationKeybindingsConfig = field(default_factory=NavigationKeybindingsConfig)
 
 
 @dataclass
@@ -225,6 +234,10 @@ class UserConfig:
                     "help": self.keybindings.misc.help,
                     "toggleTerminal": self.keybindings.misc.toggle_terminal,
                     "toggleViewer": self.keybindings.misc.toggle_viewer,
+                },
+                "navigation": {
+                    "scrollToTop": self.keybindings.navigation.scroll_to_top,
+                    "scrollToBottom": self.keybindings.navigation.scroll_to_bottom,
                 },
             },
             "behavior": {

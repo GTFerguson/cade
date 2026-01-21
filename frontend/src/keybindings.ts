@@ -27,6 +27,8 @@ export interface KeybindingCallbacks {
   toggleTerminal: () => void;
   toggleViewerCycle: () => void;
   viewLatestPlan: () => void;
+  scrollTerminalToTop: () => void;
+  scrollTerminalToBottom: () => void;
   getFocusedPane: () => PaneType;
   getPaneHandler: (pane: PaneType) => PaneKeyHandler | null;
 }
@@ -40,9 +42,13 @@ export class KeybindingManager implements Component {
   private prefixTimeout: number | null = null;
   private callbacks: KeybindingCallbacks | null = null;
   private boundHandleKeydown: (e: KeyboardEvent) => void;
+  private boundHandleKeyup: (e: KeyboardEvent) => void;
+  private prefixKeyHeld = false;
+  private prefixUsedWhileHeld = false;
 
   constructor() {
     this.boundHandleKeydown = this.handleKeydown.bind(this);
+    this.boundHandleKeyup = this.handleKeyup.bind(this);
   }
 
   /**
@@ -74,6 +80,7 @@ export class KeybindingManager implements Component {
     console.log("[keybindings] Initializing...");
     // Use capture phase to intercept before xterm.js handles the event
     document.addEventListener("keydown", this.boundHandleKeydown, true);
+    document.addEventListener("keyup", this.boundHandleKeyup, true);
     console.log("[keybindings] Event listener added");
   }
 
@@ -119,6 +126,8 @@ export class KeybindingManager implements Component {
       if (isInput) {
         return;
       }
+      this.prefixKeyHeld = true;
+      this.prefixUsedWhileHeld = false;
       this.activatePrefix();
       e.preventDefault();
       e.stopPropagation();
@@ -181,15 +190,23 @@ export class KeybindingManager implements Component {
   /**
    * Check if a key matches a configured binding (for use after prefix).
    * Binding format: "h" for simple key, "C-h" for Ctrl+h, etc.
+   * When prefix key is held, Ctrl modifier is ignored (it comes from the held prefix).
    */
   private matchesBinding(e: KeyboardEvent, binding: string): boolean {
     const parsed = parseKeybinding(binding);
 
-    // For post-prefix bindings, we match the key and modifiers
+    // When prefix key is held, ignore Ctrl (it's from the prefix, not the shortcut)
+    const effectiveCtrl = this.prefixKeyHeld ? false : e.ctrlKey;
+
+    // For shift: only enforce if binding explicitly uses S- prefix.
+    // Characters like ?, G, ! inherently require shift to type, so we
+    // shouldn't require shiftKey to match for single-character bindings.
+    const shiftMatches = parsed.shift ? e.shiftKey : true;
+
     return (
-      e.ctrlKey === parsed.ctrl &&
+      effectiveCtrl === parsed.ctrl &&
       e.altKey === parsed.alt &&
-      e.shiftKey === parsed.shift &&
+      shiftMatches &&
       e.metaKey === parsed.meta &&
       e.key.toLowerCase() === parsed.key
     );
@@ -205,28 +222,42 @@ export class KeybindingManager implements Component {
     }
 
     const config = this.getConfig();
-    console.log("[keybindings] Prefix shortcut:", e.key, "ctrl:", e.ctrlKey);
-    // Always deactivate prefix after handling
-    this.deactivatePrefix();
+    console.log("[keybindings] Prefix shortcut:", e.key, "ctrl:", e.ctrlKey, "alt:", e.altKey);
 
-    // Pane resize: uses config pane.resizeLeft/resizeRight (default: C-h/C-l)
+    // Pane resize: uses config pane.resizeLeft/resizeRight (default: A-h/A-l)
     if (this.matchesBinding(e, config.pane.resizeLeft)) {
       e.preventDefault();
       this.callbacks?.resizePane("left");
+      this.onPrefixShortcutUsed();
       return;
     }
     if (this.matchesBinding(e, config.pane.resizeRight)) {
       e.preventDefault();
       this.callbacks?.resizePane("right");
+      this.onPrefixShortcutUsed();
       return;
     }
 
-    // Don't process simple keys if Ctrl is still held (resize was already checked)
-    if (e.ctrlKey) {
+    // Don't process simple keys if Ctrl is still held (except when prefix key is held)
+    if (e.ctrlKey && !this.prefixKeyHeld) {
+      this.onPrefixShortcutUsed();
       return;
     }
 
     e.preventDefault();
+
+    // Navigation: scroll to top/bottom (works in terminal with prefix)
+    const nav = config.navigation;
+    if (this.matchesBinding(e, nav.scrollToTop)) {
+      this.callbacks?.scrollTerminalToTop();
+      this.onPrefixShortcutUsed();
+      return;
+    }
+    if (this.matchesBinding(e, nav.scrollToBottom)) {
+      this.callbacks?.scrollTerminalToBottom();
+      this.onPrefixShortcutUsed();
+      return;
+    }
 
     // Pane focus: uses config pane.focusLeft/focusRight (default: h/l)
     // Also support arrow keys as aliases
@@ -235,6 +266,7 @@ export class KeybindingManager implements Component {
       e.key === "ArrowLeft"
     ) {
       this.callbacks?.focusPane("left");
+      this.onPrefixShortcutUsed();
       return;
     }
     if (
@@ -242,44 +274,52 @@ export class KeybindingManager implements Component {
       e.key === "ArrowRight"
     ) {
       this.callbacks?.focusPane("right");
+      this.onPrefixShortcutUsed();
       return;
     }
 
     // Tab navigation: uses config tab.previous/next (default: r/t)
     if (this.matchesBinding(e, config.tab.previous)) {
       this.callbacks?.previousTab();
+      this.onPrefixShortcutUsed();
       return;
     }
     if (this.matchesBinding(e, config.tab.next)) {
       this.callbacks?.nextTab();
+      this.onPrefixShortcutUsed();
       return;
     }
 
     // Tab create/close: uses config tab.create/close (default: c/x)
     if (this.matchesBinding(e, config.tab.create)) {
       this.callbacks?.createTab();
+      this.onPrefixShortcutUsed();
       return;
     }
     if (this.matchesBinding(e, config.tab.close)) {
       this.callbacks?.closeTab();
+      this.onPrefixShortcutUsed();
       return;
     }
 
     // Help: uses config misc.help (default: ?)
     if (this.matchesBinding(e, config.misc.help)) {
       this.callbacks?.showHelp();
+      this.onPrefixShortcutUsed();
       return;
     }
 
     // Terminal toggle: uses config misc.toggleTerminal (default: s)
     if (this.matchesBinding(e, config.misc.toggleTerminal)) {
       this.callbacks?.toggleTerminal();
+      this.onPrefixShortcutUsed();
       return;
     }
 
     // Viewer toggle: uses config misc.toggleViewer (default: v)
     if (this.matchesBinding(e, config.misc.toggleViewer)) {
       this.callbacks?.toggleViewerCycle();
+      this.onPrefixShortcutUsed();
       return;
     }
 
@@ -287,12 +327,56 @@ export class KeybindingManager implements Component {
     // (1-indexed for ergonomics: key "1" = first tab)
     if (/^[1-9]$/.test(e.key)) {
       this.callbacks?.goToTab(parseInt(e.key, 10) - 1);
+      this.onPrefixShortcutUsed();
       return;
     }
     if (e.key === "0") {
       this.callbacks?.goToTab(9); // Tab 10
+      this.onPrefixShortcutUsed();
       return;
     }
+
+    // No match - still deactivate prefix for tap flow
+    this.onPrefixShortcutUsed();
+  }
+
+  /**
+   * Called after a prefix shortcut is used.
+   * Tracks usage for hold mode and deactivates for tap mode.
+   */
+  private onPrefixShortcutUsed(): void {
+    if (this.prefixKeyHeld) {
+      // Hold mode: allow more shortcuts while held
+      this.prefixUsedWhileHeld = true;
+    } else {
+      // Tap flow: one shortcut only
+      this.deactivatePrefix();
+    }
+  }
+
+  /**
+   * Handle keyup events (for prefix key release).
+   */
+  private handleKeyup(e: KeyboardEvent): void {
+    if (this.isPrefixKeyRelease(e)) {
+      this.prefixKeyHeld = false;
+      if (this.prefixUsedWhileHeld) {
+        // User used shortcuts while holding - immediately deactivate
+        this.deactivatePrefix();
+      }
+      // If not used while held, timeout handles deactivation (tap-then-shortcut flow)
+    }
+  }
+
+  /**
+   * Check if a keyup event is for the prefix key.
+   */
+  private isPrefixKeyRelease(e: KeyboardEvent): boolean {
+    const prefix = this.getConfig().global.prefix;
+    const parsed = parseKeybinding(prefix);
+    // For keyup, we check if the released key matches the prefix key character
+    // The modifiers may or may not be present depending on release order
+    return e.key.toLowerCase() === parsed.key;
   }
 
   /**
@@ -300,6 +384,7 @@ export class KeybindingManager implements Component {
    */
   dispose(): void {
     document.removeEventListener("keydown", this.boundHandleKeydown, true);
+    document.removeEventListener("keyup", this.boundHandleKeyup, true);
     this.clearPrefixTimeout();
   }
 }

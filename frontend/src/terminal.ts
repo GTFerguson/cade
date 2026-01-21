@@ -276,6 +276,13 @@ export class Terminal implements Component {
   }
 
   /**
+   * Scroll terminal to the top of the buffer.
+   */
+  scrollToTop(): void {
+    this.terminal?.scrollToTop();
+  }
+
+  /**
    * Scroll terminal to the bottom of the buffer.
    */
   scrollToBottom(): void {

@@ -4,6 +4,7 @@
 
 import type { PaneKeyHandler } from "./keybindings";
 import type { Component, EventHandler, FileNode } from "./types";
+import { getUserConfig, matchesKeybinding } from "./user-config";
 import type { WebSocketClient } from "./websocket";
 
 interface FileTreeEvents {
@@ -497,6 +498,8 @@ export class FileTree implements Component, PaneKeyHandler {
     }
 
     // In search-nav mode or normal mode - vim keys work
+    const nav = getUserConfig().keybindings.navigation;
+
     switch (e.key) {
       case "j":
       case "ArrowDown":
@@ -519,11 +522,6 @@ export class FileTree implements Component, PaneKeyHandler {
       case "h":
         this.collapseOrParent();
         return true;
-      case "g":
-        return this.handleGKey();
-      case "G":
-        this.jumpToBottom();
-        return true;
       case "c":
         this.collapseAll();
         return true;
@@ -540,6 +538,16 @@ export class FileTree implements Component, PaneKeyHandler {
         }
         return false;
     }
+
+    // Navigation keybindings (configurable)
+    if (matchesKeybinding(e, nav.scrollToTop)) {
+      return this.handleScrollToTopKey();
+    }
+    if (matchesKeybinding(e, nav.scrollToBottom)) {
+      this.jumpToBottom();
+      return true;
+    }
+
     return false;
   }
 
@@ -615,9 +623,9 @@ export class FileTree implements Component, PaneKeyHandler {
   }
 
   /**
-   * Handle 'g' key for gg detection.
+   * Handle scroll-to-top key for double-tap detection (like vim's gg).
    */
-  private handleGKey(): boolean {
+  private handleScrollToTopKey(): boolean {
     const now = Date.now();
     if (now - this.lastGPress < 500) {
       this.jumpToTop();

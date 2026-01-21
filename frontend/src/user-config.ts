@@ -98,6 +98,14 @@ export interface MiscKeybindingsConfig {
 }
 
 /**
+ * Navigation keybindings (shared across all panes).
+ */
+export interface NavigationKeybindingsConfig {
+  scrollToTop: string;
+  scrollToBottom: string;
+}
+
+/**
  * Keybindings configuration.
  */
 export interface KeybindingsConfig {
@@ -105,6 +113,7 @@ export interface KeybindingsConfig {
   pane: PaneKeybindingsConfig;
   tab: TabKeybindingsConfig;
   misc: MiscKeybindingsConfig;
+  navigation: NavigationKeybindingsConfig;
 }
 
 /**
@@ -206,8 +215,8 @@ export const defaultUserConfig: UserConfig = {
     pane: {
       focusLeft: "h",
       focusRight: "l",
-      resizeLeft: "C-h",
-      resizeRight: "C-l",
+      resizeLeft: "A-h",
+      resizeRight: "A-l",
     },
     tab: {
       next: "f",
@@ -219,6 +228,10 @@ export const defaultUserConfig: UserConfig = {
       help: "?",
       toggleTerminal: "s",
       toggleViewer: "v",
+    },
+    navigation: {
+      scrollToTop: "g",
+      scrollToBottom: "G",
     },
   },
   behavior: {

@@ -177,6 +177,14 @@ class App {
         }
         activeTab?.ws.requestLatestPlan();
       },
+      scrollTerminalToTop: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        activeTab?.context?.getTerminalManager()?.scrollToTop();
+      },
+      scrollTerminalToBottom: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        activeTab?.context?.getTerminalManager()?.scrollToBottom();
+      },
       getFocusedPane: () => {
         const activeTab = this.tabManager.getActiveTab();
         return activeTab?.context?.getFocusedPane() ?? "terminal";

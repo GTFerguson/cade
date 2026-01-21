@@ -275,6 +275,13 @@ export class ProjectContextImpl implements IProjectContext {
   }
 
   /**
+   * Get the terminal manager for scroll operations.
+   */
+  getTerminalManager(): TerminalManager | null {
+    return this.terminalManager;
+  }
+
+  /**
    * Set a custom key handler for the terminal.
    */
   setTerminalKeyHandler(handler: CustomKeyHandler | null): void {

@@ -15,6 +15,7 @@ import { marked, type TokenizerExtension, type RendererExtension } from "marked"
 import hljs from "highlight.js";
 import type { PaneKeyHandler } from "./keybindings";
 import type { Component, EventHandler } from "./types";
+import { getUserConfig, matchesKeybinding } from "./user-config";
 import type { WebSocketClient } from "./websocket";
 
 // Make libraries available globally for mertex.md
@@ -604,6 +605,8 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       return false;
     }
 
+    const nav = getUserConfig().keybindings.navigation;
+
     switch (e.key) {
       case "j":
       case "ArrowDown":
@@ -619,11 +622,6 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       case "l":
         this.scrollCodeBlocksHorizontally("right");
         return true;
-      case "g":
-        return this.handleGKey(container);
-      case "G":
-        container.scrollTo(0, container.scrollHeight);
-        return true;
       case "d":
         if (e.ctrlKey) {
           container.scrollBy(0, container.clientHeight * SCROLL_PAGE_FACTOR);
@@ -637,13 +635,23 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
         }
         return false;
     }
+
+    // Navigation keybindings (configurable)
+    if (matchesKeybinding(e, nav.scrollToTop)) {
+      return this.handleScrollToTopKey(container);
+    }
+    if (matchesKeybinding(e, nav.scrollToBottom)) {
+      container.scrollTo(0, container.scrollHeight);
+      return true;
+    }
+
     return false;
   }
 
   /**
-   * Handle 'g' key for gg detection.
+   * Handle scroll-to-top key for double-tap detection (like vim's gg).
    */
-  private handleGKey(container: HTMLElement): boolean {
+  private handleScrollToTopKey(container: HTMLElement): boolean {
     const now = Date.now();
     if (now - this.lastGPress < 500) {
       container.scrollTo(0, 0);

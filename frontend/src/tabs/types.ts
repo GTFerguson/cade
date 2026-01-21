@@ -6,6 +6,7 @@ import type { PaneKeyHandler, PaneType } from "../keybindings";
 import type { Layout } from "../layout";
 import type { MarkdownViewer } from "../markdown";
 import type { CustomKeyHandler } from "../terminal";
+import type { TerminalManager } from "../terminal-manager";
 import type { WebSocketClient } from "../websocket";
 
 /**
@@ -54,6 +55,7 @@ export interface ProjectContext {
   getPaneHandler(pane: PaneType): PaneKeyHandler | null;
   getLayout(): Layout | null;
   getViewer(): MarkdownViewer | null;
+  getTerminalManager(): TerminalManager | null;
   setTerminalKeyHandler(handler: CustomKeyHandler | null): void;
   toggleTerminal(): void;
 }

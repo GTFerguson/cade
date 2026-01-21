@@ -24,14 +24,16 @@ const KEYBINDINGS_HTML = `
     <h3>Terminal</h3>
     <table>
       <tr><td><kbd>prefix</kbd> + <kbd>s</kbd></td><td>Toggle claude/shell terminal</td></tr>
+      <tr><td><kbd>prefix</kbd> + <kbd>g</kbd></td><td>Scroll to top</td></tr>
+      <tr><td><kbd>prefix</kbd> + <kbd>G</kbd></td><td>Scroll to bottom</td></tr>
     </table>
   </div>
 
   <div class="help-section">
     <h3>Pane Resize</h3>
     <table>
-      <tr><td><kbd>prefix</kbd> + <kbd>Ctrl-h</kbd></td><td>Shrink left / grow right</td></tr>
-      <tr><td><kbd>prefix</kbd> + <kbd>Ctrl-l</kbd></td><td>Grow left / shrink right</td></tr>
+      <tr><td><kbd>prefix</kbd> + <kbd>Alt-h</kbd></td><td>Shrink left / grow right</td></tr>
+      <tr><td><kbd>prefix</kbd> + <kbd>Alt-l</kbd></td><td>Grow left / shrink right</td></tr>
     </table>
   </div>
 

@@ -290,6 +290,28 @@ export class TerminalManager implements Component {
   }
 
   /**
+   * Scroll the active terminal to top.
+   */
+  scrollToTop(): void {
+    if (this.activeTerminal === SessionKey.CLAUDE) {
+      this.claudeTerminal?.scrollToTop();
+    } else {
+      this.manualTerminal?.scrollToTop();
+    }
+  }
+
+  /**
+   * Scroll the active terminal to bottom.
+   */
+  scrollToBottom(): void {
+    if (this.activeTerminal === SessionKey.CLAUDE) {
+      this.claudeTerminal?.scrollToBottom();
+    } else {
+      this.manualTerminal?.scrollToBottom();
+    }
+  }
+
+  /**
    * Dispose of all terminal resources.
    */
   dispose(): void {
