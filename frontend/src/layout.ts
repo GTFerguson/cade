@@ -21,6 +21,10 @@ export class Layout implements Component {
   private startProportions: LayoutProportions | null = null;
   private mobileMode = false;
   private onChangeCallback: (() => void) | null = null;
+  private boundHandleResize: (() => void) | null = null;
+  private boundOnDrag: ((e: MouseEvent) => void) | null = null;
+  private boundEndDrag: (() => void) | null = null;
+  private rafId: number | null = null;
 
   constructor(private container: HTMLElement) {
     this.proportions = { ...DEFAULT_PROPORTIONS };
@@ -45,9 +49,9 @@ export class Layout implements Component {
       this.initDesktopLayout();
     }
 
-    window.addEventListener("resize", () => {
-      this.handleResize();
-    });
+    // Store bound handler and attach
+    this.boundHandleResize = () => this.handleResize();
+    window.addEventListener("resize", this.boundHandleResize);
   }
 
   /**
@@ -143,6 +147,10 @@ export class Layout implements Component {
       ".resize-handle-right"
     ) as HTMLElement;
 
+    // Store bound handlers
+    this.boundOnDrag = (e: MouseEvent) => this.onDrag(e);
+    this.boundEndDrag = () => this.endDrag();
+
     if (leftHandle != null) {
       leftHandle.addEventListener("mousedown", (e) => {
         this.startDrag(e, "left");
@@ -155,13 +163,8 @@ export class Layout implements Component {
       });
     }
 
-    document.addEventListener("mousemove", (e) => {
-      this.onDrag(e);
-    });
-
-    document.addEventListener("mouseup", () => {
-      this.endDrag();
-    });
+    // DO NOT attach mousemove/mouseup here
+    // They are attached in startDrag() and removed in endDrag()
   }
 
   /**
@@ -175,6 +178,12 @@ export class Layout implements Component {
     this.startProportions = { ...this.proportions };
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
+
+    // Attach drag listeners ONLY when dragging starts
+    if (this.boundOnDrag && this.boundEndDrag) {
+      document.addEventListener("mousemove", this.boundOnDrag);
+      document.addEventListener("mouseup", this.boundEndDrag);
+    }
   }
 
   /**
@@ -225,7 +234,13 @@ export class Layout implements Component {
         1 - this.proportions.fileTree - this.proportions.viewer;
     }
 
-    this.applyProportions();
+    // Debounce with RAF instead of immediate apply
+    if (this.rafId == null) {
+      this.rafId = requestAnimationFrame(() => {
+        this.applyProportions();
+        this.rafId = null;
+      });
+    }
   }
 
   /**
@@ -241,6 +256,12 @@ export class Layout implements Component {
     this.startProportions = null;
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
+
+    // Remove drag listeners when drag ends
+    if (this.boundOnDrag && this.boundEndDrag) {
+      document.removeEventListener("mousemove", this.boundOnDrag);
+      document.removeEventListener("mouseup", this.boundEndDrag);
+    }
 
     this.onChangeCallback?.();
 
@@ -336,6 +357,24 @@ export class Layout implements Component {
    * Dispose of resources.
    */
   dispose(): void {
-    // Event listeners are on document, they'll be cleaned up naturally
+    // Remove window resize listener
+    if (this.boundHandleResize) {
+      window.removeEventListener("resize", this.boundHandleResize);
+      this.boundHandleResize = null;
+    }
+
+    // Clean up any active drag listeners (in case disposal happens during drag)
+    if (this.boundOnDrag && this.boundEndDrag) {
+      document.removeEventListener("mousemove", this.boundOnDrag);
+      document.removeEventListener("mouseup", this.boundEndDrag);
+      this.boundOnDrag = null;
+      this.boundEndDrag = null;
+    }
+
+    // Clean up any pending RAF
+    if (this.rafId != null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
   }
 }

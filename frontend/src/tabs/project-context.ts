@@ -29,6 +29,42 @@ export class ProjectContextImpl implements IProjectContext {
   private pendingSession: SessionState | null = null;
   private isVisible = false;
   private focusedPane: PaneType = "terminal";
+  private boundHandlers = {
+    startupStatus: (msg: any) => {
+      if (this.splash?.isVisible()) {
+        this.splash.setStatus(msg.message);
+      }
+    },
+    sessionRestored: (msg: any) => {
+      console.log(`[${this.name}] Session restored:`, msg.sessionId, msg.sessionKey);
+    },
+    connected: (msg: ConnectedMessage) => {
+      console.log(`[${this.name}] Connected to server:`, msg.workingDir);
+      if (msg.session != null) {
+        this.pendingSession = msg.session;
+      }
+      if (this.splash?.isVisible()) {
+        const shouldSkip = this.shouldSkipSplash(msg);
+        if (shouldSkip) {
+          this.splash.autoSkip(() => this.terminalManager?.focus());
+        } else {
+          this.splash.setReady(() => this.terminalManager?.focus());
+        }
+      }
+    },
+    fileTree: () => {
+      if (this.pendingSession != null) {
+        this.restoreSession(this.pendingSession);
+        this.pendingSession = null;
+      }
+    },
+    disconnected: () => {
+      console.log(`[${this.name}] Disconnected from server`);
+    },
+    error: (msg: any) => {
+      console.error(`[${this.name}] Server error:`, msg.code, msg.message);
+    },
+  };
 
   constructor(
     readonly id: string,
@@ -106,47 +142,12 @@ export class ProjectContextImpl implements IProjectContext {
       this.scheduleSave();
     });
 
-    this.ws.on("startup-status", (message) => {
-      if (this.splash?.isVisible()) {
-        this.splash.setStatus(message.message);
-      }
-    });
-
-    this.ws.on("session-restored", (message) => {
-      console.log(`[${this.name}] Session restored:`, message.sessionId, message.sessionKey);
-      // TerminalManager handles session-restored internally
-    });
-
-    this.ws.on("connected", (message) => {
-      console.log(`[${this.name}] Connected to server:`, message.workingDir);
-      if (message.session != null) {
-        this.pendingSession = message.session;
-      }
-      // Handle splash screen based on session state
-      if (this.splash?.isVisible()) {
-        const shouldSkip = this.shouldSkipSplash(message);
-        if (shouldSkip) {
-          this.splash.autoSkip(() => this.terminalManager?.focus());
-        } else {
-          this.splash.setReady(() => this.terminalManager?.focus());
-        }
-      }
-    });
-
-    this.ws.on("file-tree", () => {
-      if (this.pendingSession != null) {
-        this.restoreSession(this.pendingSession);
-        this.pendingSession = null;
-      }
-    });
-
-    this.ws.on("disconnected", () => {
-      console.log(`[${this.name}] Disconnected from server`);
-    });
-
-    this.ws.on("error", (message) => {
-      console.error(`[${this.name}] Server error:`, message.code, message.message);
-    });
+    this.ws.on("startup-status", this.boundHandlers.startupStatus);
+    this.ws.on("session-restored", this.boundHandlers.sessionRestored);
+    this.ws.on("connected", this.boundHandlers.connected);
+    this.ws.on("file-tree", this.boundHandlers.fileTree);
+    this.ws.on("disconnected", this.boundHandlers.disconnected);
+    this.ws.on("error", this.boundHandlers.error);
 
     this.hide();
   }
@@ -342,6 +343,14 @@ export class ProjectContextImpl implements IProjectContext {
     }
 
     this.saveSessionNow();
+
+    // Unregister WebSocket handlers
+    this.ws.off("startup-status", this.boundHandlers.startupStatus);
+    this.ws.off("session-restored", this.boundHandlers.sessionRestored);
+    this.ws.off("connected", this.boundHandlers.connected);
+    this.ws.off("file-tree", this.boundHandlers.fileTree);
+    this.ws.off("disconnected", this.boundHandlers.disconnected);
+    this.ws.off("error", this.boundHandlers.error);
 
     this.terminalManager?.dispose();
     this.fileTree?.dispose();

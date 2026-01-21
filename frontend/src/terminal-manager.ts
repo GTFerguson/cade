@@ -18,6 +18,13 @@ export class TerminalManager implements Component {
   private manualContainer: HTMLElement;
   private statusIndicator: HTMLElement;
   private customKeyHandler: CustomKeyHandler | null = null;
+  private outputBuffer: Map<SessionKeyValue, string> = new Map();
+  private flushRafId: number | null = null;
+  private lastFlushTime = 0;
+  private boundHandlers = {
+    output: (message: OutputMessage) => this.handleOutput(message),
+    sessionRestored: (message: SessionRestoredMessage) => this.handleSessionRestored(message),
+  };
 
   constructor(
     private container: HTMLElement,
@@ -54,14 +61,10 @@ export class TerminalManager implements Component {
     this.claudeTerminal.initialize();
 
     // Subscribe to output messages and route to correct terminal
-    this.ws.on("output", (message: OutputMessage) => {
-      this.handleOutput(message);
-    });
+    this.ws.on("output", this.boundHandlers.output);
 
     // Subscribe to session-restored messages
-    this.ws.on("session-restored", (message: SessionRestoredMessage) => {
-      this.handleSessionRestored(message);
-    });
+    this.ws.on("session-restored", this.boundHandlers.sessionRestored);
   }
 
   /**
@@ -70,11 +73,45 @@ export class TerminalManager implements Component {
   private handleOutput(message: OutputMessage): void {
     const sessionKey = message.sessionKey ?? SessionKey.CLAUDE;
 
-    if (sessionKey === SessionKey.CLAUDE) {
-      this.claudeTerminal?.write(message.data);
-    } else if (sessionKey === SessionKey.MANUAL && this.manualTerminal) {
-      this.manualTerminal.write(message.data);
+    // Append to buffer
+    const existing = this.outputBuffer.get(sessionKey) ?? "";
+    this.outputBuffer.set(sessionKey, existing + message.data);
+
+    // Adaptive flushing: immediate for small data, batched for high-frequency
+    const now = performance.now();
+    const timeSinceLastFlush = now - this.lastFlushTime;
+
+    if (message.data.length < 100 && timeSinceLastFlush > 100) {
+      // Small output and sufficient time passed: flush immediately for responsiveness
+      this.flushOutputBuffer();
+    } else {
+      // Large output or high frequency: batch with RAF
+      if (this.flushRafId == null) {
+        this.flushRafId = requestAnimationFrame(() => {
+          this.flushOutputBuffer();
+        });
+      }
     }
+  }
+
+  /**
+   * Flush buffered output to terminals.
+   */
+  private flushOutputBuffer(): void {
+    this.lastFlushTime = performance.now();
+    this.flushRafId = null;
+
+    for (const [sessionKey, data] of this.outputBuffer.entries()) {
+      if (data.length === 0) continue;
+
+      if (sessionKey === SessionKey.CLAUDE) {
+        this.claudeTerminal?.write(data);
+      } else if (sessionKey === SessionKey.MANUAL && this.manualTerminal) {
+        this.manualTerminal.write(data);
+      }
+    }
+
+    this.outputBuffer.clear();
   }
 
   /**
@@ -234,6 +271,21 @@ export class TerminalManager implements Component {
    * Dispose of all terminal resources.
    */
   dispose(): void {
+    // Cancel pending flush
+    if (this.flushRafId != null) {
+      cancelAnimationFrame(this.flushRafId);
+      this.flushRafId = null;
+    }
+
+    // Flush any remaining buffered output before disposal
+    if (this.outputBuffer.size > 0) {
+      this.flushOutputBuffer();
+    }
+
+    // Unregister WebSocket handlers
+    this.ws.off("output", this.boundHandlers.output);
+    this.ws.off("session-restored", this.boundHandlers.sessionRestored);
+
     this.claudeTerminal?.dispose();
     this.manualTerminal?.dispose();
     this.statusIndicator.remove();

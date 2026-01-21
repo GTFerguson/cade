@@ -96,6 +96,25 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   > = new Map();
   private contentContainer: HTMLElement | null = null;
   private lastGPress = 0;
+  private boundHandlers = {
+    fileContent: (message: any) => {
+      this.currentPath = message.path;
+      this.currentContent = message.content;
+      this.currentFileType = message.fileType;
+      this.render();
+    },
+    viewFile: (message: any) => {
+      this.currentPath = message.path;
+      this.currentContent = message.content;
+      this.currentFileType = message.fileType;
+      this.render();
+    },
+    fileChange: (message: any) => {
+      if (message.path === this.currentPath) {
+        this.refresh();
+      }
+    },
+  };
 
   constructor(
     private container: HTMLElement,
@@ -116,25 +135,9 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
    * Initialize the viewer.
    */
   initialize(): void {
-    this.ws.on("file-content", (message) => {
-      this.currentPath = message.path;
-      this.currentContent = message.content;
-      this.currentFileType = message.fileType;
-      this.render();
-    });
-
-    this.ws.on("view-file", (message) => {
-      this.currentPath = message.path;
-      this.currentContent = message.content;
-      this.currentFileType = message.fileType;
-      this.render();
-    });
-
-    this.ws.on("file-change", (message) => {
-      if (message.path === this.currentPath) {
-        this.refresh();
-      }
-    });
+    this.ws.on("file-content", this.boundHandlers.fileContent);
+    this.ws.on("view-file", this.boundHandlers.viewFile);
+    this.ws.on("file-change", this.boundHandlers.fileChange);
 
     this.renderEmpty();
   }
@@ -565,6 +568,11 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
    * Dispose of resources.
    */
   dispose(): void {
+    // Unregister WebSocket handlers
+    this.ws.off("file-content", this.boundHandlers.fileContent);
+    this.ws.off("view-file", this.boundHandlers.viewFile);
+    this.ws.off("file-change", this.boundHandlers.fileChange);
+
     this.container.innerHTML = "";
     this.handlers.clear();
     this.currentPath = null;
