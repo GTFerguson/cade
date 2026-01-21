@@ -18,8 +18,9 @@ export class TerminalManager implements Component {
   private manualContainer: HTMLElement;
   private statusIndicator: HTMLElement;
   private customKeyHandler: CustomKeyHandler | null = null;
-  private outputBuffer: Map<SessionKeyValue, string> = new Map();
+  private outputBuffer: Map<SessionKeyValue, string[]> = new Map();
   private flushRafId: number | null = null;
+  private flushTimeoutId: number | null = null;
   private lastFlushTime = 0;
   private boundHandlers = {
     output: (message: OutputMessage) => this.handleOutput(message),
@@ -74,22 +75,32 @@ export class TerminalManager implements Component {
     const sessionKey = message.sessionKey ?? SessionKey.CLAUDE;
 
     // Append to buffer
-    const existing = this.outputBuffer.get(sessionKey) ?? "";
-    this.outputBuffer.set(sessionKey, existing + message.data);
+    const chunks = this.outputBuffer.get(sessionKey) ?? [];
+    chunks.push(message.data);
+    this.outputBuffer.set(sessionKey, chunks);
 
-    // Adaptive flushing: immediate for small data, batched for high-frequency
+    // Adaptive flushing: immediate for interactive input, batched for bulk output
     const now = performance.now();
     const timeSinceLastFlush = now - this.lastFlushTime;
 
-    if (message.data.length < 100 && timeSinceLastFlush > 100) {
-      // Small output and sufficient time passed: flush immediately for responsiveness
+    // Flush immediately for small, rapid updates (likely interactive typing)
+    const isSmallUpdate = message.data.length < 50;
+    const isRapidUpdate = timeSinceLastFlush < 33; // Within 2 frames at 60fps
+
+    if (isSmallUpdate && isRapidUpdate) {
+      // Interactive typing: flush immediately for responsiveness
       this.flushOutputBuffer();
     } else {
-      // Large output or high frequency: batch with RAF
+      // Large updates or infrequent updates: batch for efficiency
       if (this.flushRafId == null) {
         this.flushRafId = requestAnimationFrame(() => {
           this.flushOutputBuffer();
         });
+
+        // Fallback: force flush if RAF doesn't fire within 16ms
+        this.flushTimeoutId = window.setTimeout(() => {
+          this.flushOutputBuffer();
+        }, 16);
       }
     }
   }
@@ -99,10 +110,21 @@ export class TerminalManager implements Component {
    */
   private flushOutputBuffer(): void {
     this.lastFlushTime = performance.now();
-    this.flushRafId = null;
 
-    for (const [sessionKey, data] of this.outputBuffer.entries()) {
-      if (data.length === 0) continue;
+    // Clear both scheduled flush mechanisms
+    if (this.flushRafId != null) {
+      cancelAnimationFrame(this.flushRafId);
+      this.flushRafId = null;
+    }
+    if (this.flushTimeoutId != null) {
+      clearTimeout(this.flushTimeoutId);
+      this.flushTimeoutId = null;
+    }
+
+    for (const [sessionKey, chunks] of this.outputBuffer.entries()) {
+      if (chunks.length === 0) continue;
+
+      const data = chunks.join(''); // Safe: preserves UTF-8 boundaries
 
       if (sessionKey === SessionKey.CLAUDE) {
         this.claudeTerminal?.write(data);
@@ -271,10 +293,14 @@ export class TerminalManager implements Component {
    * Dispose of all terminal resources.
    */
   dispose(): void {
-    // Cancel pending flush
+    // Cancel pending flush (both RAF and timeout)
     if (this.flushRafId != null) {
       cancelAnimationFrame(this.flushRafId);
       this.flushRafId = null;
+    }
+    if (this.flushTimeoutId != null) {
+      clearTimeout(this.flushTimeoutId);
+      this.flushTimeoutId = null;
     }
 
     // Flush any remaining buffered output before disposal
