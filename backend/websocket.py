@@ -114,11 +114,22 @@ class ConnectionHandler:
                         path = data.get("path")
                         if path:
                             project_path = Path(path).resolve()
+                            logger.debug(
+                                "Path validation: input=%s, resolved=%s, exists=%s, is_dir=%s",
+                                path,
+                                project_path,
+                                project_path.exists(),
+                                project_path.is_dir(),
+                            )
                             if project_path.is_dir():
                                 self._working_dir = project_path
                                 logger.info("Project set to: %s", self._working_dir)
                             else:
-                                logger.warning("Invalid project path: %s", path)
+                                logger.warning(
+                                    "Invalid project path: %s (resolved: %s)",
+                                    path,
+                                    project_path,
+                                )
                         self._session_id = data.get("sessionId")
                         if self._session_id:
                             logger.debug("Session ID: %s", self._session_id)
@@ -421,9 +432,8 @@ class ConnectionHandler:
     async def _handle_get_latest_plan(self) -> None:
         """Handle request for plan file associated with current project.
 
-        First tries to find the Claude Code session for this project and
-        open its specific plan file. Falls back to most recently modified
-        .md file in ~/.claude/plans/ if no session-specific plan is found.
+        Finds the Claude Code session for this project and opens its specific
+        plan file. Returns nothing if no plan is found for the current project.
         """
         import asyncio
         import sys
@@ -448,20 +458,23 @@ class ConnectionHandler:
         # Try to find the plan file for this specific project's CC session
         plan_file = None
         slug = await asyncio.to_thread(resolve_project_to_slug, self._working_dir)
+        logger.debug(
+            "Plan lookup: working_dir=%s, resolved_slug=%s",
+            self._working_dir,
+            slug,
+        )
         if slug:
             session_plan = plans_dir / f"{slug}.md"
             if session_plan.exists():
                 plan_file = session_plan
                 logger.info("Found session-specific plan file: %s", plan_file)
+                # Associate this CC session slug with this connection for targeted routing
+                get_connection_registry().set_cc_session_slug(self._ws, slug)
 
-        # Fall back to most recently modified file
+        # No fallback - only show the plan for this specific project
         if plan_file is None:
-            md_files = list(plans_dir.glob("*.md"))
-            if not md_files:
-                logger.debug("No plan files found in: %s", plans_dir)
-                return
-            plan_file = max(md_files, key=lambda f: f.stat().st_mtime)
-            logger.info("Falling back to latest plan file: %s", plan_file)
+            logger.info("No plan found for project: %s (slug=%s)", self._working_dir, slug)
+            return
 
         try:
             content = plan_file.read_text(encoding="utf-8")

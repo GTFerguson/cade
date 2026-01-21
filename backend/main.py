@@ -195,8 +195,24 @@ def create_app(config: Config | None = None) -> FastAPI:
         normalized_path = str(file_path).replace("\\", "/")
         if "/.claude/plans/" in normalized_path:
             slug = file_path.stem  # e.g., "jazzy-crunching-moonbeam"
-            project_path = resolve_slug_to_project(slug)
+            message["isPlan"] = True  # Mark as plan for overlay behavior
 
+            # First try direct slug-based routing (connection has associated itself with this slug)
+            target_ws = registry.get_connection_for_slug(slug)
+            if target_ws:
+                sent_count = await _send_to_connections([target_ws], message)
+                logger.info(
+                    "Sent VIEW_FILE to connection via slug match '%s'",
+                    slug,
+                )
+                return {
+                    "success": True,
+                    "path": str(file_path),
+                    "connections": sent_count,
+                }
+
+            # Fall back to project-based routing (for first-time associations)
+            project_path = resolve_slug_to_project(slug)
             if project_path:
                 target_connections = registry.get_connections_for_project(project_path)
                 if target_connections:

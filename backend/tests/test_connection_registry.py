@@ -289,3 +289,201 @@ class TestConnectionInfo:
             session_id=None,
         )
         assert info.session_id is None
+
+    def test_connection_info_cc_session_slug_default(self) -> None:
+        """Test ConnectionInfo defaults cc_session_slug to None."""
+        info = ConnectionInfo(
+            project_path=Path("/home/user/project"),
+            session_id="session-123",
+        )
+        assert info.cc_session_slug is None
+
+    def test_connection_info_cc_session_slug_explicit(self) -> None:
+        """Test ConnectionInfo with explicit cc_session_slug."""
+        info = ConnectionInfo(
+            project_path=Path("/home/user/project"),
+            session_id="session-123",
+            cc_session_slug="jazzy-crunching-moonbeam",
+        )
+        assert info.cc_session_slug == "jazzy-crunching-moonbeam"
+
+
+class TestCCSessionSlugRouting:
+    """Tests for Claude Code session slug-based routing.
+
+    This feature enables targeted routing of plan file updates to specific
+    connections. When two CADE tabs are open to the same project, only the
+    tab that has associated itself with a CC session slug should receive
+    plan updates for that slug.
+    """
+
+    def test_set_cc_session_slug(self, temp_dir: Path) -> None:
+        """Test setting a CC session slug on a connection."""
+        registry = ConnectionRegistry()
+        ws = MagicMock()
+
+        registry.register(ws, temp_dir)
+        registry.set_cc_session_slug(ws, "jazzy-crunching-moonbeam")
+
+        info = registry._connections[ws]
+        assert info.cc_session_slug == "jazzy-crunching-moonbeam"
+
+    def test_set_cc_session_slug_overwrites_previous(self, temp_dir: Path) -> None:
+        """Setting a new slug replaces the previous one."""
+        registry = ConnectionRegistry()
+        ws = MagicMock()
+
+        registry.register(ws, temp_dir)
+        registry.set_cc_session_slug(ws, "old-slug")
+        registry.set_cc_session_slug(ws, "new-slug")
+
+        info = registry._connections[ws]
+        assert info.cc_session_slug == "new-slug"
+
+    def test_set_cc_session_slug_unregistered_connection(self) -> None:
+        """Setting slug on unregistered connection does nothing."""
+        registry = ConnectionRegistry()
+        ws = MagicMock()
+
+        # Should not raise, just no-op
+        registry.set_cc_session_slug(ws, "some-slug")
+        assert ws not in registry._connections
+
+    def test_get_connection_for_slug(self, temp_dir: Path) -> None:
+        """Test retrieving connection by slug."""
+        registry = ConnectionRegistry()
+        ws = MagicMock()
+
+        registry.register(ws, temp_dir)
+        registry.set_cc_session_slug(ws, "jazzy-crunching-moonbeam")
+
+        result = registry.get_connection_for_slug("jazzy-crunching-moonbeam")
+        assert result is ws
+
+    def test_get_connection_for_nonexistent_slug(self, temp_dir: Path) -> None:
+        """Non-existent slug returns None."""
+        registry = ConnectionRegistry()
+        ws = MagicMock()
+
+        registry.register(ws, temp_dir)
+        registry.set_cc_session_slug(ws, "existing-slug")
+
+        result = registry.get_connection_for_slug("nonexistent-slug")
+        assert result is None
+
+    def test_get_connection_for_slug_empty_registry(self) -> None:
+        """Empty registry returns None."""
+        registry = ConnectionRegistry()
+
+        result = registry.get_connection_for_slug("any-slug")
+        assert result is None
+
+    def test_slug_isolation_between_connections(self, temp_dir: Path) -> None:
+        """Different connections can have different slugs."""
+        registry = ConnectionRegistry()
+        ws1 = MagicMock(name="ws1")
+        ws2 = MagicMock(name="ws2")
+
+        registry.register(ws1, temp_dir)
+        registry.register(ws2, temp_dir)
+
+        registry.set_cc_session_slug(ws1, "slug-one")
+        registry.set_cc_session_slug(ws2, "slug-two")
+
+        assert registry.get_connection_for_slug("slug-one") is ws1
+        assert registry.get_connection_for_slug("slug-two") is ws2
+
+    def test_same_project_different_slugs(self, temp_dir: Path) -> None:
+        """Two tabs for same project with different CC sessions.
+
+        This is the key scenario: Tab A and Tab B are both open to /project,
+        but Tab A is viewing CC session "slug-a" and Tab B is viewing "slug-b".
+        Updates to slug-a should only go to Tab A.
+        """
+        registry = ConnectionRegistry()
+        tab_a = MagicMock(name="tab_a")
+        tab_b = MagicMock(name="tab_b")
+
+        # Both tabs open to same project
+        project = temp_dir / "project"
+        project.mkdir(parents=True, exist_ok=True)
+        registry.register(tab_a, project)
+        registry.register(tab_b, project)
+
+        # Tab A associates with slug-a (e.g., via Ctrl+G)
+        registry.set_cc_session_slug(tab_a, "slug-a")
+
+        # Tab B associates with slug-b
+        registry.set_cc_session_slug(tab_b, "slug-b")
+
+        # Slug-based routing returns only the matching connection
+        assert registry.get_connection_for_slug("slug-a") is tab_a
+        assert registry.get_connection_for_slug("slug-b") is tab_b
+
+        # Project-based routing still returns both
+        project_connections = registry.get_connections_for_project(project)
+        assert len(project_connections) == 2
+        assert tab_a in project_connections
+        assert tab_b in project_connections
+
+    def test_one_tab_with_slug_one_without(self, temp_dir: Path) -> None:
+        """Tab A has a slug, Tab B does not (hasn't pressed Ctrl+G yet).
+
+        When a hook triggers for Tab A's slug, only Tab A should receive it.
+        Tab B (without slug) won't match the slug query.
+        """
+        registry = ConnectionRegistry()
+        tab_a = MagicMock(name="tab_a_with_slug")
+        tab_b = MagicMock(name="tab_b_no_slug")
+
+        project = temp_dir / "project"
+        project.mkdir(parents=True, exist_ok=True)
+        registry.register(tab_a, project)
+        registry.register(tab_b, project)
+
+        # Only Tab A has associated with a slug
+        registry.set_cc_session_slug(tab_a, "active-slug")
+
+        # Slug-based routing finds Tab A
+        assert registry.get_connection_for_slug("active-slug") is tab_a
+
+        # Tab B's slug is None, so it won't be found by slug query
+        info_b = registry._connections[tab_b]
+        assert info_b.cc_session_slug is None
+
+    def test_slug_persists_after_file_routing(self, temp_dir: Path) -> None:
+        """Slug association persists when other routing methods are used."""
+        registry = ConnectionRegistry()
+        ws = MagicMock()
+
+        project = temp_dir / "project"
+        project.mkdir(parents=True, exist_ok=True)
+        registry.register(ws, project)
+        registry.set_cc_session_slug(ws, "persistent-slug")
+
+        # Use file routing
+        file_path = project / "src" / "main.py"
+        registry.get_connections_for_file(file_path)
+
+        # Use project routing
+        registry.get_connections_for_project(project)
+
+        # Slug should still be set
+        assert registry.get_connection_for_slug("persistent-slug") is ws
+
+    def test_unregister_clears_slug_association(self, temp_dir: Path) -> None:
+        """Unregistering a connection removes its slug association."""
+        registry = ConnectionRegistry()
+        ws = MagicMock()
+
+        registry.register(ws, temp_dir)
+        registry.set_cc_session_slug(ws, "temp-slug")
+
+        # Verify slug works before unregister
+        assert registry.get_connection_for_slug("temp-slug") is ws
+
+        # Unregister
+        registry.unregister(ws)
+
+        # Slug should no longer find anything
+        assert registry.get_connection_for_slug("temp-slug") is None

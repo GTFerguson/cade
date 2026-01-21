@@ -25,6 +25,7 @@ class ConnectionInfo:
 
     project_path: Path
     session_id: str | None
+    cc_session_slug: str | None = None
 
 
 class ConnectionRegistry:
@@ -151,6 +152,38 @@ class ConnectionRegistry:
                 results.append(ws)
 
         return results
+
+    def set_cc_session_slug(self, websocket: "WebSocket", slug: str) -> None:
+        """Associate a Claude Code session slug with a connection.
+
+        When a connection requests its plan via GET_LATEST_PLAN, we store
+        which CC session (identified by slug) is associated with that
+        connection. This allows targeted routing of plan updates.
+
+        Args:
+            websocket: The WebSocket connection.
+            slug: The Claude Code session slug (e.g., "jazzy-crunching-moonbeam").
+        """
+        if websocket in self._connections:
+            self._connections[websocket].cc_session_slug = slug
+            logger.debug("Associated CC session slug '%s' with connection", slug)
+
+    def get_connection_for_slug(self, slug: str) -> "WebSocket | None":
+        """Find the connection associated with a Claude Code session slug.
+
+        Used for routing plan file updates to the specific connection that
+        has associated itself with a CC session slug.
+
+        Args:
+            slug: The Claude Code session slug to find.
+
+        Returns:
+            The WebSocket connection for that slug, or None if not found.
+        """
+        for ws, info in self._connections.items():
+            if info.cc_session_slug == slug:
+                return ws
+        return None
 
     def get_all_connections(self) -> list[WebSocket]:
         """Get all registered connections.
