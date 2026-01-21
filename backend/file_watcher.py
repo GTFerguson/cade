@@ -9,6 +9,7 @@ from typing import Literal
 
 from watchfiles import Change, awatch
 
+from backend.file_tree import get_file_tree_cache
 from backend.types import FileChangeEvent
 
 # Directories to ignore when watching
@@ -95,11 +96,15 @@ class FileWatcher:
                 watch_filter=lambda _, path: not _should_ignore_watch(path),
             ):
                 for change_type, path_str in changes:
-                    if _should_ignore_watch(path_str):
-                        continue
+                    # Remove redundant check - already filtered by watch_filter
+                    path = Path(path_str)
+
+                    # Invalidate file tree cache for affected paths
+                    cache = get_file_tree_cache()
+                    cache.invalidate(path)
 
                     try:
-                        rel_path = str(Path(path_str).relative_to(self._root)).replace("\\", "/")
+                        rel_path = str(path.relative_to(self._root)).replace("\\", "/")
                     except ValueError:
                         continue
 

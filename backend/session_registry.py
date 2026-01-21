@@ -366,9 +366,11 @@ class SessionRegistry:
     async def _cleanup_orphaned(self) -> None:
         """Remove sessions older than max_age."""
         now = time.time()
-        to_remove = []
+        sessions_to_close: list[tuple[str, "Session"]] = []
 
+        # Collect sessions to close while holding lock
         async with self._lock:
+            to_remove = []
             for session_id, session in self._sessions.items():
                 age = now - session.created_at
                 if age > self._session_max_age:
@@ -376,16 +378,19 @@ class SessionRegistry:
                 elif not session.is_alive():
                     to_remove.append(session_id)
 
+            # Remove from registry and collect for closure
             for session_id in to_remove:
                 session = self._sessions.pop(session_id, None)
                 if session is not None:
-                    await self._close_session(session)
-                    logger.info(
-                        "Cleaned up session %s (age=%ds, alive=%s)",
-                        session_id,
-                        now - session.created_at,
-                        session.is_alive(),
-                    )
+                    sessions_to_close.append((session_id, session))
+
+        # Close sessions outside the lock to avoid blocking
+        for session_id, session in sessions_to_close:
+            try:
+                await self._close_session(session)
+                logger.info("Cleaned up orphaned session: %s", session_id)
+            except Exception as e:
+                logger.error("Error closing orphaned session %s: %s", session_id, e)
 
 
 # Global registry instance

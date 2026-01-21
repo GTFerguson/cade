@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+from threading import Lock
 
 from backend.errors import FileError
 from backend.types import FileNode
+
+logger = logging.getLogger(__name__)
 
 # Directories to always ignore
 IGNORED_DIRS = {
@@ -250,3 +254,115 @@ def get_file_type(path: str) -> str:
     }
 
     return type_map.get(ext, "plaintext")
+
+
+class FileTreeCache:
+    """Cache for file tree structures with invalidation support."""
+
+    def __init__(self) -> None:
+        self._cache: dict[tuple[Path, bool], list[FileNode]] = {}
+        self._lock = Lock()
+
+    def get(
+        self,
+        root: Path,
+        max_depth: int = 10,
+        respect_gitignore: bool = False,
+    ) -> list[FileNode]:
+        """Get cached tree or build if not cached."""
+        cache_key = (root.resolve(), respect_gitignore)
+
+        with self._lock:
+            if cache_key in self._cache:
+                logger.debug(f"File tree cache hit: {root}")
+                return self._cache[cache_key]
+
+        # Build tree outside lock
+        logger.debug(f"File tree cache miss: {root}")
+        tree = build_file_tree(root, max_depth=max_depth, respect_gitignore=respect_gitignore)
+
+        # Cache result
+        with self._lock:
+            self._cache[cache_key] = tree
+
+        return tree
+
+    def invalidate(self, changed_path: Path) -> None:
+        """
+        Invalidate cache entries affected by a file system change.
+
+        Strategy:
+        - If change is to a directory, invalidate that directory and all parents
+        - If change is to a file, invalidate parent directory and all its parents
+        - This ensures tree structure stays consistent
+        """
+        with self._lock:
+            paths_to_invalidate: set[Path] = set()
+
+            # Resolve the changed path
+            try:
+                changed_path = changed_path.resolve()
+            except (OSError, RuntimeError):
+                # Path may not exist anymore (deleted), invalidate all
+                logger.warning(
+                    f"Cannot resolve changed path {changed_path}, clearing entire cache"
+                )
+                self._cache.clear()
+                return
+
+            # Determine invalidation root
+            if changed_path.is_dir():
+                invalidation_root = changed_path
+            else:
+                # For files, invalidate parent directory
+                invalidation_root = changed_path.parent
+
+            # Find all cached roots that are ancestors of or descendants of the change
+            for cache_key in list(self._cache.keys()):
+                cached_root, _ = cache_key
+                try:
+                    # Is cached_root an ancestor of the change?
+                    changed_path.relative_to(cached_root)
+                    paths_to_invalidate.add(cache_key)
+                except ValueError:
+                    pass
+
+                try:
+                    # Is cached_root a descendant of the change?
+                    cached_root.relative_to(invalidation_root)
+                    paths_to_invalidate.add(cache_key)
+                except ValueError:
+                    pass
+
+            # Invalidate collected paths
+            for cache_key in paths_to_invalidate:
+                del self._cache[cache_key]
+                logger.debug(f"Invalidated file tree cache: {cache_key[0]}")
+
+    def clear(self) -> None:
+        """Clear entire cache."""
+        with self._lock:
+            self._cache.clear()
+            logger.debug("Cleared file tree cache")
+
+
+# Global cache instance
+_file_tree_cache: FileTreeCache | None = None
+
+
+def get_file_tree_cache() -> FileTreeCache:
+    """Get or create the global file tree cache."""
+    global _file_tree_cache
+    if _file_tree_cache is None:
+        _file_tree_cache = FileTreeCache()
+    return _file_tree_cache
+
+
+def build_file_tree_cached(
+    root: Path,
+    max_depth: int = 10,
+    respect_gitignore: bool = False,
+) -> list[FileNode]:
+    """Build file tree using cache."""
+    cache = get_file_tree_cache()
+    return cache.get(root, max_depth=max_depth, respect_gitignore=respect_gitignore)

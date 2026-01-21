@@ -15,7 +15,7 @@ from backend.config import load_user_config
 from backend.connection_manager import get_connection_manager
 from backend.connection_registry import get_connection_registry
 from backend.errors import CADEError, ProtocolError
-from backend.file_tree import build_file_tree, get_file_type, read_file_content
+from backend.file_tree import build_file_tree_cached, get_file_type, read_file_content
 from backend.file_watcher import FileWatcher
 from backend.protocol import ErrorCode, MessageType, SessionKey
 from backend.session import load_session, save_session
@@ -391,7 +391,7 @@ class ConnectionHandler:
         else:
             show_ignored = self._user_config.behavior.file_tree.show_ignored if self._user_config else True
 
-        tree = build_file_tree(self._working_dir, respect_gitignore=not show_ignored)
+        tree = build_file_tree_cached(self._working_dir, respect_gitignore=not show_ignored)
         await self._send({
             "type": MessageType.FILE_TREE,
             "data": [node.to_dict() for node in tree],
