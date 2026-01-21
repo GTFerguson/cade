@@ -208,7 +208,7 @@ export class KeybindingManager implements Component {
       e.altKey === parsed.alt &&
       shiftMatches &&
       e.metaKey === parsed.meta &&
-      e.key.toLowerCase() === parsed.key
+      e.key === parsed.key
     );
   }
 
@@ -376,7 +376,8 @@ export class KeybindingManager implements Component {
     const parsed = parseKeybinding(prefix);
     // For keyup, we check if the released key matches the prefix key character
     // The modifiers may or may not be present depending on release order
-    return e.key.toLowerCase() === parsed.key;
+    // Use case-insensitive comparison for the prefix key
+    return e.key.toLowerCase() === parsed.key.toLowerCase();
   }
 
   /**

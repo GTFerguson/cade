@@ -358,7 +358,8 @@ export function parseKeybinding(binding: string): {
   }
 
   const lastPart = parts[parts.length - 1];
-  result.key = lastPart ? lastPart.toLowerCase() : "";
+  // Keep original case - don't lowercase
+  result.key = lastPart ?? "";
 
   return result;
 }
@@ -369,11 +370,14 @@ export function parseKeybinding(binding: string): {
 export function matchesKeybinding(e: KeyboardEvent, binding: string): boolean {
   const parsed = parseKeybinding(binding);
 
+  // For shift: only enforce if binding explicitly uses S- prefix
+  const shiftMatches = parsed.shift ? e.shiftKey : true;
+
   return (
     e.ctrlKey === parsed.ctrl &&
     e.altKey === parsed.alt &&
-    e.shiftKey === parsed.shift &&
+    shiftMatches &&
     e.metaKey === parsed.meta &&
-    e.key.toLowerCase() === parsed.key
+    e.key === parsed.key
   );
 }
