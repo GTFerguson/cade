@@ -228,10 +228,9 @@ export class KeybindingManager implements Component {
     e.preventDefault();
 
     // Pane focus: uses config pane.focusLeft/focusRight (default: h/l)
-    // Also support f/g and arrow keys as aliases
+    // Also support arrow keys as aliases
     if (
       this.matchesBinding(e, config.pane.focusLeft) ||
-      e.key === "f" ||
       e.key === "ArrowLeft"
     ) {
       this.callbacks?.focusPane("left");
@@ -239,7 +238,6 @@ export class KeybindingManager implements Component {
     }
     if (
       this.matchesBinding(e, config.pane.focusRight) ||
-      e.key === "g" ||
       e.key === "ArrowRight"
     ) {
       this.callbacks?.focusPane("right");
