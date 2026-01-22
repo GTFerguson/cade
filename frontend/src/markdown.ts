@@ -13,6 +13,15 @@
 import { MertexMD } from "mertex.md";
 import { marked, type TokenizerExtension, type RendererExtension } from "marked";
 import hljs from "highlight.js";
+import { Editor, rootCtx, defaultValueCtx, editorViewCtx } from "@milkdown/core";
+import { $prose } from "@milkdown/utils";
+import { Plugin, Selection, TextSelection } from "prosemirror-state";
+import type { EditorView } from "prosemirror-view";
+import { commonmark } from "@milkdown/preset-commonmark";
+import { gfm } from "@milkdown/preset-gfm";
+import { nord } from "@milkdown/theme-nord";
+import { listener, listenerCtx } from "@milkdown/plugin-listener";
+import { history } from "@milkdown/plugin-history";
 import type { PaneKeyHandler } from "./keybindings";
 import type { Component, EventHandler } from "./types";
 import { getUserConfig, matchesKeybinding } from "./user-config";
@@ -104,9 +113,15 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   > = new Map();
   private contentContainer: HTMLElement | null = null;
   private lastGPress = 0;
+  private lastGPressNormal = 0;
   private mainView: ViewState | null = null;
   private planView: ViewState | null = null;
   private isPlanOverlayActive = false;
+  private mode: "view" | "normal" | "edit" = "view";
+  private isDirty = false;
+  private editor: Editor | null = null;
+  private editorContainer: HTMLElement | null = null;
+  private editorContent: string = "";
   private boundHandlers = {
     fileContent: (message: any) => {
       this.currentPath = message.path;
@@ -594,12 +609,65 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
    * Returns true if the key was handled.
    */
   handleKeydown(e: KeyboardEvent): boolean {
-    // ESC closes plan overlay regardless of content container
-    if (e.key === "Escape" && this.isPlanOverlayActive) {
-      this.closePlanOverlay();
+    // Ctrl+s saves in normal or edit mode
+    if (e.key === "s" && e.ctrlKey && (this.mode === "edit" || this.mode === "normal")) {
+      e.preventDefault();
+      this.save();
       return true;
     }
 
+    // ESC exits normal/edit mode or closes plan overlay
+    if (e.key === "Escape") {
+      if (this.mode === "edit" || this.mode === "normal") {
+        this.exitToView();
+        return true;
+      }
+      if (this.isPlanOverlayActive) {
+        this.closePlanOverlay();
+        return true;
+      }
+    }
+
+    // View mode: 'i' enters Normal mode
+    if (this.mode === "view") {
+      if (e.key === "i" && this.currentPath !== null && this.currentFileType === "markdown") {
+        this.enterNormalMode();
+        return true;
+      }
+      // View mode scrolling (when not in editor)
+      return this.handleViewModeScroll(e);
+    }
+
+    // Normal mode handling
+    if (this.mode === "normal") {
+      // Ctrl+i toggles to Edit mode
+      if (e.ctrlKey && e.key === "i") {
+        e.preventDefault();
+        this.enterEditModeFromNormal();
+        return true;
+      }
+      // Handle vim navigation
+      return this.handleNormalModeKey(e);
+    }
+
+    // Edit mode: Ctrl+i toggles back to Normal mode
+    if (this.mode === "edit") {
+      if (e.ctrlKey && e.key === "i") {
+        e.preventDefault();
+        this.enterNormalModeFromEdit();
+        return true;
+      }
+      // Let editor handle other keys
+      return false;
+    }
+
+    return false;
+  }
+
+  /**
+   * Handle view mode scroll keys.
+   */
+  private handleViewModeScroll(e: KeyboardEvent): boolean {
     const container = this.contentContainer;
     if (!container) {
       return false;
@@ -649,6 +717,264 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   }
 
   /**
+   * Handle normal mode vim navigation keys.
+   * Returns true if the key was handled.
+   */
+  private handleNormalModeKey(e: KeyboardEvent): boolean {
+    const view = this.getEditorView();
+    if (!view) {
+      return false;
+    }
+
+    const key = e.key;
+
+    // 'i' enters Edit mode (like Vim insert mode)
+    if (key === "i" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      this.enterEditModeFromNormal();
+      return true;
+    }
+
+    // Cursor movement
+    switch (key) {
+      case "h":
+      case "ArrowLeft":
+        e.preventDefault();
+        this.moveCursorLeft(view);
+        return true;
+      case "j":
+      case "ArrowDown":
+        e.preventDefault();
+        this.moveCursorDown(view);
+        return true;
+      case "k":
+      case "ArrowUp":
+        e.preventDefault();
+        this.moveCursorUp(view);
+        return true;
+      case "l":
+      case "ArrowRight":
+        e.preventDefault();
+        this.moveCursorRight(view);
+        return true;
+      case "w":
+        e.preventDefault();
+        this.moveCursorWordForward(view);
+        return true;
+      case "b":
+        e.preventDefault();
+        this.moveCursorWordBackward(view);
+        return true;
+      case "e":
+        e.preventDefault();
+        this.moveCursorWordEnd(view);
+        return true;
+      case "0":
+        e.preventDefault();
+        this.moveCursorLineStart(view);
+        return true;
+      case "$":
+        e.preventDefault();
+        this.moveCursorLineEnd(view);
+        return true;
+      case "G":
+        e.preventDefault();
+        this.moveCursorDocumentEnd(view);
+        return true;
+      case "g":
+        // Double-tap gg for document start
+        return this.handleNormalModeGKey(view);
+    }
+
+    // Block all other printable characters in normal mode
+    if (key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Handle 'g' key for double-tap gg detection in normal mode.
+   */
+  private handleNormalModeGKey(view: EditorView): boolean {
+    const now = Date.now();
+    if (now - this.lastGPressNormal < 500) {
+      this.moveCursorDocumentStart(view);
+      this.lastGPressNormal = 0;
+      return true;
+    }
+    this.lastGPressNormal = now;
+    return true;
+  }
+
+  /**
+   * Get the ProseMirror editor view from Milkdown.
+   */
+  private getEditorView(): EditorView | null {
+    if (!this.editor) {
+      return null;
+    }
+    try {
+      return this.editor.ctx.get(editorViewCtx);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Move cursor left by one position.
+   */
+  private moveCursorLeft(view: EditorView): void {
+    const { state, dispatch } = view;
+    const { $from } = state.selection;
+    if ($from.pos > 0) {
+      const $pos = state.doc.resolve($from.pos - 1);
+      const sel = Selection.near($pos, -1);
+      dispatch(state.tr.setSelection(sel).scrollIntoView());
+    }
+  }
+
+  /**
+   * Move cursor right by one position.
+   */
+  private moveCursorRight(view: EditorView): void {
+    const { state, dispatch } = view;
+    const { $from } = state.selection;
+    if ($from.pos < state.doc.content.size) {
+      const $pos = state.doc.resolve($from.pos + 1);
+      const sel = Selection.near($pos, 1);
+      dispatch(state.tr.setSelection(sel).scrollIntoView());
+    }
+  }
+
+  /**
+   * Move cursor down by one line.
+   */
+  private moveCursorDown(view: EditorView): void {
+    const { state, dispatch } = view;
+    const { $from } = state.selection;
+
+    const blockEnd = $from.end();
+    if (blockEnd + 1 < state.doc.content.size) {
+      const $nextPos = state.doc.resolve(blockEnd + 1);
+      const sel = Selection.near($nextPos, 1);
+      dispatch(state.tr.setSelection(sel).scrollIntoView());
+    }
+  }
+
+  /**
+   * Move cursor up by one line.
+   */
+  private moveCursorUp(view: EditorView): void {
+    const { state, dispatch } = view;
+    const { $from } = state.selection;
+
+    const blockStart = $from.start();
+    if (blockStart > 1) {
+      const $prevPos = state.doc.resolve(blockStart - 1);
+      const sel = Selection.near($prevPos, -1);
+      dispatch(state.tr.setSelection(sel).scrollIntoView());
+    }
+  }
+
+  /**
+   * Move cursor to start of next word.
+   */
+  private moveCursorWordForward(view: EditorView): void {
+    const { state, dispatch } = view;
+    const { $from } = state.selection;
+    const text = state.doc.textBetween($from.pos, state.doc.content.size, "\n", "\ufffc");
+
+    const match = text.match(/^\S*\s*/);
+    if (match && match[0].length > 0) {
+      const targetPos = Math.min($from.pos + match[0].length, state.doc.content.size);
+      const $pos = state.doc.resolve(targetPos);
+      const sel = Selection.near($pos, 1);
+      dispatch(state.tr.setSelection(sel).scrollIntoView());
+    }
+  }
+
+  /**
+   * Move cursor to start of previous word.
+   */
+  private moveCursorWordBackward(view: EditorView): void {
+    const { state, dispatch } = view;
+    const { $from } = state.selection;
+    const text = state.doc.textBetween(0, $from.pos, "\n", "\ufffc");
+
+    const match = text.match(/\s*\S+\s*$/);
+    if (match) {
+      const targetPos = Math.max(0, $from.pos - match[0].length);
+      const $pos = state.doc.resolve(targetPos);
+      const sel = Selection.near($pos, -1);
+      dispatch(state.tr.setSelection(sel).scrollIntoView());
+    } else {
+      const $pos = state.doc.resolve(0);
+      const sel = Selection.near($pos, 1);
+      dispatch(state.tr.setSelection(sel).scrollIntoView());
+    }
+  }
+
+  /**
+   * Move cursor to end of current word.
+   */
+  private moveCursorWordEnd(view: EditorView): void {
+    const { state, dispatch } = view;
+    const { $from } = state.selection;
+    const text = state.doc.textBetween($from.pos, state.doc.content.size, "\n", "\ufffc");
+
+    const match = text.match(/^\s*\S*/);
+    if (match && match[0].length > 0) {
+      const targetPos = Math.min($from.pos + match[0].length, state.doc.content.size);
+      const $pos = state.doc.resolve(targetPos);
+      const sel = Selection.near($pos, 1);
+      dispatch(state.tr.setSelection(sel).scrollIntoView());
+    }
+  }
+
+  /**
+   * Move cursor to start of line.
+   */
+  private moveCursorLineStart(view: EditorView): void {
+    const { state, dispatch } = view;
+    const { $from } = state.selection;
+    const start = $from.start();
+    dispatch(state.tr.setSelection(TextSelection.create(state.doc, start)).scrollIntoView());
+  }
+
+  /**
+   * Move cursor to end of line.
+   */
+  private moveCursorLineEnd(view: EditorView): void {
+    const { state, dispatch } = view;
+    const { $from } = state.selection;
+    const end = $from.end();
+    dispatch(state.tr.setSelection(TextSelection.create(state.doc, end)).scrollIntoView());
+  }
+
+  /**
+   * Move cursor to start of document.
+   */
+  private moveCursorDocumentStart(view: EditorView): void {
+    const { state, dispatch } = view;
+    const $pos = state.doc.resolve(0);
+    const sel = Selection.near($pos, 1);
+    dispatch(state.tr.setSelection(sel).scrollIntoView());
+  }
+
+  /**
+   * Move cursor to end of document.
+   */
+  private moveCursorDocumentEnd(view: EditorView): void {
+    const { state, dispatch } = view;
+    const $pos = state.doc.resolve(state.doc.content.size);
+    const sel = Selection.near($pos, -1);
+    dispatch(state.tr.setSelection(sel).scrollIntoView());
+  }
+
+  /**
    * Handle scroll-to-top key for double-tap detection (like vim's gg).
    */
   private handleScrollToTopKey(container: HTMLElement): boolean {
@@ -689,9 +1015,361 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   }
 
   /**
+   * Create a ProseMirror plugin to handle vim keys directly within the editor.
+   * This bypasses the keybinding manager's contenteditable detection.
+   */
+  private createVimModePlugin(): Plugin {
+    return new Plugin({
+      props: {
+        handleKeyDown: (view, event) => {
+          if (this.mode === "normal") {
+            return this.handleNormalModeKeyProseMirror(view, event);
+          }
+          // Edit mode - only intercept Ctrl+i and Esc
+          if (event.ctrlKey && event.key === "i") {
+            event.preventDefault();
+            this.enterNormalModeFromEdit();
+            return true;
+          }
+          if (event.key === "Escape") {
+            event.preventDefault();
+            this.exitToView();
+            return true;
+          }
+          return false;
+        },
+        handleTextInput: () => {
+          // Block all text input in normal mode
+          return this.mode === "normal";
+        },
+      },
+    });
+  }
+
+  /**
+   * Handle normal mode keys from within ProseMirror plugin.
+   * Returns true if the key was handled.
+   */
+  private handleNormalModeKeyProseMirror(view: EditorView, e: KeyboardEvent): boolean {
+    const key = e.key;
+
+    // Ctrl+s saves
+    if (e.key === "s" && e.ctrlKey) {
+      e.preventDefault();
+      this.save();
+      return true;
+    }
+
+    // ESC exits to View mode
+    if (key === "Escape") {
+      e.preventDefault();
+      this.exitToView();
+      return true;
+    }
+
+    // 'i' or Ctrl+i enters Edit mode
+    if (key === "i" && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      this.enterEditModeFromNormal();
+      return true;
+    }
+
+    // Cursor movement
+    switch (key) {
+      case "h":
+      case "ArrowLeft":
+        e.preventDefault();
+        this.moveCursorLeft(view);
+        return true;
+      case "j":
+      case "ArrowDown":
+        e.preventDefault();
+        this.moveCursorDown(view);
+        return true;
+      case "k":
+      case "ArrowUp":
+        e.preventDefault();
+        this.moveCursorUp(view);
+        return true;
+      case "l":
+      case "ArrowRight":
+        e.preventDefault();
+        this.moveCursorRight(view);
+        return true;
+      case "w":
+        e.preventDefault();
+        this.moveCursorWordForward(view);
+        return true;
+      case "b":
+        e.preventDefault();
+        this.moveCursorWordBackward(view);
+        return true;
+      case "e":
+        e.preventDefault();
+        this.moveCursorWordEnd(view);
+        return true;
+      case "0":
+        e.preventDefault();
+        this.moveCursorLineStart(view);
+        return true;
+      case "$":
+        e.preventDefault();
+        this.moveCursorLineEnd(view);
+        return true;
+      case "G":
+        e.preventDefault();
+        this.moveCursorDocumentEnd(view);
+        return true;
+      case "g":
+        // Double-tap gg for document start
+        e.preventDefault();
+        return this.handleNormalModeGKey(view);
+    }
+
+    // Block all other printable characters in normal mode
+    if (key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Enter Normal mode from View mode (opens Milkdown editor in navigation mode).
+   */
+  private async enterNormalMode(): Promise<void> {
+    if (this.mode !== "view" || this.currentPath === null) {
+      return;
+    }
+
+    if (this.currentFileType !== "markdown") {
+      console.log("Can only edit markdown files");
+      return;
+    }
+
+    this.mode = "normal";
+    this.isDirty = false;
+    this.editorContent = this.currentContent;
+
+    // Create editor container
+    const header = document.createElement("div");
+    header.className = "viewer-header normal-mode";
+
+    const filename = document.createElement("span");
+    filename.className = "viewer-filename";
+    filename.textContent = this.currentPath;
+    header.appendChild(filename);
+
+    const modeIndicator = document.createElement("span");
+    modeIndicator.className = "mode-indicator mode-normal";
+    modeIndicator.textContent = "NORMAL";
+    header.appendChild(modeIndicator);
+
+    const dirtyIndicator = document.createElement("span");
+    dirtyIndicator.className = "viewer-dirty-indicator";
+    dirtyIndicator.textContent = " (unsaved)";
+    dirtyIndicator.style.display = "none";
+    header.appendChild(dirtyIndicator);
+
+    this.editorContainer = document.createElement("div");
+    this.editorContainer.className = "milkdown-editor mode-normal";
+    this.editorContainer.id = "milkdown-editor";
+
+    this.container.innerHTML = "";
+    this.container.appendChild(header);
+    this.container.appendChild(this.editorContainer);
+
+    try {
+      // Create Milkdown editor
+      this.editor = await Editor.make()
+        .config((ctx) => {
+          ctx.set(rootCtx, this.editorContainer!);
+          ctx.set(defaultValueCtx, this.currentContent);
+
+          ctx.get(listenerCtx).markdownUpdated((ctx, markdown) => {
+            this.editorContent = markdown;
+            const wasDirty = this.isDirty;
+            this.isDirty = markdown !== this.currentContent;
+
+            if (this.isDirty !== wasDirty) {
+              const indicator = this.container.querySelector(".viewer-dirty-indicator") as HTMLElement;
+              if (indicator) {
+                indicator.style.display = this.isDirty ? "inline" : "none";
+              }
+            }
+          });
+        })
+        .config(nord)
+        .use(commonmark)
+        .use(gfm)
+        .use(history)
+        .use(listener)
+        .use($prose(() => this.createVimModePlugin()))
+        .create();
+
+      // Focus the editor but intercept input
+      requestAnimationFrame(() => {
+        const editableEl = this.editorContainer?.querySelector(".milkdown")?.querySelector("[contenteditable]") as HTMLElement;
+        if (editableEl) {
+          editableEl.focus();
+          // Block text input in normal mode
+          this.setupNormalModeInputBlock(editableEl);
+        }
+      });
+    } catch (error) {
+      console.error("Failed to create Milkdown editor:", error);
+      this.mode = "view";
+      this.render();
+    }
+  }
+
+  /**
+   * Setup input blocking for Normal mode.
+   */
+  private setupNormalModeInputBlock(element: HTMLElement): void {
+    const handler = (e: InputEvent) => {
+      if (this.mode === "normal") {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    element.addEventListener("beforeinput", handler as EventListener);
+  }
+
+  /**
+   * Switch from Normal mode to Edit mode.
+   */
+  private enterEditModeFromNormal(): void {
+    if (this.mode !== "normal") {
+      return;
+    }
+
+    this.mode = "edit";
+
+    // Update header styling
+    const header = this.container.querySelector(".viewer-header");
+    if (header) {
+      header.classList.remove("normal-mode");
+      header.classList.add("edit-mode");
+    }
+
+    // Update mode indicator
+    const indicator = this.container.querySelector(".mode-indicator");
+    if (indicator) {
+      indicator.textContent = "EDIT";
+      indicator.classList.remove("mode-normal");
+      indicator.classList.add("mode-edit");
+    }
+
+    // Update editor container styling
+    if (this.editorContainer) {
+      this.editorContainer.classList.remove("mode-normal");
+      this.editorContainer.classList.add("mode-edit");
+    }
+  }
+
+  /**
+   * Switch from Edit mode back to Normal mode.
+   */
+  private enterNormalModeFromEdit(): void {
+    if (this.mode !== "edit") {
+      return;
+    }
+
+    this.mode = "normal";
+
+    // Update header styling
+    const header = this.container.querySelector(".viewer-header");
+    if (header) {
+      header.classList.remove("edit-mode");
+      header.classList.add("normal-mode");
+    }
+
+    // Update mode indicator
+    const indicator = this.container.querySelector(".mode-indicator");
+    if (indicator) {
+      indicator.textContent = "NORMAL";
+      indicator.classList.remove("mode-edit");
+      indicator.classList.add("mode-normal");
+    }
+
+    // Update editor container styling
+    if (this.editorContainer) {
+      this.editorContainer.classList.remove("mode-edit");
+      this.editorContainer.classList.add("mode-normal");
+    }
+  }
+
+  /**
+   * Exit to View mode from Normal or Edit mode.
+   */
+  private async exitToView(): Promise<void> {
+    if (this.mode === "view") {
+      return;
+    }
+
+    // Check for unsaved changes
+    if (this.isDirty) {
+      const shouldSave = confirm("You have unsaved changes. Save before exiting? (OK = Save, Cancel = Discard)");
+      if (shouldSave) {
+        await this.save();
+      }
+    }
+
+    // Cleanup editor
+    if (this.editor) {
+      this.editor.destroy();
+      this.editor = null;
+    }
+    this.editorContainer = null;
+
+    this.mode = "view";
+    this.isDirty = false;
+    this.render();
+  }
+
+  /**
+   * Save the current editor content.
+   */
+  private async save(): Promise<void> {
+    if ((this.mode !== "edit" && this.mode !== "normal") || !this.editor || !this.currentPath) {
+      return;
+    }
+
+    try {
+      // Get markdown from editor (stored in editorContent by listener)
+      const markdown = this.editorContent || this.currentContent;
+
+      // Send write request
+      await this.ws.writeFile(this.currentPath, markdown);
+
+      // Update current content and clear dirty flag
+      this.currentContent = markdown;
+      this.isDirty = false;
+
+      const indicator = this.container.querySelector(".viewer-dirty-indicator") as HTMLElement;
+      if (indicator) {
+        indicator.style.display = "none";
+      }
+
+      console.log("File saved successfully");
+    } catch (error) {
+      console.error("Failed to save file:", error);
+      alert(`Failed to save file: ${error}`);
+    }
+  }
+
+  /**
    * Dispose of resources.
    */
   dispose(): void {
+    // Cleanup editor if active
+    if (this.editor) {
+      this.editor.destroy();
+      this.editor = null;
+    }
+
     // Unregister WebSocket handlers
     this.ws.off("file-content", this.boundHandlers.fileContent);
     this.ws.off("view-file", this.boundHandlers.viewFile);
@@ -702,5 +1380,6 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     this.currentPath = null;
     this.currentContent = "";
     this.contentContainer = null;
+    this.editorContainer = null;
   }
 }
