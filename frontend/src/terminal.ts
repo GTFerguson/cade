@@ -106,6 +106,16 @@ export class Terminal implements Component {
 
     // Allow external key interception (e.g., for prefix key)
     this.terminal.attachCustomKeyEventHandler((e) => {
+      // Check if keybinding manager wants to intercept FIRST (e.g., prefix key active)
+      if (this.customKeyHandler) {
+        const shouldIntercept = this.customKeyHandler(e);
+        if (shouldIntercept) {
+          return false; // Prevent xterm from handling
+        }
+      }
+
+      // Now handle terminal-specific shortcuts (only if not intercepted above)
+
       // Handle Ctrl+C (copy) - intercept before terminal sends SIGINT
       if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyC') {
         const selection = this.terminal?.getSelection();
@@ -138,10 +148,6 @@ export class Terminal implements Component {
         return false;
       }
 
-      if (this.customKeyHandler) {
-        // Return false to prevent xterm from handling the key
-        return !this.customKeyHandler(e);
-      }
       return true;
     });
 
