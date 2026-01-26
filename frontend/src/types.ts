@@ -74,6 +74,24 @@ export interface GetLatestPlanMessage extends BaseMessage {
 }
 
 /**
+ * Write file request (client -> server).
+ */
+export interface WriteFileMessage extends BaseMessage {
+  type: "write-file";
+  path: string;
+  content: string;
+}
+
+/**
+ * Create file request (client -> server).
+ */
+export interface CreateFileMessage extends BaseMessage {
+  type: "create-file";
+  path: string;
+  content: string;
+}
+
+/**
  * Layout pane proportions.
  */
 export interface LayoutProportions {
@@ -202,6 +220,22 @@ export interface StartupStatusMessage extends BaseMessage {
 }
 
 /**
+ * File written confirmation (server -> client).
+ */
+export interface FileWrittenMessage extends BaseMessage {
+  type: "file-written";
+  path: string;
+}
+
+/**
+ * File created confirmation (server -> client).
+ */
+export interface FileCreatedMessage extends BaseMessage {
+  type: "file-created";
+  path: string;
+}
+
+/**
  * Union of all client -> server messages.
  */
 export type ClientMessage =
@@ -210,6 +244,8 @@ export type ClientMessage =
   | GetFileMessage
   | GetTreeMessage
   | GetLatestPlanMessage
+  | WriteFileMessage
+  | CreateFileMessage
   | SaveSessionMessage
   | SetProjectMessage;
 
@@ -221,6 +257,8 @@ export type ServerMessage =
   | FileTreeMessage
   | FileChangeMessage
   | FileContentMessage
+  | FileWrittenMessage
+  | FileCreatedMessage
   | ViewFileMessage
   | ErrorMessage
   | ConnectedMessage

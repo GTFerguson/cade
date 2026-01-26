@@ -1187,7 +1187,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
           ctx.set(rootCtx, this.editorContainer!);
           ctx.set(defaultValueCtx, this.currentContent);
 
-          ctx.get(listenerCtx).markdownUpdated((ctx, markdown) => {
+          ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
             this.editorContent = markdown;
             const wasDirty = this.isDirty;
             this.isDirty = markdown !== this.currentContent;
