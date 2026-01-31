@@ -40,6 +40,12 @@ export class TabBar implements Component {
     const tabArea = document.createElement("div");
     tabArea.className = "tab-area";
 
+    // Make the tab area background draggable in Tauri
+    // Interactive elements have pointer-events: auto to override
+    if (isTauri) {
+      tabArea.setAttribute("data-tauri-drag-region", "");
+    }
+
     const tabList = document.createElement("div");
     tabList.className = "tab-list";
 
