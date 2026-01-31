@@ -6,8 +6,8 @@
  */
 
 import hljs from "highlight.js";
-import type { Component, FileChangeMessage } from "./types";
-import type { WebSocketClient } from "./websocket";
+import type { Component, FileChangeMessage } from "../types";
+import type { WebSocketClient } from "../platform/websocket";
 
 const MOBILE_BREAKPOINT = 768;
 

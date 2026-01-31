@@ -2,12 +2,12 @@
  * Type definitions for multi-project tab support.
  */
 
-import type { PaneKeyHandler, PaneType } from "../keybindings";
-import type { Layout } from "../layout";
-import type { MarkdownViewer } from "../markdown";
-import type { CustomKeyHandler } from "../terminal";
-import type { TerminalManager } from "../terminal-manager";
-import type { WebSocketClient } from "../websocket";
+import type { PaneKeyHandler, PaneType } from "../input/keybindings";
+import type { Layout } from "../ui/layout";
+import type { MarkdownViewer } from "../markdown/markdown";
+import type { CustomKeyHandler } from "../terminal/terminal";
+import type { TerminalManager } from "../terminal/terminal-manager";
+import type { WebSocketClient } from "../platform/websocket";
 
 /**
  * Persistent tab information stored in localStorage.

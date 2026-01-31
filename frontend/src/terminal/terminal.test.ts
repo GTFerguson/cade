@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Terminal } from "./terminal";
-import { SessionKey } from "./protocol";
-import type { WebSocketClient } from "./websocket";
+import { SessionKey } from "../platform/protocol";
+import type { WebSocketClient } from "../platform/websocket";
 
 // Mock ResizeObserver (not available in jsdom)
 class ResizeObserverMock {

@@ -2,8 +2,8 @@
  * Tab state management with localStorage persistence.
  */
 
-import { config } from "../config";
-import { WebSocketClient } from "../websocket";
+import { config } from "../config/config";
+import { WebSocketClient } from "../platform/websocket";
 import type { EventHandler } from "../types";
 import type { AppState, TabInfo, TabManagerEvents, TabState } from "./types";
 

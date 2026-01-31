@@ -6,15 +6,15 @@
  */
 
 import { FileTree } from "../file-tree";
-import type { PaneKeyHandler, PaneType } from "../keybindings";
-import { Layout } from "../layout";
-import { MarkdownViewer } from "../markdown";
-import { Splash } from "../splash";
-import { TerminalManager } from "../terminal-manager";
-import type { CustomKeyHandler } from "../terminal";
-import { ErrorCode } from "../protocol";
+import type { PaneKeyHandler, PaneType } from "../input/keybindings";
+import { Layout } from "../ui/layout";
+import { MarkdownViewer } from "../markdown/markdown";
+import { Splash } from "../ui/splash";
+import { TerminalManager } from "../terminal/terminal-manager";
+import type { CustomKeyHandler } from "../terminal/terminal";
+import { ErrorCode } from "../platform/protocol";
 import type { ConnectedMessage, PtyExitedMessage, SessionState } from "../types";
-import type { WebSocketClient } from "../websocket";
+import type { WebSocketClient } from "../platform/websocket";
 import type { ProjectContext as IProjectContext } from "./types";
 
 const PANE_ORDER: PaneType[] = ["file-tree", "terminal", "viewer"];

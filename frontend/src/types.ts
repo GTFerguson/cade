@@ -2,8 +2,8 @@
  * TypeScript interfaces for CADE frontend.
  */
 
-import type { ErrorCodeValue, MessageTypeValue, SessionKeyValue } from "./protocol";
-import type { UserConfig } from "./user-config";
+import type { ErrorCodeValue, MessageTypeValue, SessionKeyValue } from "./platform/protocol";
+import type { UserConfig } from "./config/user-config";
 
 /**
  * Represents a file or directory in the file tree.

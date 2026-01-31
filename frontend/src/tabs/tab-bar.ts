@@ -4,7 +4,7 @@
 
 import type { Component, EventHandler } from "../types";
 import type { TabBarEvents, TabState } from "./types";
-import { minimizeWindow, toggleMaximizeWindow, closeWindow } from "../tauri-bridge";
+import { minimizeWindow, toggleMaximizeWindow, closeWindow } from "../platform/tauri-bridge";
 
 export class TabBar implements Component {
   private handlers: Map<

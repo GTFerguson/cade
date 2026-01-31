@@ -22,10 +22,10 @@ import { gfm } from "@milkdown/preset-gfm";
 import { nord } from "@milkdown/theme-nord";
 import { listener, listenerCtx } from "@milkdown/plugin-listener";
 import { history } from "@milkdown/plugin-history";
-import type { PaneKeyHandler } from "./keybindings";
-import type { Component, EventHandler } from "./types";
-import { getUserConfig, matchesKeybinding } from "./user-config";
-import type { WebSocketClient } from "./websocket";
+import type { PaneKeyHandler } from "../input/keybindings";
+import type { Component, EventHandler } from "../types";
+import { getUserConfig, matchesKeybinding } from "../config/user-config";
+import type { WebSocketClient } from "../platform/websocket";
 
 // Make libraries available globally for mertex.md
 declare global {

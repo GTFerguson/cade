@@ -5,13 +5,13 @@
  * while delegating pane-specific keys to focused components.
  */
 
-import type { Component } from "./types";
+import type { Component } from "../types";
 import {
   getUserConfig,
   matchesKeybinding,
   parseKeybinding,
   type KeybindingsConfig,
-} from "./user-config";
+} from "../config/user-config";
 
 export type PaneType = "file-tree" | "terminal" | "viewer";
 

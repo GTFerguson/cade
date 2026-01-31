@@ -2,7 +2,7 @@
  * WebSocket client with auto-reconnection and event handling.
  */
 
-import { config } from "./config";
+import { config } from "../config/config";
 import { MessageType, type SessionKeyValue } from "./protocol";
 import type {
   ClientMessage,
@@ -20,7 +20,7 @@ import type {
   SetProjectMessage,
   StartupStatusMessage,
   ViewFileMessage,
-} from "./types";
+} from "../types";
 
 type ConnectionState = "disconnected" | "connecting" | "connected";
 

@@ -6,9 +6,9 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
-import { SessionKey, type SessionKeyValue } from "./protocol";
-import type { Component } from "./types";
-import type { WebSocketClient } from "./websocket";
+import { SessionKey, type SessionKeyValue } from "../platform/protocol";
+import type { Component } from "../types";
+import type { WebSocketClient } from "../platform/websocket";
 
 /**
  * Badwolf-inspired color scheme.

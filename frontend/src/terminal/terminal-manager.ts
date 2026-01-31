@@ -5,10 +5,10 @@
  * switching between terminals with visual status indicators.
  */
 
-import { SessionKey, type SessionKeyValue } from "./protocol";
+import { SessionKey, type SessionKeyValue } from "../platform/protocol";
 import { Terminal, type CustomKeyHandler } from "./terminal";
-import type { Component, OutputMessage, SessionRestoredMessage } from "./types";
-import type { WebSocketClient } from "./websocket";
+import type { Component, OutputMessage, SessionRestoredMessage } from "../types";
+import type { WebSocketClient } from "../platform/websocket";
 
 export class TerminalManager implements Component {
   private claudeTerminal: Terminal | null = null;

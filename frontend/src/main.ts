@@ -6,14 +6,14 @@ import "@xterm/xterm/css/xterm.css";
 import "highlight.js/styles/vs2015.css";
 import "../styles/main.css";
 
-import { config } from "./config";
-import { HelpOverlay } from "./help-overlay";
-import { KeybindingManager } from "./keybindings";
-import { MobileUI } from "./mobile";
+import { config } from "./config/config";
+import { HelpOverlay } from "./ui/help-overlay";
+import { KeybindingManager } from "./input/keybindings";
+import { MobileUI } from "./ui/mobile";
 import { ProjectContextImpl, TabBar, TabManager } from "./tabs";
 import type { TabState } from "./tabs";
-import { pickProjectFolder, getUserHomePath } from "./tauri-bridge";
-import { setUserConfig, getUserConfig, matchesKeybinding } from "./user-config";
+import { pickProjectFolder, getUserHomePath } from "./platform/tauri-bridge";
+import { setUserConfig, getUserConfig, matchesKeybinding } from "./config/user-config";
 
 class App {
   private tabManager: TabManager;
