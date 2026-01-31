@@ -29,43 +29,45 @@ export class TabBar implements Component {
 
     const isTauri = (window as any).__TAURI__ === true;
 
+    // Add draggable spacers for empty grid areas (replaces ::before and ::after)
     if (isTauri) {
-      this.container.setAttribute("data-tauri-drag-region", "");
+      const spacerLeft = document.createElement("div");
+      spacerLeft.className = "tab-bar-spacer-left";
+      spacerLeft.setAttribute("data-tauri-drag-region", "");
+      this.container.appendChild(spacerLeft);
     }
 
     const tabArea = document.createElement("div");
     tabArea.className = "tab-area";
-    // Tab area background should be draggable in Tauri mode
-    if (isTauri) {
-      tabArea.setAttribute("data-tauri-drag-region", "");
-    }
 
     const tabList = document.createElement("div");
     tabList.className = "tab-list";
-    // Tab list needs to opt out of drag so individual tab interactivity works
-    if (isTauri) {
-      tabList.setAttribute("data-tauri-drag-region", "false");
-    }
 
     for (const tab of tabs) {
       const tabEl = this.createTabElement(tab, tab.id === activeTabId);
       tabList.appendChild(tabEl);
     }
 
+    tabArea.appendChild(tabList);
+
     const addButton = document.createElement("button");
     addButton.className = "tab-add-button";
     addButton.title = "Open new project";
     addButton.textContent = "+";
-    addButton.setAttribute("data-tauri-drag-region", "false");
-    addButton.addEventListener("click", () => {
+    addButton.addEventListener("click", (e) => {
+      e.stopPropagation();
       this.emit("tab-add", undefined);
     });
 
-    tabArea.appendChild(tabList);
     tabArea.appendChild(addButton);
     this.container.appendChild(tabArea);
 
     if (isTauri) {
+      const spacerRight = document.createElement("div");
+      spacerRight.className = "tab-bar-spacer-right";
+      spacerRight.setAttribute("data-tauri-drag-region", "");
+      this.container.appendChild(spacerRight);
+
       const windowControls = this.createWindowControls();
       this.container.appendChild(windowControls);
     }
@@ -78,7 +80,6 @@ export class TabBar implements Component {
     const tabEl = document.createElement("div");
     tabEl.className = `tab${isActive ? " active" : ""}`;
     tabEl.dataset["tabId"] = tab.id;
-    tabEl.setAttribute("data-tauri-drag-region", "false");
 
     const nameEl = document.createElement("span");
     nameEl.className = "tab-name";

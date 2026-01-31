@@ -92,3 +92,20 @@ export async function closeWindow(): Promise<void> {
     }
   }
 }
+
+/**
+ * Start dragging the window.
+ * Can be triggered by keyboard shortcut as a backup to click-drag.
+ * Only works in Tauri mode.
+ */
+export async function startDragging(): Promise<void> {
+  if (isTauri()) {
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const appWindow = getCurrentWindow();
+      await appWindow.startDragging();
+    } catch (e) {
+      console.error("[tauri-bridge] Failed to start dragging:", e);
+    }
+  }
+}

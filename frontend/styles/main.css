@@ -138,22 +138,20 @@ body {
   overflow: visible; /* Allow window controls to extend beyond grid */
 }
 
-/* Empty space above file tree */
+/* Empty space above file tree - DRAGGABLE in Tauri */
 .tab-bar::before {
   content: '';
   grid-column: 1 / 3;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
-  pointer-events: none;
 }
 
-/* Empty space above viewer */
+/* Empty space above viewer - DRAGGABLE in Tauri */
 .tab-bar::after {
   content: '';
   grid-column: 4 / 6;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
-  pointer-events: none;
 }
 
 .tab-area {
@@ -163,6 +161,21 @@ body {
   padding: 0 8px;
   min-width: 0;
   overflow: hidden;
+}
+
+/* Draggable spacers replace pseudo-elements in Tauri */
+.tab-bar-spacer-left {
+  grid-column: 1 / 3;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  cursor: move; /* Visual feedback that this area is draggable */
+}
+
+.tab-bar-spacer-right {
+  grid-column: 4 / 6;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  cursor: move; /* Visual feedback that this area is draggable */
 }
 
 .tab-list {
@@ -183,6 +196,7 @@ body {
   max-width: 200px;
   min-width: 80px;
   transition: background 0.15s ease;
+  pointer-events: auto;
 }
 
 .tab:hover {
@@ -222,6 +236,7 @@ body {
   border-radius: 2px;
   opacity: 0;
   transition: opacity 0.15s ease, background 0.15s ease;
+  pointer-events: auto;
 }
 
 .tab:hover .tab-close {
@@ -247,6 +262,7 @@ body {
   margin-left: 4px;
   flex-shrink: 0;
   transition: color 0.15s ease;
+  pointer-events: auto;
 }
 
 .tab-add-button:hover {
