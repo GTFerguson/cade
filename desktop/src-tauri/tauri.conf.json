@@ -34,11 +34,28 @@
         "width": 1400,
         "height": 900,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "decorations": false,
+        "dragDropEnabled": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "capabilities": [
+        {
+          "identifier": "main-window-capability",
+          "description": "Permissions for the main window",
+          "windows": ["main"],
+          "permissions": [
+            "core:window:allow-start-dragging",
+            "core:window:allow-minimize",
+            "core:window:allow-maximize",
+            "core:window:allow-unmaximize",
+            "core:window:allow-toggle-maximize",
+            "core:window:allow-close"
+          ]
+        }
+      ]
     }
   }
 }

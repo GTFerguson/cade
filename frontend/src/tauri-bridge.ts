@@ -44,3 +44,51 @@ export function getUserHomePath(): string | null {
   const home = (window as any).__HOME_DIR__;
   return typeof home === "string" && home.length > 0 ? home : null;
 }
+
+/**
+ * Minimize the application window.
+ * Only works in Tauri mode.
+ */
+export async function minimizeWindow(): Promise<void> {
+  if (isTauri()) {
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const appWindow = getCurrentWindow();
+      await appWindow.minimize();
+    } catch (e) {
+      console.error("[tauri-bridge] Failed to minimize window:", e);
+    }
+  }
+}
+
+/**
+ * Toggle maximize/unmaximize the application window.
+ * Only works in Tauri mode.
+ */
+export async function toggleMaximizeWindow(): Promise<void> {
+  if (isTauri()) {
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const appWindow = getCurrentWindow();
+      await appWindow.toggleMaximize();
+    } catch (e) {
+      console.error("[tauri-bridge] Failed to toggle maximize window:", e);
+    }
+  }
+}
+
+/**
+ * Close the application window.
+ * Only works in Tauri mode.
+ */
+export async function closeWindow(): Promise<void> {
+  if (isTauri()) {
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const appWindow = getCurrentWindow();
+      await appWindow.close();
+    } catch (e) {
+      console.error("[tauri-bridge] Failed to close window:", e);
+    }
+  }
+}

@@ -4,6 +4,7 @@
 
 import type { Component, EventHandler } from "../types";
 import type { TabBarEvents, TabState } from "./types";
+import { minimizeWindow, toggleMaximizeWindow, closeWindow } from "../tauri-bridge";
 
 export class TabBar implements Component {
   private handlers: Map<
@@ -26,11 +27,25 @@ export class TabBar implements Component {
   render(tabs: TabState[], activeTabId: string | null = null): void {
     this.container.innerHTML = "";
 
+    const isTauri = (window as any).__TAURI__ === true;
+
+    if (isTauri) {
+      this.container.setAttribute("data-tauri-drag-region", "");
+    }
+
     const tabArea = document.createElement("div");
     tabArea.className = "tab-area";
+    // Tab area background should be draggable in Tauri mode
+    if (isTauri) {
+      tabArea.setAttribute("data-tauri-drag-region", "");
+    }
 
     const tabList = document.createElement("div");
     tabList.className = "tab-list";
+    // Tab list needs to opt out of drag so individual tab interactivity works
+    if (isTauri) {
+      tabList.setAttribute("data-tauri-drag-region", "false");
+    }
 
     for (const tab of tabs) {
       const tabEl = this.createTabElement(tab, tab.id === activeTabId);
@@ -41,6 +56,7 @@ export class TabBar implements Component {
     addButton.className = "tab-add-button";
     addButton.title = "Open new project";
     addButton.textContent = "+";
+    addButton.setAttribute("data-tauri-drag-region", "false");
     addButton.addEventListener("click", () => {
       this.emit("tab-add", undefined);
     });
@@ -48,6 +64,11 @@ export class TabBar implements Component {
     tabArea.appendChild(tabList);
     tabArea.appendChild(addButton);
     this.container.appendChild(tabArea);
+
+    if (isTauri) {
+      const windowControls = this.createWindowControls();
+      this.container.appendChild(windowControls);
+    }
   }
 
   /**
@@ -57,6 +78,7 @@ export class TabBar implements Component {
     const tabEl = document.createElement("div");
     tabEl.className = `tab${isActive ? " active" : ""}`;
     tabEl.dataset["tabId"] = tab.id;
+    tabEl.setAttribute("data-tauri-drag-region", "false");
 
     const nameEl = document.createElement("span");
     nameEl.className = "tab-name";
@@ -80,6 +102,58 @@ export class TabBar implements Component {
     });
 
     return tabEl;
+  }
+
+  /**
+   * Create window control buttons for Tauri.
+   */
+  private createWindowControls(): HTMLElement {
+    const controls = document.createElement("div");
+    controls.className = "tab-bar-window-controls";
+    controls.setAttribute("data-tauri-drag-region", "false");
+
+    const minimizeBtn = document.createElement("button");
+    minimizeBtn.className = "window-control-button window-minimize";
+    minimizeBtn.setAttribute("aria-label", "Minimize");
+    minimizeBtn.innerHTML = `
+      <svg width="10" height="1" viewBox="0 0 10 1">
+        <rect fill="currentColor" width="10" height="1"/>
+      </svg>
+    `;
+    minimizeBtn.addEventListener("click", () => {
+      minimizeWindow();
+    });
+
+    const maximizeBtn = document.createElement("button");
+    maximizeBtn.className = "window-control-button window-maximize";
+    maximizeBtn.setAttribute("aria-label", "Maximize");
+    maximizeBtn.innerHTML = `
+      <svg width="10" height="10" viewBox="0 0 10 10">
+        <rect fill="none" stroke="currentColor" stroke-width="1" x="0.5" y="0.5" width="9" height="9"/>
+      </svg>
+    `;
+    maximizeBtn.addEventListener("click", () => {
+      toggleMaximizeWindow();
+    });
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "window-control-button window-close";
+    closeBtn.setAttribute("aria-label", "Close");
+    closeBtn.innerHTML = `
+      <svg width="10" height="10" viewBox="0 0 10 10">
+        <line stroke="currentColor" stroke-width="1" x1="0" y1="0" x2="10" y2="10"/>
+        <line stroke="currentColor" stroke-width="1" x1="10" y1="0" x2="0" y2="10"/>
+      </svg>
+    `;
+    closeBtn.addEventListener("click", () => {
+      closeWindow();
+    });
+
+    controls.appendChild(minimizeBtn);
+    controls.appendChild(maximizeBtn);
+    controls.appendChild(closeBtn);
+
+    return controls;
   }
 
   /**
