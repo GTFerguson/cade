@@ -247,7 +247,7 @@ class TestGetConnectionsForProjectWslPaths:
 
     def test_wsl_mount_path_conversion(self) -> None:
         """Verifies wsl_mount_to_windows_path is called for /mnt paths."""
-        from backend.wsl_path import wsl_mount_to_windows_path
+        from backend.wsl.paths import wsl_mount_to_windows_path
 
         # Test the conversion function directly - forward slashes
         assert wsl_mount_to_windows_path("/mnt/c/Users/test") == "C:\\Users\\test"

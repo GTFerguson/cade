@@ -5,8 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
-import shutil
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -14,7 +12,8 @@ from typing import TYPE_CHECKING, AsyncIterator
 
 from backend.errors import PTYError
 from backend.types import TerminalSize
-from backend.wsl_health import is_wsl_error, restart_wsl
+from backend.wsl.commands import resolve_command, windows_to_wsl_path
+from backend.wsl.health import is_wsl_error, restart_wsl
 
 logger = logging.getLogger(__name__)
 
@@ -149,44 +148,6 @@ class UnixPTY(BasePTY):
         return self._process is not None and self._process.isalive()
 
 
-def _windows_to_wsl_path(windows_path: str) -> str | None:
-    """Convert a Windows path like C:\\Users\\foo to /mnt/c/Users/foo."""
-    # Normalize to forward slashes
-    normalized = windows_path.replace("\\", "/")
-    match = re.match(r"^([a-zA-Z]):/(.*)$", normalized)
-    if not match:
-        return None
-    drive = match.group(1).lower()
-    rest = match.group(2)
-    return f"/mnt/{drive}/{rest}"
-
-
-def _resolve_command(command: str) -> str:
-    """Resolve a command to its full path so WinPTY can find it."""
-    resolved = shutil.which(command)
-    if resolved:
-        return resolved
-    # Try with .exe suffix
-    resolved = shutil.which(command + ".exe")
-    if resolved:
-        return resolved
-    return command
-
-
-def _build_wsl_command(command: str, cwd: Path) -> str:
-    """Build a WSL command with --cd for proper working directory.
-
-    Resolves the wsl binary to its full path so both WinPTY and ConPTY
-    can find it regardless of working directory or PATH inheritance.
-    """
-    # Resolve to full path (e.g. C:\Windows\System32\wsl.exe)
-    resolved = _resolve_command(command)
-    wsl_path = _windows_to_wsl_path(str(cwd))
-    if wsl_path:
-        return f"{resolved} --cd {wsl_path}"
-    return resolved
-
-
 class WindowsPTY(BasePTY):
     """Windows PTY implementation using pywinpty."""
 
@@ -209,7 +170,7 @@ class WindowsPTY(BasePTY):
         is_wsl = "wsl" in command.lower()
 
         # Resolve the executable to its full path so both backends find it
-        exe = _resolve_command(command) if is_wsl else command
+        exe = resolve_command(command) if is_wsl else command
         if is_wsl:
             logger.info("Resolved executable: %s", exe)
 
@@ -219,7 +180,7 @@ class WindowsPTY(BasePTY):
         # Passing the whole string as the first arg causes WinPTY to treat
         # it as a file path, resulting in ERROR_PATH_NOT_FOUND.
         if is_wsl:
-            wsl_cwd = _windows_to_wsl_path(str(cwd)) or "~"
+            wsl_cwd = windows_to_wsl_path(str(cwd)) or "~"
             attempts: list[tuple[int, str, str]] = [
                 (Backend.WinPTY, exe, f" --cd {wsl_cwd}"),
                 (Backend.ConPTY, exe, f" --cd {wsl_cwd}"),

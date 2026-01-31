@@ -16,9 +16,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from backend.protocol import SessionKey
-from backend.pty_manager import PTYManager
+from backend.terminal.pty import PTYManager
 from backend.types import TerminalSize
-from backend.wsl_health import wait_for_wsl_network
+from backend.wsl.health import wait_for_wsl_network
 
 if TYPE_CHECKING:
     from fastapi import WebSocket

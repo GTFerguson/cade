@@ -182,7 +182,7 @@ class TestWslClaudeDirDetection:
         # Mock get_wsl_home_as_windows_path() to return UNC path
         wsl_home = "\\\\wsl.localhost\\Ubuntu\\home\\testuser"
         monkeypatch.setattr(
-            "backend.wsl_path.get_wsl_home_as_windows_path",
+            "backend.wsl.paths.get_wsl_home_as_windows_path",
             lambda: wsl_home,
         )
 
@@ -206,7 +206,7 @@ class TestWslClaudeDirDetection:
 
         # Mock get_wsl_home_as_windows_path() to return None (WSL not ready)
         monkeypatch.setattr(
-            "backend.wsl_path.get_wsl_home_as_windows_path",
+            "backend.wsl.paths.get_wsl_home_as_windows_path",
             lambda: None,
         )
 
@@ -224,7 +224,7 @@ class TestWslClaudeDirDetection:
         # First call: WSL not ready
         monkeypatch.setattr("backend.cc_session_resolver.sys.platform", "win32")
         monkeypatch.setattr(
-            "backend.wsl_path.get_wsl_home_as_windows_path",
+            "backend.wsl.paths.get_wsl_home_as_windows_path",
             lambda: None,
         )
 
@@ -235,7 +235,7 @@ class TestWslClaudeDirDetection:
         # Second call: WSL now ready
         wsl_home = "\\\\wsl.localhost\\Ubuntu\\home\\user"
         monkeypatch.setattr(
-            "backend.wsl_path.get_wsl_home_as_windows_path",
+            "backend.wsl.paths.get_wsl_home_as_windows_path",
             lambda: wsl_home,
         )
 

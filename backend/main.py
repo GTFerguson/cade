@@ -17,16 +17,16 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from backend.config import Config, get_config, set_config
-from backend.connection_manager import get_connection_manager
+from backend.terminal.connections import get_connection_manager
 from backend.connection_registry import get_connection_registry
-from backend.file_tree import get_file_type
+from backend.files.tree import get_file_type
 from backend.protocol import MessageType
-from backend.session_registry import get_registry
+from backend.terminal.sessions import get_registry
 from backend.websocket import websocket_handler
 from backend.cc_session_resolver import resolve_slug_to_project
-from backend.wsl_health import ensure_wsl_ready
-from backend.wsl_path import wsl_to_windows_path
-from backend.wsl_session_unifier import unify_sessions
+from backend.wsl.health import ensure_wsl_ready
+from backend.wsl.paths import wsl_to_windows_path
+from backend.wsl.session_unifier import unify_sessions
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator

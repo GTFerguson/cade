@@ -29,7 +29,7 @@ from backend.config import (
     get_user_config_paths,
     load_user_config,
 )
-from backend.user_config import (
+from backend.files.user_config import (
     ColorsConfig,
     FileTreeBehaviorConfig,
     FontsConfig,
@@ -471,7 +471,7 @@ class TestConfigCaching:
     def test_get_user_config_returns_cached(self) -> None:
         """get_user_config should return cached config on subsequent calls."""
         from backend.config import get_user_config, set_user_config, user_config
-        from backend.user_config import UserConfig
+        from backend.files.user_config import UserConfig
 
         # Reset global state
         import backend.config

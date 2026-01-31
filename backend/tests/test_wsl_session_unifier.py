@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from backend.wsl_session_unifier import (
+from backend.wsl.session_unifier import (
     encode_windows_session_dirname,
     encode_wsl_session_dirname,
     get_windows_user_home,

@@ -130,7 +130,7 @@ class ConnectionRegistry:
         Returns:
             List of WebSocket connections for that project.
         """
-        from backend.wsl_path import wsl_mount_to_windows_path
+        from backend.wsl.paths import wsl_mount_to_windows_path
 
         path_str = str(project_path)
         resolved_path = Path(project_path).resolve()

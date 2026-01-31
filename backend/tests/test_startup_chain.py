@@ -18,8 +18,8 @@ import pytest
 from backend.config import Config
 from backend.errors import PTYError
 from backend.protocol import MessageType, SessionKey
-from backend.pty_manager import PTYManager
-from backend.session_registry import PTYSession, SessionRegistry, TerminalState
+from backend.terminal.pty import PTYManager
+from backend.terminal.sessions import PTYSession, SessionRegistry, TerminalState
 from backend.types import TerminalSize
 
 
@@ -142,7 +142,7 @@ class TestStartupFlow:
         mock_pty = AsyncMock(spec=PTYManager)
         mock_pty.is_alive.return_value = True
 
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             session, is_new = await registry.get_or_create(
                 session_id="tab-uuid-123",
                 project_path=temp_dir,
@@ -165,9 +165,9 @@ class TestStartupFlow:
         mock_pty = AsyncMock(spec=PTYManager)
         mock_pty.is_alive.return_value = True
 
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             with patch(
-                "backend.session_registry.wait_for_wsl_network",
+                "backend.terminal.sessions.wait_for_wsl_network",
                 return_value=(True, "ready"),
             ) as mock_wait:
                 session, is_new = await registry.get_or_create(
@@ -283,7 +283,7 @@ class TestDesktopEdgeCases:
         mock_pty = AsyncMock(spec=PTYManager)
         mock_pty.is_alive.return_value = True
 
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             session1, is_new1 = await registry.get_or_create(
                 "session-1", temp_dir, "bash",
                 auto_start_claude=False,
@@ -292,7 +292,7 @@ class TestDesktopEdgeCases:
         # Simulate some output was captured
         session1.capture_output("$ claude\nHello!", SessionKey.CLAUDE)
 
-        with patch("backend.session_registry.PTYManager"):
+        with patch("backend.terminal.sessions.PTYManager"):
             session2, is_new2 = await registry.get_or_create(
                 "session-1", temp_dir, "bash",
             )
@@ -311,7 +311,7 @@ class TestDesktopEdgeCases:
             "wsl", "The Windows Subsystem for Linux has not been enabled."
         )
 
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             registry = SessionRegistry()
             with pytest.raises(PTYError) as exc_info:
                 await registry.get_or_create(
@@ -460,7 +460,7 @@ class TestErrorPropagation:
         mock_pty.is_alive.return_value = False
         mock_pty.spawn.side_effect = PTYError.spawn_failed("wsl", "WSL not available")
 
-        with patch("backend.pty_manager.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.pty.PTYManager", return_value=mock_pty):
             with patch("backend.websocket.load_user_config") as mock_uc:
                 mock_uc.return_value = MagicMock()
                 with patch("backend.websocket.get_connection_manager") as mock_cm:

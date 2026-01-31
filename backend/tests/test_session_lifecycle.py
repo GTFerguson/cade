@@ -16,8 +16,8 @@ import pytest
 
 from backend.errors import PTYError
 from backend.protocol import SessionKey
-from backend.pty_manager import PTYManager
-from backend.session_registry import (
+from backend.terminal.pty import PTYManager
+from backend.terminal.sessions import (
     MAX_SCROLLBACK_SIZE,
     PTYSession,
     SessionRegistry,
@@ -182,7 +182,7 @@ class TestSessionRegistry:
         registry = SessionRegistry()
 
         mock_pty = make_mock_pty()
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             session, is_new = await registry.get_or_create(
                 "session-1",
                 temp_dir,
@@ -202,7 +202,7 @@ class TestSessionRegistry:
         registry = SessionRegistry()
 
         mock_pty = make_mock_pty(alive=True)
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             session1, is_new1 = await registry.get_or_create(
                 "session-1", temp_dir, "bash"
             )
@@ -229,7 +229,7 @@ class TestSessionRegistry:
             call_count += 1
             return dead_pty if call_count == 1 else new_pty
 
-        with patch("backend.session_registry.PTYManager", side_effect=create_pty):
+        with patch("backend.terminal.sessions.PTYManager", side_effect=create_pty):
             session1, is_new1 = await registry.get_or_create(
                 "session-1", temp_dir, "bash"
             )
@@ -249,8 +249,8 @@ class TestSessionRegistry:
         registry = SessionRegistry()
 
         mock_pty = make_mock_pty()
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
-            with patch("backend.session_registry.wait_for_wsl_network") as mock_wait:
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
+            with patch("backend.terminal.sessions.wait_for_wsl_network") as mock_wait:
                 session, is_new = await registry.get_or_create(
                     "session-1",
                     temp_dir,
@@ -267,9 +267,9 @@ class TestSessionRegistry:
         registry = SessionRegistry()
 
         mock_pty = make_mock_pty()
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             with patch(
-                "backend.session_registry.wait_for_wsl_network",
+                "backend.terminal.sessions.wait_for_wsl_network",
                 return_value=(True, "ready"),
             ) as mock_wait:
                 session, is_new = await registry.get_or_create(
@@ -289,9 +289,9 @@ class TestSessionRegistry:
         registry = SessionRegistry()
 
         mock_pty = make_mock_pty()
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             with patch(
-                "backend.session_registry.wait_for_wsl_network",
+                "backend.terminal.sessions.wait_for_wsl_network",
                 return_value=(False, "timeout"),
             ):
                 session, is_new = await registry.get_or_create(
@@ -310,7 +310,7 @@ class TestSessionRegistry:
         registry = SessionRegistry()
 
         mock_pty = make_mock_pty()
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             session, is_new = await registry.get_or_create(
                 "session-1",
                 temp_dir,
@@ -327,7 +327,7 @@ class TestSessionRegistry:
         registry = SessionRegistry()
 
         mock_pty = make_mock_pty()
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             session, _ = await registry.get_or_create(
                 "session-1",
                 temp_dir,
@@ -353,7 +353,7 @@ class TestSessionRegistry:
             call_count += 1
             return mock_pty_claude if call_count == 1 else mock_pty_manual
 
-        with patch("backend.session_registry.PTYManager", side_effect=create_pty):
+        with patch("backend.terminal.sessions.PTYManager", side_effect=create_pty):
             await registry.get_or_create("session-1", temp_dir, "bash")
             terminal = await registry.create_manual_terminal("session-1", "bash")
 
@@ -373,7 +373,7 @@ class TestSessionRegistry:
         registry = SessionRegistry()
 
         mock_pty = make_mock_pty()
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             await registry.get_or_create("session-1", temp_dir, "bash")
             terminal1 = await registry.create_manual_terminal("session-1", "bash")
             terminal2 = await registry.create_manual_terminal("session-1", "bash")
@@ -387,7 +387,7 @@ class TestSessionRegistry:
         mock_ws = MagicMock()
 
         mock_pty = make_mock_pty()
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             await registry.get_or_create("session-1", temp_dir, "bash")
 
         session = await registry.attach("session-1", mock_ws)
@@ -410,7 +410,7 @@ class TestSessionRegistry:
         registry = SessionRegistry()
 
         mock_pty = make_mock_pty()
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             await registry.get_or_create("session-1", temp_dir, "bash")
 
         await registry.remove("session-1")
@@ -422,7 +422,7 @@ class TestSessionRegistry:
         registry = SessionRegistry()
 
         mock_pty = make_mock_pty()
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             await registry.get_or_create("session-1", temp_dir, "bash")
 
         session = registry.get("session-1")
@@ -441,7 +441,7 @@ class TestSessionRegistry:
         await registry.start()
 
         mock_pty = make_mock_pty()
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             await registry.get_or_create("session-1", temp_dir, "bash")
             await registry.get_or_create("session-2", temp_dir, "bash")
 
@@ -457,6 +457,6 @@ class TestSessionRegistry:
         mock_pty = make_mock_pty()
         mock_pty.spawn.side_effect = PTYError.spawn_failed("wsl", "WSL not found")
 
-        with patch("backend.session_registry.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             with pytest.raises(PTYError, match="spawn"):
                 await registry.get_or_create("session-1", temp_dir, "wsl")

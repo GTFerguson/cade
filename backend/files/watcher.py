@@ -9,7 +9,7 @@ from typing import Literal
 
 from watchfiles import Change, awatch
 
-from backend.file_tree import get_file_tree_cache
+from backend.files.tree import get_file_tree_cache
 from backend.types import FileChangeEvent
 
 # Directories to ignore when watching

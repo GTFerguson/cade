@@ -15,12 +15,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from backend.errors import PTYError
-from backend.pty_manager import BasePTY, PTYManager, UnixPTY
+from backend.terminal.pty import BasePTY, PTYManager, UnixPTY
 from backend.types import TerminalSize
 
 # Only import WindowsPTY on Windows
 if sys.platform == "win32":
-    from backend.pty_manager import WindowsPTY
+    from backend.terminal.pty import WindowsPTY
 
 
 # ---------------------------------------------------------------------------

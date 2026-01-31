@@ -17,7 +17,7 @@ import {
   toggleFolder,
   setTree,
   handleKey,
-} from "./file-tree-state";
+} from "./state";
 
 // Test fixtures
 const sampleTree: FileNode[] = [

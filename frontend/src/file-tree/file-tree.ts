@@ -2,10 +2,10 @@
  * File tree UI component with vim-style keyboard navigation.
  */
 
-import type { PaneKeyHandler } from "./keybindings";
-import type { Component, EventHandler, FileNode } from "./types";
-import { getUserConfig, matchesKeybinding } from "./user-config";
-import type { WebSocketClient } from "./websocket";
+import type { PaneKeyHandler } from "../keybindings";
+import type { Component, EventHandler, FileNode } from "../types";
+import { getUserConfig, matchesKeybinding } from "../user-config";
+import type { WebSocketClient } from "../websocket";
 
 interface FileTreeEvents {
   "file-select": string;

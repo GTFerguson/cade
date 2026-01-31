@@ -12,15 +12,15 @@ from typing import TYPE_CHECKING
 from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.config import load_user_config
-from backend.connection_manager import get_connection_manager
+from backend.terminal.connections import get_connection_manager
 from backend.connection_registry import get_connection_registry
 from backend.errors import CADEError, ProtocolError
-from backend.file_operations import create_file, write_file_content
-from backend.file_tree import build_file_tree_cached, get_file_type, read_file_content
-from backend.file_watcher import FileWatcher
+from backend.files.operations import create_file, write_file_content
+from backend.files.tree import build_file_tree_cached, get_file_type, read_file_content
+from backend.files.watcher import FileWatcher
 from backend.protocol import ErrorCode, MessageType, SessionKey
 from backend.session import load_session, save_session
-from backend.session_registry import PTYSession, TerminalState, get_registry
+from backend.terminal.sessions import PTYSession, TerminalState, get_registry
 from backend.types import FileChangeEvent, TerminalSize
 
 if TYPE_CHECKING:
@@ -175,7 +175,7 @@ class ConnectionHandler:
             )
             self._session.connected_clients.add(self._ws)
         else:
-            from backend.pty_manager import PTYManager
+            from backend.terminal.pty import PTYManager
             pty = PTYManager()
             await pty.spawn(
                 self._config.shell_command,
@@ -302,7 +302,7 @@ class ConnectionHandler:
         wsl_healthy = True
         if session_restored and not self._config.dummy_mode:
             health_check_timeout = self._user_config.behavior.splash.health_check_timeout
-            from backend.wsl_health import check_wsl_health
+            from backend.wsl.health import check_wsl_health
             wsl_healthy, _ = check_wsl_health(timeout=float(health_check_timeout))
 
         message: dict = {
@@ -484,7 +484,7 @@ class ConnectionHandler:
         """
         import asyncio
         import sys
-        from backend.wsl_path import get_wsl_home_as_windows_path
+        from backend.wsl.paths import get_wsl_home_as_windows_path
         from backend.cc_session_resolver import resolve_project_to_slug
 
         # On Windows, look in WSL home directory

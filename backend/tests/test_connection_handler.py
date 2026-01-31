@@ -18,8 +18,8 @@ import pytest
 from backend.config import Config
 from backend.errors import PTYError
 from backend.protocol import ErrorCode, MessageType, SessionKey
-from backend.pty_manager import PTYManager
-from backend.session_registry import PTYSession, SessionRegistry, TerminalState
+from backend.terminal.pty import PTYManager
+from backend.terminal.sessions import PTYSession, SessionRegistry, TerminalState
 from backend.types import TerminalSize
 from backend.websocket import ConnectionHandler
 
@@ -437,7 +437,7 @@ class TestSetupFlow:
 
         mock_pty = make_mock_pty()
 
-        with patch("backend.pty_manager.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.pty.PTYManager", return_value=mock_pty):
             with patch("backend.websocket.load_user_config") as mock_user_config:
                 mock_user_config.return_value = MagicMock()
                 await handler._setup()
@@ -456,7 +456,7 @@ class TestSetupFlow:
         mock_pty = make_mock_pty()
         mock_pty.spawn.side_effect = PTYError.spawn_failed("wsl", "not found")
 
-        with patch("backend.pty_manager.PTYManager", return_value=mock_pty):
+        with patch("backend.terminal.pty.PTYManager", return_value=mock_pty):
             with patch("backend.websocket.load_user_config") as mock_user_config:
                 mock_user_config.return_value = MagicMock()
                 with pytest.raises(PTYError):
@@ -508,7 +508,7 @@ class TestConnectedMessage:
         handler._user_config.behavior.splash.health_check_timeout = 5
 
         with patch("backend.websocket.load_session", return_value=None):
-            with patch("backend.wsl_health.check_wsl_health", return_value=(True, "ok")):
+            with patch("backend.wsl.health.check_wsl_health", return_value=(True, "ok")):
                 await handler._send_connected()
 
         # Should have sent SESSION_RESTORED with scrollback

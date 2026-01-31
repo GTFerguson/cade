@@ -26,8 +26,8 @@ from backend.config import Config, set_config
 from backend.errors import PTYError
 from backend.main import create_app
 from backend.protocol import ErrorCode, MessageType, SessionKey
-from backend.pty_manager import PTYManager
-from backend.session_registry import SessionRegistry, set_registry
+from backend.terminal.pty import PTYManager
+from backend.terminal.sessions import SessionRegistry, set_registry
 from backend.types import TerminalSize
 
 

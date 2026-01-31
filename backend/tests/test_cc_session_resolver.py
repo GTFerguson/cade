@@ -38,7 +38,7 @@ class TestGetClaudeDir:
         """On Windows, uses WSL home directory when available."""
         monkeypatch.setattr("backend.cc_session_resolver.sys.platform", "win32")
         monkeypatch.setattr(
-            "backend.wsl_path.get_wsl_home_as_windows_path",
+            "backend.wsl.paths.get_wsl_home_as_windows_path",
             lambda: "\\\\wsl.localhost\\Ubuntu\\home\\testuser",
         )
         # Clear the cache to force re-evaluation
@@ -54,7 +54,7 @@ class TestGetClaudeDir:
         """On Windows without WSL, falls back to Windows home."""
         monkeypatch.setattr("backend.cc_session_resolver.sys.platform", "win32")
         monkeypatch.setattr(
-            "backend.wsl_path.get_wsl_home_as_windows_path",
+            "backend.wsl.paths.get_wsl_home_as_windows_path",
             lambda: None,
         )
         # Clear the cache to force re-evaluation

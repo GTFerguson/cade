@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.user_config import (
+from backend.files.user_config import (
     AppearanceConfig,
     BehaviorConfig,
     ColorsConfig,

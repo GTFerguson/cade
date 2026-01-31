@@ -14,7 +14,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
-from backend.user_config import (
+from backend.files.user_config import (
     AppearanceConfig,
     BehaviorConfig,
     ColorsConfig,

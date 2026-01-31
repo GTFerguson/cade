@@ -38,7 +38,7 @@ def _get_claude_dir() -> Path:
     """
     if sys.platform == "win32":
         # On Windows, Claude Code likely runs in WSL
-        from backend.wsl_path import get_wsl_home_as_windows_path
+        from backend.wsl.paths import get_wsl_home_as_windows_path
 
         wsl_home = get_wsl_home_as_windows_path()
         if wsl_home:
@@ -224,7 +224,7 @@ def resolve_project_to_slug(project_path: Path | str) -> str | None:
     Returns:
         The session slug if found, None otherwise.
     """
-    from backend.wsl_path import wsl_mount_to_windows_path
+    from backend.wsl.paths import wsl_mount_to_windows_path
 
     # Normalize the project path for comparison
     project_str = str(project_path)
