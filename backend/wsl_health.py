@@ -108,6 +108,79 @@ def restart_wsl(timeout: float = 60.0) -> tuple[bool, str]:
         return False, f"WSL restart failed: {e}"
 
 
+def check_wsl_network(timeout: float = 10.0) -> tuple[bool, str]:
+    """
+    Check if WSL has network connectivity to reach the internet.
+
+    Specifically checks if api.anthropic.com is reachable, which is required
+    for Claude Code to function.
+
+    Returns:
+        Tuple of (is_connected, message)
+    """
+    try:
+        # Try DNS resolution first (fastest and most reliable check)
+        # Using getent which is more universal than nslookup
+        result = subprocess.run(
+            ["wsl", "bash", "-c", "getent hosts api.anthropic.com >/dev/null 2>&1"],
+            capture_output=True,
+            timeout=min(timeout, 5.0),
+        )
+
+        if result.returncode == 0:
+            return True, "WSL network is ready (DNS working)"
+
+        # Fall back to ping if getent fails
+        result = subprocess.run(
+            ["wsl", "bash", "-c", "ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1"],
+            capture_output=True,
+            timeout=min(timeout, 3.0),
+        )
+
+        if result.returncode == 0:
+            # Network works but DNS might not - still considered ready
+            return True, "WSL network is ready (ping working)"
+
+        return False, "WSL network not ready - cannot resolve DNS or ping"
+
+    except subprocess.TimeoutExpired:
+        return False, "WSL network check timed out"
+    except FileNotFoundError:
+        return False, "WSL not found"
+    except Exception as e:
+        return False, f"WSL network check failed: {e}"
+
+
+def wait_for_wsl_network(max_wait: float = 15.0, check_interval: float = 1.0) -> tuple[bool, str]:
+    """
+    Wait for WSL network to be ready, checking periodically.
+
+    Args:
+        max_wait: Maximum time to wait in seconds
+        check_interval: How often to check in seconds
+
+    Returns:
+        Tuple of (is_ready, message)
+    """
+    start_time = time.time()
+    last_error = ""
+
+    logger.debug("Waiting for WSL network readiness...")
+
+    while time.time() - start_time < max_wait:
+        ready, msg = check_wsl_network(timeout=check_interval + 2)
+        if ready:
+            elapsed = time.time() - start_time
+            logger.info("WSL network ready after %.1fs", elapsed)
+            return True, msg
+
+        last_error = msg
+        logger.debug("WSL network not ready yet: %s (%.1fs elapsed)", msg, time.time() - start_time)
+        time.sleep(check_interval)
+
+    return False, f"WSL network not ready after {max_wait}s: {last_error}"
+
+
 def ensure_wsl_ready(max_retries: int = 2) -> tuple[bool, str]:
     """
     Ensure WSL is ready for use, restarting if necessary.

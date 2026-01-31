@@ -12,6 +12,7 @@ import { KeybindingManager } from "./keybindings";
 import { MobileUI } from "./mobile";
 import { ProjectContextImpl, TabBar, TabManager } from "./tabs";
 import type { TabState } from "./tabs";
+import { pickProjectFolder, getUserHomePath } from "./tauri-bridge";
 import { setUserConfig, getUserConfig, matchesKeybinding } from "./user-config";
 
 class App {
@@ -39,7 +40,7 @@ class App {
     if (pathParam) {
       return pathParam;
     }
-    return config.defaultProjectPath || ".";
+    return getUserHomePath() ?? config.defaultProjectPath ?? ".";
   }
 
   /**
@@ -295,11 +296,8 @@ class App {
   /**
    * Handle add tab button click.
    */
-  private handleAddTab(): void {
-    const path = window.prompt(
-      "Enter project path:",
-      this.defaultProjectPath
-    );
+  private async handleAddTab(): Promise<void> {
+    const path = await pickProjectFolder(this.defaultProjectPath);
 
     if (path) {
       const tab = this.tabManager.createTab(path);

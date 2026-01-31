@@ -2,7 +2,26 @@
 
 **Claude Agentic Development Environment** - An agent-first development environment with Claude Code in a terminal shell as its centerpiece.
 
-## Quick Start
+Available as both a **web application** and **native desktop application** (Windows, macOS, Linux).
+
+## Desktop Application
+
+CADE is now available as a native desktop application built with Tauri:
+
+```bash
+# Setup prerequisites and dependencies
+make setup
+
+# Start desktop app in dev mode
+make dev-desktop
+
+# Build desktop installers
+make build-desktop
+```
+
+See [SETUP.md](SETUP.md) for detailed setup instructions or [desktop/QUICKSTART.md](desktop/QUICKSTART.md) for desktop-specific documentation.
+
+## Quick Start (Web Version)
 
 ### Prerequisites
 

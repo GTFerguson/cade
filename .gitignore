@@ -29,3 +29,10 @@ plans/
 
 # Build artifacts
 frontend/dist/
+dist/
+build/
+
+# Desktop app build artifacts
+desktop/src-tauri/target/
+desktop/src-tauri/Cargo.lock
+desktop/src-tauri/resources/cade-backend*

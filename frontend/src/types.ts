@@ -220,6 +220,17 @@ export interface StartupStatusMessage extends BaseMessage {
 }
 
 /**
+ * PTY exited message (server -> client).
+ * Sent when the terminal process dies unexpectedly.
+ */
+export interface PtyExitedMessage extends BaseMessage {
+  type: "pty-exited";
+  code: string;
+  message: string;
+  sessionKey?: SessionKeyValue;
+}
+
+/**
  * File written confirmation (server -> client).
  */
 export interface FileWrittenMessage extends BaseMessage {
@@ -263,7 +274,8 @@ export type ServerMessage =
   | ErrorMessage
   | ConnectedMessage
   | SessionRestoredMessage
-  | StartupStatusMessage;
+  | StartupStatusMessage
+  | PtyExitedMessage;
 
 /**
  * Event handler type.

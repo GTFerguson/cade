@@ -326,6 +326,8 @@ def _apply_session_behavior_config(data: dict) -> SessionBehaviorConfig:
         config.auto_save = data["auto-save"]
     if "save-interval" in data:
         config.save_interval = data["save-interval"]
+    if "network-timeout" in data:
+        config.network_timeout = float(data["network-timeout"])
     return config
 
 

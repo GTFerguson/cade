@@ -12,7 +12,8 @@ import { MarkdownViewer } from "../markdown";
 import { Splash } from "../splash";
 import { TerminalManager } from "../terminal-manager";
 import type { CustomKeyHandler } from "../terminal";
-import type { ConnectedMessage, SessionState } from "../types";
+import { ErrorCode } from "../protocol";
+import type { ConnectedMessage, PtyExitedMessage, SessionState } from "../types";
 import type { WebSocketClient } from "../websocket";
 import type { ProjectContext as IProjectContext } from "./types";
 
@@ -63,6 +64,22 @@ export class ProjectContextImpl implements IProjectContext {
     },
     error: (msg: any) => {
       console.error(`[${this.name}] Server error:`, msg.code, msg.message);
+      if (
+        msg.code === ErrorCode.PTY_SPAWN_FAILED ||
+        msg.code === ErrorCode.PTY_READ_FAILED ||
+        msg.code === ErrorCode.PTY_EXITED
+      ) {
+        // Dismiss splash if still showing so the error is visible
+        if (this.splash?.isVisible()) {
+          this.splash.autoSkip(() => {});
+        }
+        this.terminalManager?.write(
+          `\r\n\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`
+        );
+      }
+    },
+    ptyExited: (msg: PtyExitedMessage) => {
+      console.error(`[${this.name}] PTY exited:`, msg.message);
     },
   };
 
@@ -148,6 +165,7 @@ export class ProjectContextImpl implements IProjectContext {
     this.ws.on("file-tree", this.boundHandlers.fileTree);
     this.ws.on("disconnected", this.boundHandlers.disconnected);
     this.ws.on("error", this.boundHandlers.error);
+    this.ws.on("pty-exited", this.boundHandlers.ptyExited);
 
     this.hide();
   }
@@ -365,6 +383,7 @@ export class ProjectContextImpl implements IProjectContext {
     this.ws.off("file-tree", this.boundHandlers.fileTree);
     this.ws.off("disconnected", this.boundHandlers.disconnected);
     this.ws.off("error", this.boundHandlers.error);
+    this.ws.off("pty-exited", this.boundHandlers.ptyExited);
 
     this.terminalManager?.dispose();
     this.fileTree?.dispose();

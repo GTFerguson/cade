@@ -1,20 +1,32 @@
-# Normalize line endings to LF in repo, auto-convert on checkout
-* text=auto eol=lf
+# Ensure shell scripts always use LF line endings (even on Windows)
+*.sh text eol=lf
 
-# Ensure these are always LF
-*.ts text eol=lf
-*.js text eol=lf
-*.json text eol=lf
-*.css text eol=lf
-*.html text eol=lf
-*.md text eol=lf
-*.py text eol=lf
-*.toml text eol=lf
-*.txt text eol=lf
-*.yml text eol=lf
-*.yaml text eol=lf
+# Ensure batch files use CRLF on Windows
+*.bat text eol=crlf
+
+# Standard text files
+*.md text
+*.json text
+*.toml text
+*.yaml text
+*.yml text
+
+# Source code
+*.py text
+*.js text
+*.ts text
+*.tsx text
+*.rs text
+*.css text
+*.html text
 
 # Binary files
 *.png binary
 *.jpg binary
+*.jpeg binary
 *.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

@@ -130,6 +130,7 @@ class SessionBehaviorConfig:
     auto_start_claude: bool = True
     auto_save: bool = True
     save_interval: int = 300
+    network_timeout: float = 15.0  # Max time to wait for WSL network readiness (seconds)
 
 
 @dataclass

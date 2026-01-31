@@ -13,6 +13,7 @@ import type {
   FileContentMessage,
   FileTreeMessage,
   OutputMessage,
+  PtyExitedMessage,
   ServerMessage,
   SessionRestoredMessage,
   SessionState,
@@ -30,9 +31,12 @@ interface WebSocketEvents {
   "file-tree": FileTreeMessage;
   "file-change": FileChangeMessage;
   "file-content": FileContentMessage;
+  "file-written": { path: string };
+  "file-created": { path: string };
   "view-file": ViewFileMessage;
   "session-restored": SessionRestoredMessage;
   "startup-status": StartupStatusMessage;
+  "pty-exited": PtyExitedMessage;
   error: ErrorMessage;
 }
 
@@ -45,6 +49,7 @@ export class WebSocketClient {
     new Map();
   private pendingProjectPath: string | null = null;
   private pendingSessionId: string | null = null;
+  private urlPollTimer: number | null = null;
 
   constructor(private url: string = config.wsUrl) {}
 
@@ -95,6 +100,25 @@ export class WebSocketClient {
       return;
     }
 
+    // In Tauri, the backend URL is injected via eval() which may not have
+    // run yet. Poll until the URL is available rather than connecting to
+    // a wrong address.
+    if (config.wsUrlPending) {
+      if (this.urlPollTimer === null) {
+        this.urlPollTimer = window.setInterval(() => {
+          if (!config.wsUrlPending) {
+            window.clearInterval(this.urlPollTimer!);
+            this.urlPollTimer = null;
+            this.connect();
+          }
+        }, 50);
+      }
+      return;
+    }
+
+    // Always re-read the URL so Tauri's late-injected value is picked up
+    this.url = config.wsUrl;
+
     this.state = "connecting";
     this.ws = new WebSocket(this.url);
 
@@ -135,6 +159,11 @@ export class WebSocketClient {
    * Disconnect from the server.
    */
   disconnect(): void {
+    if (this.urlPollTimer !== null) {
+      window.clearInterval(this.urlPollTimer);
+      this.urlPollTimer = null;
+    }
+
     if (this.reconnectTimer !== null) {
       window.clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -203,6 +232,58 @@ export class WebSocketClient {
    */
   requestFile(path: string): void {
     this.send({ type: MessageType.GET_FILE, path });
+  }
+
+  /**
+   * Write file content.
+   */
+  writeFile(path: string, content: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const handleWritten = (message: any) => {
+        if (message.path === path) {
+          this.off("file-written", handleWritten);
+          this.off("error", handleError);
+          resolve();
+        }
+      };
+
+      const handleError = (message: ErrorMessage) => {
+        this.off("file-written", handleWritten);
+        this.off("error", handleError);
+        reject(new Error(message.message));
+      };
+
+      this.on("file-written", handleWritten);
+      this.on("error", handleError);
+
+      this.send({ type: MessageType.WRITE_FILE, path, content });
+    });
+  }
+
+  /**
+   * Create a new file.
+   */
+  createFile(path: string, content: string = ""): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const handleCreated = (message: any) => {
+        if (message.path === path) {
+          this.off("file-created", handleCreated);
+          this.off("error", handleError);
+          resolve();
+        }
+      };
+
+      const handleError = (message: ErrorMessage) => {
+        this.off("file-created", handleCreated);
+        this.off("error", handleError);
+        reject(new Error(message.message));
+      };
+
+      this.on("file-created", handleCreated);
+      this.on("error", handleError);
+
+      this.send({ type: MessageType.CREATE_FILE, path, content });
+    });
   }
 
   /**
@@ -279,6 +360,14 @@ export class WebSocketClient {
         this.emit("file-content", message);
         break;
 
+      case MessageType.FILE_WRITTEN:
+        this.emit("file-written", message as { path: string });
+        break;
+
+      case MessageType.FILE_CREATED:
+        this.emit("file-created", message as { path: string });
+        break;
+
       case MessageType.VIEW_FILE:
         this.emit("view-file", message as ViewFileMessage);
         break;
@@ -294,6 +383,11 @@ export class WebSocketClient {
 
       case MessageType.STARTUP_STATUS:
         this.emit("startup-status", message);
+        break;
+
+      case MessageType.PTY_EXITED:
+        this.emit("pty-exited", message as PtyExitedMessage);
+        console.error("PTY exited:", message);
         break;
 
       default:

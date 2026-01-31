@@ -34,9 +34,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Paths
+# When running as PyInstaller bundle, __file__ points to the executable
+# and bundled files are in sys._MEIPASS
 BACKEND_DIR = Path(__file__).parent
 PROJECT_ROOT = BACKEND_DIR.parent
-FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
+
+# Check if running as PyInstaller bundle
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    # Running as PyInstaller bundle
+    FRONTEND_DIST = Path(sys._MEIPASS) / "frontend" / "dist"
+else:
+    # Running as normal Python script
+    FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 
 
 async def _check_wsl_health_async() -> None:
@@ -81,6 +90,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     logger.info("CADE started at %s", config.server_url)
     logger.info("Working directory: %s", config.working_dir)
+    logger.info(
+        "Platform: %s, frozen: %s, shell: %s",
+        sys.platform,
+        getattr(sys, "frozen", False),
+        config.shell_command,
+    )
 
     yield
 

@@ -1,7 +1,7 @@
 # CADE Makefile
 # Run stable, dev, or both versions
 
-.PHONY: stable dev dev-dummy both build kill clean help
+.PHONY: stable dev dev-dummy both build kill clean help build-desktop dev-desktop setup
 
 # Default ports
 STABLE_PORT ?= 3000
@@ -37,12 +37,15 @@ endif
 
 help:
 	@echo "Usage:"
-	@echo "  make stable    - Build frontend and run on port $(STABLE_PORT)"
-	@echo "  make dev       - Run backend on $(DEV_PORT) + Vite on $(VITE_PORT)"
-	@echo "  make dev-dummy - Same as dev, but with fake Claude UI"
-	@echo "  make both      - Run stable and dev simultaneously"
-	@echo "  make build     - Build frontend only"
-	@echo "  make kill      - Stop all CADE processes"
+	@echo "  make setup        - Check prerequisites for desktop development"
+	@echo "  make stable       - Build frontend and run on port $(STABLE_PORT)"
+	@echo "  make dev          - Run backend on $(DEV_PORT) + Vite on $(VITE_PORT)"
+	@echo "  make dev-dummy    - Same as dev, but with fake Claude UI"
+	@echo "  make both         - Run stable and dev simultaneously"
+	@echo "  make build        - Build frontend only"
+	@echo "  make kill         - Stop all CADE processes"
+	@echo "  make build-desktop - Build desktop application (full build)"
+	@echo "  make dev-desktop  - Run desktop app in dev mode (Tauri dev)"
 	@echo ""
 	@echo "Custom ports:"
 	@echo "  make stable STABLE_PORT=8000"
@@ -98,3 +101,22 @@ kill:
 clean:
 	$(RM_RF)
 	@echo "Cleaned build artifacts"
+
+# Check prerequisites for desktop development
+setup:
+	@bash scripts/setup-dev.sh && bash scripts/install-deps.sh
+
+# Build desktop application (full build with PyInstaller + Tauri)
+build-desktop:
+	@echo "Building desktop application..."
+ifeq ($(OS),Windows_NT)
+	@PowerShell -ExecutionPolicy Bypass -File scripts/build-desktop.ps1
+else
+	@bash scripts/build-desktop.sh
+endif
+
+# Run desktop application in development mode
+dev-desktop:
+	@echo "Starting desktop app in dev mode..."
+	@echo "Make sure Vite dev server is running (make dev in another terminal)"
+	cd desktop && npm run dev

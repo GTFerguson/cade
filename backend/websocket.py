@@ -15,6 +15,7 @@ from backend.config import load_user_config
 from backend.connection_manager import get_connection_manager
 from backend.connection_registry import get_connection_registry
 from backend.errors import CADEError, ProtocolError
+from backend.file_operations import create_file, write_file_content
 from backend.file_tree import build_file_tree_cached, get_file_type, read_file_content
 from backend.file_watcher import FileWatcher
 from backend.protocol import ErrorCode, MessageType, SessionKey
@@ -45,6 +46,7 @@ class ConnectionHandler:
         self._closed = False
         self._suppress_output = False
         self._suppress_start_time: float | None = None
+        self._suppress_buffer: list[str] = []
         self._project_set = asyncio.Event()
         self._is_new_session = True
         self._output_tasks: dict[str, asyncio.Task] = {}
@@ -72,7 +74,14 @@ class ConnectionHandler:
                 session_id=self._session_id,
             )
             await self._send_status("Starting terminal...")
-            await self._setup()
+
+            try:
+                await self._setup()
+            except CADEError as e:
+                logger.error("Terminal setup failed: %s", e)
+                await self._send(e.to_message())
+                return
+
             await self._send_status("Connected")
             await self._send_connected()
 
@@ -149,6 +158,9 @@ class ConnectionHandler:
 
     async def _setup(self) -> None:
         """Initialize PTY session and file watcher."""
+        # Load user config first so we can use network_timeout setting
+        self._user_config = load_user_config(self._working_dir)
+
         registry = get_registry()
 
         if self._session_id:
@@ -159,6 +171,7 @@ class ConnectionHandler:
                 TerminalSize(cols=80, rows=24),
                 auto_start_claude=self._config.auto_start_claude,
                 dummy_mode=self._config.dummy_mode,
+                network_timeout=self._user_config.behavior.session.network_timeout,
             )
             self._session.connected_clients.add(self._ws)
         else:
@@ -285,9 +298,6 @@ class ConnectionHandler:
                         "sessionKey": SessionKey.MANUAL,
                     })
 
-        # Load user config for this working directory
-        self._user_config = load_user_config(self._working_dir)
-
         # Perform WSL health check for restored sessions
         wsl_healthy = True
         if session_restored and not self._config.dummy_mode:
@@ -342,6 +352,10 @@ class ConnectionHandler:
                 await self._handle_get_tree(data)
             elif msg_type == MessageType.GET_FILE:
                 await self._handle_get_file(data)
+            elif msg_type == MessageType.WRITE_FILE:
+                await self._handle_write_file(data)
+            elif msg_type == MessageType.CREATE_FILE:
+                await self._handle_create_file(data)
             elif msg_type == MessageType.SAVE_SESSION:
                 await self._handle_save_session(data)
             elif msg_type == MessageType.GET_LATEST_PLAN:
@@ -422,6 +436,39 @@ class ConnectionHandler:
             "path": path,
             "content": content,
             "fileType": file_type,
+        })
+
+    async def _handle_write_file(self, data: dict) -> None:
+        """Handle file write request."""
+        path = data.get("path", "")
+        content = data.get("content")
+
+        if not path:
+            raise ProtocolError.invalid_message("Missing path")
+
+        if content is None:
+            raise ProtocolError.invalid_message("Missing content")
+
+        write_file_content(self._working_dir, path, content)
+
+        await self._send({
+            "type": MessageType.FILE_WRITTEN,
+            "path": path,
+        })
+
+    async def _handle_create_file(self, data: dict) -> None:
+        """Handle file creation request."""
+        path = data.get("path", "")
+        content = data.get("content", "")
+
+        if not path:
+            raise ProtocolError.invalid_message("Missing path")
+
+        create_file(self._working_dir, path, content)
+
+        await self._send({
+            "type": MessageType.FILE_CREATED,
+            "path": path,
         })
 
     async def _handle_save_session(self, data: dict) -> None:
@@ -509,11 +556,13 @@ class ConnectionHandler:
         if terminal is None:
             return
 
+        received_output = False
         try:
             async for data in terminal.pty.read():
                 if self._closed:
                     break
 
+                received_output = True
                 self._session.capture_output(data, session_key)
 
                 # Only apply startup suppression to claude terminal
@@ -522,19 +571,35 @@ class ConnectionHandler:
                     # - Alternate screen buffer: \x1b[?1049h or \x1b[?47h
                     # - Clear screen: \x1b[2J (often with \x1b[H cursor home)
                     # - Claude logo start (the block characters)
-                    if (
+                    claude_detected = (
                         "\x1b[?1049h" in data
                         or "\x1b[?47h" in data
                         or "\x1b[2J" in data
                         or "▐▛███▜▌" in data
-                    ):
+                    )
+                    timed_out = (
+                        self._suppress_start_time
+                        and time.monotonic() - self._suppress_start_time > 4.0
+                    )
+
+                    if claude_detected or timed_out:
                         self._suppress_output = False
-                        # Fall through to send this chunk (contains Claude's TUI)
-                    # Timeout fallback after 4 seconds
-                    elif self._suppress_start_time and time.monotonic() - self._suppress_start_time > 4.0:
-                        self._suppress_output = False
+                        # Flush buffered output so error messages are visible
+                        # (e.g. "claude: command not found")
+                        if self._suppress_buffer:
+                            buffered = "".join(self._suppress_buffer)
+                            self._suppress_buffer.clear()
+                            if not claude_detected:
+                                # Only send buffered shell output on timeout;
+                                # if Claude was detected, its TUI replaces the screen
+                                await self._send({
+                                    "type": MessageType.OUTPUT,
+                                    "data": buffered,
+                                    "sessionKey": session_key,
+                                })
                         # Fall through to send this chunk
                     else:
+                        self._suppress_buffer.append(data)
                         continue  # Keep suppressing
 
                 await self._send({
@@ -545,6 +610,30 @@ class ConnectionHandler:
         except Exception as e:
             if not self._closed:
                 logger.exception("PTY output error for %s: %s", session_key, e)
+
+        # PTY read loop ended — notify client if process died without producing output
+        if not received_output and not self._closed:
+            logger.error(
+                "PTY for %s exited without producing any output", session_key,
+            )
+            error_msg = "Terminal process exited without producing output. The shell may have failed to start."
+            # Write visible red error text to the terminal so the user sees it
+            ansi_error = (
+                "\r\n\x1b[1;31m"
+                f"Error: {error_msg}"
+                "\x1b[0m\r\n"
+            )
+            await self._send({
+                "type": MessageType.OUTPUT,
+                "data": ansi_error,
+                "sessionKey": session_key,
+            })
+            await self._send({
+                "type": MessageType.PTY_EXITED,
+                "code": ErrorCode.PTY_EXITED,
+                "message": error_msg,
+                "sessionKey": session_key,
+            })
 
     async def _watch_loop(self) -> None:
         """Watch for file changes and notify client."""

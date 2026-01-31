@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import re
+import shutil
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -14,6 +17,16 @@ from backend.types import TerminalSize
 from backend.wsl_health import is_wsl_error, restart_wsl
 
 logger = logging.getLogger(__name__)
+
+# Ensure winpty native binaries (winpty.dll, winpty-agent.exe) can be found
+# when running as a frozen PyInstaller bundle
+if sys.platform == "win32" and getattr(sys, "frozen", False):
+    _meipass = getattr(sys, "_MEIPASS", "")
+    _winpty_dir = os.path.join(_meipass, "winpty")
+    if os.path.isdir(_winpty_dir):
+        os.add_dll_directory(_winpty_dir)
+        os.environ["PATH"] = _winpty_dir + os.pathsep + os.environ.get("PATH", "")
+        logger.info("Added winpty binary path: %s", _winpty_dir)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -136,6 +149,44 @@ class UnixPTY(BasePTY):
         return self._process is not None and self._process.isalive()
 
 
+def _windows_to_wsl_path(windows_path: str) -> str | None:
+    """Convert a Windows path like C:\\Users\\foo to /mnt/c/Users/foo."""
+    # Normalize to forward slashes
+    normalized = windows_path.replace("\\", "/")
+    match = re.match(r"^([a-zA-Z]):/(.*)$", normalized)
+    if not match:
+        return None
+    drive = match.group(1).lower()
+    rest = match.group(2)
+    return f"/mnt/{drive}/{rest}"
+
+
+def _resolve_command(command: str) -> str:
+    """Resolve a command to its full path so WinPTY can find it."""
+    resolved = shutil.which(command)
+    if resolved:
+        return resolved
+    # Try with .exe suffix
+    resolved = shutil.which(command + ".exe")
+    if resolved:
+        return resolved
+    return command
+
+
+def _build_wsl_command(command: str, cwd: Path) -> str:
+    """Build a WSL command with --cd for proper working directory.
+
+    Resolves the wsl binary to its full path so both WinPTY and ConPTY
+    can find it regardless of working directory or PATH inheritance.
+    """
+    # Resolve to full path (e.g. C:\Windows\System32\wsl.exe)
+    resolved = _resolve_command(command)
+    wsl_path = _windows_to_wsl_path(str(cwd))
+    if wsl_path:
+        return f"{resolved} --cd {wsl_path}"
+    return resolved
+
+
 class WindowsPTY(BasePTY):
     """Windows PTY implementation using pywinpty."""
 
@@ -143,37 +194,131 @@ class WindowsPTY(BasePTY):
         self._pty: "winpty.PTY | None" = None  # type: ignore[name-defined]
         self._closed = False
 
+    def _do_spawn(
+        self, pty: "winpty.PTY", exe: str, args: str, cwd: str,  # type: ignore[name-defined]
+    ) -> None:
+        """Synchronous spawn helper — called in executor for timeout support."""
+        if args:
+            pty.spawn(exe, cwd=cwd, cmdline=args)
+        else:
+            pty.spawn(exe, cwd=cwd)
+
     async def spawn(self, command: str, cwd: Path, size: TerminalSize) -> None:
-        from winpty import PTY, WinptyError
+        from winpty import PTY, Backend, WinptyError
 
-        try:
-            self._pty = PTY(size.cols, size.rows)
-            self._pty.spawn(command, cwd=str(cwd))
-        except (WinptyError, Exception) as e:
-            error_msg = str(e)
+        is_wsl = "wsl" in command.lower()
 
-            # Check if this is a WSL error that might be recoverable
-            if "wsl" in command.lower() and is_wsl_error(error_msg):
-                logger.warning("WSL spawn failed, attempting recovery: %s", error_msg)
+        # Resolve the executable to its full path so both backends find it
+        exe = _resolve_command(command) if is_wsl else command
+        if is_wsl:
+            logger.info("Resolved executable: %s", exe)
 
-                # Attempt WSL restart
-                success, restart_msg = restart_wsl()
-                if success:
-                    logger.info("WSL recovered, retrying spawn")
+        # Build (backend, exe, args) attempts.
+        # pywinpty's PTY.spawn() takes the executable as the first arg
+        # and command-line arguments via the cmdline= keyword.
+        # Passing the whole string as the first arg causes WinPTY to treat
+        # it as a file path, resulting in ERROR_PATH_NOT_FOUND.
+        if is_wsl:
+            wsl_cwd = _windows_to_wsl_path(str(cwd)) or "~"
+            attempts: list[tuple[int, str, str]] = [
+                (Backend.WinPTY, exe, f" --cd {wsl_cwd}"),
+                (Backend.ConPTY, exe, f" --cd {wsl_cwd}"),
+                (Backend.WinPTY, exe, f" --cd {wsl_cwd} -e bash --login"),
+                (Backend.ConPTY, exe, f" --cd {wsl_cwd} -e bash --login"),
+                (Backend.WinPTY, exe, " --cd ~"),
+                (Backend.ConPTY, exe, " --cd ~"),
+            ]
+        else:
+            attempts = [(Backend.ConPTY, exe, "")]
+
+        loop = asyncio.get_event_loop()
+        last_error: str = ""
+
+        for attempt_idx, (backend, attempt_exe, attempt_args) in enumerate(attempts):
+            backend_name = "WinPTY" if backend == Backend.WinPTY else "ConPTY"
+            logger.info(
+                "Attempt %d/%d: backend=%s, exe=%s, args=%s",
+                attempt_idx + 1, len(attempts), backend_name,
+                attempt_exe, attempt_args.strip(),
+            )
+
+            try:
+                pty = PTY(size.cols, size.rows, backend)
+                logger.debug("PTY created, calling spawn...")
+
+                # Run spawn in executor with timeout — ConPTY can hang
+                try:
+                    await asyncio.wait_for(
+                        loop.run_in_executor(
+                            None, self._do_spawn, pty, attempt_exe,
+                            attempt_args, str(cwd),
+                        ),
+                        timeout=5.0,
+                    )
+                except asyncio.TimeoutError:
+                    last_error = f"{backend_name} spawn timed out after 5s"
+                    logger.warning("%s", last_error)
                     try:
-                        self._pty = PTY(size.cols, size.rows)
-                        self._pty.spawn(command, cwd=str(cwd))
-                        return
-                    except Exception as retry_e:
-                        raise PTYError.spawn_failed(
-                            command, f"Retry after WSL recovery failed: {retry_e}"
-                        ) from retry_e
-                else:
-                    raise PTYError.spawn_failed(
-                        command, f"WSL recovery failed: {restart_msg}"
-                    ) from e
+                        pty.close()
+                    except Exception:
+                        pass
+                    continue
 
-            raise PTYError.spawn_failed(command, error_msg) from e
+                self._pty = pty
+                logger.debug("spawn() returned successfully")
+            except (WinptyError, Exception) as e:
+                last_error = f"{backend_name} spawn exception: {e}"
+                logger.warning("%s", last_error)
+
+                if is_wsl and is_wsl_error(str(e)):
+                    success, restart_msg = restart_wsl()
+                    if success:
+                        logger.info("WSL recovered, retrying")
+                        try:
+                            pty2 = PTY(size.cols, size.rows, backend)
+                            await asyncio.wait_for(
+                                loop.run_in_executor(
+                                    None, self._do_spawn, pty2, attempt_exe,
+                                    attempt_args, str(cwd),
+                                ),
+                                timeout=5.0,
+                            )
+                            self._pty = pty2
+                        except Exception as retry_e:
+                            last_error = f"Retry after WSL recovery: {retry_e}"
+                            logger.warning("%s", last_error)
+                            continue
+                    else:
+                        last_error = f"WSL recovery failed: {restart_msg}"
+                        logger.warning("%s", last_error)
+                        continue
+                else:
+                    continue
+
+            # Allow process time to start, then verify it's alive
+            await asyncio.sleep(0.5)
+            alive = self.is_alive()
+            logger.info("After 500ms: is_alive=%s", alive)
+
+            if alive:
+                logger.info(
+                    "PTY spawned successfully: backend=%s, exe=%s, args=%s",
+                    backend_name, attempt_exe, attempt_args.strip(),
+                )
+                return
+
+            # Process died — capture any output for diagnostics
+            error_output = ""
+            try:
+                error_output = self._pty.read(blocking=False) if self._pty else ""
+            except Exception:
+                pass
+
+            last_error = f"{backend_name} process died after spawn. Output: {error_output!r}"
+            logger.warning("%s", last_error)
+
+        # All attempts exhausted
+        raise PTYError.spawn_failed(command, last_error or "All spawn attempts failed")
 
     async def read(self) -> AsyncIterator[str]:
         if self._pty is None:
@@ -199,7 +344,7 @@ class WindowsPTY(BasePTY):
         try:
             return self._pty.read(blocking=False)
         except Exception as e:
-            logger.debug("PTY read error: %s", e)
+            logger.warning("PTY read error: %s", e)
             return ""
 
     async def write(self, data: str) -> None:
@@ -269,10 +414,6 @@ class PTYManager:
 
         self._pty = self._create_pty()
         await self._pty.spawn(command, cwd, size or TerminalSize())
-
-        # Verify PTY is alive after spawn
-        if not self.is_alive():
-            raise PTYError.spawn_failed(command, "PTY process exited immediately")
 
     async def read(self) -> AsyncIterator[str]:
         """Read output from PTY as an async iterator."""

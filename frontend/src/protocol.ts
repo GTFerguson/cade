@@ -18,6 +18,8 @@ export const MessageType = {
   RESIZE: "resize",
   GET_FILE: "get-file",
   GET_TREE: "get-tree",
+  WRITE_FILE: "write-file",
+  CREATE_FILE: "create-file",
   SAVE_SESSION: "save-session",
   SET_PROJECT: "set-project",
   GET_LATEST_PLAN: "get-latest-plan",
@@ -27,11 +29,14 @@ export const MessageType = {
   FILE_TREE: "file-tree",
   FILE_CHANGE: "file-change",
   FILE_CONTENT: "file-content",
+  FILE_WRITTEN: "file-written",
+  FILE_CREATED: "file-created",
   VIEW_FILE: "view-file",
   ERROR: "error",
   CONNECTED: "connected",
   SESSION_RESTORED: "session-restored",
   STARTUP_STATUS: "startup-status",
+  PTY_EXITED: "pty-exited",
 } as const;
 
 export type MessageTypeValue = (typeof MessageType)[keyof typeof MessageType];
@@ -42,7 +47,12 @@ export const ErrorCode = {
   PTY_WRITE_FAILED: "pty-write-failed",
   FILE_NOT_FOUND: "file-not-found",
   FILE_READ_FAILED: "file-read-failed",
+  FILE_WRITE_FAILED: "file-write-failed",
+  FILE_CREATE_FAILED: "file-create-failed",
+  FILE_EXISTS: "file-exists",
+  INVALID_PATH: "invalid-path",
   INVALID_MESSAGE: "invalid-message",
+  PTY_EXITED: "pty-exited",
   INTERNAL_ERROR: "internal-error",
 } as const;
 

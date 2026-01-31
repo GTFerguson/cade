@@ -484,6 +484,126 @@ export class FileTree implements Component, PaneKeyHandler {
   }
 
   /**
+   * Show modal to create a new file.
+   */
+  private showFileCreationModal(): void {
+    // Get the currently selected directory
+    let basePath = "";
+    if (this.selectedPath) {
+      const selectedNode = this.findNodeByPath(this.selectedPath);
+      if (selectedNode?.type === "directory") {
+        basePath = this.selectedPath + "/";
+      } else {
+        // If a file is selected, use its parent directory
+        const lastSlash = this.selectedPath.lastIndexOf("/");
+        if (lastSlash !== -1) {
+          basePath = this.selectedPath.substring(0, lastSlash + 1);
+        }
+      }
+    }
+
+    // Create modal overlay
+    const overlay = document.createElement("div");
+    overlay.className = "file-creation-modal-overlay";
+
+    const modal = document.createElement("div");
+    modal.className = "file-creation-modal";
+
+    const title = document.createElement("div");
+    title.className = "modal-title";
+    title.textContent = "Create New File";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "modal-input";
+    input.placeholder = "Enter file path (e.g., plans/new-feature.md)";
+    input.value = basePath;
+
+    const buttonContainer = document.createElement("div");
+    buttonContainer.className = "modal-buttons";
+
+    const createBtn = document.createElement("button");
+    createBtn.textContent = "Create";
+    createBtn.className = "modal-button modal-button-primary";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.className = "modal-button";
+
+    buttonContainer.appendChild(createBtn);
+    buttonContainer.appendChild(cancelBtn);
+
+    modal.appendChild(title);
+    modal.appendChild(input);
+    modal.appendChild(buttonContainer);
+    overlay.appendChild(modal);
+
+    // Handle create
+    const handleCreate = async () => {
+      const path = input.value.trim();
+      if (!path) {
+        alert("Please enter a file path");
+        return;
+      }
+
+      try {
+        await this.ws.createFile(path, "");
+        document.body.removeChild(overlay);
+
+        // Request updated tree
+        this.ws.requestTree(this.showIgnored);
+
+        // Open the new file in the editor
+        this.emit("file-select", path);
+      } catch (error) {
+        alert(`Failed to create file: ${error}`);
+      }
+    };
+
+    // Event listeners
+    createBtn.addEventListener("click", handleCreate);
+    cancelBtn.addEventListener("click", () => {
+      document.body.removeChild(overlay);
+    });
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        handleCreate();
+      } else if (e.key === "Escape") {
+        document.body.removeChild(overlay);
+      }
+    });
+
+    // Show modal
+    document.body.appendChild(overlay);
+
+    // Focus input and position cursor after base path
+    requestAnimationFrame(() => {
+      input.focus();
+      input.setSelectionRange(basePath.length, basePath.length);
+    });
+  }
+
+  /**
+   * Find a node by its path in the tree.
+   */
+  private findNodeByPath(path: string): FileNode | null {
+    const search = (nodes: FileNode[]): FileNode | null => {
+      for (const node of nodes) {
+        if (node.path === path) {
+          return node;
+        }
+        if (node.children) {
+          const found = search(node.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return search(this.tree);
+  }
+
+  /**
    * Handle keyboard navigation (called by KeybindingManager).
    * Returns true if the key was handled.
    */
@@ -527,6 +647,9 @@ export class FileTree implements Component, PaneKeyHandler {
         return true;
       case ".":
         this.toggleIgnored();
+        return true;
+      case "n":
+        this.showFileCreationModal();
         return true;
       case "/":
         this.enterSearchMode();

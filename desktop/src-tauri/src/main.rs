@@ -1,0 +1,108 @@
+// Prevents additional console window on Windows in release
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod port;
+mod python;
+
+use port::find_available_port;
+use python::PythonProcess;
+use std::sync::Mutex;
+use tauri::Manager;
+
+struct AppState {
+    backend: Mutex<Option<PythonProcess>>,
+}
+
+fn main() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            // Find an available port
+            let port = find_available_port()
+                .map_err(|e| format!("Failed to find available port: {}", e))?;
+
+            println!("Found available port: {}", port);
+
+            let backend_url = format!("http://127.0.0.1:{}", port);
+
+            // Inject backend URL into the webview BEFORE starting the backend.
+            // The webview begins loading when the window is created (before setup runs),
+            // so this must happen as early as possible to beat the frontend JS evaluation.
+            let window = app.get_webview_window("main")
+                .ok_or("Failed to get main window")?;
+
+            let home_dir = dirs::home_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            window.eval(&format!(
+                "window.__BACKEND_URL__ = '{}'; window.__TAURI__ = true; window.__HOME_DIR__ = '{}';",
+                backend_url,
+                home_dir.replace('\\', "\\\\")
+            )).map_err(|e| format!("Failed to inject backend URL: {}", e))?;
+
+            // Start Python backend
+            let mut backend = PythonProcess::start(port)
+                .map_err(|e| format!("Failed to start backend: {}", e))?;
+
+            println!("Backend started on port {} (PID: {:?})", port, backend.pid());
+
+            // Wait for backend to be ready (poll the HTTP endpoint)
+            if !wait_for_backend(&backend_url, 30) {
+                backend.stop().ok();
+                return Err("Backend failed to start within 30 seconds".into());
+            }
+
+            println!("Backend is ready at {}", backend_url);
+
+            // Store backend in app state
+            app.manage(AppState {
+                backend: Mutex::new(Some(backend)),
+            });
+
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                // Stop backend when window closes
+                if let Some(state) = window.try_state::<AppState>() {
+                    if let Ok(mut backend) = state.backend.lock() {
+                        if let Some(ref mut proc) = *backend {
+                            println!("Stopping backend on window close");
+                            proc.stop().ok();
+                        }
+                    }
+                }
+            }
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
+
+/// Wait for the backend to be ready by polling the HTTP endpoint
+fn wait_for_backend(url: &str, timeout_secs: u64) -> bool {
+    use std::time::{Duration, Instant};
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .unwrap();
+
+    let start = Instant::now();
+    let timeout = Duration::from_secs(timeout_secs);
+
+    while start.elapsed() < timeout {
+        match client.get(url).send() {
+            Ok(response) if response.status().is_success() => {
+                println!("Backend ready after {:?}", start.elapsed());
+                return true;
+            }
+            _ => {
+                std::thread::sleep(Duration::from_millis(500));
+            }
+        }
+    }
+
+    eprintln!("Backend did not become ready within {}s", timeout_secs);
+    false
+}

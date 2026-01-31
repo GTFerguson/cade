@@ -71,6 +71,36 @@ const KEYBINDINGS_HTML = `
       <tr><td><kbd>G</kbd></td><td>Scroll to bottom</td></tr>
       <tr><td><kbd>Ctrl-d</kbd></td><td>Page down</td></tr>
       <tr><td><kbd>Ctrl-u</kbd></td><td>Page up</td></tr>
+      <tr><td><kbd>i</kbd></td><td>Enter Normal mode (editor)</td></tr>
+    </table>
+  </div>
+
+  <div class="help-section">
+    <h3>Markdown Editor - Normal Mode</h3>
+    <table>
+      <tr><td><kbd>h</kbd> / <kbd>←</kbd></td><td>Move cursor left</td></tr>
+      <tr><td><kbd>j</kbd> / <kbd>↓</kbd></td><td>Move cursor down</td></tr>
+      <tr><td><kbd>k</kbd> / <kbd>↑</kbd></td><td>Move cursor up</td></tr>
+      <tr><td><kbd>l</kbd> / <kbd>→</kbd></td><td>Move cursor right</td></tr>
+      <tr><td><kbd>w</kbd></td><td>Jump to next word</td></tr>
+      <tr><td><kbd>b</kbd></td><td>Jump to previous word</td></tr>
+      <tr><td><kbd>e</kbd></td><td>Jump to end of word</td></tr>
+      <tr><td><kbd>0</kbd></td><td>Jump to start of line</td></tr>
+      <tr><td><kbd>$</kbd></td><td>Jump to end of line</td></tr>
+      <tr><td><kbd>g</kbd><kbd>g</kbd></td><td>Jump to document start</td></tr>
+      <tr><td><kbd>G</kbd></td><td>Jump to document end</td></tr>
+      <tr><td><kbd>Ctrl-i</kbd></td><td>Enter Edit mode (insert)</td></tr>
+      <tr><td><kbd>Ctrl-s</kbd></td><td>Save file</td></tr>
+      <tr><td><kbd>Escape</kbd></td><td>Exit to View mode</td></tr>
+    </table>
+  </div>
+
+  <div class="help-section">
+    <h3>Markdown Editor - Edit Mode</h3>
+    <table>
+      <tr><td><kbd>Ctrl-i</kbd></td><td>Return to Normal mode</td></tr>
+      <tr><td><kbd>Ctrl-s</kbd></td><td>Save file</td></tr>
+      <tr><td><kbd>Escape</kbd></td><td>Exit to View mode</td></tr>
     </table>
   </div>
 

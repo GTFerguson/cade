@@ -52,6 +52,22 @@ class FileError(CADEError):
     def read_failed(cls, path: str, reason: str) -> FileError:
         return cls(ErrorCode.FILE_READ_FAILED, f"Failed to read '{path}': {reason}")
 
+    @classmethod
+    def write_failed(cls, path: str, reason: str) -> FileError:
+        return cls(ErrorCode.FILE_WRITE_FAILED, f"Failed to write '{path}': {reason}")
+
+    @classmethod
+    def create_failed(cls, path: str, reason: str) -> FileError:
+        return cls(ErrorCode.FILE_CREATE_FAILED, f"Failed to create '{path}': {reason}")
+
+    @classmethod
+    def file_exists(cls, path: str) -> FileError:
+        return cls(ErrorCode.FILE_EXISTS, f"File already exists: {path}")
+
+    @classmethod
+    def invalid_path(cls, path: str, reason: str) -> FileError:
+        return cls(ErrorCode.INVALID_PATH, f"Invalid path '{path}': {reason}")
+
 
 class ProtocolError(CADEError):
     """Protocol-related errors."""

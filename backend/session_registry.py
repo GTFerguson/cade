@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 from backend.protocol import SessionKey
 from backend.pty_manager import PTYManager
 from backend.types import TerminalSize
+from backend.wsl_health import wait_for_wsl_network
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
@@ -182,6 +183,7 @@ class SessionRegistry:
         size: TerminalSize | None = None,
         auto_start_claude: bool = False,
         dummy_mode: bool = False,
+        network_timeout: float = 15.0,
     ) -> tuple[PTYSession, bool]:
         """Get an existing session or create a new one.
 
@@ -192,6 +194,7 @@ class SessionRegistry:
             size: Terminal size
             auto_start_claude: Whether to auto-start claude command
             dummy_mode: Whether to run in dummy mode
+            network_timeout: Max time to wait for network readiness (seconds)
 
         Returns:
             Tuple of (session, is_new) where is_new indicates if session was created
@@ -214,6 +217,7 @@ class SessionRegistry:
                 size,
                 auto_start_claude,
                 dummy_mode,
+                network_timeout,
             )
             self._sessions[session_id] = session
             logger.info("Created new session: %s at %s", session_id, project_path)
@@ -227,6 +231,7 @@ class SessionRegistry:
         size: TerminalSize | None,
         auto_start_claude: bool,
         dummy_mode: bool,
+        network_timeout: float,
     ) -> PTYSession:
         """Create a new PTY session with the primary (claude) terminal."""
         pty = PTYManager()
@@ -255,7 +260,38 @@ class SessionRegistry:
             )
             session.capture_output(dummy_output, SessionKey.CLAUDE)
         elif auto_start_claude:
+            # Wait for shell to be ready
             await asyncio.sleep(0.5)
+
+            # Verify the PTY survived the startup delay
+            if not pty.is_alive():
+                logger.error(
+                    "PTY died during shell startup: command=%s, cwd=%s",
+                    shell_command, project_path,
+                )
+                return session
+
+            # For WSL, ensure network is ready before starting Claude Code
+            # This prevents API timeout issues when WSL networking isn't initialized yet
+            if "wsl" in shell_command.lower():
+                logger.debug("Checking WSL network readiness before starting Claude Code...")
+                # Run blocking network check in thread pool to avoid blocking event loop
+                loop = asyncio.get_event_loop()
+                ready, msg = await loop.run_in_executor(
+                    None,
+                    wait_for_wsl_network,
+                    network_timeout,  # Use configured timeout
+                    1.0,   # check_interval
+                )
+                if ready:
+                    logger.info("WSL network ready, starting Claude Code")
+                else:
+                    logger.warning(
+                        "WSL network not ready after %.1fs timeout, starting Claude Code anyway: %s",
+                        network_timeout,
+                        msg
+                    )
+
             await pty.write("claude\n")
 
         return session
@@ -387,8 +423,12 @@ class SessionRegistry:
         # Close sessions outside the lock to avoid blocking
         for session_id, session in sessions_to_close:
             try:
+                age_seconds = now - session.created_at
                 await self._close_session(session)
-                logger.info("Cleaned up orphaned session: %s", session_id)
+                logger.info(
+                    "Cleaned up orphaned session: %s (age=%.0fs, project=%s, alive=%s)",
+                    session_id, age_seconds, session.project_path, session.is_alive(),
+                )
             except Exception as e:
                 logger.error("Error closing orphaned session %s: %s", session_id, e)
 
