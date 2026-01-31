@@ -133,19 +133,12 @@ export class Terminal implements Component {
         return false;
       }
 
-      // Handle Ctrl+V (paste)
+      // Handle Ctrl+V (paste) - let the browser paste event handle it
+      // We intercept here only to prevent xterm from handling it
       if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyV') {
-        e.preventDefault();
-        navigator.clipboard.readText()
-          .then(text => {
-            if (text) {
-              this.ws.sendInput(text, this.sessionKey);
-            }
-          })
-          .catch(err => {
-            console.error('Failed to read from clipboard:', err);
-          });
-        return false;
+        // Don't preventDefault - allow browser paste event to fire
+        // Our paste event handler will catch it
+        return false; // Prevent xterm from handling
       }
 
       return true;
@@ -193,6 +186,18 @@ export class Terminal implements Component {
       const selection = this.terminal?.getSelection();
       if (!selection) {
         this.scrollToBottom();
+      }
+    });
+
+    // Prevent default browser paste events (xterm.js has its own paste handler that conflicts)
+    this.container.addEventListener('paste', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Get clipboard data from event
+      const text = e.clipboardData?.getData('text');
+      if (text) {
+        this.ws.sendInput(text, this.sessionKey);
       }
     });
 
