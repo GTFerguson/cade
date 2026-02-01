@@ -139,6 +139,10 @@ class TestShellSpawn:
         await manager.close()
 
     @pytest.mark.asyncio
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="WindowsPTY spawn leaves stuck threads that poison the executor",
+    )
     async def test_spawn_nonexistent_command(self, temp_dir: Path):
         """Spawning a nonexistent command should raise PTYError."""
         manager = PTYManager()
@@ -148,22 +152,26 @@ class TestShellSpawn:
                 temp_dir,
                 TerminalSize(80, 24),
             )
+        await manager.close()
 
     @pytest.mark.asyncio
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="WindowsPTY spawn leaves stuck threads that poison the executor",
+    )
     async def test_spawn_with_invalid_cwd(self):
         """Spawning with a nonexistent working directory should fail."""
         manager = PTYManager()
-        # pexpect may or may not raise immediately; depends on platform
         try:
             await manager.spawn(
                 "bash",
                 Path("/nonexistent/directory/path"),
                 TerminalSize(80, 24),
             )
-            # If it didn't raise, it might still fail
-            await manager.close()
         except (PTYError, Exception):
             pass  # Expected
+        finally:
+            await manager.close()
 
 
 # ---------------------------------------------------------------------------
@@ -210,18 +218,23 @@ class TestStartupFlow:
         mock_pty = AsyncMock(spec=PTYManager)
         mock_pty.is_alive.return_value = True
 
+        mock_wait = MagicMock(return_value=(True, "ready"))
+
         with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             with patch(
                 "backend.terminal.sessions.wait_for_wsl_network",
-                return_value=(True, "ready"),
-            ) as mock_wait:
-                session, is_new = await registry.get_or_create(
-                    session_id="tab-uuid-123",
-                    project_path=temp_dir,
-                    shell_command="wsl",
-                    size=TerminalSize(80, 24),
-                    auto_start_claude=True,
-                    network_timeout=10.0,
+                mock_wait,
+            ):
+                session, is_new = await asyncio.wait_for(
+                    registry.get_or_create(
+                        session_id="tab-uuid-123",
+                        project_path=temp_dir,
+                        shell_command="wsl",
+                        size=TerminalSize(80, 24),
+                        auto_start_claude=True,
+                        network_timeout=10.0,
+                    ),
+                    timeout=10.0,
                 )
 
         mock_wait.assert_called_once_with(10.0, 1.0)
