@@ -1,6 +1,16 @@
 import type { RemoteProfile } from "./types";
 import { RemoteProfileManager } from "./profile-manager";
 
+function generateId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 export class RemoteProfileEditor {
   private container: HTMLDivElement;
   private nameInput: HTMLInputElement;
@@ -236,7 +246,7 @@ export class RemoteProfileEditor {
     }
 
     const profile: RemoteProfile = {
-      id: this.profile?.id || crypto.randomUUID(),
+      id: this.profile?.id || generateId(),
       name,
       url,
       authToken: this.tokenInput.value || undefined,
