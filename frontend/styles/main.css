@@ -274,6 +274,7 @@ body {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 36px);
+  height: calc(100dvh - 36px);
   overflow: hidden;
 }
 
@@ -1026,16 +1027,21 @@ body {
     padding-bottom: 0;
   }
 
+  .splash {
+    overflow: hidden;
+  }
+
   /* Scale splash logo to fit mobile viewport */
   .splash-logo {
     font-size: 14px;
     line-height: 1.2;
-    transform: scale(0.45);
+    transform: scale(0.35);
     transform-origin: center center;
   }
 
   .splash-status {
     font-size: 11px;
+    margin-top: -20px;
   }
 
   /* Prevent double-tap zoom on interactive elements */
@@ -1342,6 +1348,7 @@ body {
   width: 85%;
   max-width: 400px;
   height: 100vh;
+  height: 100dvh;
   background: var(--bg-primary);
   transition: right 0.3s ease;
   z-index: 101;
