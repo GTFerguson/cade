@@ -1028,8 +1028,10 @@ body {
 
   /* Scale splash logo to fit mobile viewport */
   .splash-logo {
-    font-size: 5.5px;
-    line-height: 1.1;
+    font-size: 14px;
+    line-height: 1.2;
+    transform: scale(0.45);
+    transform-origin: center center;
   }
 
   .splash-status {
