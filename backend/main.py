@@ -72,6 +72,7 @@ async def _check_wsl_health_async() -> None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan handler."""
     config = get_config()
+    config.validate_shell_command()
 
     try:
         unify_sessions(config.working_dir)

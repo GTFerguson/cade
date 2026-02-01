@@ -3,7 +3,7 @@
  */
 
 import { config } from "../config/config";
-import { MessageType, type SessionKeyValue } from "./protocol";
+import { ErrorCode, MessageType, type SessionKeyValue } from "./protocol";
 import type {
   ClientMessage,
   ConnectedMessage,
@@ -50,6 +50,7 @@ export class WebSocketClient {
   private pendingProjectPath: string | null = null;
   private pendingSessionId: string | null = null;
   private urlPollTimer: number | null = null;
+  private fatalError = false;
 
   constructor(private url: string = config.wsUrl) {}
 
@@ -375,6 +376,9 @@ export class WebSocketClient {
       case MessageType.ERROR:
         this.emit("error", message);
         console.error("Server error:", message.code, message.message);
+        if (message.code === ErrorCode.PTY_SPAWN_FAILED) {
+          this.fatalError = true;
+        }
         break;
 
       case MessageType.SESSION_RESTORED:
@@ -399,6 +403,11 @@ export class WebSocketClient {
    * Schedule a reconnection attempt.
    */
   private scheduleReconnect(): void {
+    if (this.fatalError) {
+      console.error("Not reconnecting: terminal failed to start");
+      return;
+    }
+
     if (this.reconnectAttempts >= config.reconnectMaxAttempts) {
       console.error("Max reconnection attempts reached");
       return;

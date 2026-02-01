@@ -132,7 +132,9 @@ if (-not (Test-Path $tauriResources)) {
 $targetTriple = "x86_64-pc-windows-msvc"
 $tauriBackendName = "cade-backend-$targetTriple.exe"
 Copy-Item $backendExe -Destination "$tauriResources\$tauriBackendName" -Force
-Write-Host "[OK] Backend copied to Tauri resources as $tauriBackendName" -ForegroundColor Green
+# Also copy with the plain name so the dev-path lookup in python.rs finds the fresh build
+Copy-Item $backendExe -Destination "$tauriResources\cade-backend.exe" -Force
+Write-Host "[OK] Backend copied to Tauri resources as $tauriBackendName + cade-backend.exe" -ForegroundColor Green
 Write-Host ""
 
 # Step 4: Build Tauri app

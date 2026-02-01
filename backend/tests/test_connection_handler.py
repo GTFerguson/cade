@@ -371,7 +371,8 @@ class TestSetProject:
         handler = ConnectionHandler(ws, config)
         await handler._wait_for_project()
 
-        assert handler._working_dir == temp_dir
+        # _wait_for_project calls .resolve() on the received path
+        assert handler._working_dir == temp_dir.resolve()
         assert handler._session_id == "test-session-id"
 
     @pytest.mark.asyncio

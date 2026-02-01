@@ -76,6 +76,7 @@ export class ProjectContextImpl implements IProjectContext {
         this.terminalManager?.write(
           `\r\n\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`
         );
+        this.terminalManager?.focus();
       }
     },
     ptyExited: (msg: PtyExitedMessage) => {

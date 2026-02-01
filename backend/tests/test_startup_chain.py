@@ -8,6 +8,7 @@ the Claude pane shows a white cursor but can't type.
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import time
 from pathlib import Path
@@ -15,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from backend.config import Config
+from backend.config import Config, detect_default_shell
 from backend.errors import PTYError
 from backend.protocol import MessageType, SessionKey
 from backend.terminal.pty import PTYManager
@@ -32,10 +33,13 @@ class TestConfigResolution:
     """Verify that the shell command and other config settings resolve correctly
     for the desktop context."""
 
-    def test_default_shell_is_wsl(self):
-        """Default shell_command should be 'wsl' (for Windows host)."""
-        config = Config()
-        assert config.shell_command == "wsl"
+    def test_default_shell_detected(self):
+        """Default shell_command should be auto-detected via from_env()."""
+        with patch.dict("os.environ", {}, clear=False):
+            # Remove any explicit override so detect_default_shell() runs
+            os.environ.pop("CADE_SHELL_COMMAND", None)
+            config = Config.from_env()
+        assert config.shell_command == detect_default_shell()
 
     def test_env_override_shell_command(self):
         with patch.dict("os.environ", {"CADE_SHELL_COMMAND": "bash"}):
@@ -65,6 +69,47 @@ class TestConfigResolution:
         config = Config()
         updated = config.update_from_args(auto_open_browser=False)
         assert updated.auto_open_browser is False
+
+
+# ---------------------------------------------------------------------------
+# Shell Command Validation Tests
+# ---------------------------------------------------------------------------
+
+
+class TestValidateShellCommand:
+    """Verify that validate_shell_command() auto-corrects missing binaries."""
+
+    def test_valid_command_unchanged(self):
+        """A command that exists on PATH should not be changed."""
+        config = Config(shell_command="python")
+        original = config.shell_command
+        config.validate_shell_command()
+        assert config.shell_command == original
+
+    def test_invalid_command_corrected(self):
+        """A command not on PATH should be replaced with detect_default_shell()."""
+        config = Config(shell_command="totally_nonexistent_binary_xyz")
+        config.validate_shell_command()
+        assert config.shell_command == detect_default_shell()
+
+    def test_command_with_valid_base_and_args(self):
+        """A command with arguments whose base binary exists should pass."""
+        config = Config(shell_command="python --version")
+        config.validate_shell_command()
+        assert config.shell_command == "python --version"
+
+    def test_command_with_invalid_base_and_args(self):
+        """A command with arguments whose base binary is missing should be corrected."""
+        config = Config(shell_command="nonexistent_shell_xyz --login")
+        config.validate_shell_command()
+        assert config.shell_command == detect_default_shell()
+
+    def test_already_correct_is_noop(self):
+        """Running validation on an already-valid config is a no-op."""
+        default = detect_default_shell()
+        config = Config(shell_command=default)
+        config.validate_shell_command()
+        assert config.shell_command == default
 
 
 # ---------------------------------------------------------------------------
@@ -271,8 +316,8 @@ class TestDesktopEdgeCases:
         assert updated.port == 12345
         assert updated.host == "127.0.0.1"
         assert updated.auto_open_browser is False
-        # Shell command should remain default
-        assert updated.shell_command == "wsl"
+        # Shell command should remain whatever from_env() resolved
+        assert updated.shell_command == config.shell_command
 
     @pytest.mark.asyncio
     async def test_reconnect_to_existing_session(self, temp_dir: Path):
@@ -446,6 +491,7 @@ class TestErrorPropagation:
         ws = AsyncMock()
         ws.accept = AsyncMock()
         ws.send_json = AsyncMock()
+
 
         # Simulate no SET_PROJECT message - use a slow coroutine so
         # the inner 0.1s timeout fires naturally instead of busy-spinning

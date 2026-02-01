@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import os
+import platform
+import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -35,6 +37,29 @@ from backend.files.user_config import (
 logger = logging.getLogger(__name__)
 
 
+def detect_default_shell() -> str:
+    """Auto-detect the appropriate shell command based on platform.
+
+    Returns:
+        - "wsl" on Windows (to access WSL from Windows)
+        - "bash" on Linux/macOS/WSL (universal, always available)
+        - Falls back to "zsh" if bash not found but zsh is available
+    """
+    system = platform.system().lower()
+
+    if system == "windows":
+        return "wsl"
+
+    # On Linux/macOS/WSL, prefer bash (universal) over zsh
+    if shutil.which("bash"):
+        return "bash"
+    elif shutil.which("zsh"):
+        return "zsh"
+    else:
+        # Fallback to sh (POSIX shell, always exists)
+        return "sh"
+
+
 @dataclass
 class Config:
     """Application configuration loaded from environment variables."""
@@ -42,7 +67,7 @@ class Config:
     port: int = 3000
     host: str = "0.0.0.0"  # Listen on all interfaces for WSL connectivity
     working_dir: Path = field(default_factory=Path.cwd)
-    shell_command: str = "wsl"
+    shell_command: str = "bash"  # Default, overridden by detect_default_shell() in from_env()
     auto_start_claude: bool = True
     auto_open_browser: bool = True
     debug: bool = False
@@ -56,7 +81,7 @@ class Config:
             CADE_PORT: Server port (default: 3000)
             CADE_HOST: Server host (default: 0.0.0.0 for WSL connectivity)
             CADE_WORKING_DIR: Working directory (default: cwd)
-            CADE_SHELL_COMMAND: Shell command to run (default: wsl)
+            CADE_SHELL_COMMAND: Shell command to run (default: auto-detected - "wsl" on Windows, "bash" on Linux/macOS)
             CADE_AUTO_START_CLAUDE: Auto-run claude on shell start (default: true)
             CADE_AUTO_OPEN_BROWSER: Open browser on start (default: true)
             CADE_DEBUG: Enable debug mode (default: false)
@@ -66,7 +91,7 @@ class Config:
             port=int(os.getenv("CADE_PORT", "3000")),
             host=os.getenv("CADE_HOST", "0.0.0.0"),
             working_dir=Path(os.getenv("CADE_WORKING_DIR", str(Path.cwd()))),
-            shell_command=os.getenv("CADE_SHELL_COMMAND", "wsl"),
+            shell_command=os.getenv("CADE_SHELL_COMMAND", detect_default_shell()),
             auto_start_claude=os.getenv("CADE_AUTO_START_CLAUDE", "true").lower() == "true",
             auto_open_browser=os.getenv("CADE_AUTO_OPEN_BROWSER", "true").lower() == "true",
             debug=os.getenv("CADE_DEBUG", "false").lower() == "true",
@@ -99,6 +124,26 @@ class Config:
             debug=debug if debug is not None else self.debug,
             dummy_mode=dummy_mode if dummy_mode is not None else self.dummy_mode,
         )
+
+    def validate_shell_command(self) -> None:
+        """Auto-correct shell command if the binary doesn't exist on this system."""
+        if shutil.which(self.shell_command) is not None:
+            return
+
+        # Handle commands with arguments (e.g., "wsl --cd /path")
+        base_cmd = self.shell_command.split()[0]
+        if shutil.which(base_cmd) is not None:
+            return
+
+        corrected = detect_default_shell()
+        logger.warning(
+            "Shell command '%s' not found on this system. "
+            "Auto-correcting to '%s'. "
+            "Check CADE_SHELL_COMMAND environment variable.",
+            self.shell_command,
+            corrected,
+        )
+        self.shell_command = corrected
 
     @property
     def server_url(self) -> str:
