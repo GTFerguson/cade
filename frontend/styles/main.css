@@ -1022,8 +1022,8 @@ body {
 
   .terminal-pane {
     width: 100%;
-    height: 100%;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    height: calc(100% - 48px);
+    padding-bottom: 0;
   }
 
   /* Prevent double-tap zoom on interactive elements */
@@ -1045,13 +1045,13 @@ body {
 
 .app-container.mobile-layout .terminal-pane {
   width: 100%;
-  height: 100dvh;
-  height: 100vh;
+  height: calc(100dvh - 48px);
+  height: calc(100vh - 48px);
 }
 
 @supports (height: 100dvh) {
   .app-container.mobile-layout .terminal-pane {
-    height: 100dvh;
+    height: calc(100dvh - 48px);
   }
 }
 
@@ -1102,13 +1102,224 @@ body {
   }
 }
 
-/* Show MD button only on mobile */
+/* Show MD button only on mobile (hidden when touch toolbar is active) */
 @media (max-width: 768px) {
   .md-button {
     display: flex;
     align-items: center;
     justify-content: center;
   }
+
+  /* Hide MD button when touch toolbar is visible */
+  .md-button.toolbar-active {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   Touch Toolbar (Mobile)
+   ========================================================================== */
+
+.touch-toolbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  z-index: 99;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  touch-action: manipulation;
+}
+
+.touch-toolbar-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition: background 0.1s ease;
+}
+
+.touch-toolbar-btn:active {
+  background: var(--bg-hover);
+}
+
+/* Notification dot on overflow button */
+.touch-toolbar-btn.has-indicator::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  right: calc(50% - 16px);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+}
+
+/* ==========================================================================
+   Overflow Menu (Mobile Bottom Sheet)
+   ========================================================================== */
+
+.overflow-menu-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  z-index: 200;
+}
+
+.overflow-menu-backdrop.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.overflow-menu {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  border-radius: 12px 12px 0 0;
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+  z-index: 201;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.overflow-menu.open {
+  transform: translateY(0);
+}
+
+.overflow-menu-handle {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 6px;
+}
+
+.overflow-menu-handle::after {
+  content: '';
+  width: 32px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--text-muted);
+  opacity: 0.4;
+}
+
+.overflow-menu-section {
+  padding: 0 16px;
+}
+
+.overflow-menu-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  padding: 12px 0 8px;
+}
+
+.overflow-menu-tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s ease;
+  touch-action: manipulation;
+}
+
+.overflow-menu-tab:active {
+  background: var(--bg-hover);
+}
+
+.overflow-menu-tab.active {
+  background: var(--bg-tertiary);
+}
+
+.overflow-menu-tab-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.overflow-menu-tab.active .overflow-menu-tab-indicator {
+  background: var(--accent-green);
+}
+
+.overflow-menu-tab-name {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overflow-menu-tab-path {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overflow-menu-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 8px 16px;
+}
+
+.overflow-menu-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background 0.1s ease;
+  touch-action: manipulation;
+}
+
+.overflow-menu-action:active {
+  background: var(--bg-hover);
+}
+
+.overflow-menu-action-icon {
+  font-size: 16px;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.overflow-menu-action-label {
+  font-size: 14px;
+  color: var(--text-primary);
 }
 
 /* Slide-out viewer panel */
@@ -1278,11 +1489,14 @@ body {
   visibility: visible;
 }
 
-/* Hide slideout elements on desktop */
+/* Hide mobile-only elements on desktop */
 @media (min-width: 769px) {
   .md-button,
   .viewer-slideout,
-  .slideout-backdrop {
+  .slideout-backdrop,
+  .touch-toolbar,
+  .overflow-menu,
+  .overflow-menu-backdrop {
     display: none !important;
   }
 }

@@ -9,6 +9,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import shutil
+import subprocess
+import sys
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -65,18 +67,17 @@ class NeovimManager:
                 await self._close_instance(existing)
                 del self._instances[session_id]
 
-        nvim_path = shutil.which("nvim")
-        if nvim_path is None:
-            raise FileNotFoundError("nvim not found on PATH")
+        nvim_path = self._resolve_nvim_path()
 
         # Build unique socket path for RPC
         socket_name = f"cade-nvim-{uuid.uuid4().hex[:12]}"
-        if hasattr(asyncio, "get_running_loop"):
+        if sys.platform == "win32":
+            # Neovim on Windows uses named pipes, not Unix sockets
+            socket_path = f"\\\\.\\pipe\\{socket_name}"
+        else:
             import tempfile
             socket_dir = Path(tempfile.gettempdir())
-        else:
-            socket_dir = Path("/tmp")
-        socket_path = str(socket_dir / socket_name)
+            socket_path = str(socket_dir / socket_name)
 
         cmd_parts = [nvim_path, "--listen", socket_path]
         if clean_mode:
@@ -106,6 +107,56 @@ class NeovimManager:
         )
 
         return instance
+
+    def _resolve_nvim_path(self) -> str:
+        """Find a working nvim binary, preferring the bundled copy."""
+        bundled = self._find_bundled_nvim()
+        if bundled is not None:
+            logger.info("Using bundled nvim: %s", bundled)
+            return bundled
+
+        system_nvim = shutil.which("nvim")
+        if system_nvim is None:
+            raise FileNotFoundError("nvim not found on PATH")
+
+        if not self._validate_nvim(system_nvim):
+            raise FileNotFoundError(
+                f"Found nvim at {system_nvim} but it failed to run. "
+                "The binary may be a broken shim — reinstall Neovim or "
+                "remove the broken entry from PATH."
+            )
+
+        logger.info("Using system nvim: %s", system_nvim)
+        return system_nvim
+
+    @staticmethod
+    def _find_bundled_nvim() -> str | None:
+        """Check for nvim bundled inside a PyInstaller package."""
+        nvim_name = "nvim.exe" if sys.platform == "win32" else "nvim"
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            path = Path(meipass) / "nvim" / "bin" / nvim_name
+            if path.is_file():
+                return str(path)
+        return None
+
+    @staticmethod
+    def _validate_nvim(nvim_path: str) -> bool:
+        """Run 'nvim --version' to verify the binary actually works."""
+        try:
+            result = subprocess.run(
+                [nvim_path, "--version"],
+                capture_output=True,
+                timeout=5,
+                creationflags=(
+                    subprocess.CREATE_NO_WINDOW
+                    if sys.platform == "win32"
+                    else 0
+                ),
+            )
+            return result.returncode == 0
+        except (subprocess.TimeoutExpired, OSError):
+            return False
 
     async def kill(self, session_id: str) -> None:
         """Kill the Neovim instance for a session."""
@@ -138,13 +189,14 @@ class NeovimManager:
                 pass
         await instance.pty.close()
 
-        # Clean up socket file
-        try:
-            socket = Path(instance.socket_path)
-            if socket.exists():
-                socket.unlink()
-        except OSError:
-            pass
+        # Clean up socket file (named pipes on Windows are cleaned up by the OS)
+        if not instance.socket_path.startswith("\\\\.\\pipe\\"):
+            try:
+                socket = Path(instance.socket_path)
+                if socket.exists():
+                    socket.unlink()
+            except OSError:
+                pass
 
 
 # Global manager instance

@@ -232,6 +232,17 @@ export class TerminalManager implements Component {
   }
 
   /**
+   * Send input to the active terminal's PTY.
+   */
+  sendInput(data: string): void {
+    if (this.activeTerminal === SessionKey.CLAUDE) {
+      this.claudeTerminal?.sendInput(data);
+    } else {
+      this.manualTerminal?.sendInput(data);
+    }
+  }
+
+  /**
    * Focus the active terminal.
    */
   focus(): void {

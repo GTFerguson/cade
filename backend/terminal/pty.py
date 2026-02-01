@@ -207,7 +207,12 @@ class WindowsPTY(BasePTY):
                 (Backend.ConPTY, exe, " --cd ~"),
             ]
         else:
-            attempts = [(Backend.ConPTY, exe, "")]
+            # Split exe from args so ConPTY doesn't treat the whole string as a path
+            import shlex
+            parts = shlex.split(command, posix=False)
+            native_exe = parts[0]
+            native_args = " ".join(parts[1:]) if len(parts) > 1 else ""
+            attempts = [(Backend.ConPTY, native_exe, native_args)]
 
         loop = asyncio.get_event_loop()
         last_error: str = ""

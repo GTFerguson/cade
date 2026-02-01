@@ -85,7 +85,7 @@ Write-Host "[OK] All prerequisites found" -ForegroundColor Green
 Write-Host ""
 
 # Step 1: Build frontend
-Write-Host "Step 1/4: Building frontend..." -ForegroundColor Cyan
+Write-Host "Step 1/5: Building frontend..." -ForegroundColor Cyan
 Set-Location "$projectRoot\frontend"
 
 if (-not (Test-Path "node_modules")) {
@@ -93,6 +93,8 @@ if (-not (Test-Path "node_modules")) {
     npm install
 }
 
+# Desktop builds serve from root /, not a subpath like /cade/
+$env:VITE_BASE_PATH = "/"
 npm run build
 
 if (-not (Test-Path "dist")) {
@@ -103,8 +105,39 @@ if (-not (Test-Path "dist")) {
 Write-Host "[OK] Frontend built successfully" -ForegroundColor Green
 Write-Host ""
 
-# Step 2: Package Python backend with PyInstaller
-Write-Host "Step 2/4: Packaging Python backend..." -ForegroundColor Cyan
+# Step 2: Download Neovim portable
+Write-Host "Step 2/5: Downloading Neovim portable..." -ForegroundColor Cyan
+Set-Location $projectRoot
+
+$nvimVersion = "v0.11.0"
+$nvimZipUrl = "https://github.com/neovim/neovim/releases/download/$nvimVersion/nvim-win64.zip"
+$nvimZipPath = "$projectRoot\dist\nvim-win64.zip"
+$nvimDir = "$projectRoot\dist\nvim"
+
+# Ensure dist/ directory exists
+if (-not (Test-Path "$projectRoot\dist")) {
+    New-Item -ItemType Directory -Path "$projectRoot\dist" -Force | Out-Null
+}
+
+# Download only if not cached
+if (-not (Test-Path $nvimZipPath)) {
+    Write-Host "Downloading Neovim $nvimVersion portable..." -ForegroundColor Yellow
+    Invoke-WebRequest -Uri $nvimZipUrl -OutFile $nvimZipPath
+} else {
+    Write-Host "Using cached Neovim download: $nvimZipPath" -ForegroundColor Yellow
+}
+
+# Extract (the zip contains nvim-win64/ as root)
+Write-Host "Extracting Neovim..." -ForegroundColor Yellow
+Expand-Archive -Path $nvimZipPath -DestinationPath "$projectRoot\dist" -Force
+if (Test-Path $nvimDir) { Remove-Item -Recurse -Force $nvimDir }
+Rename-Item "$projectRoot\dist\nvim-win64" $nvimDir
+
+Write-Host "[OK] Neovim $nvimVersion extracted to $nvimDir" -ForegroundColor Green
+Write-Host ""
+
+# Step 3: Package Python backend with PyInstaller
+Write-Host "Step 3/5: Packaging Python backend..." -ForegroundColor Cyan
 Set-Location $projectRoot
 
 & $pythonCmd -m PyInstaller "$projectRoot\scripts\pyinstaller.spec" --clean --noconfirm
@@ -120,8 +153,8 @@ $backendSize = [math]::Round((Get-Item $backendExe).Length / 1MB, 2)
 Write-Host "[OK] Backend packaged successfully: $backendExe ($backendSize MB)" -ForegroundColor Green
 Write-Host ""
 
-# Step 3: Copy backend to Tauri resources
-Write-Host "Step 3/4: Copying backend to Tauri resources..." -ForegroundColor Cyan
+# Step 4: Copy backend to Tauri resources
+Write-Host "Step 4/5: Copying backend to Tauri resources..." -ForegroundColor Cyan
 $tauriResources = "$projectRoot\desktop\src-tauri\resources"
 
 if (-not (Test-Path $tauriResources)) {
@@ -137,8 +170,8 @@ Copy-Item $backendExe -Destination "$tauriResources\cade-backend.exe" -Force
 Write-Host "[OK] Backend copied to Tauri resources as $tauriBackendName + cade-backend.exe" -ForegroundColor Green
 Write-Host ""
 
-# Step 4: Build Tauri app
-Write-Host "Step 4/4: Building Tauri desktop app..." -ForegroundColor Cyan
+# Step 5: Build Tauri app
+Write-Host "Step 5/5: Building Tauri desktop app..." -ForegroundColor Cyan
 Set-Location "$projectRoot\desktop"
 
 if (-not (Test-Path "node_modules")) {

@@ -1,15 +1,24 @@
 /**
  * Mobile UI component for CADE.
  *
- * Provides a mobile-friendly interface with a floating MD button
- * and slide-out viewer panel.
+ * Coordinates the touch toolbar, overflow menu, and slide-out viewer
+ * for mobile-sized viewports.
  */
 
 import hljs from "highlight.js";
 import type { Component, FileChangeMessage } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
+import { TouchToolbar } from "./touch-toolbar";
+import { OverflowMenu, type OverflowTab } from "./overflow-menu";
 
 const MOBILE_BREAKPOINT = 768;
+
+export interface MobileUICallbacks {
+  sendInput: (data: string) => void;
+  getTabs: () => OverflowTab[];
+  onSwitchTab: (id: string) => void;
+  getActiveWs: () => WebSocketClient;
+}
 
 export class MobileUI implements Component {
   private viewerOpen = false;
@@ -24,7 +33,13 @@ export class MobileUI implements Component {
   private slideoutContent: HTMLElement;
   private closeButton: HTMLButtonElement;
 
-  constructor(private ws: WebSocketClient) {
+  private toolbar: TouchToolbar | null = null;
+  private overflowMenu: OverflowMenu | null = null;
+
+  constructor(
+    private ws: WebSocketClient,
+    private callbacks: MobileUICallbacks,
+  ) {
     this.mdButton = document.getElementById("md-button") as HTMLButtonElement;
     this.slideout = document.getElementById("viewer-slideout") as HTMLElement;
     this.backdrop = document.getElementById("slideout-backdrop") as HTMLElement;
@@ -52,7 +67,38 @@ export class MobileUI implements Component {
   initialize(): void {
     this.setupEventListeners();
     this.setupWebSocketListeners();
+
+    if (MobileUI.isMobile()) {
+      this.initializeToolbar();
+    }
+
     this.updateVisibility();
+  }
+
+  /**
+   * Create and initialize the touch toolbar and overflow menu.
+   */
+  private initializeToolbar(): void {
+    this.overflowMenu = new OverflowMenu({
+      getTabs: () => this.callbacks.getTabs(),
+      onSwitchTab: (id) => this.callbacks.onSwitchTab(id),
+      onViewFile: () => this.openViewer(),
+      onReconnect: () => {
+        const ws = this.callbacks.getActiveWs();
+        ws.disconnect();
+        ws.connect();
+      },
+    });
+    this.overflowMenu.initialize();
+
+    this.toolbar = new TouchToolbar(
+      (data) => this.callbacks.sendInput(data),
+      () => this.overflowMenu!.toggle(),
+    );
+    this.toolbar.initialize();
+
+    // Hide the floating MD button — toolbar's ⋯ → View File replaces it
+    this.mdButton.classList.add("toolbar-active");
   }
 
   /**
@@ -100,20 +146,33 @@ export class MobileUI implements Component {
   private updateVisibility(): void {
     const isMobile = MobileUI.isMobile();
 
+    if (isMobile && !this.toolbar) {
+      this.initializeToolbar();
+    } else if (!isMobile && this.toolbar) {
+      this.toolbar.hide();
+    } else if (isMobile && this.toolbar) {
+      this.toolbar.show();
+    }
+
     if (!isMobile && this.viewerOpen) {
       this.closeViewer();
     }
   }
 
   /**
-   * Show the update indicator on the MD button.
+   * Show the update indicator on the overflow button (or MD button as fallback).
    */
   showUpdateIndicator(path: string): void {
     if (!MobileUI.isMobile()) return;
 
     this.hasUpdate = true;
     this.lastChangedPath = path;
-    this.mdButton.classList.add("has-update");
+
+    if (this.toolbar) {
+      this.toolbar.showOverflowIndicator();
+    } else {
+      this.mdButton.classList.add("has-update");
+    }
   }
 
   /**
@@ -122,6 +181,7 @@ export class MobileUI implements Component {
   private clearUpdateIndicator(): void {
     this.hasUpdate = false;
     this.mdButton.classList.remove("has-update");
+    this.toolbar?.clearOverflowIndicator();
   }
 
   /**
@@ -143,11 +203,14 @@ export class MobileUI implements Component {
     this.slideout.classList.add("open");
     this.backdrop.classList.add("visible");
 
+    // Use the active tab's WebSocket for file requests
+    const ws = this.callbacks.getActiveWs();
+
     if (this.hasUpdate && this.lastChangedPath !== null) {
-      this.ws.requestFile(this.lastChangedPath);
+      ws.requestFile(this.lastChangedPath);
       this.clearUpdateIndicator();
     } else if (this.currentPath !== null) {
-      this.ws.requestFile(this.currentPath);
+      ws.requestFile(this.currentPath);
     } else {
       this.renderEmpty();
     }
@@ -285,5 +348,7 @@ export class MobileUI implements Component {
   dispose(): void {
     this.closeViewer();
     this.slideoutContent.innerHTML = "";
+    this.toolbar?.dispose();
+    this.overflowMenu?.dispose();
   }
 }

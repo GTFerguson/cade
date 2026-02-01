@@ -323,6 +323,13 @@ export class Terminal implements Component {
   }
 
   /**
+   * Send input data to the terminal's PTY (same path as keyboard input).
+   */
+  sendInput(data: string): void {
+    this.ws.sendInput(data, this.sessionKey);
+  }
+
+  /**
    * Clear the terminal.
    */
   clear(): void {

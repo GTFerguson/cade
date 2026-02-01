@@ -9,10 +9,11 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { PaneKeyHandler } from "../input/keybindings";
-import type { Component, NeovimExitedMessage, NeovimOutputMessage, NeovimReadyMessage } from "../types";
+import type { Component, ErrorMessage, NeovimExitedMessage, NeovimOutputMessage, NeovimReadyMessage } from "../types";
+import { ErrorCode } from "../platform/protocol";
 import type { WebSocketClient } from "../platform/websocket";
 
-type NeovimPaneState = "idle" | "starting" | "ready" | "exited";
+type NeovimPaneState = "idle" | "starting" | "ready" | "exited" | "error";
 
 export class NeovimPane implements Component, PaneKeyHandler {
   private terminal: XTerm | null = null;
@@ -27,6 +28,7 @@ export class NeovimPane implements Component, PaneKeyHandler {
     output: (msg: NeovimOutputMessage) => this.handleOutput(msg),
     ready: (msg: NeovimReadyMessage) => this.handleReady(msg),
     exited: (msg: NeovimExitedMessage) => this.handleExited(msg),
+    error: (msg: ErrorMessage) => this.handleError(msg),
   };
 
   constructor(
@@ -119,6 +121,7 @@ export class NeovimPane implements Component, PaneKeyHandler {
     this.ws.on("neovim-output", this.boundHandlers.output);
     this.ws.on("neovim-ready", this.boundHandlers.ready);
     this.ws.on("neovim-exited", this.boundHandlers.exited);
+    this.ws.on("error", this.boundHandlers.error);
 
     this.showStatus("idle");
   }
@@ -131,6 +134,7 @@ export class NeovimPane implements Component, PaneKeyHandler {
     if (this.state === "ready" || this.state === "starting") {
       return;
     }
+    // Allow re-spawn from error state (Retry button)
 
     this.state = "starting";
     this.showStatus("starting");
@@ -220,7 +224,19 @@ export class NeovimPane implements Component, PaneKeyHandler {
     console.log(`[neovim] Exited with code: ${msg.exitCode}`);
   }
 
-  private showStatus(state: NeovimPaneState, exitCode?: number): void {
+  private handleError(msg: ErrorMessage): void {
+    if (this.state !== "starting") return;
+
+    if (
+      msg.code === ErrorCode.NEOVIM_NOT_FOUND ||
+      msg.code === ErrorCode.NEOVIM_SPAWN_FAILED
+    ) {
+      this.state = "error";
+      this.showStatus("error", undefined, msg.message);
+    }
+  }
+
+  private showStatus(state: NeovimPaneState, exitCode?: number, errorMessage?: string): void {
     this.statusEl.style.display = "flex";
     this.terminalContainer.style.opacity = state === "ready" ? "1" : "0.3";
 
@@ -249,9 +265,19 @@ export class NeovimPane implements Component, PaneKeyHandler {
             <button class="neovim-restart-btn" onclick="">Restart</button>
           </div>
         `;
-        // Wire up restart button
-        const btn = this.statusEl.querySelector(".neovim-restart-btn");
-        btn?.addEventListener("click", () => this.spawn());
+        this.statusEl.querySelector(".neovim-restart-btn")
+          ?.addEventListener("click", () => this.spawn());
+        break;
+      case "error":
+        this.statusEl.innerHTML = `
+          <div class="neovim-status-content">
+            <span class="neovim-status-icon">✕</span>
+            <span>${errorMessage ?? "Failed to start Neovim"}</span>
+            <button class="neovim-restart-btn">Retry</button>
+          </div>
+        `;
+        this.statusEl.querySelector(".neovim-restart-btn")
+          ?.addEventListener("click", () => this.spawn());
         break;
       case "ready":
         this.hideStatus();
@@ -275,6 +301,7 @@ export class NeovimPane implements Component, PaneKeyHandler {
     this.ws.off("neovim-output", this.boundHandlers.output);
     this.ws.off("neovim-ready", this.boundHandlers.ready);
     this.ws.off("neovim-exited", this.boundHandlers.exited);
+    this.ws.off("error", this.boundHandlers.error);
 
     if (this.state === "ready" || this.state === "starting") {
       this.kill();

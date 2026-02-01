@@ -117,7 +117,27 @@ class App {
 
     const initialActiveTab = this.tabManager.getActiveTab();
     if (initialActiveTab) {
-      this.mobileUI = new MobileUI(initialActiveTab.ws);
+      this.mobileUI = new MobileUI(initialActiveTab.ws, {
+        sendInput: (data) => {
+          const tab = this.tabManager.getActiveTab();
+          tab?.context?.getTerminalManager()?.sendInput(data);
+        },
+        getTabs: () => {
+          const activeId = this.tabManager.getActiveTabId();
+          return this.tabManager.getTabs().map((t) => ({
+            id: t.id,
+            name: t.name,
+            projectPath: t.projectPath,
+            isActive: t.id === activeId,
+          }));
+        },
+        onSwitchTab: (id) => {
+          this.tabManager.switchTab(id);
+        },
+        getActiveWs: () => {
+          return this.tabManager.getActiveTab()?.ws ?? initialActiveTab.ws;
+        },
+      });
       this.mobileUI.initialize();
     }
 

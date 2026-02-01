@@ -591,6 +591,7 @@ class ConnectionHandler:
             })
 
         except FileNotFoundError:
+            logger.warning("Neovim not found on PATH")
             await self._send_error(
                 ErrorCode.NEOVIM_NOT_FOUND,
                 "Neovim (nvim) is not installed or not on PATH",

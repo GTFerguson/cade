@@ -30,6 +30,8 @@ plans/
 # Build artifacts
 frontend/dist/
 dist/
+dist/nvim*/
+dist/nvim-win64.zip
 build/
 
 # Desktop app build artifacts

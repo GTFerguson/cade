@@ -56,6 +56,11 @@ datas = []
 if frontend_dist.exists():
     datas.append((str(frontend_dist), 'frontend/dist'))
 
+# Bundle Neovim portable (downloaded by build script)
+nvim_dist = project_root / 'dist' / 'nvim'
+if nvim_dist.is_dir():
+    datas.append((str(nvim_dist), 'nvim'))
+
 # Bundle winpty native binaries (DLLs and executables) that PyInstaller
 # doesn't discover through hidden imports alone
 binaries = []
