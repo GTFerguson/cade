@@ -64,6 +64,11 @@ class BasePTY(ABC):
         """Check if the PTY process is still running."""
         ...
 
+    @property
+    def pid(self) -> int:
+        """Return the PID of the underlying process, or 0 if unavailable."""
+        return 0
+
 
 class UnixPTY(BasePTY):
     """Unix PTY implementation using pexpect."""
@@ -76,12 +81,16 @@ class UnixPTY(BasePTY):
         import pexpect
 
         try:
+            env = os.environ.copy()
+            env.setdefault("TERM", "xterm-256color")
+
             self._process = pexpect.spawn(
                 command,
                 cwd=str(cwd),
                 dimensions=(size.rows, size.cols),
                 encoding="utf-8",
                 timeout=None,
+                env=env,
             )
         except Exception as e:
             raise PTYError.spawn_failed(command, str(e)) from e
@@ -148,6 +157,12 @@ class UnixPTY(BasePTY):
 
     def is_alive(self) -> bool:
         return self._process is not None and self._process.isalive()
+
+    @property
+    def pid(self) -> int:
+        if self._process is not None:
+            return self._process.pid
+        return 0
 
 
 class WindowsPTY(BasePTY):
@@ -405,3 +420,10 @@ class PTYManager:
     def is_alive(self) -> bool:
         """Check if the PTY process is still running."""
         return self._pty is not None and self._pty.is_alive()
+
+    @property
+    def pid(self) -> int:
+        """Return the PID of the underlying process, or 0 if unavailable."""
+        if self._pty is not None:
+            return self._pty.pid
+        return 0
