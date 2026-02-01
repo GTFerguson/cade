@@ -1026,6 +1026,16 @@ body {
     padding-bottom: 0;
   }
 
+  /* Scale splash logo to fit mobile viewport */
+  .splash-logo {
+    font-size: 5.5px;
+    line-height: 1.1;
+  }
+
+  .splash-status {
+    font-size: 11px;
+  }
+
   /* Prevent double-tap zoom on interactive elements */
   button, .tab, .md-button {
     touch-action: manipulation;

@@ -18,6 +18,7 @@ export class Splash {
   private ready = false;
   private onEnter: (() => void) | null = null;
   private keyHandler: ((e: KeyboardEvent) => void) | null = null;
+  private tapHandler: ((e: Event) => void) | null = null;
 
   constructor(container: HTMLElement) {
     this.element = document.createElement("div");
@@ -36,6 +37,7 @@ export class Splash {
     container.appendChild(this.element);
 
     this.setupKeyListener();
+    this.setupTapListener();
   }
 
   private setupKeyListener(): void {
@@ -43,12 +45,26 @@ export class Splash {
       if (this.ready && (e.key === "Enter" || e.key === " ")) {
         e.preventDefault();
         e.stopPropagation();
-        this.hide();
-        this.onEnter?.();
+        this.dismiss();
       }
     };
     // Use capture phase to intercept before other handlers
     document.addEventListener("keydown", this.keyHandler, true);
+  }
+
+  private setupTapListener(): void {
+    this.tapHandler = (e: Event) => {
+      if (this.ready) {
+        e.preventDefault();
+        this.dismiss();
+      }
+    };
+    this.element.addEventListener("click", this.tapHandler);
+  }
+
+  private dismiss(): void {
+    this.hide();
+    this.onEnter?.();
   }
 
   /**
@@ -65,7 +81,8 @@ export class Splash {
   setReady(callback: () => void): void {
     this.ready = true;
     this.onEnter = callback;
-    this.setStatus("enter");
+    const isMobile = window.innerWidth <= 768;
+    this.setStatus(isMobile ? "tap" : "enter");
     this.statusEl.classList.add("blink");
   }
 
@@ -86,6 +103,10 @@ export class Splash {
     if (this.keyHandler) {
       document.removeEventListener("keydown", this.keyHandler, true);
       this.keyHandler = null;
+    }
+    if (this.tapHandler) {
+      this.element.removeEventListener("click", this.tapHandler);
+      this.tapHandler = null;
     }
     this.element.classList.add("hidden");
     setTimeout(() => this.element.remove(), 300);
