@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from backend.auth import extract_token_from_query, validate_token
 from backend.config import load_user_config
 from backend.terminal.connections import get_connection_manager
 from backend.connection_registry import get_connection_registry
@@ -21,7 +22,7 @@ from backend.files.watcher import FileWatcher
 from backend.protocol import ErrorCode, MessageType, SessionKey
 from backend.session import load_session, save_session
 from backend.terminal.sessions import PTYSession, TerminalState, get_registry
-from backend.types import FileChangeEvent, TerminalSize
+from backend.models import FileChangeEvent, TerminalSize
 
 if TYPE_CHECKING:
     from backend.config import Config
@@ -62,6 +63,15 @@ class ConnectionHandler:
 
     async def handle(self) -> None:
         """Main connection handler loop."""
+        # Validate auth token before accepting WebSocket connection
+        query_string = self._ws.scope.get("query_string", b"").decode("utf-8")
+        token = extract_token_from_query(query_string)
+
+        if not validate_token(token):
+            logger.warning("WebSocket connection rejected: invalid or missing auth token")
+            await self._ws.close(code=1008, reason="Authentication failed")
+            return
+
         await self._ws.accept()
         get_connection_manager().register(self._ws)
 
@@ -577,26 +587,47 @@ class ConnectionHandler:
                         or "\x1b[2J" in data
                         or "▐▛███▜▌" in data
                     )
+
+                    # Detect if Claude command failed (not installed)
+                    command_not_found = (
+                        "command not found" in data
+                        or "not found" in data.lower()
+                    )
+
                     timed_out = (
                         self._suppress_start_time
                         and time.monotonic() - self._suppress_start_time > 4.0
                     )
 
-                    if claude_detected or timed_out:
+                    if claude_detected or timed_out or command_not_found:
                         self._suppress_output = False
                         # Flush buffered output so error messages are visible
-                        # (e.g. "claude: command not found")
                         if self._suppress_buffer:
                             buffered = "".join(self._suppress_buffer)
                             self._suppress_buffer.clear()
                             if not claude_detected:
-                                # Only send buffered shell output on timeout;
-                                # if Claude was detected, its TUI replaces the screen
+                                # Send buffered shell output on timeout or error
                                 await self._send({
                                     "type": MessageType.OUTPUT,
                                     "data": buffered,
                                     "sessionKey": session_key,
                                 })
+
+                        # If Claude isn't installed, show helpful message
+                        if command_not_found:
+                            help_message = (
+                                "\r\n\x1b[33m"
+                                "Claude Code is not installed or not in PATH.\r\n"
+                                "To install: npm install -g @anthropics/claude-code\r\n"
+                                "Or disable auto-start: export CADE_AUTO_START_CLAUDE=false\r\n"
+                                "\x1b[0m"
+                            )
+                            await self._send({
+                                "type": MessageType.OUTPUT,
+                                "data": help_message,
+                                "sessionKey": session_key,
+                            })
+
                         # Fall through to send this chunk
                     else:
                         self._suppress_buffer.append(data)

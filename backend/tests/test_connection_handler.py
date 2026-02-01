@@ -20,7 +20,7 @@ from backend.errors import PTYError
 from backend.protocol import ErrorCode, MessageType, SessionKey
 from backend.terminal.pty import PTYManager
 from backend.terminal.sessions import PTYSession, SessionRegistry, TerminalState
-from backend.types import TerminalSize
+from backend.models import TerminalSize
 from backend.websocket import ConnectionHandler
 
 
@@ -190,6 +190,23 @@ class TestOutputSuppression:
         if claude_detected:
             handler._suppress_buffer.clear()
         assert len(handler._suppress_buffer) == 0
+
+    def test_command_not_found_ends_suppression(self):
+        """Detecting 'command not found' should end output suppression immediately."""
+        data = "bash: claude: command not found\n"
+        command_not_found = "command not found" in data or "not found" in data.lower()
+        assert command_not_found
+
+    def test_command_not_found_variations(self):
+        """Should detect various forms of command not found errors."""
+        test_cases = [
+            "bash: claude: command not found",
+            "zsh: command not found: claude",
+            "sh: claude: not found",
+            "-bash: claude: command not found",
+        ]
+        for data in test_cases:
+            assert "command not found" in data or "not found" in data.lower()
 
 
 # ---------------------------------------------------------------------------

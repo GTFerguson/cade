@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, AsyncIterator
 
 from backend.errors import PTYError
-from backend.types import TerminalSize
+from backend.models import TerminalSize
 from backend.wsl.commands import resolve_command, windows_to_wsl_path
 from backend.wsl.health import is_wsl_error, restart_wsl
 
@@ -112,12 +112,14 @@ class UnixPTY(BasePTY):
         if self._process is None:
             return ""
         try:
-            self._process.expect(pexpect.TIMEOUT, timeout=0.1)
+            # Use read_nonblocking to avoid duplicate data from pexpect.before
+            # The expect(TIMEOUT) approach was returning the same data repeatedly
+            # because pexpect.before is not cleared when no new data arrives
+            return self._process.read_nonblocking(size=4096, timeout=0.1)
         except pexpect.TIMEOUT:
-            pass
+            return ""  # No new data available
         except pexpect.EOF:
             return ""
-        return self._process.before or ""
 
     async def write(self, data: str) -> None:
         if self._process is None:
