@@ -1,7 +1,7 @@
 # CADE Makefile
 # Run stable, dev, or both versions
 
-.PHONY: stable dev dev-dummy both build kill clean help build-desktop dev-desktop setup
+.PHONY: stable dev dev-dummy both build kill clean help build-desktop dev-desktop setup setup-remote
 
 # Default ports
 STABLE_PORT ?= 3000
@@ -46,6 +46,7 @@ help:
 	@echo "  make kill         - Stop all CADE processes"
 	@echo "  make build-desktop - Build desktop application (full build)"
 	@echo "  make dev-desktop  - Run desktop app in dev mode (Tauri dev)"
+	@echo "  make setup-remote HOST=<ssh-host> - Set up a remote server for CADE"
 	@echo ""
 	@echo "Custom ports:"
 	@echo "  make stable STABLE_PORT=8000"
@@ -120,3 +121,16 @@ dev-desktop:
 	@echo "Starting desktop app in dev mode..."
 	@echo "Make sure Vite dev server is running (make dev in another terminal)"
 	cd desktop && npm run dev
+
+# Set up a remote server for CADE backend deployment
+# Usage: make setup-remote HOST=clann-vm
+#        make setup-remote HOST=user@192.168.1.10
+HOST ?=
+setup-remote:
+ifndef HOST
+	$(error HOST is required. Usage: make setup-remote HOST=clann-vm)
+endif
+	@echo "Setting up remote server: $(HOST)"
+	@scp scripts/setup-remote.sh $(HOST):/tmp/cade-setup-remote.sh
+	@ssh $(HOST) "tr -d '\r' < /tmp/cade-setup-remote.sh > /tmp/cade-setup.sh && chmod +x /tmp/cade-setup.sh"
+	ssh -tt $(HOST) "bash /tmp/cade-setup.sh"
