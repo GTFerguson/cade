@@ -58,11 +58,26 @@ export class TabBar implements Component {
 
     const addButton = document.createElement("button");
     addButton.className = "tab-add-button";
-    addButton.title = "Open new project";
+    addButton.title = "Open new project (Shift+click for remote)";
     addButton.textContent = "+";
+
+    // Capture shiftKey on mousedown before Tauri's drag region processing
+    // can strip modifier keys from the synthesized click event
+    let shiftHeld = false;
+    addButton.addEventListener("mousedown", (e) => {
+      shiftHeld = e.shiftKey;
+    });
     addButton.addEventListener("click", (e) => {
       e.stopPropagation();
-      this.emit("tab-add", undefined);
+      console.log("[CADE] Add button clicked, shiftKey:", e.shiftKey, "shiftHeld:", shiftHeld);
+      if (shiftHeld || e.shiftKey) {
+        console.log("[CADE] Emitting tab-add-remote");
+        this.emit("tab-add-remote", undefined);
+      } else {
+        console.log("[CADE] Emitting tab-add");
+        this.emit("tab-add", undefined);
+      }
+      shiftHeld = false;
     });
 
     tabArea.appendChild(addButton);
@@ -86,6 +101,21 @@ export class TabBar implements Component {
     const tabEl = document.createElement("div");
     tabEl.className = `tab${isActive ? " active" : ""}`;
     tabEl.dataset["tabId"] = tab.id;
+
+    if (tab.isRemote) {
+      const icon = document.createElement("span");
+      icon.className = "tab-remote-icon";
+
+      if (tab.tunnelPid) {
+        icon.textContent = "🔒";
+        icon.title = `Remote via SSH tunnel (PID: ${tab.tunnelPid})`;
+      } else {
+        icon.textContent = "🌐";
+        icon.title = "Remote direct connection";
+      }
+
+      tabEl.appendChild(icon);
+    }
 
     const nameEl = document.createElement("span");
     nameEl.className = "tab-name";

@@ -2,7 +2,8 @@
  * WebSocket client with auto-reconnection and event handling.
  */
 
-import { config } from "../config/config";
+import { appendTokenToUrl } from "../auth/tokenManager";
+import { basePath, config } from "../config/config";
 import { ErrorCode, MessageType, type SessionKeyValue } from "./protocol";
 import type {
   ClientMessage,
@@ -12,6 +13,10 @@ import type {
   FileChangeMessage,
   FileContentMessage,
   FileTreeMessage,
+  NeovimExitedMessage,
+  NeovimOutputMessage,
+  NeovimReadyMessage,
+  NeovimRpcResponseMessage,
   OutputMessage,
   PtyExitedMessage,
   ServerMessage,
@@ -37,6 +42,10 @@ interface WebSocketEvents {
   "session-restored": SessionRestoredMessage;
   "startup-status": StartupStatusMessage;
   "pty-exited": PtyExitedMessage;
+  "neovim-ready": NeovimReadyMessage;
+  "neovim-output": NeovimOutputMessage;
+  "neovim-rpc-response": NeovimRpcResponseMessage;
+  "neovim-exited": NeovimExitedMessage;
   error: ErrorMessage;
 }
 
@@ -50,9 +59,15 @@ export class WebSocketClient {
   private pendingProjectPath: string | null = null;
   private pendingSessionId: string | null = null;
   private urlPollTimer: number | null = null;
+  private readonly explicitUrl: boolean;
   private fatalError = false;
+  private remoteAuthToken: string | null = null;
 
-  constructor(private url: string = config.wsUrl) {}
+  constructor(url?: string, authToken?: string) {
+    this.explicitUrl = url !== undefined;
+    this.url = url || config.wsUrl;
+    this.remoteAuthToken = authToken ?? null;
+  }
 
   /**
    * Register an event handler.
@@ -104,7 +119,7 @@ export class WebSocketClient {
     // In Tauri, the backend URL is injected via eval() which may not have
     // run yet. Poll until the URL is available rather than connecting to
     // a wrong address.
-    if (config.wsUrlPending) {
+    if (!this.explicitUrl && config.wsUrlPending) {
       if (this.urlPollTimer === null) {
         this.urlPollTimer = window.setInterval(() => {
           if (!config.wsUrlPending) {
@@ -118,10 +133,18 @@ export class WebSocketClient {
     }
 
     // Always re-read the URL so Tauri's late-injected value is picked up
-    this.url = config.wsUrl;
+    // (but only if an explicit URL wasn't provided for remote connections)
+    if (!this.explicitUrl) {
+      this.url = config.wsUrl;
+    }
+
+    // Use per-connection token for remote profiles, global token otherwise
+    const urlWithAuth = this.remoteAuthToken
+      ? appendTokenToUrl(this.url, this.remoteAuthToken)
+      : appendTokenToUrl(this.url);
 
     this.state = "connecting";
-    this.ws = new WebSocket(this.url);
+    this.ws = new WebSocket(urlWithAuth);
 
     this.ws.onopen = () => {
       this.state = "connected";
@@ -140,10 +163,23 @@ export class WebSocketClient {
       }
     };
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (event) => {
       this.state = "disconnected";
       this.ws = null;
       this.emit("disconnected", undefined);
+
+      // Code 1008 = Policy Violation (auth failure) — redirect to login
+      // instead of reconnecting in a loop
+      const isTauri =
+        window.location.hostname === "tauri.localhost" ||
+        (window as any).__TAURI__ === true;
+
+      if (event.code === 1008 && !isTauri) {
+        console.warn("WebSocket auth rejected (1008), redirecting to login");
+        window.location.href = basePath + "/login";
+        return;
+      }
+
       this.scheduleReconnect();
     };
 
@@ -302,6 +338,41 @@ export class WebSocketClient {
   }
 
   /**
+   * Spawn a Neovim instance on the backend.
+   */
+  neovimSpawn(): void {
+    this.send({ type: MessageType.NEOVIM_SPAWN });
+  }
+
+  /**
+   * Kill the Neovim instance on the backend.
+   */
+  neovimKill(): void {
+    this.send({ type: MessageType.NEOVIM_KILL });
+  }
+
+  /**
+   * Send terminal input to Neovim.
+   */
+  neovimSendInput(data: string): void {
+    this.send({ type: MessageType.NEOVIM_INPUT, data });
+  }
+
+  /**
+   * Send terminal resize to Neovim.
+   */
+  neovimSendResize(cols: number, rows: number): void {
+    this.send({ type: MessageType.NEOVIM_RESIZE, cols, rows });
+  }
+
+  /**
+   * Send an RPC command to Neovim.
+   */
+  neovimRpc(method: string, args: unknown[], requestId: string): void {
+    this.send({ type: MessageType.NEOVIM_RPC, method, args, requestId });
+  }
+
+  /**
    * Set project directory for this connection.
    * If not connected yet, the path is stored and sent on connect.
    */
@@ -392,6 +463,22 @@ export class WebSocketClient {
       case MessageType.PTY_EXITED:
         this.emit("pty-exited", message as PtyExitedMessage);
         console.error("PTY exited:", message);
+        break;
+
+      case MessageType.NEOVIM_READY:
+        this.emit("neovim-ready", message as NeovimReadyMessage);
+        break;
+
+      case MessageType.NEOVIM_OUTPUT:
+        this.emit("neovim-output", message as NeovimOutputMessage);
+        break;
+
+      case MessageType.NEOVIM_RPC_RESPONSE:
+        this.emit("neovim-rpc-response", message as NeovimRpcResponseMessage);
+        break;
+
+      case MessageType.NEOVIM_EXITED:
+        this.emit("neovim-exited", message as NeovimExitedMessage);
         break;
 
       default:

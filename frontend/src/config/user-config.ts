@@ -85,6 +85,7 @@ export interface TabKeybindingsConfig {
   next: string;
   previous: string;
   create: string;
+  createRemote: string;
   close: string;
 }
 
@@ -95,6 +96,7 @@ export interface MiscKeybindingsConfig {
   help: string;
   toggleTerminal: string;
   toggleViewer: string;
+  toggleNeovim: string;
 }
 
 /**
@@ -222,12 +224,14 @@ export const defaultUserConfig: UserConfig = {
       next: "f",
       previous: "d",
       create: "c",
+      createRemote: "C",
       close: "x",
     },
     misc: {
       help: "?",
       toggleTerminal: "s",
       toggleViewer: "v",
+      toggleNeovim: "n",
     },
     navigation: {
       scrollToTop: "g",
@@ -270,11 +274,37 @@ export function getUserConfig(): UserConfig {
 }
 
 /**
+ * Deep merge: overlay values from source onto target, preserving
+ * any keys in target that source doesn't provide.
+ */
+function deepMerge<T extends Record<string, any>>(target: T, source: Record<string, any>): T {
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    const srcVal = source[key];
+    const tgtVal = (target as Record<string, any>)[key];
+    if (
+      srcVal !== null &&
+      typeof srcVal === "object" &&
+      !Array.isArray(srcVal) &&
+      tgtVal !== null &&
+      typeof tgtVal === "object" &&
+      !Array.isArray(tgtVal)
+    ) {
+      (result as Record<string, any>)[key] = deepMerge(tgtVal, srcVal);
+    } else {
+      (result as Record<string, any>)[key] = srcVal;
+    }
+  }
+  return result;
+}
+
+/**
  * Set the user configuration.
+ * Merges with defaults so missing fields from the server don't break things.
  */
 export function setUserConfig(config: UserConfig): void {
-  currentConfig = config;
-  applyAppearanceConfig(config.appearance);
+  currentConfig = deepMerge(defaultUserConfig, config);
+  applyAppearanceConfig(currentConfig.appearance);
 }
 
 /**

@@ -113,8 +113,8 @@ class TestPaneKeybindingsConfig:
         config = PaneKeybindingsConfig()
         assert config.focus_left == "h"
         assert config.focus_right == "l"
-        assert config.resize_left == "C-h"
-        assert config.resize_right == "C-l"
+        assert config.resize_left == "A-h"
+        assert config.resize_right == "A-l"
 
 
 class TestTabKeybindingsConfig:
@@ -123,10 +123,16 @@ class TestTabKeybindingsConfig:
     def test_default_values(self) -> None:
         """Default tab keybindings should be set."""
         config = TabKeybindingsConfig()
-        assert config.next == "t"
-        assert config.previous == "r"
+        assert config.next == "f"
+        assert config.previous == "d"
         assert config.create == "c"
+        assert config.create_remote == "C"
         assert config.close == "x"
+
+    def test_create_and_create_remote_are_distinct(self) -> None:
+        """create and create_remote must differ so the frontend can distinguish them."""
+        config = TabKeybindingsConfig()
+        assert config.create != config.create_remote
 
 
 class TestMiscKeybindingsConfig:
@@ -219,6 +225,25 @@ class TestUserConfig:
         assert "bgPrimary" in result["appearance"]["colors"]
         assert "prefixTimeout" in result["keybindings"]["global"]
         assert "autoStartClaude" in result["behavior"]["session"]
+
+    def test_to_dict_includes_create_remote(self) -> None:
+        """to_dict must include createRemote in tab keybindings.
+
+        Without this, the frontend receives a config missing createRemote,
+        causing matchesBinding(e, undefined) to throw a TypeError.
+        """
+        config = UserConfig()
+        result = config.to_dict()
+        tab_bindings = result["keybindings"]["tab"]
+        assert "createRemote" in tab_bindings
+        assert tab_bindings["createRemote"] == "C"
+
+    def test_to_dict_tab_keys_match_frontend_expectations(self) -> None:
+        """All tab keybinding keys the frontend expects must be present."""
+        config = UserConfig()
+        tab_bindings = config.to_dict()["keybindings"]["tab"]
+        expected_keys = {"next", "previous", "create", "createRemote", "close"}
+        assert set(tab_bindings.keys()) == expected_keys
 
     def test_to_dict_values(self) -> None:
         """to_dict should preserve actual values."""

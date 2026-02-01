@@ -72,6 +72,10 @@ class Config:
     auto_open_browser: bool = True
     debug: bool = False
     dummy_mode: bool = False
+    auth_enabled: bool = False
+    auth_token: str = ""
+    cors_origins: list[str] = field(default_factory=list)
+    root_path: str = ""
 
     @classmethod
     def from_env(cls) -> Config:
@@ -86,7 +90,14 @@ class Config:
             CADE_AUTO_OPEN_BROWSER: Open browser on start (default: true)
             CADE_DEBUG: Enable debug mode (default: false)
             CADE_DUMMY_MODE: Show fake Claude UI for development (default: false)
+            CADE_AUTH_ENABLED: Enable token authentication (default: false)
+            CADE_AUTH_TOKEN: Authentication token (required if auth enabled)
+            CADE_CORS_ORIGINS: Comma-separated list of allowed CORS origins
+            CADE_ROOT_PATH: URL prefix when behind a reverse proxy (e.g. "/cade")
         """
+        cors_origins_str = os.getenv("CADE_CORS_ORIGINS", "")
+        cors_origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
+
         return cls(
             port=int(os.getenv("CADE_PORT", "3000")),
             host=os.getenv("CADE_HOST", "0.0.0.0"),
@@ -96,6 +107,10 @@ class Config:
             auto_open_browser=os.getenv("CADE_AUTO_OPEN_BROWSER", "true").lower() == "true",
             debug=os.getenv("CADE_DEBUG", "false").lower() == "true",
             dummy_mode=os.getenv("CADE_DUMMY_MODE", "false").lower() == "true",
+            auth_enabled=os.getenv("CADE_AUTH_ENABLED", "false").lower() == "true",
+            auth_token=os.getenv("CADE_AUTH_TOKEN", ""),
+            cors_origins=cors_origins,
+            root_path=os.getenv("CADE_ROOT_PATH", ""),
         )
 
     def update_from_args(
@@ -123,6 +138,10 @@ class Config:
             ),
             debug=debug if debug is not None else self.debug,
             dummy_mode=dummy_mode if dummy_mode is not None else self.dummy_mode,
+            auth_enabled=self.auth_enabled,
+            auth_token=self.auth_token,
+            cors_origins=self.cors_origins,
+            root_path=self.root_path,
         )
 
     def validate_shell_command(self) -> None:
@@ -327,6 +346,8 @@ def _apply_tab_keybindings_config(data: dict) -> TabKeybindingsConfig:
     for key in ["next", "previous", "create", "close"]:
         if key in data:
             setattr(config, key, data[key])
+    if "create-remote" in data:
+        config.create_remote = data["create-remote"]
     return config
 
 

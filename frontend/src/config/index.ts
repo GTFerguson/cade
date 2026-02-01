@@ -6,5 +6,4 @@ export {
   parseKeybinding,
   type UserConfig,
   type KeybindingsConfig,
-  type Keybinding,
 } from "./user-config";

@@ -92,6 +92,7 @@ class TabKeybindingsConfig:
     next: str = "f"
     previous: str = "d"
     create: str = "c"
+    create_remote: str = "C"
     close: str = "x"
 
 
@@ -229,6 +230,7 @@ class UserConfig:
                     "next": self.keybindings.tab.next,
                     "previous": self.keybindings.tab.previous,
                     "create": self.keybindings.tab.create,
+                    "createRemote": self.keybindings.tab.create_remote,
                     "close": self.keybindings.tab.close,
                 },
                 "misc": {

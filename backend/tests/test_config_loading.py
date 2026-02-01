@@ -235,6 +235,25 @@ class TestApplyTabKeybindingsConfig:
         assert config.create == "a"
         assert config.close == "d"
 
+    def test_apply_create_remote(self) -> None:
+        """Should apply create-remote from TOML data."""
+        data = {"create-remote": "S-c"}
+        config = _apply_tab_keybindings_config(data)
+        assert config.create_remote == "S-c"
+
+    def test_create_remote_defaults_when_absent(self) -> None:
+        """create_remote should keep its default when not in TOML data."""
+        config = _apply_tab_keybindings_config({})
+        assert config.create_remote == "C"
+
+    def test_create_remote_loaded_from_toml(self, temp_config_dir: Path) -> None:
+        """create-remote should survive the full TOML→config loading pipeline."""
+        keybindings_file = temp_config_dir / "keybindings.toml"
+        keybindings_file.write_text('[tab]\ncreate-remote = "S-n"\n')
+
+        config = _load_keybindings_config([temp_config_dir])
+        assert config.tab.create_remote == "S-n"
+
 
 class TestApplyMiscKeybindingsConfig:
     """Tests for _apply_misc_keybindings_config function."""

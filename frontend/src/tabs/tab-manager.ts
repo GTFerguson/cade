@@ -3,9 +3,11 @@
  */
 
 import { config } from "../config/config";
+import { toWebSocketUrl } from "../platform/url-utils";
 import { WebSocketClient } from "../platform/websocket";
 import type { EventHandler } from "../types";
 import type { AppState, TabInfo, TabManagerEvents, TabState } from "./types";
+import type { RemoteProfile } from "../remote/types";
 
 const STORAGE_KEY = "cade-app-state";
 const STATE_VERSION = 1;
@@ -39,6 +41,13 @@ export class TabManager {
     keyof TabManagerEvents,
     Set<EventHandler<TabManagerEvents[keyof TabManagerEvents]>>
   > = new Map();
+  // Evaluated at call time so it works even if Tauri injects
+  // window.__TAURI__ after this class is constructed
+  private get isTauri(): boolean {
+    return typeof window !== "undefined" && (window as any).__TAURI__ === true;
+  }
+
+  constructor() {}
 
   /**
    * Initialize the tab manager and restore state from localStorage.
@@ -112,9 +121,66 @@ export class TabManager {
   }
 
   /**
+   * Create a new remote tab for a project.
+   */
+  async createRemoteTab(
+    profile: RemoteProfile,
+    projectPath?: string
+  ): Promise<TabState> {
+    if (!this.isTauri && profile.connectionType === "ssh-tunnel") {
+      throw new Error(
+        "SSH tunnels require the desktop app. " +
+        "Either use the desktop app or edit this profile to use direct connection."
+      );
+    }
+
+    const id = generateId();
+    const path = projectPath || profile.defaultPath || "/";
+    const name = `${profile.name}: ${getProjectName(path)}`;
+
+    let tunnelPid: number | undefined;
+
+    if (this.isTauri && profile.connectionType === "ssh-tunnel") {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        tunnelPid = await invoke<number>("start_ssh_tunnel", {
+          sshHost: profile.sshHost,
+          localPort: profile.localPort,
+          remotePort: profile.remotePort,
+        });
+        console.log(`SSH tunnel started: PID ${tunnelPid}`);
+
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      } catch (error) {
+        console.error("Failed to start SSH tunnel:", error);
+        throw new Error(`SSH tunnel failed: ${error}`);
+      }
+    }
+
+    const tabInfo: TabInfo = {
+      id,
+      projectPath: path,
+      name,
+      isRemote: true,
+      remoteProfileId: profile.id,
+      remoteUrl: profile.url,
+    };
+    const tabState = this.createTabState(tabInfo, profile.authToken);
+    tabState.tunnelPid = tunnelPid;
+
+    this.tabs.set(id, tabState);
+    this.saveState();
+
+    this.emit("tab-created", tabState);
+    this.emit("tabs-changed", this.getTabs());
+
+    return tabState;
+  }
+
+  /**
    * Close a tab by ID.
    */
-  closeTab(id: string): void {
+  async closeTab(id: string): Promise<void> {
     const tab = this.tabs.get(id);
     if (!tab) {
       return;
@@ -122,6 +188,26 @@ export class TabManager {
 
     tab.ws.disconnect();
     tab.context?.dispose();
+
+    if (this.isTauri && tab.tunnelPid && tab.remoteProfileId) {
+      const otherTabsUsingTunnel = Array.from(this.tabs.values()).filter(
+        t => t.id !== id &&
+             t.remoteProfileId === tab.remoteProfileId &&
+             t.tunnelPid === tab.tunnelPid
+      );
+
+      if (otherTabsUsingTunnel.length === 0) {
+        try {
+          const { invoke } = await import("@tauri-apps/api/core");
+          await invoke("stop_ssh_tunnel", {
+            tunnelPid: tab.tunnelPid,
+          });
+          console.log(`SSH tunnel stopped: PID ${tab.tunnelPid}`);
+        } catch (error) {
+          console.error("Failed to stop SSH tunnel:", error);
+        }
+      }
+    }
 
     this.tabs.delete(id);
 
@@ -269,8 +355,10 @@ export class TabManager {
   /**
    * Create a TabState from TabInfo.
    */
-  private createTabState(info: TabInfo): TabState {
-    const ws = new WebSocketClient(config.wsUrl);
+  private createTabState(info: TabInfo, authToken?: string): TabState {
+    const ws = info.remoteUrl
+      ? new WebSocketClient(toWebSocketUrl(info.remoteUrl), authToken)
+      : new WebSocketClient();
 
     return {
       ...info,
@@ -316,6 +404,9 @@ export class TabManager {
       id: tab.id,
       projectPath: tab.projectPath,
       name: tab.name,
+      isRemote: tab.isRemote,
+      remoteProfileId: tab.remoteProfileId,
+      remoteUrl: tab.remoteUrl,
     }));
 
     const state: AppState = {
