@@ -33,10 +33,11 @@ Open multiple projects simultaneously using tabs. Each tab maintains:
 ### Managing Tabs
 
 - **Add tab**: Click the `+` button and enter a project path
+- **Add remote tab**: `Shift+click` the `+` button or `Ctrl-a` + `Shift+C`
 - **Switch tabs**: Click on a tab
 - **Close tab**: Hover over a tab and click the `×` button
 
-Tab state persists in your browser's localStorage.
+Tab state persists in your browser's localStorage. See [[remote-connections|Remote Connections]] for connecting to remote backends.
 
 ## File Tree
 
