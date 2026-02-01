@@ -22,10 +22,12 @@ export interface KeybindingCallbacks {
   previousTab: () => void;
   goToTab: (index: number) => void;
   createTab: () => void;
+  createRemoteTab: () => void;
   closeTab: () => void;
   showHelp: () => void;
   toggleTerminal: () => void;
   toggleViewerCycle: () => void;
+  toggleNeovim: () => void;
   viewLatestPlan: () => void;
   scrollTerminalToTop: () => void;
   scrollTerminalToBottom: () => void;
@@ -203,13 +205,25 @@ export class KeybindingManager implements Component {
     // shouldn't require shiftKey to match for single-character bindings.
     const shiftMatches = parsed.shift ? e.shiftKey : true;
 
-    return (
+    const matches = (
       effectiveCtrl === parsed.ctrl &&
       e.altKey === parsed.alt &&
       shiftMatches &&
       e.metaKey === parsed.meta &&
       e.key === parsed.key
     );
+
+    if (binding === "C" || binding === "c") {
+      console.log("[CADE] matchesBinding check:", {
+        binding,
+        eventKey: e.key,
+        parsedKey: parsed.key,
+        keyMatch: e.key === parsed.key,
+        matches
+      });
+    }
+
+    return matches;
   }
 
   /**
@@ -290,12 +304,19 @@ export class KeybindingManager implements Component {
       return;
     }
 
-    // Tab create/close: uses config tab.create/close (default: c/x)
+    // Tab create/close: uses config tab.create/createRemote/close (default: c/C/x)
     if (this.matchesBinding(e, config.tab.create)) {
       this.callbacks?.createTab();
       this.onPrefixShortcutUsed();
       return;
     }
+    if (this.matchesBinding(e, config.tab.createRemote)) {
+      console.log("[CADE] createRemote binding matched! Calling callback");
+      this.callbacks?.createRemoteTab();
+      this.onPrefixShortcutUsed();
+      return;
+    }
+    console.log("[CADE] createRemote binding check - key:", e.key, "expected:", config.tab.createRemote, "matched:", this.matchesBinding(e, config.tab.createRemote));
     if (this.matchesBinding(e, config.tab.close)) {
       this.callbacks?.closeTab();
       this.onPrefixShortcutUsed();
@@ -319,6 +340,13 @@ export class KeybindingManager implements Component {
     // Viewer toggle: uses config misc.toggleViewer (default: v)
     if (this.matchesBinding(e, config.misc.toggleViewer)) {
       this.callbacks?.toggleViewerCycle();
+      this.onPrefixShortcutUsed();
+      return;
+    }
+
+    // Neovim toggle: uses config misc.toggleNeovim (default: n)
+    if (this.matchesBinding(e, config.misc.toggleNeovim)) {
+      this.callbacks?.toggleNeovim();
       this.onPrefixShortcutUsed();
       return;
     }

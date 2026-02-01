@@ -35,6 +35,19 @@ class MessageType:
     STARTUP_STATUS = "startup-status"  # Startup progress: { type, message: str }
     PTY_EXITED = "pty-exited"  # PTY process exited: { type, code: str, message: str, sessionKey?: str }
 
+    # Neovim - Client -> Server
+    NEOVIM_SPAWN = "neovim-spawn"  # Request Neovim instance: { type, sessionId }
+    NEOVIM_KILL = "neovim-kill"  # Terminate Neovim instance: { type, sessionId }
+    NEOVIM_INPUT = "neovim-input"  # Terminal input to Neovim: { type, data: str }
+    NEOVIM_RESIZE = "neovim-resize"  # Resize Neovim terminal: { type, cols: int, rows: int }
+    NEOVIM_RPC = "neovim-rpc"  # RPC command: { type, method: str, args: list, requestId: str }
+
+    # Neovim - Server -> Client
+    NEOVIM_READY = "neovim-ready"  # Neovim running: { type, pid: int }
+    NEOVIM_OUTPUT = "neovim-output"  # Terminal output from Neovim: { type, data: str }
+    NEOVIM_RPC_RESPONSE = "neovim-rpc-response"  # RPC response: { type, requestId, result?, error? }
+    NEOVIM_EXITED = "neovim-exited"  # Neovim exited: { type, exitCode: int }
+
 
 class SessionKey:
     """Session key constants for dual-terminal support."""
@@ -58,3 +71,6 @@ class ErrorCode:
     INVALID_MESSAGE = "invalid-message"
     PTY_EXITED = "pty-exited"
     INTERNAL_ERROR = "internal-error"
+    NEOVIM_SPAWN_FAILED = "neovim-spawn-failed"
+    NEOVIM_NOT_FOUND = "neovim-not-found"
+    NEOVIM_RPC_FAILED = "neovim-rpc-failed"

@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from backend.protocol import SessionKey
 from backend.terminal.pty import PTYManager
-from backend.types import TerminalSize
+from backend.models import TerminalSize
 from backend.wsl.health import wait_for_wsl_network
 
 if TYPE_CHECKING:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import secrets
 import sys
 import webbrowser
 from contextlib import asynccontextmanager
@@ -11,12 +12,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import uvicorn
-from fastapi import FastAPI, WebSocket
+from fastapi import Cookie, FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
+from backend.auth import create_session_value, validate_session_cookie
 from backend.config import Config, get_config, set_config
+from backend.login_page import get_login_page_html
 from backend.terminal.connections import get_connection_manager
 from backend.connection_registry import get_connection_registry
 from backend.files.tree import get_file_type
@@ -27,6 +30,7 @@ from backend.cc_session_resolver import resolve_slug_to_project
 from backend.wsl.health import ensure_wsl_ready
 from backend.wsl.paths import wsl_to_windows_path
 from backend.wsl.session_unifier import unify_sessions
+from backend.middleware import setup_cors
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -106,6 +110,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await wsl_task
     except asyncio.CancelledError:
         pass
+
+    # Shut down Neovim instances
+    from backend.neovim.manager import get_neovim_manager
+    await get_neovim_manager().stop()
+
     await registry.stop()
 
 
@@ -113,6 +122,12 @@ class ViewFileRequest(BaseModel):
     """Request body for /api/view endpoint."""
 
     path: str
+
+
+class LoginRequest(BaseModel):
+    """Request body for /api/auth/login endpoint."""
+
+    token: str
 
 
 async def _send_to_connections(connections: list, message: dict) -> int:
@@ -140,12 +155,18 @@ def create_app(config: Config | None = None) -> FastAPI:
     if config is not None:
         set_config(config)
 
+    cfg = config or get_config()
+
     app = FastAPI(
         title="CADE",
         description="Unified terminal environment",
         version="0.1.0",
         lifespan=lifespan,
+        root_path=cfg.root_path,
     )
+
+    # Setup CORS middleware for remote access
+    setup_cors(app)
 
     @app.websocket("/ws")
     async def ws_endpoint(websocket: WebSocket) -> None:
@@ -256,10 +277,65 @@ def create_app(config: Config | None = None) -> FastAPI:
             "connections": 0,
         }
 
+    # --- Auth routes (must be registered before StaticFiles catch-all) ---
+
+    @app.get("/login")
+    async def login_page(
+        cade_session: str | None = Cookie(default=None),
+    ) -> Response:
+        """Serve the login page, or redirect to app if already authenticated."""
+        cfg = get_config()
+        if not cfg.auth_enabled or validate_session_cookie(cade_session or "", cfg):
+            return RedirectResponse(url=f"{cfg.root_path}/", status_code=302)
+        return HTMLResponse(content=get_login_page_html(cfg.root_path))
+
+    @app.post("/api/auth/login")
+    async def login(request: LoginRequest) -> JSONResponse:
+        """Validate token, set session cookie, return result."""
+        cfg = get_config()
+
+        if not cfg.auth_enabled:
+            return JSONResponse({"success": True})
+
+        if not cfg.auth_token or not secrets.compare_digest(request.token, cfg.auth_token):
+            return JSONResponse(
+                {"success": False, "error": "Invalid token"},
+                status_code=401,
+            )
+
+        cookie_path = f"{cfg.root_path}/" if cfg.root_path else "/"
+        response = JSONResponse({"success": True})
+        response.set_cookie(
+            key="cade_session",
+            value=create_session_value(cfg.auth_token),
+            httponly=True,
+            samesite="strict",
+            max_age=86400,
+            path=cookie_path,
+        )
+        return response
+
+    @app.get("/api/auth/check")
+    async def auth_check(
+        cade_session: str | None = Cookie(default=None),
+    ) -> JSONResponse:
+        """Check if the current session is authenticated."""
+        cfg = get_config()
+        if not cfg.auth_enabled or validate_session_cookie(cade_session or "", cfg):
+            return JSONResponse({"authenticated": True})
+        return JSONResponse({"authenticated": False}, status_code=401)
+
+    # --- Frontend serving ---
+
     if FRONTEND_DIST.exists():
         @app.get("/")
-        async def serve_index() -> FileResponse:
-            """Serve the frontend index.html."""
+        async def serve_index(
+            cade_session: str | None = Cookie(default=None),
+        ) -> Response:
+            """Serve index.html, or redirect to login if auth required."""
+            cfg = get_config()
+            if cfg.auth_enabled and not validate_session_cookie(cade_session or "", cfg):
+                return RedirectResponse(url=f"{cfg.root_path}/login", status_code=302)
             return FileResponse(FRONTEND_DIST / "index.html")
 
         app.mount(

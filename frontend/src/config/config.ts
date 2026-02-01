@@ -2,15 +2,27 @@
  * Client-side configuration.
  */
 
+// Vite injects BASE_URL from the `base` option (with trailing slash).
+// Strip the trailing slash so concatenation is clean: basePath + "/ws"
+export const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 // Build WebSocket URL based on environment.
 // Re-evaluated on each call so Tauri's async eval() injection is picked up.
 const getWsUrl = (): string => {
+  // 1. Check for environment variable (remote backend)
+  const envBackendUrl = import.meta.env.VITE_BACKEND_URL;
+  if (envBackendUrl) {
+    return `ws://${envBackendUrl.replace('http://', '').replace('https://', '')}/ws`;
+  }
+
+  // 2. Check for Tauri injection
   const backendUrl = (window as any).__BACKEND_URL__;
   if (backendUrl) {
     return `ws://${backendUrl.replace('http://', '')}/ws`;
   }
-  // In browser, use current host (works with Vite proxy in dev)
-  return `ws://${window.location.host}/ws`;
+
+  // 3. Default: use current host (works with Vite proxy in dev)
+  return `ws://${window.location.host}${basePath}/ws`;
 };
 
 // Detect Tauri production environment where the backend URL

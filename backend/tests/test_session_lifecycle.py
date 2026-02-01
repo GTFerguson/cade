@@ -23,7 +23,7 @@ from backend.terminal.sessions import (
     SessionRegistry,
     TerminalState,
 )
-from backend.types import TerminalSize
+from backend.models import TerminalSize
 
 
 # ---------------------------------------------------------------------------

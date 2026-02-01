@@ -16,7 +16,7 @@ import pytest
 
 from backend.errors import PTYError
 from backend.terminal.pty import BasePTY, PTYManager, UnixPTY
-from backend.types import TerminalSize
+from backend.models import TerminalSize
 
 # Only import WindowsPTY on Windows
 if sys.platform == "win32":

@@ -9,6 +9,7 @@ import { FileTree } from "../file-tree";
 import type { PaneKeyHandler, PaneType } from "../input/keybindings";
 import { Layout } from "../ui/layout";
 import { MarkdownViewer } from "../markdown/markdown";
+import { RightPaneManager, type RightPaneMode } from "../right-pane";
 import { Splash } from "../ui/splash";
 import { TerminalManager } from "../terminal/terminal-manager";
 import type { CustomKeyHandler } from "../terminal/terminal";
@@ -24,7 +25,7 @@ export class ProjectContextImpl implements IProjectContext {
   private layout: Layout | null = null;
   private terminalManager: TerminalManager | null = null;
   private fileTree: FileTree | null = null;
-  private viewer: MarkdownViewer | null = null;
+  private rightPane: RightPaneManager | null = null;
   private splash: Splash | null = null;
   private saveTimeout: number | null = null;
   private pendingSession: SessionState | null = null;
@@ -138,11 +139,11 @@ export class ProjectContextImpl implements IProjectContext {
     this.fileTree = new FileTree(fileTreeEl, this.ws);
     this.fileTree.initialize();
 
-    this.viewer = new MarkdownViewer(viewerEl, this.ws);
-    this.viewer.initialize();
+    this.rightPane = new RightPaneManager(viewerEl, this.ws);
+    this.rightPane.initialize();
 
     this.fileTree.on("file-select", (path) => {
-      this.viewer?.loadFile(path);
+      this.rightPane?.getViewer().loadFile(path);
       this.scheduleSave();
     });
 
@@ -150,9 +151,13 @@ export class ProjectContextImpl implements IProjectContext {
       this.scheduleSave();
     });
 
-    this.viewer.on("link-click", (path) => {
-      this.viewer?.loadFile(path);
+    this.rightPane.getViewer().on("link-click", (path) => {
+      this.rightPane?.getViewer().loadFile(path);
       this.fileTree?.revealFile(path);
+      this.scheduleSave();
+    });
+
+    this.rightPane.onModeChange(() => {
       this.scheduleSave();
     });
 
@@ -273,7 +278,7 @@ export class ProjectContextImpl implements IProjectContext {
       case "file-tree":
         return this.fileTree;
       case "viewer":
-        return this.viewer;
+        return this.rightPane;
       default:
         return null;
     }
@@ -290,7 +295,28 @@ export class ProjectContextImpl implements IProjectContext {
    * Get the markdown viewer instance.
    */
   getViewer(): MarkdownViewer | null {
-    return this.viewer;
+    return this.rightPane?.getViewer() ?? null;
+  }
+
+  /**
+   * Get the right pane manager.
+   */
+  getRightPane(): RightPaneManager | null {
+    return this.rightPane;
+  }
+
+  /**
+   * Toggle the right pane to/from Neovim mode.
+   */
+  toggleNeovim(): void {
+    this.rightPane?.toggleNeovim();
+  }
+
+  /**
+   * Set the right pane mode directly.
+   */
+  setRightPaneMode(mode: RightPaneMode): void {
+    this.rightPane?.setMode(mode);
   }
 
   /**
@@ -326,8 +352,8 @@ export class ProjectContextImpl implements IProjectContext {
       this.layout.setProportions(session.layout);
     }
 
-    if (session.viewerPath != null && this.viewer != null) {
-      this.viewer.loadFile(session.viewerPath);
+    if (session.viewerPath != null && this.rightPane != null) {
+      this.rightPane.getViewer().loadFile(session.viewerPath);
       this.fileTree?.revealFile(session.viewerPath);
     }
   }
@@ -338,7 +364,7 @@ export class ProjectContextImpl implements IProjectContext {
   private buildSessionState(): Partial<SessionState> {
     return {
       expandedPaths: this.fileTree?.getExpandedPaths() ?? [],
-      viewerPath: this.viewer?.getCurrentPath() ?? null,
+      viewerPath: this.rightPane?.getViewer().getCurrentPath() ?? null,
       layout: this.layout?.getProportions() ?? null,
     };
   }
@@ -388,7 +414,7 @@ export class ProjectContextImpl implements IProjectContext {
 
     this.terminalManager?.dispose();
     this.fileTree?.dispose();
-    this.viewer?.dispose();
+    this.rightPane?.dispose();
     this.layout?.dispose();
 
     this.container.remove();

@@ -247,6 +247,81 @@ export interface FileCreatedMessage extends BaseMessage {
 }
 
 /**
+ * Neovim spawn request (client -> server).
+ */
+export interface NeovimSpawnMessage extends BaseMessage {
+  type: "neovim-spawn";
+}
+
+/**
+ * Neovim kill request (client -> server).
+ */
+export interface NeovimKillMessage extends BaseMessage {
+  type: "neovim-kill";
+}
+
+/**
+ * Neovim terminal input (client -> server).
+ */
+export interface NeovimInputMessage extends BaseMessage {
+  type: "neovim-input";
+  data: string;
+}
+
+/**
+ * Neovim terminal resize (client -> server).
+ */
+export interface NeovimResizeMessage extends BaseMessage {
+  type: "neovim-resize";
+  cols: number;
+  rows: number;
+}
+
+/**
+ * Neovim RPC command (client -> server).
+ */
+export interface NeovimRpcMessage extends BaseMessage {
+  type: "neovim-rpc";
+  method: string;
+  args: unknown[];
+  requestId: string;
+}
+
+/**
+ * Neovim ready notification (server -> client).
+ */
+export interface NeovimReadyMessage extends BaseMessage {
+  type: "neovim-ready";
+  pid: number;
+}
+
+/**
+ * Neovim terminal output (server -> client).
+ */
+export interface NeovimOutputMessage extends BaseMessage {
+  type: "neovim-output";
+  data: string;
+}
+
+/**
+ * Neovim RPC response (server -> client).
+ */
+export interface NeovimRpcResponseMessage extends BaseMessage {
+  type: "neovim-rpc-response";
+  requestId: string;
+  result?: unknown;
+  error?: string;
+}
+
+/**
+ * Neovim exited notification (server -> client).
+ */
+export interface NeovimExitedMessage extends BaseMessage {
+  type: "neovim-exited";
+  exitCode: number;
+}
+
+/**
  * Union of all client -> server messages.
  */
 export type ClientMessage =
@@ -258,7 +333,12 @@ export type ClientMessage =
   | WriteFileMessage
   | CreateFileMessage
   | SaveSessionMessage
-  | SetProjectMessage;
+  | SetProjectMessage
+  | NeovimSpawnMessage
+  | NeovimKillMessage
+  | NeovimInputMessage
+  | NeovimResizeMessage
+  | NeovimRpcMessage;
 
 /**
  * Union of all server -> client messages.
@@ -275,7 +355,11 @@ export type ServerMessage =
   | ConnectedMessage
   | SessionRestoredMessage
   | StartupStatusMessage
-  | PtyExitedMessage;
+  | PtyExitedMessage
+  | NeovimReadyMessage
+  | NeovimOutputMessage
+  | NeovimRpcResponseMessage
+  | NeovimExitedMessage;
 
 /**
  * Event handler type.

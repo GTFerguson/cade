@@ -44,7 +44,17 @@ const KEYBINDINGS_HTML = `
       <tr><td><kbd>prefix</kbd> + <kbd>f</kbd></td><td>Next tab</td></tr>
       <tr><td><kbd>prefix</kbd> + <kbd>1-9</kbd></td><td>Go to tab 1-9</td></tr>
       <tr><td><kbd>prefix</kbd> + <kbd>c</kbd></td><td>Create new tab</td></tr>
+      <tr><td><kbd>prefix</kbd> + <kbd>C</kbd></td><td>Create remote tab</td></tr>
       <tr><td><kbd>prefix</kbd> + <kbd>x</kbd></td><td>Close current tab</td></tr>
+    </table>
+  </div>
+
+  <div class="help-section">
+    <h3>Right Pane</h3>
+    <table>
+      <tr><td><kbd>prefix</kbd> + <kbd>v</kbd></td><td>Toggle viewer pane visibility</td></tr>
+      <tr><td><kbd>prefix</kbd> + <kbd>n</kbd></td><td>Toggle Neovim mode</td></tr>
+      <tr><td><kbd>Ctrl-g</kbd></td><td>View latest plan</td></tr>
     </table>
   </div>
 

@@ -37,6 +37,19 @@ export const MessageType = {
   SESSION_RESTORED: "session-restored",
   STARTUP_STATUS: "startup-status",
   PTY_EXITED: "pty-exited",
+
+  // Neovim - Client -> Server
+  NEOVIM_SPAWN: "neovim-spawn",
+  NEOVIM_KILL: "neovim-kill",
+  NEOVIM_INPUT: "neovim-input",
+  NEOVIM_RESIZE: "neovim-resize",
+  NEOVIM_RPC: "neovim-rpc",
+
+  // Neovim - Server -> Client
+  NEOVIM_READY: "neovim-ready",
+  NEOVIM_OUTPUT: "neovim-output",
+  NEOVIM_RPC_RESPONSE: "neovim-rpc-response",
+  NEOVIM_EXITED: "neovim-exited",
 } as const;
 
 export type MessageTypeValue = (typeof MessageType)[keyof typeof MessageType];
@@ -54,6 +67,9 @@ export const ErrorCode = {
   INVALID_MESSAGE: "invalid-message",
   PTY_EXITED: "pty-exited",
   INTERNAL_ERROR: "internal-error",
+  NEOVIM_SPAWN_FAILED: "neovim-spawn-failed",
+  NEOVIM_NOT_FOUND: "neovim-not-found",
+  NEOVIM_RPC_FAILED: "neovim-rpc-failed",
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];

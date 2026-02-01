@@ -7,7 +7,7 @@ from pathlib import Path
 from threading import Lock
 
 from backend.errors import FileError
-from backend.types import FileNode
+from backend.models import FileNode
 
 logger = logging.getLogger(__name__)
 

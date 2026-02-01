@@ -6,7 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 import "highlight.js/styles/vs2015.css";
 import "../styles/main.css";
 
-import { config } from "./config/config";
+import { basePath, config } from "./config/config";
 import { HelpOverlay } from "./ui/help-overlay";
 import { KeybindingManager } from "./input/keybindings";
 import { MobileUI } from "./ui/mobile";
@@ -14,6 +14,8 @@ import { ProjectContextImpl, TabBar, TabManager } from "./tabs";
 import type { TabState } from "./tabs";
 import { pickProjectFolder, getUserHomePath } from "./platform/tauri-bridge";
 import { setUserConfig, getUserConfig, matchesKeybinding } from "./config/user-config";
+import { RemoteProfileManager } from "./remote/profile-manager";
+import { RemoteConnectionModal } from "./remote/RemoteConnectionModal";
 
 class App {
   private tabManager: TabManager;
@@ -23,12 +25,14 @@ class App {
   private defaultProjectPath: string;
   private keybindingManager: KeybindingManager;
   private helpOverlay: HelpOverlay;
+  private profileManager: RemoteProfileManager;
 
   constructor() {
     this.tabManager = new TabManager();
     this.defaultProjectPath = this.getDefaultProjectPath();
     this.keybindingManager = new KeybindingManager();
     this.helpOverlay = new HelpOverlay();
+    this.profileManager = new RemoteProfileManager();
   }
 
   /**
@@ -77,6 +81,11 @@ class App {
 
     this.tabBar.on("tab-add", () => {
       this.handleAddTab();
+    });
+
+    this.tabBar.on("tab-add-remote", () => {
+      console.log("[CADE] tab-add-remote event received in main.ts");
+      this.handleAddRemoteTab();
     });
 
     this.tabManager.on("tab-created", (tab) => {
@@ -134,6 +143,9 @@ class App {
       createTab: () => {
         this.handleAddTab();
       },
+      createRemoteTab: () => {
+        this.handleAddRemoteTab();
+      },
       closeTab: () => {
         const activeId = this.tabManager.getActiveTabId();
         if (activeId) {
@@ -168,6 +180,15 @@ class App {
         } else {
           layout?.showViewer();
         }
+      },
+      toggleNeovim: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        const layout = activeTab?.context?.getLayout();
+        // Ensure viewer pane is visible before toggling mode
+        if (!layout?.isViewerVisible()) {
+          layout?.showViewer();
+        }
+        activeTab?.context?.toggleNeovim();
       },
       viewLatestPlan: () => {
         const activeTab = this.tabManager.getActiveTab();
@@ -306,6 +327,28 @@ class App {
   }
 
   /**
+   * Handle add remote tab action.
+   */
+  private async handleAddRemoteTab(): Promise<void> {
+    console.log("[CADE] handleAddRemoteTab called");
+    try {
+      console.log("[CADE] Creating RemoteConnectionModal");
+      const modal = new RemoteConnectionModal(this.profileManager);
+      console.log("[CADE] Showing modal");
+      const profile = await modal.show();
+      console.log("[CADE] Modal result:", profile);
+
+      if (profile) {
+        const tab = await this.tabManager.createRemoteTab(profile);
+        this.tabManager.switchTab(tab.id);
+      }
+    } catch (error) {
+      console.error("Failed to create remote tab:", error);
+      alert(`Failed to connect: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
    * Dispose of all resources.
    */
   async dispose(): Promise<void> {
@@ -319,7 +362,38 @@ class App {
 
 const app = new App();
 
-document.addEventListener("DOMContentLoaded", () => {
+/**
+ * Check HTTP-level auth before loading the app.
+ * Redirects to /login if the server rejects the session.
+ * Skipped in Tauri mode (desktop app handles auth differently).
+ */
+async function checkAuth(): Promise<boolean> {
+  const isTauri =
+    window.location.hostname === "tauri.localhost" ||
+    (window as any).__TAURI__ === true;
+
+  if (isTauri) {
+    return true;
+  }
+
+  try {
+    const res = await fetch(basePath + "/api/auth/check", { credentials: "same-origin" });
+    if (res.status === 401) {
+      window.location.href = basePath + "/login";
+      return false;
+    }
+    return true;
+  } catch {
+    // Network error — let the app try to connect anyway;
+    // WebSocket auth will be the fallback gate
+    return true;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  const authed = await checkAuth();
+  if (!authed) return;
+
   app.initialize().catch((e) => {
     console.error("Failed to initialize app:", e);
   });

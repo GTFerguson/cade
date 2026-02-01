@@ -9,6 +9,7 @@ const __dirname = dirname(__filename);
 const backendPort = process.env.BACKEND_PORT || "3001";
 
 export default defineConfig({
+  base: process.env.VITE_BASE_PATH || "/",
   root: ".",
   publicDir: "public",
   build: {

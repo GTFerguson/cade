@@ -5,6 +5,7 @@
 import type { PaneKeyHandler, PaneType } from "../input/keybindings";
 import type { Layout } from "../ui/layout";
 import type { MarkdownViewer } from "../markdown/markdown";
+import type { RightPaneManager, RightPaneMode } from "../right-pane";
 import type { CustomKeyHandler } from "../terminal/terminal";
 import type { TerminalManager } from "../terminal/terminal-manager";
 import type { WebSocketClient } from "../platform/websocket";
@@ -16,6 +17,9 @@ export interface TabInfo {
   id: string;
   projectPath: string;
   name: string;
+  isRemote?: boolean;
+  remoteProfileId?: string;
+  remoteUrl?: string;
 }
 
 /**
@@ -25,6 +29,7 @@ export interface TabState extends TabInfo {
   ws: WebSocketClient;
   context: ProjectContext | null;
   isConnected: boolean;
+  tunnelPid?: number;
 }
 
 /**
@@ -56,8 +61,11 @@ export interface ProjectContext {
   getLayout(): Layout | null;
   getViewer(): MarkdownViewer | null;
   getTerminalManager(): TerminalManager | null;
+  getRightPane(): RightPaneManager | null;
   setTerminalKeyHandler(handler: CustomKeyHandler | null): void;
   toggleTerminal(): void;
+  toggleNeovim(): void;
+  setRightPaneMode(mode: RightPaneMode): void;
 }
 
 /**
@@ -77,4 +85,5 @@ export interface TabBarEvents {
   "tab-select": string;
   "tab-close": string;
   "tab-add": void;
+  "tab-add-remote": void;
 }

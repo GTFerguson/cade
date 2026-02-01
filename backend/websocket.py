@@ -19,6 +19,7 @@ from backend.errors import CADEError, ProtocolError
 from backend.files.operations import create_file, write_file_content
 from backend.files.tree import build_file_tree_cached, get_file_type, read_file_content
 from backend.files.watcher import FileWatcher
+from backend.neovim.manager import get_neovim_manager
 from backend.protocol import ErrorCode, MessageType, SessionKey
 from backend.session import load_session, save_session
 from backend.terminal.sessions import PTYSession, TerminalState, get_registry
@@ -230,6 +231,11 @@ class ConnectionHandler:
         get_connection_manager().unregister(self._ws)
         get_connection_registry().unregister(self._ws)
 
+        # Clean up Neovim instance for this session
+        if self._session_id is not None:
+            manager = get_neovim_manager()
+            await manager.kill(self._session_id)
+
         if self._watcher is not None:
             self._watcher.stop()
             self._watcher = None
@@ -370,6 +376,14 @@ class ConnectionHandler:
                 await self._handle_save_session(data)
             elif msg_type == MessageType.GET_LATEST_PLAN:
                 await self._handle_get_latest_plan()
+            elif msg_type == MessageType.NEOVIM_SPAWN:
+                await self._handle_neovim_spawn()
+            elif msg_type == MessageType.NEOVIM_KILL:
+                await self._handle_neovim_kill()
+            elif msg_type == MessageType.NEOVIM_INPUT:
+                await self._handle_neovim_input(data)
+            elif msg_type == MessageType.NEOVIM_RESIZE:
+                await self._handle_neovim_resize(data)
             else:
                 raise ProtocolError.invalid_message(f"Unknown message type: {msg_type}")
 
@@ -548,6 +562,100 @@ class ConnectionHandler:
             "fileType": file_type,
             "isPlan": True,
         })
+
+    # --- Neovim handlers ---
+
+    async def _handle_neovim_spawn(self) -> None:
+        """Spawn a Neovim instance for this session."""
+        if self._session_id is None:
+            await self._send_error(ErrorCode.INTERNAL_ERROR, "No session ID")
+            return
+
+        manager = get_neovim_manager()
+        try:
+            instance = await manager.spawn(
+                self._session_id,
+                self._working_dir,
+                TerminalSize(cols=80, rows=24),
+            )
+
+            # Start forwarding Neovim PTY output to the client
+            task = asyncio.create_task(
+                self._neovim_output_loop(self._session_id)
+            )
+            instance.output_task = task
+
+            await self._send({
+                "type": MessageType.NEOVIM_READY,
+                "pid": instance.pty.pid,
+            })
+
+        except FileNotFoundError:
+            await self._send_error(
+                ErrorCode.NEOVIM_NOT_FOUND,
+                "Neovim (nvim) is not installed or not on PATH",
+            )
+        except Exception as e:
+            logger.exception("Failed to spawn Neovim: %s", e)
+            await self._send_error(
+                ErrorCode.NEOVIM_SPAWN_FAILED,
+                f"Failed to spawn Neovim: {e}",
+            )
+
+    async def _handle_neovim_kill(self) -> None:
+        """Kill the Neovim instance for this session."""
+        if self._session_id is None:
+            return
+        manager = get_neovim_manager()
+        await manager.kill(self._session_id)
+
+    async def _handle_neovim_input(self, data: dict) -> None:
+        """Forward terminal input to Neovim."""
+        if self._session_id is None:
+            return
+        manager = get_neovim_manager()
+        instance = manager.get(self._session_id)
+        if instance is not None and instance.is_alive():
+            input_data = data.get("data", "")
+            if input_data:
+                await instance.pty.write(input_data)
+
+    async def _handle_neovim_resize(self, data: dict) -> None:
+        """Resize the Neovim terminal."""
+        if self._session_id is None:
+            return
+        manager = get_neovim_manager()
+        instance = manager.get(self._session_id)
+        if instance is not None and instance.is_alive():
+            cols = data.get("cols", 80)
+            rows = data.get("rows", 24)
+            await instance.pty.resize(cols, rows)
+
+    async def _neovim_output_loop(self, session_id: str) -> None:
+        """Read Neovim PTY output and send to client."""
+        manager = get_neovim_manager()
+        instance = manager.get(session_id)
+        if instance is None:
+            return
+
+        try:
+            async for data in instance.pty.read():
+                if self._closed:
+                    break
+                await self._send({
+                    "type": MessageType.NEOVIM_OUTPUT,
+                    "data": data,
+                })
+        except Exception as e:
+            if not self._closed:
+                logger.exception("Neovim output error: %s", e)
+
+        # Neovim process exited
+        if not self._closed:
+            await self._send({
+                "type": MessageType.NEOVIM_EXITED,
+                "exitCode": -1,
+            })
 
     def _start_output_loop(self, session_key: str) -> None:
         """Start the output loop for a terminal."""

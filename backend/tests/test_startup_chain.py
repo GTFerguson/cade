@@ -21,7 +21,7 @@ from backend.errors import PTYError
 from backend.protocol import MessageType, SessionKey
 from backend.terminal.pty import PTYManager
 from backend.terminal.sessions import PTYSession, SessionRegistry, TerminalState
-from backend.types import TerminalSize
+from backend.models import TerminalSize
 
 
 # ---------------------------------------------------------------------------
@@ -491,7 +491,7 @@ class TestErrorPropagation:
         ws = AsyncMock()
         ws.accept = AsyncMock()
         ws.send_json = AsyncMock()
-
+        ws.scope = {"query_string": b""}  # Empty query string for auth validation
 
         # Simulate no SET_PROJECT message - use a slow coroutine so
         # the inner 0.1s timeout fires naturally instead of busy-spinning
