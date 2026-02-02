@@ -213,32 +213,26 @@ class TestStartupFlow:
 
     @pytest.mark.asyncio
     async def test_session_with_wsl_flow(self, temp_dir: Path):
-        """Test WSL-specific startup with network wait."""
+        """WSL sessions defer Claude start to the WebSocket handler."""
         registry = SessionRegistry()
         mock_pty = AsyncMock(spec=PTYManager)
         mock_pty.is_alive.return_value = True
 
-        mock_wait = MagicMock(return_value=(True, "ready"))
-
         with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
-            with patch(
-                "backend.terminal.sessions.wait_for_wsl_network",
-                mock_wait,
-            ):
-                session, is_new = await asyncio.wait_for(
-                    registry.get_or_create(
-                        session_id="tab-uuid-123",
-                        project_path=temp_dir,
-                        shell_command="wsl",
-                        size=TerminalSize(80, 24),
-                        auto_start_claude=True,
-                        network_timeout=10.0,
-                    ),
-                    timeout=10.0,
-                )
+            session, is_new = await asyncio.wait_for(
+                registry.get_or_create(
+                    session_id="tab-uuid-123",
+                    project_path=temp_dir,
+                    shell_command="wsl",
+                    size=TerminalSize(80, 24),
+                    auto_start_claude=True,
+                    network_timeout=10.0,
+                ),
+                timeout=10.0,
+            )
 
-        mock_wait.assert_called_once_with(10.0, 1.0)
-        mock_pty.write.assert_awaited_with("claude\n")
+        # WSL sessions should NOT write claude\n during session creation
+        mock_pty.write.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_output_loop_reads_pty_data(self, temp_dir: Path):

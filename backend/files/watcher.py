@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Literal
@@ -12,11 +13,14 @@ from watchfiles import Change, awatch
 from backend.files.tree import get_file_tree_cache
 from backend.models import FileChangeEvent
 
-# Directories to ignore when watching
+logger = logging.getLogger(__name__)
+
+# Directories to ignore when watching (aligned with tree.py IGNORED_DIRS)
 WATCH_IGNORE_DIRS = {
     ".git",
     ".hg",
     ".svn",
+    ".cade",
     "node_modules",
     "__pycache__",
     ".pytest_cache",
@@ -26,7 +30,10 @@ WATCH_IGNORE_DIRS = {
     "build",
     ".venv",
     "venv",
+    ".env",
+    "env",
     ".tox",
+    ".eggs",
 }
 
 
@@ -64,6 +71,7 @@ class FileWatcher:
         self._debounce_ms = debounce_ms
         self._stop_event = asyncio.Event()
         self._callbacks: list[Callable[[FileChangeEvent], None]] = []
+        self._force_polling = False
 
     def on_change(self, callback: Callable[[FileChangeEvent], None]) -> None:
         """Register a callback for file changes."""
@@ -75,6 +83,8 @@ class FileWatcher:
 
     async def watch(self) -> AsyncIterator[FileChangeEvent]:
         """Watch for file changes and yield events.
+
+        Falls back to polling mode if inotify fails (e.g. exhausted watches).
 
         Yields:
             FileChangeEvent objects for each detected change
@@ -94,9 +104,10 @@ class FileWatcher:
                 self._root,
                 stop_event=self._stop_event,
                 watch_filter=lambda _, path: not _should_ignore_watch(path),
+                force_polling=self._force_polling,
+                ignore_permission_denied=True,
             ):
                 for change_type, path_str in changes:
-                    # Remove redundant check - already filtered by watch_filter
                     path = Path(path_str)
 
                     # Invalidate file tree cache for affected paths
@@ -136,6 +147,16 @@ class FileWatcher:
                 except asyncio.CancelledError:
                     pass
 
+        except OSError as e:
+            if self._force_polling:
+                raise
+            logger.warning(
+                "inotify watcher failed (%s), falling back to polling mode", e,
+            )
+            self._force_polling = True
+            self._stop_event = asyncio.Event()
+            async for event in self.watch():
+                yield event
         except asyncio.CancelledError:
             pass
         finally:

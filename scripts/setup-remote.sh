@@ -96,6 +96,18 @@ else
     echo -e "  ${GREEN}✓${NC} All packages present (python3, python3-venv, neovim)"
 fi
 
+# Ensure inotify watch limit is high enough for file watching
+DESIRED_WATCHES=524288
+CURRENT_WATCHES=$(cat /proc/sys/fs/inotify/max_user_watches 2>/dev/null || echo "0")
+if [ "$CURRENT_WATCHES" -lt "$DESIRED_WATCHES" ]; then
+    echo "  Setting inotify max_user_watches to $DESIRED_WATCHES (was $CURRENT_WATCHES)"
+    echo "fs.inotify.max_user_watches=$DESIRED_WATCHES" | sudo tee /etc/sysctl.d/60-cade-inotify.conf > /dev/null
+    sudo sysctl -p /etc/sysctl.d/60-cade-inotify.conf > /dev/null
+    echo -e "  ${GREEN}✓${NC} inotify watches configured"
+else
+    echo -e "  ${GREEN}✓${NC} inotify watches already sufficient ($CURRENT_WATCHES)"
+fi
+
 # ── Step 2: Python venv + dependencies ─────────────────────────────────────
 
 echo -e "${CYAN}[2/8]${NC} Python venv..."

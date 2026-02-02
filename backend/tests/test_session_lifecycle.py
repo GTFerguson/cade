@@ -245,64 +245,62 @@ class TestSessionRegistry:
 
     @pytest.mark.asyncio
     async def test_auto_start_claude(self, temp_dir: Path):
-        """When auto_start_claude=True, 'claude\\n' should be written to PTY."""
+        """When auto_start_claude=True with non-WSL shell, 'claude\\n' should be written to PTY."""
         registry = SessionRegistry()
 
         mock_pty = make_mock_pty()
         with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
-            with patch("backend.terminal.sessions.wait_for_wsl_network") as mock_wait:
-                session, is_new = await registry.get_or_create(
-                    "session-1",
-                    temp_dir,
-                    "bash",  # Not a WSL command, so network wait is skipped
-                    auto_start_claude=True,
-                )
+            session, is_new = await registry.get_or_create(
+                "session-1",
+                temp_dir,
+                "bash",
+                auto_start_claude=True,
+            )
 
-        mock_pty.write.assert_awaited_with("claude\n")
-        mock_wait.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_auto_start_claude_wsl_waits_for_network(self, temp_dir: Path):
-        """When shell command contains 'wsl', should wait for network before starting Claude."""
-        registry = SessionRegistry()
-
-        mock_pty = make_mock_pty()
-        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
-            with patch(
-                "backend.terminal.sessions.wait_for_wsl_network",
-                return_value=(True, "ready"),
-            ) as mock_wait:
-                session, is_new = await registry.get_or_create(
-                    "session-1",
-                    temp_dir,
-                    "wsl",
-                    auto_start_claude=True,
-                    network_timeout=5.0,
-                )
-
-        mock_wait.assert_called_once_with(5.0, 1.0)
         mock_pty.write.assert_awaited_with("claude\n")
 
     @pytest.mark.asyncio
-    async def test_auto_start_claude_wsl_network_fail_continues(self, temp_dir: Path):
-        """Even if WSL network isn't ready, Claude should still start."""
+    async def test_auto_start_claude_wsl_defers_to_caller(self, temp_dir: Path):
+        """WSL sessions should NOT write 'claude\\n' during session creation.
+
+        The WebSocket handler runs the network check as a non-blocking
+        background task and writes the command after the connection is
+        established.
+        """
         registry = SessionRegistry()
 
         mock_pty = make_mock_pty()
         with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
-            with patch(
-                "backend.terminal.sessions.wait_for_wsl_network",
-                return_value=(False, "timeout"),
-            ):
-                session, is_new = await registry.get_or_create(
-                    "session-1",
-                    temp_dir,
-                    "wsl",
-                    auto_start_claude=True,
-                )
+            session, is_new = await registry.get_or_create(
+                "session-1",
+                temp_dir,
+                "wsl",
+                auto_start_claude=True,
+                network_timeout=5.0,
+            )
 
-        # Claude should still be started even if network wait failed
-        mock_pty.write.assert_awaited_with("claude\n")
+        mock_pty.write.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_auto_start_claude_wsl_no_network_check(self, temp_dir: Path):
+        """WSL session creation should not call wait_for_wsl_network at all.
+
+        The network check is handled by the WebSocket handler's deferred
+        start, not during session creation.
+        """
+        registry = SessionRegistry()
+
+        mock_pty = make_mock_pty()
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
+            session, is_new = await registry.get_or_create(
+                "session-1",
+                temp_dir,
+                "wsl",
+                auto_start_claude=True,
+            )
+
+        # Verify no write was made — deferred to caller
+        mock_pty.write.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_no_auto_start_in_dummy_mode(self, temp_dir: Path):

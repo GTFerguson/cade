@@ -101,6 +101,17 @@ class ConnectionHandler:
             self._start_output_loop(SessionKey.CLAUDE)
             watch_task = asyncio.create_task(self._watch_loop())
 
+            # For WSL sessions, run the network check + Claude start as a
+            # background task so the WebSocket stays responsive
+            deferred_task: asyncio.Task | None = None
+            if (
+                self._is_new_session
+                and self._config.auto_start_claude
+                and not self._config.dummy_mode
+                and "wsl" in self._config.shell_command.lower()
+            ):
+                deferred_task = asyncio.create_task(self._deferred_claude_start())
+
             # Receive loop controls connection lifetime
             # PTY output and watch loops run as long-lived background tasks
             try:
@@ -110,8 +121,13 @@ class ConnectionHandler:
                 for task in self._output_tasks.values():
                     task.cancel()
                 watch_task.cancel()
+                if deferred_task is not None:
+                    deferred_task.cancel()
                 await asyncio.gather(
-                    *self._output_tasks.values(), watch_task, return_exceptions=True
+                    *self._output_tasks.values(),
+                    watch_task,
+                    *([] if deferred_task is None else [deferred_task]),
+                    return_exceptions=True,
                 )
 
         except WebSocketDisconnect:
@@ -795,25 +811,85 @@ class ConnectionHandler:
                 "sessionKey": session_key,
             })
 
-    async def _watch_loop(self) -> None:
-        """Watch for file changes and notify client."""
-        if self._watcher is None:
-            return
+    async def _deferred_claude_start(self) -> None:
+        """Run WSL network check in background and start Claude when ready.
 
+        Keeps the WebSocket responsive while waiting for WSL networking.
+        """
         try:
-            async for event in self._watcher.watch():
-                if self._closed:
-                    break
-                await self._send({
-                    "type": MessageType.FILE_CHANGE,
-                    "event": event.event,
-                    "path": event.path,
-                })
+            await self._send_status("Checking WSL network...")
+
+            from backend.wsl.health import wait_for_wsl_network
+            network_timeout = (
+                self._user_config.behavior.session.network_timeout
+                if self._user_config
+                else 15.0
+            )
+            ready, msg = await asyncio.get_event_loop().run_in_executor(
+                None,
+                wait_for_wsl_network,
+                network_timeout,
+                1.0,
+            )
+
+            if ready:
+                logger.info("WSL network ready, starting Claude Code")
+            else:
+                logger.warning(
+                    "WSL network not ready after %.1fs, starting Claude Code anyway: %s",
+                    network_timeout, msg,
+                )
+
+            if self._closed or self._session is None:
+                return
+
+            await self._session.pty.write("claude\n")
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            if not self._closed:
-                logger.exception("Watch error: %s", e)
+            logger.exception("Deferred Claude start failed: %s", e)
+
+    async def _watch_loop(self) -> None:
+        """Watch for file changes and notify client.
+
+        Retries up to 3 times with exponential backoff if the watcher fails,
+        recreating it each time. The connection stays alive even if watching
+        is permanently lost.
+        """
+        max_retries = 3
+        for attempt in range(max_retries + 1):
+            if self._closed or self._watcher is None:
+                return
+
+            try:
+                async for event in self._watcher.watch():
+                    if self._closed:
+                        return
+                    await self._send({
+                        "type": MessageType.FILE_CHANGE,
+                        "event": event.event,
+                        "path": event.path,
+                    })
+                # Normal exit (stop event set) — don't retry
+                return
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                if self._closed:
+                    return
+                if attempt < max_retries:
+                    backoff = 2 ** (attempt + 1)
+                    logger.warning(
+                        "Watch error (attempt %d/%d), retrying in %ds: %s",
+                        attempt + 1, max_retries, backoff, e,
+                    )
+                    await asyncio.sleep(backoff)
+                    self._watcher = FileWatcher(self._working_dir)
+                else:
+                    logger.warning(
+                        "File watcher failed after %d retries, disabling: %s",
+                        max_retries, e,
+                    )
 
 
 async def websocket_handler(websocket: WebSocket, config: "Config") -> None:

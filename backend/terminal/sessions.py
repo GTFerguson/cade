@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING
 from backend.protocol import SessionKey
 from backend.terminal.pty import PTYManager
 from backend.models import TerminalSize
-from backend.wsl.health import wait_for_wsl_network
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
@@ -271,28 +270,11 @@ class SessionRegistry:
                 )
                 return session
 
-            # For WSL, ensure network is ready before starting Claude Code
-            # This prevents API timeout issues when WSL networking isn't initialized yet
-            if "wsl" in shell_command.lower():
-                logger.debug("Checking WSL network readiness before starting Claude Code...")
-                # Run blocking network check in thread pool to avoid blocking event loop
-                loop = asyncio.get_event_loop()
-                ready, msg = await loop.run_in_executor(
-                    None,
-                    wait_for_wsl_network,
-                    network_timeout,  # Use configured timeout
-                    1.0,   # check_interval
-                )
-                if ready:
-                    logger.info("WSL network ready, starting Claude Code")
-                else:
-                    logger.warning(
-                        "WSL network not ready after %.1fs timeout, starting Claude Code anyway: %s",
-                        network_timeout,
-                        msg
-                    )
-
-            await pty.write("claude\n")
+            # WSL sessions skip writing "claude\n" here — the WebSocket handler
+            # runs the network check as a non-blocking background task and writes
+            # the command after the connection is established
+            if "wsl" not in shell_command.lower():
+                await pty.write("claude\n")
 
         return session
 
