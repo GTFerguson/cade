@@ -519,16 +519,17 @@ class TestErrorPropagation:
         mock_pty.is_alive.return_value = False
         mock_pty.spawn.side_effect = PTYError.spawn_failed("wsl", "WSL not available")
 
-        with patch("backend.terminal.pty.PTYManager", return_value=mock_pty):
-            with patch("backend.websocket.load_user_config") as mock_uc:
-                mock_uc.return_value = MagicMock()
-                with patch("backend.websocket.get_connection_manager") as mock_cm:
-                    mock_cm.return_value.register = MagicMock()
-                    mock_cm.return_value.unregister = MagicMock()
-                    with patch("backend.websocket.get_connection_registry") as mock_cr:
-                        mock_cr.return_value.register = MagicMock()
-                        mock_cr.return_value.unregister = MagicMock()
-                        await handler.handle()
+        with patch("backend.websocket.validate_token", return_value=True):
+            with patch("backend.terminal.pty.PTYManager", return_value=mock_pty):
+                with patch("backend.websocket.load_user_config") as mock_uc:
+                    mock_uc.return_value = MagicMock()
+                    with patch("backend.websocket.get_connection_manager") as mock_cm:
+                        mock_cm.return_value.register = MagicMock()
+                        mock_cm.return_value.unregister = MagicMock()
+                        with patch("backend.websocket.get_connection_registry") as mock_cr:
+                            mock_cr.return_value.register = MagicMock()
+                            mock_cr.return_value.unregister = MagicMock()
+                            await handler.handle()
 
         # Should have sent an error message to the client
         error_calls = [
