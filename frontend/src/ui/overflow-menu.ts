@@ -17,6 +17,7 @@ export interface OverflowTab {
 export interface OverflowMenuCallbacks {
   getTabs: () => OverflowTab[];
   onSwitchTab: (id: string) => void;
+  onFileExplorer: () => void;
   onViewFile: () => void;
   onReconnect: () => void;
 }
@@ -131,7 +132,12 @@ export class OverflowMenu implements Component {
     this.menu.appendChild(divider);
 
     // Actions
-    this.addAction("📄", "View File", () => {
+    this.addAction("📁", "File Explorer", () => {
+      this.callbacks.onFileExplorer();
+      this.close();
+    });
+
+    this.addAction("📄", "Current File", () => {
       this.callbacks.onViewFile();
       this.close();
     });

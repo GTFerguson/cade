@@ -8,6 +8,7 @@
 import hljs from "highlight.js";
 import type { Component, FileChangeMessage } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
+import { FileTree } from "../file-tree/file-tree";
 import { TouchToolbar } from "./touch-toolbar";
 import { OverflowMenu, type OverflowTab } from "./overflow-menu";
 
@@ -25,6 +26,8 @@ export class MobileUI implements Component {
   private hasUpdate = false;
   private currentPath: string | null = null;
   private lastChangedPath: string | null = null;
+  private mode: "explorer" | "content" = "content";
+  private fileTree: FileTree | null = null;
 
   private mdButton: HTMLButtonElement;
   private slideout: HTMLElement;
@@ -32,6 +35,8 @@ export class MobileUI implements Component {
   private slideoutTitle: HTMLElement;
   private slideoutContent: HTMLElement;
   private closeButton: HTMLButtonElement;
+  private backButton: HTMLButtonElement;
+  private fileTreeContainer: HTMLElement;
 
   private toolbar: TouchToolbar | null = null;
   private overflowMenu: OverflowMenu | null = null;
@@ -52,6 +57,12 @@ export class MobileUI implements Component {
     this.closeButton = document.getElementById(
       "slideout-close"
     ) as HTMLButtonElement;
+    this.backButton = document.getElementById(
+      "slideout-back"
+    ) as HTMLButtonElement;
+    this.fileTreeContainer = document.getElementById(
+      "slideout-file-tree"
+    ) as HTMLElement;
   }
 
   /**
@@ -82,6 +93,7 @@ export class MobileUI implements Component {
     this.overflowMenu = new OverflowMenu({
       getTabs: () => this.callbacks.getTabs(),
       onSwitchTab: (id) => this.callbacks.onSwitchTab(id),
+      onFileExplorer: () => this.openExplorer(),
       onViewFile: () => this.openViewer(),
       onReconnect: () => {
         const ws = this.callbacks.getActiveWs();
@@ -113,6 +125,10 @@ export class MobileUI implements Component {
       this.closeViewer();
     });
 
+    this.backButton.addEventListener("click", () => {
+      this.switchToExplorer();
+    });
+
     this.backdrop.addEventListener("click", () => {
       this.closeViewer();
     });
@@ -133,9 +149,14 @@ export class MobileUI implements Component {
     });
 
     this.ws.on("file-content", (message) => {
-      if (MobileUI.isMobile() && this.viewerOpen) {
-        this.currentPath = message.path;
-        this.renderContent(message.path, message.content, message.fileType);
+      if (!MobileUI.isMobile() || !this.viewerOpen) return;
+
+      this.currentPath = message.path;
+      this.renderContent(message.path, message.content, message.fileType);
+
+      // When a file is selected from explorer, switch to content mode
+      if (this.mode === "explorer") {
+        this.switchToContent();
       }
     });
   }
@@ -196,12 +217,16 @@ export class MobileUI implements Component {
   }
 
   /**
-   * Open the viewer panel.
+   * Open the viewer panel in content mode (shows current/last file).
    */
   private openViewer(): void {
+    this.mode = "content";
     this.viewerOpen = true;
     this.slideout.classList.add("open");
     this.backdrop.classList.add("visible");
+    this.fileTreeContainer.classList.remove("visible");
+    this.slideoutContent.style.display = "";
+    this.backButton.classList.remove("visible");
 
     // Use the active tab's WebSocket for file requests
     const ws = this.callbacks.getActiveWs();
@@ -217,12 +242,63 @@ export class MobileUI implements Component {
   }
 
   /**
+   * Open the slideout in file explorer mode.
+   */
+  private openExplorer(): void {
+    this.mode = "explorer";
+    this.viewerOpen = true;
+    this.slideout.classList.add("open");
+    this.backdrop.classList.add("visible");
+    this.slideoutTitle.textContent = "Files";
+    this.backButton.classList.remove("visible");
+    this.fileTreeContainer.classList.add("visible");
+    this.slideoutContent.style.display = "none";
+
+    // Lazily create FileTree on first open
+    if (!this.fileTree) {
+      const ws = this.callbacks.getActiveWs();
+      this.fileTree = new FileTree(this.fileTreeContainer, ws);
+      this.fileTree.initialize();
+
+      this.fileTree.on("file-select", (path: string) => {
+        const activeWs = this.callbacks.getActiveWs();
+        activeWs.requestFile(path);
+      });
+    }
+  }
+
+  /**
+   * Switch slideout to content mode (from explorer after file select).
+   */
+  private switchToContent(): void {
+    this.mode = "content";
+    this.fileTreeContainer.classList.remove("visible");
+    this.slideoutContent.style.display = "";
+    this.backButton.classList.add("visible");
+  }
+
+  /**
+   * Switch slideout back to explorer mode (back button).
+   */
+  private switchToExplorer(): void {
+    this.mode = "explorer";
+    this.slideoutTitle.textContent = "Files";
+    this.fileTreeContainer.classList.add("visible");
+    this.slideoutContent.style.display = "none";
+    this.backButton.classList.remove("visible");
+  }
+
+  /**
    * Close the viewer panel.
    */
   private closeViewer(): void {
     this.viewerOpen = false;
+    this.mode = "content";
     this.slideout.classList.remove("open");
     this.backdrop.classList.remove("visible");
+    this.backButton.classList.remove("visible");
+    this.fileTreeContainer.classList.remove("visible");
+    this.slideoutContent.style.display = "";
   }
 
   /**
@@ -348,6 +424,7 @@ export class MobileUI implements Component {
   dispose(): void {
     this.closeViewer();
     this.slideoutContent.innerHTML = "";
+    this.fileTree?.dispose();
     this.toolbar?.dispose();
     this.overflowMenu?.dispose();
   }

@@ -1394,6 +1394,38 @@ body {
   color: var(--text-primary);
 }
 
+.slideout-back {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 8px;
+  line-height: 1;
+  margin-right: 8px;
+  display: none;
+}
+
+.slideout-back.visible {
+  display: inline-flex;
+}
+
+.slideout-file-tree {
+  flex: 1;
+  overflow-y: auto;
+  display: none;
+}
+
+.slideout-file-tree.visible {
+  display: block;
+}
+
+.viewer-slideout .file-tree-row {
+  padding-top: 10px;
+  padding-bottom: 10px;
+  font-size: 14px;
+}
+
 .viewer-slideout-content {
   flex: 1;
   overflow: auto;
