@@ -22,16 +22,17 @@ class AuthError(Exception):
     pass
 
 
-def validate_token(token: Optional[str]) -> bool:
+def validate_token(token: Optional[str], cfg: Config | None = None) -> bool:
     """Validate an authentication token.
 
     Args:
         token: The token to validate, or None if no token provided.
+        cfg: Optional Config instance; falls back to global singleton.
 
     Returns:
         True if authentication is disabled or token is valid, False otherwise.
     """
-    config = get_config()
+    config = cfg if cfg is not None else get_config()
 
     # If auth is disabled, always allow
     if not config.auth_enabled:

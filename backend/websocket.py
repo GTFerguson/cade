@@ -68,7 +68,7 @@ class ConnectionHandler:
         query_string = self._ws.scope.get("query_string", b"").decode("utf-8")
         token = extract_token_from_query(query_string)
 
-        if not validate_token(token):
+        if not validate_token(token, cfg=self._config):
             logger.warning("WebSocket connection rejected: invalid or missing auth token")
             await self._ws.close(code=1008, reason="Authentication failed")
             return
