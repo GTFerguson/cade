@@ -2,6 +2,7 @@
  * Type definitions for multi-project tab support.
  */
 
+import type { AgentManager } from "../agents";
 import type { PaneKeyHandler, PaneType } from "../input/keybindings";
 import type { Layout } from "../ui/layout";
 import type { MarkdownViewer } from "../markdown/markdown";
@@ -66,6 +67,9 @@ export interface ProjectContext {
   toggleTerminal(): void;
   toggleNeovim(): void;
   setRightPaneMode(mode: RightPaneMode): void;
+  switchToAgent(agentId: string | null): void;
+  cycleAgent(direction: "next" | "prev"): void;
+  getAgentManager(): AgentManager | null;
 }
 
 /**

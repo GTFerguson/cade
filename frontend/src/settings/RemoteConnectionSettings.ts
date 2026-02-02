@@ -126,10 +126,6 @@ export class RemoteConnectionSettings {
     const cancelButton = this.overlay.querySelector(
       ".btn-cancel"
     ) as HTMLButtonElement;
-    const statusDiv = this.overlay.querySelector(
-      ".connection-status"
-    ) as HTMLElement;
-
     // Toggle input fields based on checkbox
     remoteEnabledCheckbox?.addEventListener("change", () => {
       const enabled = remoteEnabledCheckbox.checked;

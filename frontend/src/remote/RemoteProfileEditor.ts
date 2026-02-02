@@ -166,7 +166,8 @@ export class RemoteProfileEditor {
         if (e.key === "Enter") {
           e.preventDefault();
           if (index < inputs.length - 1) {
-            inputs[index + 1].focus();
+            const next = inputs[index + 1];
+            if (next) next.focus();
           } else {
             this.handleSave();
           }
@@ -249,13 +250,15 @@ export class RemoteProfileEditor {
       id: this.profile?.id || generateId(),
       name,
       url,
-      authToken: this.tokenInput.value || undefined,
-      defaultPath: this.pathInput.value || undefined,
-      lastUsed: this.profile?.lastUsed,
       connectionType,
-      sshHost: connectionType === "ssh-tunnel" ? this.sshHostInput.value.trim() : undefined,
-      localPort: connectionType === "ssh-tunnel" ? parseInt(this.localPortInput.value) : undefined,
-      remotePort: connectionType === "ssh-tunnel" ? parseInt(this.remotePortInput.value) : undefined,
+      ...(this.tokenInput.value ? { authToken: this.tokenInput.value } : {}),
+      ...(this.pathInput.value ? { defaultPath: this.pathInput.value } : {}),
+      ...(this.profile?.lastUsed !== undefined ? { lastUsed: this.profile.lastUsed } : {}),
+      ...(connectionType === "ssh-tunnel" ? {
+        sshHost: this.sshHostInput.value.trim(),
+        localPort: parseInt(this.localPortInput.value),
+        remotePort: parseInt(this.remotePortInput.value),
+      } : {}),
     };
 
     try {

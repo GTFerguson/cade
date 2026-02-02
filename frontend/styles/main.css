@@ -339,7 +339,7 @@ body {
   font-family: var(--font-mono);
   font-weight: 600;
   z-index: 10;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .terminal-status-indicator.claude {
@@ -2272,4 +2272,150 @@ body {
 .neovim-restart-btn:hover {
   background: var(--bg-hover);
   border-color: var(--accent-green);
+}
+
+/* ═══════════════════════════════════════════════════ */
+/* Agent multi-terminal styles                        */
+/* ═══════════════════════════════════════════════════ */
+
+/* Status bar label (clickable when agents exist) */
+.terminal-status-label {
+  cursor: pointer;
+}
+
+.terminal-status-label:hover {
+  text-decoration: underline;
+}
+
+.terminal-status-claude {
+  color: var(--accent-blue);
+}
+
+.terminal-status-shell {
+  color: var(--accent-orange);
+}
+
+/* Agent selector dropdown */
+.terminal-agent-dropdown {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  min-width: 160px;
+  z-index: 100;
+  margin-bottom: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.terminal-agent-option {
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.terminal-agent-option:hover {
+  background: var(--bg-hover);
+}
+
+.terminal-agent-option.active {
+  color: var(--accent-blue);
+}
+
+/* Agent overview pane */
+.agent-overview-pane {
+  padding: 8px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.agent-overview-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 16px;
+}
+
+/* Agent cards */
+.agent-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.agent-card:hover {
+  border-color: var(--text-muted);
+}
+
+.agent-card-active {
+  border-color: var(--accent-blue);
+}
+
+.agent-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.agent-card-label {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.agent-card-state {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.agent-state-starting {
+  color: var(--accent-yellow);
+  background: rgba(250, 222, 62, 0.1);
+}
+
+.agent-state-idle {
+  color: var(--accent-green);
+  background: rgba(174, 238, 0, 0.1);
+}
+
+.agent-state-busy {
+  color: var(--accent-blue);
+  background: rgba(10, 157, 255, 0.1);
+}
+
+.agent-state-done {
+  color: var(--text-muted);
+  background: rgba(133, 127, 120, 0.1);
+}
+
+.agent-state-error {
+  color: var(--accent-red);
+  background: rgba(255, 44, 75, 0.1);
+}
+
+/* Mini-terminal in agent cards */
+.agent-card-mini-terminal {
+  height: 100px;
+  margin-top: 4px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.agent-card-mini-terminal .xterm {
+  height: 100%;
+}
+
+/* Right pane agents container */
+.right-pane-agents {
+  overflow-y: auto;
 }

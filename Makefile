@@ -1,7 +1,7 @@
 # CADE Makefile
 # Run stable, dev, or both versions
 
-.PHONY: stable dev dev-dummy both build kill clean help build-desktop dev-desktop setup setup-remote
+.PHONY: stable dev dev-dummy both build kill clean help build-desktop dev-desktop setup setup-remote check
 
 # Default ports
 STABLE_PORT ?= 3000
@@ -42,6 +42,7 @@ help:
 	@echo "  make dev          - Run backend on $(DEV_PORT) + Vite on $(VITE_PORT)"
 	@echo "  make dev-dummy    - Same as dev, but with fake Claude UI"
 	@echo "  make both         - Run stable and dev simultaneously"
+	@echo "  make check        - Run typecheck and tests (quick validation)"
 	@echo "  make build        - Build frontend only"
 	@echo "  make kill         - Stop all CADE processes"
 	@echo "  make build-desktop - Build desktop application (full build)"
@@ -55,6 +56,10 @@ help:
 # Build frontend
 build:
 	cd frontend && npm run build
+
+# Run typecheck and tests (quick local validation)
+check:
+	cd frontend && npm run typecheck && npx vitest run
 
 # Run stable version (built frontend served by backend)
 stable: build

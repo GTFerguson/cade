@@ -6,7 +6,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
-import { SessionKey, type SessionKeyValue } from "../platform/protocol";
+import { SessionKey, type AnySessionKey } from "../platform/protocol";
 import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 
@@ -45,9 +45,13 @@ const BADWOLF_THEME = {
 export type CustomKeyHandler = (e: KeyboardEvent) => boolean;
 
 export interface TerminalOptions {
-  sessionKey?: SessionKeyValue;
+  sessionKey?: AnySessionKey;
   subscribeToOutput?: boolean;
   hideCursor?: boolean;
+  readOnly?: boolean;
+  fontSize?: number;
+  rows?: number;
+  scrollback?: number;
 }
 
 export class Terminal implements Component {
@@ -56,9 +60,13 @@ export class Terminal implements Component {
   private resizeObserver: ResizeObserver | null = null;
   private resizeDebounceTimer: number | null = null;
   private customKeyHandler: CustomKeyHandler | null = null;
-  private sessionKey: SessionKeyValue;
+  private sessionKey: AnySessionKey;
   private subscribeToOutput: boolean;
   private hideCursor: boolean;
+  private readOnly: boolean;
+  private fontSizeOverride: number | null;
+  private rowsOverride: number | null;
+  private scrollbackOverride: number | null;
   private lastSentSize: { cols: number; rows: number } | null = null;
 
   constructor(
@@ -69,6 +77,10 @@ export class Terminal implements Component {
     this.sessionKey = options.sessionKey ?? SessionKey.CLAUDE;
     this.subscribeToOutput = options.subscribeToOutput ?? true;
     this.hideCursor = options.hideCursor ?? false;
+    this.readOnly = options.readOnly ?? false;
+    this.fontSizeOverride = options.fontSize ?? null;
+    this.rowsOverride = options.rows ?? null;
+    this.scrollbackOverride = options.scrollback ?? null;
   }
 
   /**
@@ -82,14 +94,16 @@ export class Terminal implements Component {
     this.terminal = new XTerm({
       cursorBlink: !this.hideCursor,
       cursorStyle: "block",
-      fontSize: 14,
+      fontSize: this.fontSizeOverride ?? 14,
       fontFamily: '"JetBrains Mono", "Fira Code", Consolas, monospace',
       fontWeight: "400",
       fontWeightBold: "600",
       letterSpacing: 0.5,
       lineHeight: 1.3,
-      scrollback: 10000,
+      scrollback: this.scrollbackOverride ?? 10000,
+      ...(this.rowsOverride != null ? { rows: this.rowsOverride } : {}),
       theme,
+      disableStdin: this.readOnly,
     });
 
     this.fitAddon = new FitAddon();
@@ -146,14 +160,16 @@ export class Terminal implements Component {
 
     this.fit();
 
-    this.terminal.onData((data) => {
-      this.ws.sendInput(data, this.sessionKey);
-    });
+    if (!this.readOnly) {
+      this.terminal.onData((data) => {
+        this.ws.sendInput(data, this.sessionKey);
+      });
 
-    this.terminal.onResize(({ cols, rows }) => {
-      this.lastSentSize = { cols, rows };
-      this.ws.sendResize(cols, rows, this.sessionKey);
-    });
+      this.terminal.onResize(({ cols, rows }) => {
+        this.lastSentSize = { cols, rows };
+        this.ws.sendResize(cols, rows, this.sessionKey);
+      });
+    }
 
     if (this.subscribeToOutput) {
       this.ws.on("output", (message) => {
@@ -311,7 +327,7 @@ export class Terminal implements Component {
   /**
    * Get the session key for this terminal.
    */
-  getSessionKey(): SessionKeyValue {
+  getSessionKey(): AnySessionKey {
     return this.sessionKey;
   }
 

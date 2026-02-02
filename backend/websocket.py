@@ -22,6 +22,7 @@ from backend.files.watcher import FileWatcher
 from backend.neovim.manager import get_neovim_manager
 from backend.protocol import ErrorCode, MessageType, SessionKey
 from backend.session import load_session, save_session
+from backend.terminal.pty import PTYManager
 from backend.terminal.sessions import PTYSession, TerminalState, get_registry
 from backend.models import FileChangeEvent, TerminalSize
 
@@ -265,22 +266,40 @@ class ConnectionHandler:
             "message": message,
         })
 
-    async def _create_manual_terminal(self) -> None:
-        """Create the manual terminal for this session."""
+    @staticmethod
+    def _is_manual_session_key(session_key: str) -> bool:
+        """Check if a session key represents a manual shell terminal."""
+        return (
+            session_key == SessionKey.MANUAL
+            or session_key.endswith("-manual")
+        )
+
+    async def _create_manual_terminal(self, session_key: str = SessionKey.MANUAL) -> None:
+        """Create a manual terminal for this session.
+
+        Supports both the primary manual terminal ("manual") and
+        per-agent manual terminals ("agent-tests-manual").
+        """
         if self._session is None or self._session_id is None:
             return
 
-        size = self._terminal_sizes.get(SessionKey.MANUAL, TerminalSize(cols=80, rows=24))
-        registry = get_registry()
-        await registry.create_manual_terminal(
-            self._session_id,
+        if self._session.has_terminal(session_key):
+            return
+
+        size = self._terminal_sizes.get(session_key, TerminalSize(cols=80, rows=24))
+
+        # Create the PTY directly on the session
+        pty = PTYManager()
+        await pty.spawn(
             self._config.shell_command,
+            self._session.project_path,
             size,
         )
+        self._session.add_terminal(session_key, pty)
 
         # Start output loop for the new terminal
-        self._start_output_loop(SessionKey.MANUAL)
-        logger.info("Created manual terminal for session: %s", self._session_id)
+        self._start_output_loop(session_key)
+        logger.info("Created manual terminal '%s' for session: %s", session_key, self._session_id)
 
     async def _send_connected(self) -> None:
         """Send connected message with working directory, session state, and user config."""
@@ -301,17 +320,18 @@ class ConnectionHandler:
                     "sessionKey": SessionKey.CLAUDE,
                 })
 
-            # Send scrollback for manual terminal if it exists
-            if self._session.has_terminal(SessionKey.MANUAL):
-                # Start output loop for existing manual terminal
-                self._start_output_loop(SessionKey.MANUAL)
-                manual_scrollback = self._session.get_scrollback(SessionKey.MANUAL)
-                if manual_scrollback:
+            # Send scrollback for all non-claude terminals (manual + agent terminals)
+            for session_key in self._session.terminals:
+                if session_key == SessionKey.CLAUDE:
+                    continue
+                self._start_output_loop(session_key)
+                terminal_scrollback = self._session.get_scrollback(session_key)
+                if terminal_scrollback:
                     await self._send({
                         "type": MessageType.SESSION_RESTORED,
                         "sessionId": self._session_id,
-                        "scrollback": manual_scrollback,
-                        "sessionKey": SessionKey.MANUAL,
+                        "scrollback": terminal_scrollback,
+                        "sessionKey": session_key,
                     })
 
         # Perform WSL health check for restored sessions
@@ -404,9 +424,9 @@ class ConnectionHandler:
         if not input_data:
             return
 
-        # Lazily create manual terminal on first input
-        if session_key == SessionKey.MANUAL and not self._session.has_terminal(SessionKey.MANUAL):
-            await self._create_manual_terminal()
+        # Lazily create manual terminals on first input
+        if self._is_manual_session_key(session_key) and not self._session.has_terminal(session_key):
+            await self._create_manual_terminal(session_key)
 
         terminal = self._session.get_terminal(session_key)
         if terminal:
@@ -424,9 +444,9 @@ class ConnectionHandler:
         # Store size for lazy terminal creation
         self._terminal_sizes[session_key] = TerminalSize(cols=cols, rows=rows)
 
-        # Lazily create manual terminal on first resize
-        if session_key == SessionKey.MANUAL and not self._session.has_terminal(SessionKey.MANUAL):
-            await self._create_manual_terminal()
+        # Lazily create manual terminals on first resize
+        if self._is_manual_session_key(session_key) and not self._session.has_terminal(session_key):
+            await self._create_manual_terminal(session_key)
 
         terminal = self._session.get_terminal(session_key)
         if terminal:

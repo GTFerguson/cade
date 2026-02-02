@@ -5,6 +5,7 @@
  * for a single project tab.
  */
 
+import { AgentManager } from "../agents";
 import { FileTree } from "../file-tree";
 import type { PaneKeyHandler, PaneType } from "../input/keybindings";
 import { Layout } from "../ui/layout";
@@ -24,6 +25,7 @@ export class ProjectContextImpl implements IProjectContext {
   readonly container: HTMLElement;
   private layout: Layout | null = null;
   private terminalManager: TerminalManager | null = null;
+  private agentManager: AgentManager | null = null;
   private fileTree: FileTree | null = null;
   private rightPane: RightPaneManager | null = null;
   private splash: Splash | null = null;
@@ -133,6 +135,22 @@ export class ProjectContextImpl implements IProjectContext {
     this.terminalManager = new TerminalManager(terminalEl, this.ws);
     this.terminalManager.initialize();
 
+    // Create agent manager for worker agent terminals
+    this.agentManager = new AgentManager(terminalEl, this.ws, null);
+    this.agentManager.initialize();
+    this.terminalManager.setAgentManager(this.agentManager);
+
+    // Coordinate visibility when switching between primary and agents
+    this.agentManager.onAgentSwitch((agentId) => {
+      if (agentId != null) {
+        this.terminalManager?.hidePrimary();
+      } else {
+        this.terminalManager?.showPrimary();
+      }
+      this.terminalManager?.updateStatusIndicator();
+      this.rightPane?.getAgentPane()?.setActiveAgent(agentId);
+    });
+
     // Create splash overlay in terminal pane
     this.splash = new Splash(terminalEl);
 
@@ -141,6 +159,12 @@ export class ProjectContextImpl implements IProjectContext {
 
     this.rightPane = new RightPaneManager(viewerEl, this.ws);
     this.rightPane.initialize();
+
+    // Wire agent overview pane in the right pane
+    this.rightPane.setAgentManager(this.agentManager);
+    this.rightPane.setOnAgentSelect((agentId) => {
+      this.agentManager?.switchToAgent(agentId);
+    });
 
     this.fileTree.on("file-select", (path) => {
       this.rightPane?.getViewer().loadFile(path);
@@ -172,6 +196,19 @@ export class ProjectContextImpl implements IProjectContext {
     this.ws.on("disconnected", this.boundHandlers.disconnected);
     this.ws.on("error", this.boundHandlers.error);
     this.ws.on("pty-exited", this.boundHandlers.ptyExited);
+
+    // Agent lifecycle events
+    this.ws.on("agent-spawned" as any, (msg: any) => {
+      this.agentManager?.createAgent(msg.agentId, msg.label, msg.role ?? "worker");
+      this.terminalManager?.updateStatusIndicator();
+    });
+    this.ws.on("agent-killed" as any, (msg: any) => {
+      this.agentManager?.destroyAgent(msg.agentId);
+      this.terminalManager?.updateStatusIndicator();
+    });
+    this.ws.on("agent-state-changed" as any, (msg: any) => {
+      this.agentManager?.updateAgentState(msg.agentId, msg.state);
+    });
 
     this.hide();
   }
@@ -341,6 +378,27 @@ export class ProjectContextImpl implements IProjectContext {
   }
 
   /**
+   * Switch center pane to a specific agent, or null for primary.
+   */
+  switchToAgent(agentId: string | null): void {
+    this.agentManager?.switchToAgent(agentId);
+  }
+
+  /**
+   * Cycle through agents.
+   */
+  cycleAgent(direction: "next" | "prev"): void {
+    this.agentManager?.cycleAgent(direction);
+  }
+
+  /**
+   * Get the agent manager.
+   */
+  getAgentManager(): AgentManager | null {
+    return this.agentManager;
+  }
+
+  /**
    * Restore session state.
    */
   private restoreSession(session: SessionState): void {
@@ -412,6 +470,7 @@ export class ProjectContextImpl implements IProjectContext {
     this.ws.off("error", this.boundHandlers.error);
     this.ws.off("pty-exited", this.boundHandlers.ptyExited);
 
+    this.agentManager?.dispose();
     this.terminalManager?.dispose();
     this.fileTree?.dispose();
     this.rightPane?.dispose();

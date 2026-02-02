@@ -24,7 +24,7 @@ impl PythonProcess {
             .arg("--port")
             .arg(port.to_string())
             .arg("--host")
-            .arg("127.0.0.1")
+            .arg("0.0.0.0")
             .arg("--no-browser")
             .arg("--debug")
             .stdout(Stdio::null());

@@ -5,10 +5,11 @@
  * switching between terminals with visual status indicators.
  */
 
-import { SessionKey, type SessionKeyValue } from "../platform/protocol";
+import { SessionKey, type SessionKeyValue, type AnySessionKey } from "../platform/protocol";
 import { Terminal, type CustomKeyHandler } from "./terminal";
 import type { Component, OutputMessage, SessionRestoredMessage } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
+import type { AgentManager } from "../agents";
 
 export class TerminalManager implements Component {
   private claudeTerminal: Terminal | null = null;
@@ -18,7 +19,9 @@ export class TerminalManager implements Component {
   private manualContainer: HTMLElement;
   private statusIndicator: HTMLElement;
   private customKeyHandler: CustomKeyHandler | null = null;
-  private outputBuffer: Map<SessionKeyValue, string[]> = new Map();
+  private agentManager: AgentManager | null = null;
+  private agentDropdown: HTMLElement | null = null;
+  private outputBuffer: Map<AnySessionKey, string[]> = new Map();
   private flushRafId: number | null = null;
   private flushTimeoutId: number | null = null;
   private lastFlushTime = 0;
@@ -69,9 +72,21 @@ export class TerminalManager implements Component {
   }
 
   /**
+   * Set the agent manager for delegating agent output routing.
+   */
+  setAgentManager(manager: AgentManager): void {
+    this.agentManager = manager;
+  }
+
+  /**
    * Handle output message and route to correct terminal.
    */
   private handleOutput(message: OutputMessage): void {
+    // Delegate agent output to AgentManager first
+    if (this.agentManager?.routeOutput(message)) {
+      return;
+    }
+
     const sessionKey = message.sessionKey ?? SessionKey.CLAUDE;
 
     // Append to buffer
@@ -140,6 +155,11 @@ export class TerminalManager implements Component {
    * Handle session restored message.
    */
   private handleSessionRestored(message: SessionRestoredMessage): void {
+    // Delegate agent scrollback to AgentManager first
+    if (this.agentManager?.routeSessionRestored(message)) {
+      return;
+    }
+
     const sessionKey = message.sessionKey ?? SessionKey.CLAUDE;
 
     if (sessionKey === SessionKey.CLAUDE) {
@@ -177,6 +197,13 @@ export class TerminalManager implements Component {
    * Toggle between claude and manual terminals.
    */
   toggle(): void {
+    // If an agent is focused, toggle its side instead
+    if (this.agentManager?.getActiveAgentId() != null) {
+      this.agentManager.toggleSide();
+      this.updateStatusIndicator();
+      return;
+    }
+
     if (this.activeTerminal === SessionKey.CLAUDE) {
       this.switchTo(SessionKey.MANUAL);
     } else {
@@ -210,17 +237,163 @@ export class TerminalManager implements Component {
   }
 
   /**
+   * Show the primary terminal containers (called when switching away from an agent).
+   */
+  showPrimary(): void {
+    if (this.activeTerminal === SessionKey.CLAUDE) {
+      this.claudeContainer.style.display = "block";
+      this.claudeTerminal?.fit();
+      this.claudeTerminal?.focus();
+    } else {
+      this.manualContainer.style.display = "block";
+      this.manualTerminal?.fit();
+      this.manualTerminal?.focus();
+    }
+    this.updateStatusIndicator();
+  }
+
+  /**
+   * Hide the primary terminal containers (called when switching to an agent).
+   */
+  hidePrimary(): void {
+    this.claudeContainer.style.display = "none";
+    this.manualContainer.style.display = "none";
+  }
+
+  /**
    * Update the status indicator text.
    */
-  private updateStatusIndicator(): void {
-    if (this.activeTerminal === SessionKey.CLAUDE) {
-      this.statusIndicator.textContent = "[claude]";
+  /**
+   * Update status indicator text. Shows agent label when an agent is focused,
+   * with a dropdown for switching between agents.
+   */
+  updateStatusIndicator(): void {
+    const activeAgentId = this.agentManager?.getActiveAgentId();
+
+    if (activeAgentId != null) {
+      // Agent is active — show its label
+      const agents = this.agentManager?.getAgentList() ?? [];
+      const activeAgent = agents.find((a) => a.agentId === activeAgentId);
+      const label = activeAgent?.label ?? activeAgentId.replace("agent-", "");
+      const side = this.agentManager?.getActiveSide() ?? "claude";
+
+      this.statusIndicator.innerHTML = "";
+      this.statusIndicator.classList.remove("claude", "shell");
+
+      const labelSpan = document.createElement("span");
+      labelSpan.className = "terminal-status-label";
+      labelSpan.textContent = `[${label} ▾]`;
+      labelSpan.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.toggleAgentDropdown();
+      });
+
+      const sideSpan = document.createElement("span");
+      sideSpan.className = side === "claude" ? "terminal-status-claude" : "terminal-status-shell";
+      sideSpan.textContent = side === "claude" ? " / [claude]" : " / [shell]";
+
+      this.statusIndicator.appendChild(labelSpan);
+      this.statusIndicator.appendChild(sideSpan);
+      this.statusIndicator.classList.add(side === "claude" ? "claude" : "shell");
+    } else if (this.agentManager?.hasAgents()) {
+      // Primary is active but agents exist — show "main ▾"
+      this.statusIndicator.innerHTML = "";
       this.statusIndicator.classList.remove("shell");
       this.statusIndicator.classList.add("claude");
+
+      const labelSpan = document.createElement("span");
+      labelSpan.className = "terminal-status-label";
+      labelSpan.textContent = "[main ▾]";
+      labelSpan.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.toggleAgentDropdown();
+      });
+
+      const sideSpan = document.createElement("span");
+      if (this.activeTerminal === SessionKey.CLAUDE) {
+        sideSpan.className = "terminal-status-claude";
+        sideSpan.textContent = " / [claude]";
+      } else {
+        sideSpan.className = "terminal-status-shell";
+        sideSpan.textContent = " / [shell]";
+      }
+
+      this.statusIndicator.appendChild(labelSpan);
+      this.statusIndicator.appendChild(sideSpan);
     } else {
-      this.statusIndicator.textContent = "[shell]";
-      this.statusIndicator.classList.remove("claude");
-      this.statusIndicator.classList.add("shell");
+      // No agents — original behavior
+      this.statusIndicator.innerHTML = "";
+      if (this.activeTerminal === SessionKey.CLAUDE) {
+        this.statusIndicator.textContent = "[claude]";
+        this.statusIndicator.classList.remove("shell");
+        this.statusIndicator.classList.add("claude");
+      } else {
+        this.statusIndicator.textContent = "[shell]";
+        this.statusIndicator.classList.remove("claude");
+        this.statusIndicator.classList.add("shell");
+      }
+    }
+  }
+
+  /**
+   * Toggle the agent dropdown in the status bar.
+   */
+  private toggleAgentDropdown(): void {
+    if (this.agentDropdown) {
+      this.agentDropdown.remove();
+      this.agentDropdown = null;
+      return;
+    }
+
+    const dropdown = document.createElement("div");
+    dropdown.className = "terminal-agent-dropdown";
+
+    // Primary option
+    const primaryOption = document.createElement("div");
+    primaryOption.className = "terminal-agent-option";
+    if (this.agentManager?.getActiveAgentId() == null) {
+      primaryOption.classList.add("active");
+    }
+    primaryOption.textContent = "● main (primary)";
+    primaryOption.addEventListener("click", () => {
+      this.agentManager?.switchToAgent(null);
+      this.hideAgentDropdown();
+    });
+    dropdown.appendChild(primaryOption);
+
+    // Agent options
+    const agents = this.agentManager?.getAgentList() ?? [];
+    for (const agent of agents) {
+      const option = document.createElement("div");
+      option.className = "terminal-agent-option";
+      if (agent.agentId === this.agentManager?.getActiveAgentId()) {
+        option.classList.add("active");
+      }
+      option.textContent = `◉ ${agent.label} (${agent.role})`;
+      option.addEventListener("click", () => {
+        this.agentManager?.switchToAgent(agent.agentId);
+        this.hideAgentDropdown();
+      });
+      dropdown.appendChild(option);
+    }
+
+    this.statusIndicator.appendChild(dropdown);
+    this.agentDropdown = dropdown;
+
+    // Close on outside click
+    const closeHandler = (e: MouseEvent) => {
+      if (!dropdown.contains(e.target as Node) && !this.statusIndicator.contains(e.target as Node)) {
+        this.hideAgentDropdown();
+        document.removeEventListener("click", closeHandler);
+      }
+    };
+    setTimeout(() => document.addEventListener("click", closeHandler), 0);
+  }
+
+  private hideAgentDropdown(): void {
+    if (this.agentDropdown) {
+      this.agentDropdown.remove();
+      this.agentDropdown = null;
     }
   }
 
@@ -235,6 +408,11 @@ export class TerminalManager implements Component {
    * Send input to the active terminal's PTY.
    */
   sendInput(data: string): void {
+    if (this.agentManager?.getActiveAgentId() != null) {
+      this.agentManager.sendInput(data);
+      return;
+    }
+
     if (this.activeTerminal === SessionKey.CLAUDE) {
       this.claudeTerminal?.sendInput(data);
     } else {
@@ -246,6 +424,11 @@ export class TerminalManager implements Component {
    * Focus the active terminal.
    */
   focus(): void {
+    if (this.agentManager?.getActiveAgentId() != null) {
+      this.agentManager.focus();
+      return;
+    }
+
     if (this.activeTerminal === SessionKey.CLAUDE) {
       this.claudeTerminal?.focus();
     } else {
@@ -259,6 +442,7 @@ export class TerminalManager implements Component {
   fit(): void {
     this.claudeTerminal?.fit();
     this.manualTerminal?.fit();
+    this.agentManager?.fit();
   }
 
   /**
@@ -267,6 +451,7 @@ export class TerminalManager implements Component {
   sendSize(): void {
     this.claudeTerminal?.sendSize();
     this.manualTerminal?.sendSize();
+    this.agentManager?.sendSize();
   }
 
   /**
@@ -276,6 +461,7 @@ export class TerminalManager implements Component {
     this.customKeyHandler = handler;
     this.claudeTerminal?.setCustomKeyHandler(handler);
     this.manualTerminal?.setCustomKeyHandler(handler);
+    this.agentManager?.setCustomKeyHandler(handler);
   }
 
   /**
@@ -304,6 +490,11 @@ export class TerminalManager implements Component {
    * Scroll the active terminal to top.
    */
   scrollToTop(): void {
+    if (this.agentManager?.getActiveAgentId() != null) {
+      this.agentManager.scrollToTop();
+      return;
+    }
+
     if (this.activeTerminal === SessionKey.CLAUDE) {
       this.claudeTerminal?.scrollToTop();
     } else {
@@ -315,6 +506,11 @@ export class TerminalManager implements Component {
    * Scroll the active terminal to bottom.
    */
   scrollToBottom(): void {
+    if (this.agentManager?.getActiveAgentId() != null) {
+      this.agentManager.scrollToBottom();
+      return;
+    }
+
     if (this.activeTerminal === SessionKey.CLAUDE) {
       this.claudeTerminal?.scrollToBottom();
     } else {

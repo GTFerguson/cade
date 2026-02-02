@@ -139,6 +139,7 @@ export class RemoteConnectionModal {
     if (this.profiles.length === 0) return;
 
     const profile = this.profiles[this.selectedIndex];
+    if (!profile) return;
     await this.profileManager.markProfileUsed(profile.id);
 
     if (this.resolve) {
@@ -185,6 +186,7 @@ export class RemoteConnectionModal {
     if (this.profiles.length === 0) return;
 
     const profile = this.profiles[this.selectedIndex];
+    if (!profile) return;
     const confirmed = confirm(`Delete profile "${profile.name}"?`);
 
     if (confirmed) {

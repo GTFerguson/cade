@@ -375,9 +375,10 @@ export class Layout implements Component {
     if (this.savedViewerProportion === null || this.savedViewerProportion <= 0) {
       this.savedViewerProportion = DEFAULT_PROPORTIONS.viewer;
     }
+    const restored = this.savedViewerProportion;
     // Take space from terminal
-    this.proportions.terminal -= this.savedViewerProportion;
-    this.proportions.viewer = this.savedViewerProportion;
+    this.proportions.terminal -= restored;
+    this.proportions.viewer = restored;
     this.savedViewerProportion = null;
     this.applyProportions();
     this.onChangeCallback?.();

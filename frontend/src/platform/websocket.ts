@@ -4,7 +4,7 @@
 
 import { appendTokenToUrl } from "../auth/tokenManager";
 import { basePath, config } from "../config/config";
-import { ErrorCode, MessageType, type SessionKeyValue } from "./protocol";
+import { ErrorCode, MessageType, type AnySessionKey } from "./protocol";
 import type {
   ClientMessage,
   ConnectedMessage,
@@ -62,6 +62,7 @@ export class WebSocketClient {
   private readonly explicitUrl: boolean;
   private fatalError = false;
   private remoteAuthToken: string | null = null;
+  private url: string;
 
   constructor(url?: string, authToken?: string) {
     this.explicitUrl = url !== undefined;
@@ -229,7 +230,7 @@ export class WebSocketClient {
   /**
    * Send terminal input.
    */
-  sendInput(data: string, sessionKey?: SessionKeyValue): void {
+  sendInput(data: string, sessionKey?: AnySessionKey): void {
     const message = {
       type: MessageType.INPUT,
       data,
@@ -241,7 +242,7 @@ export class WebSocketClient {
   /**
    * Send terminal resize.
    */
-  sendResize(cols: number, rows: number, sessionKey?: SessionKeyValue): void {
+  sendResize(cols: number, rows: number, sessionKey?: AnySessionKey): void {
     const message = {
       type: MessageType.RESIZE,
       cols,

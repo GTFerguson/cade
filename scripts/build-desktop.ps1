@@ -97,6 +97,11 @@ if (-not (Test-Path "node_modules")) {
 $env:VITE_BASE_PATH = "/"
 npm run build
 
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Error: Frontend build failed (typecheck or bundling errors)" -ForegroundColor Red
+    exit 1
+}
+
 if (-not (Test-Path "dist")) {
     Write-Host "Error: Frontend build failed - dist directory not found" -ForegroundColor Red
     exit 1

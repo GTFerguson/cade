@@ -227,6 +227,14 @@ class App {
         const activeTab = this.tabManager.getActiveTab();
         activeTab?.context?.getTerminalManager()?.scrollToBottom();
       },
+      cycleAgentNext: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        activeTab?.context?.cycleAgent("next");
+      },
+      cycleAgentPrev: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        activeTab?.context?.cycleAgent("prev");
+      },
       getFocusedPane: () => {
         const activeTab = this.tabManager.getActiveTab();
         return activeTab?.context?.getFocusedPane() ?? "terminal";

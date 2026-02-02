@@ -31,6 +31,8 @@ export interface KeybindingCallbacks {
   viewLatestPlan: () => void;
   scrollTerminalToTop: () => void;
   scrollTerminalToBottom: () => void;
+  cycleAgentNext: () => void;
+  cycleAgentPrev: () => void;
   getFocusedPane: () => PaneType;
   getPaneHandler: (pane: PaneType) => PaneKeyHandler | null;
 }
@@ -347,6 +349,18 @@ export class KeybindingManager implements Component {
     // Neovim toggle: uses config misc.toggleNeovim (default: n)
     if (this.matchesBinding(e, config.misc.toggleNeovim)) {
       this.callbacks?.toggleNeovim();
+      this.onPrefixShortcutUsed();
+      return;
+    }
+
+    // Agent cycling: ] for next, [ for previous
+    if (this.matchesBinding(e, config.misc.cycleAgentNext)) {
+      this.callbacks?.cycleAgentNext();
+      this.onPrefixShortcutUsed();
+      return;
+    }
+    if (this.matchesBinding(e, config.misc.cycleAgentPrev)) {
+      this.callbacks?.cycleAgentPrev();
       this.onPrefixShortcutUsed();
       return;
     }

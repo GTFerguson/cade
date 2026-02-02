@@ -12,6 +12,11 @@ export const SessionKey = {
 
 export type SessionKeyValue = (typeof SessionKey)[keyof typeof SessionKey];
 
+/**
+ * Accepts both well-known session keys and dynamic agent keys like "agent-tests".
+ */
+export type AnySessionKey = SessionKeyValue | string;
+
 export const MessageType = {
   // Client -> Server
   INPUT: "input",

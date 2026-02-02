@@ -2,7 +2,7 @@
  * TypeScript interfaces for CADE frontend.
  */
 
-import type { ErrorCodeValue, MessageTypeValue, SessionKeyValue } from "./platform/protocol";
+import type { ErrorCodeValue, MessageTypeValue, AnySessionKey } from "./platform/protocol";
 import type { UserConfig } from "./config/user-config";
 
 /**
@@ -37,7 +37,7 @@ export interface BaseMessage {
 export interface InputMessage extends BaseMessage {
   type: "input";
   data: string;
-  sessionKey?: SessionKeyValue;
+  sessionKey?: AnySessionKey;
 }
 
 /**
@@ -47,7 +47,7 @@ export interface ResizeMessage extends BaseMessage {
   type: "resize";
   cols: number;
   rows: number;
-  sessionKey?: SessionKeyValue;
+  sessionKey?: AnySessionKey;
 }
 
 /**
@@ -135,7 +135,7 @@ export interface SetProjectMessage extends BaseMessage {
 export interface OutputMessage extends BaseMessage {
   type: "output";
   data: string;
-  sessionKey?: SessionKeyValue;
+  sessionKey?: AnySessionKey;
 }
 
 /**
@@ -207,7 +207,7 @@ export interface SessionRestoredMessage extends BaseMessage {
   type: "session-restored";
   sessionId: string;
   scrollback: string;
-  sessionKey?: SessionKeyValue;
+  sessionKey?: AnySessionKey;
 }
 
 /**
@@ -227,7 +227,7 @@ export interface PtyExitedMessage extends BaseMessage {
   type: "pty-exited";
   code: string;
   message: string;
-  sessionKey?: SessionKeyValue;
+  sessionKey?: AnySessionKey;
 }
 
 /**

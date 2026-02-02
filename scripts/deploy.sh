@@ -109,7 +109,7 @@ else
     # MSYS_NO_PATHCONV prevents Git Bash from mangling /cade/ to a Windows path
     (
         cd "$PROJECT_ROOT/frontend"
-        MSYS_NO_PATHCONV=1 VITE_BASE_PATH="${ROOT_PATH}/" npx vite build
+        MSYS_NO_PATHCONV=1 VITE_BASE_PATH="${ROOT_PATH}/" npm run build
     )
 
     if [ ! -f "$PROJECT_ROOT/frontend/dist/index.html" ]; then

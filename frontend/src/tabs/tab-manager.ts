@@ -2,7 +2,6 @@
  * Tab state management with localStorage persistence.
  */
 
-import { config } from "../config/config";
 import { toWebSocketUrl } from "../platform/url-utils";
 import { WebSocketClient } from "../platform/websocket";
 import type { EventHandler } from "../types";
@@ -173,7 +172,9 @@ export class TabManager {
       remoteUrl: profile.url,
     };
     const tabState = this.createTabState(tabInfo, profile.authToken);
-    tabState.tunnelPid = tunnelPid;
+    if (tunnelPid !== undefined) {
+      tabState.tunnelPid = tunnelPid;
+    }
 
     this.tabs.set(id, tabState);
     this.saveState();
@@ -407,14 +408,17 @@ export class TabManager {
    * Save state to localStorage.
    */
   private saveState(): void {
-    const tabs: TabInfo[] = this.getTabs().map((tab) => ({
-      id: tab.id,
-      projectPath: tab.projectPath,
-      name: tab.name,
-      isRemote: tab.isRemote,
-      remoteProfileId: tab.remoteProfileId,
-      remoteUrl: tab.remoteUrl,
-    }));
+    const tabs: TabInfo[] = this.getTabs().map((tab) => {
+      const info: TabInfo = {
+        id: tab.id,
+        projectPath: tab.projectPath,
+        name: tab.name,
+      };
+      if (tab.isRemote !== undefined) info.isRemote = tab.isRemote;
+      if (tab.remoteProfileId !== undefined) info.remoteProfileId = tab.remoteProfileId;
+      if (tab.remoteUrl !== undefined) info.remoteUrl = tab.remoteUrl;
+      return info;
+    });
 
     const state: AppState = {
       version: STATE_VERSION,
