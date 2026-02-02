@@ -253,7 +253,7 @@ After=network.target
 [Service]
 Type=simple
 User=${CURRENT_USER}
-WorkingDirectory=${INSTALL_DIR}
+WorkingDirectory=${WORKING_DIR}
 Environment=CADE_AUTH_ENABLED=true
 Environment=CADE_AUTH_TOKEN=${TOKEN}
 Environment=CADE_HOST=0.0.0.0

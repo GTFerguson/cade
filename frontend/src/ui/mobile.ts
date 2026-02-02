@@ -29,7 +29,6 @@ export class MobileUI implements Component {
   private mode: "explorer" | "content" = "content";
   private fileTree: FileTree | null = null;
 
-  private mdButton: HTMLButtonElement;
   private slideout: HTMLElement;
   private backdrop: HTMLElement;
   private slideoutTitle: HTMLElement;
@@ -45,7 +44,6 @@ export class MobileUI implements Component {
     private ws: WebSocketClient,
     private callbacks: MobileUICallbacks,
   ) {
-    this.mdButton = document.getElementById("md-button") as HTMLButtonElement;
     this.slideout = document.getElementById("viewer-slideout") as HTMLElement;
     this.backdrop = document.getElementById("slideout-backdrop") as HTMLElement;
     this.slideoutTitle = document.getElementById(
@@ -109,18 +107,12 @@ export class MobileUI implements Component {
     );
     this.toolbar.initialize();
 
-    // Hide the floating MD button — toolbar's ⋯ → View File replaces it
-    this.mdButton.classList.add("toolbar-active");
   }
 
   /**
    * Setup DOM event listeners.
    */
   private setupEventListeners(): void {
-    this.mdButton.addEventListener("click", () => {
-      this.toggleViewer();
-    });
-
     this.closeButton.addEventListener("click", () => {
       this.closeViewer();
     });
@@ -191,8 +183,6 @@ export class MobileUI implements Component {
 
     if (this.toolbar) {
       this.toolbar.showOverflowIndicator();
-    } else {
-      this.mdButton.classList.add("has-update");
     }
   }
 
@@ -201,19 +191,7 @@ export class MobileUI implements Component {
    */
   private clearUpdateIndicator(): void {
     this.hasUpdate = false;
-    this.mdButton.classList.remove("has-update");
     this.toolbar?.clearOverflowIndicator();
-  }
-
-  /**
-   * Toggle the viewer panel.
-   */
-  private toggleViewer(): void {
-    if (this.viewerOpen) {
-      this.closeViewer();
-    } else {
-      this.openViewer();
-    }
   }
 
   /**

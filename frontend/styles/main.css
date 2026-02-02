@@ -1045,7 +1045,7 @@ body {
   }
 
   /* Prevent double-tap zoom on interactive elements */
-  button, .tab, .md-button {
+  button, .tab {
     touch-action: manipulation;
   }
 }
@@ -1070,67 +1070,6 @@ body {
 @supports (height: 100dvh) {
   .app-container.mobile-layout .terminal-pane {
     height: calc(100dvh - 48px);
-  }
-}
-
-/* MD Button - floating action button */
-.md-button {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  border: 2px solid var(--text-secondary);
-  background: transparent;
-  color: var(--text-secondary);
-  font-weight: bold;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  z-index: 100;
-  display: none;
-}
-
-.md-button:hover {
-  border-color: var(--accent-blue);
-  color: var(--accent-blue);
-}
-
-.md-button:active {
-  transform: scale(0.95);
-}
-
-.md-button.has-update {
-  background: var(--accent-blue);
-  border-color: var(--accent-blue);
-  color: white;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(86, 156, 214, 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(86, 156, 214, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(86, 156, 214, 0);
-  }
-}
-
-/* Show MD button only on mobile (hidden when touch toolbar is active) */
-@media (max-width: 768px) {
-  .md-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  /* Hide MD button when touch toolbar is visible */
-  .md-button.toolbar-active {
-    display: none;
   }
 }
 
@@ -1542,7 +1481,6 @@ body {
 
 /* Hide mobile-only elements on desktop */
 @media (min-width: 769px) {
-  .md-button,
   .viewer-slideout,
   .slideout-backdrop,
   .touch-toolbar,
