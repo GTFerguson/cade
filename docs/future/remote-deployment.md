@@ -1,7 +1,7 @@
 ---
 title: Remote Deployment
 created: 2026-01-31
-updated: 2026-02-01
+updated: 2026-02-02
 status: in-progress
 tags: [deployment, remote, ec2, cloud, architecture]
 ---
@@ -438,11 +438,11 @@ max_agents_per_user = 5
 
 5. **Updates:** How to update CADE backend without disrupting active sessions? Rolling update, blue/green deployment?
 
-6. **Mobile optimization:** Does remote deployment work well with the planned mobile interface?
+6. ~~**Mobile optimization:**~~ ✅ Resolved — mobile interface is fully implemented with touch toolbar, file explorer, and slideout viewer. Remote deployment + mobile access works seamlessly.
 
 ## See Also
 
-- [[mobile-interface|Mobile Interface]] - Remote deployment enables mobile access
+- [[../user/mobile-guide|Mobile Guide]] - Mobile interface for remote access from phones and tablets
 - [[agent-orchestration|Agent Orchestration]] - Multi-agent works well with persistent remote sessions
 - [[../technical/core/frontend-architecture|Frontend Architecture]]
 - [[../technical/core/backend-architecture|Backend Architecture]] (if exists)

@@ -1,7 +1,7 @@
 ---
 title: User Guide
 created: 2026-01-16
-updated: 2026-01-17
+updated: 2026-02-02
 status: active
 tags: [index, user, guide]
 ---
@@ -9,6 +9,18 @@ tags: [index, user, guide]
 # User Guide
 
 CADE (Claude Agentic Development Environment) is an agent-first development environment with Claude Code in a terminal shell as its centerpiece. It provides a three-pane layout with file navigation, an integrated terminal, and a document viewer.
+
+## Access Methods
+
+CADE can be accessed from multiple platforms:
+
+| Platform | How | Best For |
+|----------|-----|----------|
+| **Desktop App** | Native Tauri application | Primary development |
+| **Web Browser** | Connect to a remote CADE backend | Access from any machine |
+| **Mobile** | Responsive mobile interface | Monitoring, quick tasks, viewing docs |
+
+All platforms connect to the same backend and share the same terminal session, enabling multi-device workflows. See [[remote-connections|Remote Connections]] for remote setup.
 
 ## Interface Overview
 
@@ -140,7 +152,14 @@ python -m backend.main setup-hook
 
 This configures a PostToolUse hook that sends plan file edits to the markdown viewer. See [[plan-viewer|Plan Viewer Hook]] for setup options and troubleshooting.
 
+## Mobile Interface
+
+On phones and tablets, CADE switches to a full-screen terminal with a touch toolbar at the bottom, a file explorer in a slideout panel, and a document viewer for reading files on the go.
+
+See [[mobile-guide|Mobile Guide]] for full details on using the mobile interface.
+
 ## See Also
 
 - [[../README|Documentation Hub]]
 - [[../future/README|Roadmap]] - See what's planned
+- [[mobile-guide|Mobile Guide]] - Using CADE on phones and tablets

@@ -1,7 +1,7 @@
 ---
 title: Frontend Architecture
 created: 2026-01-17
-updated: 2026-01-18
+updated: 2026-02-02
 status: active
 tags: [technical, frontend, architecture, wiki-links, tabs, session-persistence, keybindings, state-machine]
 ---
@@ -255,27 +255,62 @@ Resolution rules:
 
 ### MobileUI (`mobile.ts`)
 
-Provides mobile-specific interface elements.
+Orchestrates all mobile-specific interface elements. Lazy-initializes components on first use.
 
-**Elements:**
+**Components:**
 
-| Element | Purpose |
-|---------|---------|
-| MD Button | Floating action button to open viewer |
-| Slide-out Panel | Off-canvas panel for viewing content |
-| Backdrop | Dismisses slide-out when tapped |
+| Component | File | Purpose |
+|-----------|------|---------|
+| MobileUI | `mobile.ts` | Orchestrator: slideout panel, file explorer, content viewer |
+| TouchToolbar | `touch-toolbar.ts` | Bottom-fixed button bar with common keys |
+| OverflowMenu | `overflow-menu.ts` | Bottom sheet for tab switching and actions |
 
-**Button States:**
+**Slideout Panel — Dual Mode:**
+
+The slideout panel slides in from the right and operates in two modes:
+
+| Mode | Trigger | Content |
+|------|---------|---------|
+| `explorer` | File Explorer button in overflow menu | Nested file tree with back button navigation |
+| `content` | MD button or file selection | Markdown/code viewer with auto-refresh |
+
+**Touch Toolbar (`touch-toolbar.ts`):**
+
+Fixed bar at the bottom of the screen with 6 buttons:
+
+| Button | Action | Purpose |
+|--------|--------|---------|
+| ↑ | Arrow Up | Command history |
+| Tab | Tab key | Autocomplete |
+| Esc | Escape | Cancel/exit |
+| ^C | Ctrl+C | Interrupt |
+| ^D | Ctrl+D | EOF/logout |
+| ⋯ | Overflow menu | Open actions menu |
+
+The toolbar repositions above the virtual keyboard using the `visualViewport` API.
+
+**Overflow Menu (`overflow-menu.ts`):**
+
+Bottom sheet that slides up with a drag handle affordance:
+
+- List of open tabs with active indicator
+- File Explorer action
+- Current File viewer action
+- Reconnect action
+- Notification indicator dot when files change
+
+**MD Button States:**
 
 - **Outline** (default): No new content available
 - **Solid Blue** (`has-update` class): Markdown file changed, pulsing animation
 
-**Slide-out Behavior:**
+**File Explorer Behavior:**
 
-1. Tap MD button to open panel
-2. If updates pending, loads the changed file
-3. Otherwise, shows previously viewed file
-4. Tap backdrop or close button to dismiss
+1. Open via overflow menu → "File Explorer"
+2. Slideout enters `explorer` mode with nested file tree
+3. Navigate folders — back button returns to parent
+4. Tap a file → slideout switches to `content` mode to view it
+5. FileTree component is lazy-initialized on first explorer open
 
 ## Keyboard Input Handling
 
@@ -528,15 +563,23 @@ When crossing the breakpoint:
 
 1. **Desktop to Mobile:**
    - Layout adds `mobile-layout` class
-   - CSS hides FileTree, resize handles, Viewer
-   - Terminal expands to 100% viewport
-   - MD button becomes visible
+   - CSS hides FileTree, resize handles, Viewer, and tab bar
+   - Terminal expands to full viewport with 48px reserved for touch toolbar
+   - MD button, touch toolbar, and overflow menu become available
+   - Uses `100dvh` (dynamic viewport height) to handle mobile browser chrome
 
 2. **Mobile to Desktop:**
    - Layout removes `mobile-layout` class
    - Three-pane grid layout restored
-   - MD button and slide-out hidden
+   - Mobile UI elements hidden
    - Any open slide-out automatically closes
+
+### Safe Area & Viewport
+
+- `viewport-fit=cover` meta tag enables edge-to-edge rendering
+- CSS uses `env(safe-area-inset-bottom)` for notched devices
+- Touch toolbar and overflow menu respect safe area insets
+- Virtual keyboard detection via `visualViewport` API repositions the toolbar
 
 ### Multi-Device Sessions
 
@@ -544,6 +587,7 @@ Mobile and desktop clients can connect to the same server session simultaneously
 
 - Shared terminal session (PTY)
 - Synchronized file tree updates
+- Real-time file change notifications across all clients
 - Independent file viewing per client
 
 ## File Structure
@@ -566,8 +610,12 @@ frontend/
 │   ├── file-tree-state.test.ts # File tree state tests
 │   ├── keybindings.ts       # Keyboard input routing
 │   ├── user-config.ts       # User configuration loading
-│   ├── markdown.ts          # Markdown viewer (mertex.md)
-│   ├── mobile.ts            # Mobile UI component
+│   ├── markdown.ts          # Markdown viewer
+│   ├── ui/
+│   │   ├── mobile.ts        # Mobile UI orchestrator
+│   │   ├── touch-toolbar.ts # Bottom touch button bar
+│   │   ├── overflow-menu.ts # Bottom sheet actions menu
+│   │   └── splash.ts        # Startup splash screen
 │   ├── websocket.ts         # WebSocket client
 │   ├── types.ts             # TypeScript interfaces
 │   ├── protocol.ts          # Message type constants

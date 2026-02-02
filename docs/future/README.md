@@ -1,7 +1,7 @@
 ---
 title: Roadmap & Future Plans
 created: 2026-01-16
-updated: 2026-02-01
+updated: 2026-02-02
 status: active
 tags: [index, roadmap, future]
 ---
@@ -19,7 +19,7 @@ CADE (Claude Agentic Development Environment) is an agent-first development envi
 
 ## Current Status
 
-Core MVP is functional with multi-project tabs, three-pane layout, and session persistence.
+Core MVP is functional with multi-project tabs, three-pane layout, session persistence, mobile interface, and remote deployment.
 
 ## Recently Implemented
 
@@ -41,6 +41,17 @@ See [[remote-deployment]] for full details.
 - Login page, CORS middleware, base path support for reverse proxies
 - Desktop app connects via SSH tunnels with per-profile auth tokens
 - Remote profile management (CRUD, connection testing, SSH tunnel config)
+
+### Mobile Interface ✓
+
+Responsive mobile-optimized interface for phones and tablets. See [[../user/mobile-guide|Mobile Guide]] and [[../technical/core/frontend-architecture#Mobile Support|Frontend Architecture]].
+
+- Full-screen terminal with touch toolbar (arrow, tab, esc, ctrl+c, ctrl+d)
+- Bottom sheet overflow menu for tab switching and actions
+- Slideout file explorer with nested folder navigation
+- Slideout document viewer with auto-refresh
+- Safe area support for notched devices
+- Virtual keyboard awareness (toolbar repositions above keyboard)
 
 ### Multi-Project Tabs ✓
 
@@ -69,7 +80,6 @@ See [[blocking-issues]] for critical issues that must be resolved before major p
 
 - [[remote-deployment]] - Remote server deployment (Phases 1-3 complete, 4-5 planned)
 - [[neovim-integration]] - Neovim integration for collaborative editing workflows
-- [[mobile-interface]] - Mobile-optimized interface for phones and tablets
 - [[state-management-refactor]] - Extract state logic into testable state machines
 - [[hook-improvements]] - Claude Code hook infrastructure improvements
 
