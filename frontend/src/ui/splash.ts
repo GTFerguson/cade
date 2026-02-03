@@ -1,7 +1,17 @@
 /**
  * Splash screen manager for CADE startup.
  * Creates a splash overlay within a specified container (e.g., terminal pane).
+ *
+ * Two modes:
+ *  - Status mode (default): Shows "[loading]" / "[enter]", dismissed with Enter/Space.
+ *  - Options mode: Shows selectable actions (e.g. Local/Remote project picker).
+ *    Navigate with ↑↓ / j/k, confirm with Enter, or click.
  */
+
+export interface SplashOption {
+  label: string;
+  action: () => void;
+}
 
 const CADE_LOGO = `   █████████    █████████   ██████████   ██████████
   ███░░░░░███  ███░░░░░███ ░░███░░░░███ ░░███░░░░░█
@@ -19,6 +29,10 @@ export class Splash {
   private onEnter: (() => void) | null = null;
   private keyHandler: ((e: KeyboardEvent) => void) | null = null;
   private tapHandler: ((e: Event) => void) | null = null;
+
+  private options: SplashOption[] | null = null;
+  private selectedIndex = 0;
+  private optionEls: HTMLElement[] = [];
 
   constructor(container: HTMLElement) {
     this.element = document.createElement("div");
@@ -42,6 +56,32 @@ export class Splash {
 
   private setupKeyListener(): void {
     this.keyHandler = (e: KeyboardEvent) => {
+      // Options mode: navigate and select
+      if (this.options) {
+        // Don't intercept keys when a modal overlay is open
+        if (document.querySelector(".modal-overlay")) return;
+
+        if (e.key === "ArrowUp" || e.key === "ArrowDown" ||
+            e.key === "j" || e.key === "k") {
+          e.preventDefault();
+          e.stopPropagation();
+          this.selectedIndex =
+            (this.selectedIndex + (e.key === "ArrowUp" || e.key === "k" ? -1 : 1) +
+             this.options.length) % this.options.length;
+          this.renderSelection();
+          return;
+        }
+
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.stopPropagation();
+          this.options[this.selectedIndex]!.action();
+          return;
+        }
+        return;
+      }
+
+      // Status mode: dismiss on Enter/Space
       if (this.ready && (e.key === "Enter" || e.key === " ")) {
         e.preventDefault();
         e.stopPropagation();
@@ -54,7 +94,8 @@ export class Splash {
 
   private setupTapListener(): void {
     this.tapHandler = (e: Event) => {
-      if (this.ready) {
+      // Only dismiss on tap in status mode
+      if (this.ready && !this.options) {
         e.preventDefault();
         this.dismiss();
       }
@@ -84,6 +125,39 @@ export class Splash {
     const isMobile = window.innerWidth <= 768;
     this.setStatus(isMobile ? "tap" : "enter");
     this.statusEl.classList.add("blink");
+  }
+
+  /**
+   * Switch to options mode: replace the status text with selectable actions.
+   * Used for the start screen when no tabs are open.
+   */
+  setOptions(options: SplashOption[]): void {
+    this.options = options;
+    this.selectedIndex = 0;
+    this.ready = true;
+
+    this.statusEl.style.display = "none";
+
+    const container = document.createElement("div");
+    container.className = "splash-options";
+
+    this.optionEls = options.map((opt) => {
+      const el = document.createElement("div");
+      el.className = "splash-option";
+      el.textContent = `[${opt.label}]`;
+      el.addEventListener("click", () => opt.action());
+      container.appendChild(el);
+      return el;
+    });
+
+    this.element.appendChild(container);
+    this.renderSelection();
+  }
+
+  private renderSelection(): void {
+    this.optionEls.forEach((el, i) => {
+      el.classList.toggle("selected", i === this.selectedIndex);
+    });
   }
 
   /**

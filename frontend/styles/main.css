@@ -178,6 +178,18 @@ body {
   cursor: move; /* Visual feedback that this area is draggable */
 }
 
+.tab-bar.empty::before,
+.tab-bar.empty::after,
+.tab-bar.empty .tab-bar-spacer-left,
+.tab-bar.empty .tab-bar-spacer-right,
+.tab-bar.empty .tab-area {
+  border-bottom: none;
+}
+
+.tab-bar.empty .tab-add-button {
+  display: none;
+}
+
 .tab-list {
   display: flex;
   align-items: flex-end;
@@ -1076,6 +1088,15 @@ body {
     margin-top: -20px;
   }
 
+  .splash-options {
+    margin-top: 0;
+  }
+
+  .splash-option {
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+
   /* Prevent double-tap zoom on interactive elements */
   button, .tab {
     touch-action: manipulation;
@@ -1700,6 +1721,27 @@ body {
 
 @keyframes blink {
   50% { opacity: 0; }
+}
+
+.splash-options {
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.splash-option {
+  padding: 4px 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.splash-option.selected {
+  background: var(--accent-red);
+  color: var(--bg-primary);
 }
 
 /* ==========================================================================

@@ -18,6 +18,7 @@ import { setUserConfig, getUserConfig, matchesKeybinding } from "./config/user-c
 import { RemoteProfileManager } from "./remote/profile-manager";
 import { RemoteConnectionModal } from "./remote/RemoteConnectionModal";
 import { AuthTokenDialog } from "./remote/AuthTokenDialog";
+import { Splash } from "./ui/splash";
 import type { RemoteProfile } from "./remote/types";
 
 class App {
@@ -30,6 +31,7 @@ class App {
   private helpOverlay: HelpOverlay;
   private profileManager: RemoteProfileManager;
   private activeAuthDialogs = new Set<string>();
+  private startSplash: Splash | null = null;
 
   constructor() {
     this.tabManager = new TabManager();
@@ -94,6 +96,7 @@ class App {
 
     this.tabManager.on("tab-created", (tab) => {
       this.initializeTabContext(tab);
+      this.initMobileUIIfNeeded();
     });
 
     this.tabManager.on("tab-switched", (tab) => {
@@ -102,10 +105,15 @@ class App {
 
     this.tabManager.on("tabs-changed", (tabs) => {
       this.tabBar?.render(tabs, this.tabManager.getActiveTabId());
+      if (tabs.length === 0) {
+        this.showStartSplash();
+      } else {
+        this.hideStartSplash();
+      }
     });
 
     if (!this.tabManager.hasTabs()) {
-      this.tabManager.createTab(this.defaultProjectPath);
+      this.showStartSplash();
     } else {
       const tabs = this.tabManager.getTabs();
       for (const tab of tabs) {
@@ -119,31 +127,7 @@ class App {
       }
     }
 
-    const initialActiveTab = this.tabManager.getActiveTab();
-    if (initialActiveTab) {
-      this.mobileUI = new MobileUI(initialActiveTab.ws, {
-        sendInput: (data) => {
-          const tab = this.tabManager.getActiveTab();
-          tab?.context?.getTerminalManager()?.sendInput(data);
-        },
-        getTabs: () => {
-          const activeId = this.tabManager.getActiveTabId();
-          return this.tabManager.getTabs().map((t) => ({
-            id: t.id,
-            name: t.name,
-            projectPath: t.projectPath,
-            isActive: t.id === activeId,
-          }));
-        },
-        onSwitchTab: (id) => {
-          this.tabManager.switchTab(id);
-        },
-        getActiveWs: () => {
-          return this.tabManager.getActiveTab()?.ws ?? initialActiveTab.ws;
-        },
-      });
-      this.mobileUI.initialize();
-    }
+    this.initMobileUIIfNeeded();
 
     // Set up keybinding callbacks (manager already initialized above)
     this.keybindingManager.setCallbacks({
@@ -391,12 +375,6 @@ class App {
    * Handle tab close.
    */
   private handleTabClose(id: string): void {
-    const tabs = this.tabManager.getTabs();
-
-    if (tabs.length <= 1) {
-      return;
-    }
-
     this.tabManager.closeTab(id);
   }
 
@@ -432,6 +410,63 @@ class App {
       console.error("Failed to create remote tab:", error);
       alert(`Failed to connect: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  /**
+   * Show the start splash with project type options.
+   * Appears when there are no tabs open.
+   */
+  private showStartSplash(): void {
+    if (this.startSplash?.isVisible()) return;
+    if (!this.tabContentContainer) return;
+
+    this.startSplash = new Splash(this.tabContentContainer);
+    this.startSplash.setOptions([
+      { label: "LOCAL PROJECT", action: () => this.handleAddTab() },
+      { label: "REMOTE PROJECT", action: () => this.handleAddRemoteTab() },
+    ]);
+  }
+
+  /**
+   * Hide the start splash when a tab is created.
+   */
+  private hideStartSplash(): void {
+    this.startSplash?.hide();
+    this.startSplash = null;
+  }
+
+  /**
+   * Initialize MobileUI on first available tab.
+   * Deferred because the start splash may show before any tab exists.
+   */
+  private initMobileUIIfNeeded(): void {
+    if (this.mobileUI) return;
+
+    const tab = this.tabManager.getActiveTab();
+    if (!tab) return;
+
+    this.mobileUI = new MobileUI(tab.ws, {
+      sendInput: (data) => {
+        const active = this.tabManager.getActiveTab();
+        active?.context?.getTerminalManager()?.sendInput(data);
+      },
+      getTabs: () => {
+        const activeId = this.tabManager.getActiveTabId();
+        return this.tabManager.getTabs().map((t) => ({
+          id: t.id,
+          name: t.name,
+          projectPath: t.projectPath,
+          isActive: t.id === activeId,
+        }));
+      },
+      onSwitchTab: (id) => {
+        this.tabManager.switchTab(id);
+      },
+      getActiveWs: () => {
+        return this.tabManager.getActiveTab()?.ws ?? tab.ws;
+      },
+    });
+    this.mobileUI.initialize();
   }
 
   /**

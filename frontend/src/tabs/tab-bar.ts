@@ -26,6 +26,7 @@ export class TabBar implements Component {
    */
   render(tabs: TabState[], activeTabId: string | null = null): void {
     this.container.innerHTML = "";
+    this.container.classList.toggle("empty", tabs.length === 0);
 
     const isTauri = (window as any).__TAURI__ === true;
 

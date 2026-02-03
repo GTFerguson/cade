@@ -49,9 +49,12 @@ export class AuthTokenDialog {
       this.submit();
     });
 
+    // Clicking outside the modal does nothing — prevent accidental dismissal
+    // since losing this dialog can leave the app with zero tabs.
+    // Users can still press Escape or click Cancel intentionally.
     this.overlay.addEventListener("click", (e) => {
       if (e.target === this.overlay) {
-        this.close(null);
+        this.tokenInput.focus();
       }
     });
   }
