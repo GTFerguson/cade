@@ -124,9 +124,6 @@ def build_file_tree(
     gitignore_patterns = _load_gitignore(root) if respect_gitignore else set()
 
     def _build_node(path: Path, depth: int) -> FileNode | None:
-        if depth > max_depth:
-            return None
-
         if _should_ignore(path):
             return None
 
@@ -139,6 +136,27 @@ def build_file_tree(
             rel_path = path.name
 
         if path.is_dir():
+            if depth > max_depth:
+                # At depth limit: check if directory has visible children
+                has_children = False
+                try:
+                    for child in path.iterdir():
+                        if _should_ignore(child):
+                            continue
+                        if respect_gitignore and _matches_gitignore(child, root, gitignore_patterns):
+                            continue
+                        has_children = True
+                        break
+                except PermissionError:
+                    pass
+                return FileNode(
+                    name=path.name,
+                    path=rel_path,
+                    type="directory",
+                    children=None,
+                    has_more=has_children,
+                )
+
             children: list[FileNode] = []
             try:
                 for child in sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
@@ -155,6 +173,9 @@ def build_file_tree(
                 children=children if children else None,
             )
         else:
+            if depth > max_depth:
+                return None
+
             try:
                 modified = path.stat().st_mtime
             except Exception:
@@ -170,6 +191,99 @@ def build_file_tree(
     nodes: list[FileNode] = []
     try:
         for child in sorted(root.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+            node = _build_node(child, 0)
+            if node is not None:
+                nodes.append(node)
+    except PermissionError:
+        pass
+
+    return nodes
+
+
+def build_directory_children(
+    root: Path,
+    relative_dir: str,
+    *,
+    max_depth: int = 2,
+    respect_gitignore: bool = False,
+) -> list[FileNode]:
+    """Build children of a specific directory for lazy loading.
+
+    Returns nodes whose paths are relative to `root` (project root),
+    consistent with the main tree structure.
+    """
+    target_dir = (root / relative_dir).resolve()
+    if not target_dir.is_dir():
+        return []
+    if not str(target_dir).startswith(str(root.resolve())):
+        return []
+
+    gitignore_patterns = _load_gitignore(root) if respect_gitignore else set()
+
+    def _build_node(path: Path, depth: int) -> FileNode | None:
+        if _should_ignore(path):
+            return None
+        if respect_gitignore and _matches_gitignore(path, root, gitignore_patterns):
+            return None
+
+        try:
+            rel_path = str(path.relative_to(root)).replace("\\", "/")
+        except ValueError:
+            rel_path = path.name
+
+        if path.is_dir():
+            if depth > max_depth:
+                has_children = False
+                try:
+                    for child in path.iterdir():
+                        if _should_ignore(child):
+                            continue
+                        if respect_gitignore and _matches_gitignore(child, root, gitignore_patterns):
+                            continue
+                        has_children = True
+                        break
+                except PermissionError:
+                    pass
+                return FileNode(
+                    name=path.name,
+                    path=rel_path,
+                    type="directory",
+                    children=None,
+                    has_more=has_children,
+                )
+
+            children: list[FileNode] = []
+            try:
+                for child in sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+                    child_node = _build_node(child, depth + 1)
+                    if child_node is not None:
+                        children.append(child_node)
+            except PermissionError:
+                pass
+
+            return FileNode(
+                name=path.name,
+                path=rel_path,
+                type="directory",
+                children=children if children else None,
+            )
+        else:
+            if depth > max_depth:
+                return None
+            try:
+                modified = path.stat().st_mtime
+            except Exception:
+                modified = None
+            return FileNode(
+                name=path.name,
+                path=rel_path,
+                type="file",
+                modified=modified,
+            )
+
+    nodes: list[FileNode] = []
+    try:
+        for child in sorted(target_dir.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
             node = _build_node(child, 0)
             if node is not None:
                 nodes.append(node)
@@ -260,7 +374,7 @@ class FileTreeCache:
     """Cache for file tree structures with invalidation support."""
 
     def __init__(self) -> None:
-        self._cache: dict[tuple[Path, bool], list[FileNode]] = {}
+        self._cache: dict[tuple[Path, int, bool], list[FileNode]] = {}
         self._lock = Lock()
 
     def get(
@@ -270,7 +384,7 @@ class FileTreeCache:
         respect_gitignore: bool = False,
     ) -> list[FileNode]:
         """Get cached tree or build if not cached."""
-        cache_key = (root.resolve(), respect_gitignore)
+        cache_key = (root.resolve(), max_depth, respect_gitignore)
 
         with self._lock:
             if cache_key in self._cache:
@@ -319,7 +433,7 @@ class FileTreeCache:
 
             # Find all cached roots that are ancestors of or descendants of the change
             for cache_key in list(self._cache.keys()):
-                cached_root, _ = cache_key
+                cached_root = cache_key[0]
                 try:
                     # Is cached_root an ancestor of the change?
                     changed_path.relative_to(cached_root)

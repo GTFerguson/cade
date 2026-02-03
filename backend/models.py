@@ -15,6 +15,7 @@ class FileNode:
     type: Literal["file", "directory"]
     children: list[FileNode] | None = None
     modified: float | None = None
+    has_more: bool = False
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -27,6 +28,8 @@ class FileNode:
             result["children"] = [child.to_dict() for child in self.children]
         if self.modified is not None:
             result["modified"] = self.modified
+        if self.has_more:
+            result["hasMore"] = True
         return result
 
 

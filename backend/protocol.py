@@ -20,10 +20,12 @@ class MessageType:
     SAVE_SESSION = "save-session"  # Save session state: { type, state: SessionState }
     SET_PROJECT = "set-project"  # Set project directory: { type, path: str, sessionId?: str }
     GET_LATEST_PLAN = "get-latest-plan"  # Request most recent plan file: { type }
+    GET_CHILDREN = "get-children"  # Request directory children: { type, path: str, showIgnored?: bool }
 
     # Server -> Client
     OUTPUT = "output"  # Terminal output: { type, data: str, sessionKey?: str }
     FILE_TREE = "file-tree"  # File tree response: { type, data: FileNode[] }
+    FILE_CHILDREN = "file-children"  # Directory children: { type, path: str, children: FileNode[] }
     FILE_CHANGE = "file-change"  # File changed: { type, event: str, path: str }
     FILE_CONTENT = "file-content"  # File content: { type, path: str, content: str }
     FILE_WRITTEN = "file-written"  # File written successfully: { type, path: str }

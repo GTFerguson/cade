@@ -3,7 +3,7 @@
  */
 
 import type { PaneKeyHandler } from "../input/keybindings";
-import type { Component, EventHandler, FileNode } from "../types";
+import type { Component, EventHandler, FileChildrenMessage, FileNode } from "../types";
 import { getUserConfig, matchesKeybinding } from "../config/user-config";
 import type { WebSocketClient } from "../platform/websocket";
 
@@ -41,6 +41,10 @@ export class FileTree implements Component, PaneKeyHandler {
   private lastGPress = 0;
   private showIgnored = true;
 
+  // Lazy loading state
+  private pendingLoads: Set<string> = new Set();
+  private pendingLoadResolvers: Map<string, () => void> = new Map();
+
   // Event delegation - single handler on tree root instead of per-row listeners
   private treeRoot: HTMLUListElement | null = null;
   private delegatedClickHandler: ((e: MouseEvent) => void) | null = null;
@@ -49,6 +53,10 @@ export class FileTree implements Component, PaneKeyHandler {
     fileTree: (message: any) => {
       this.tree = message.data;
       this.render();
+      this.loadExpandedChildren();
+    },
+    fileChildren: (message: FileChildrenMessage) => {
+      this.handleChildrenLoaded(message.path, message.children);
     },
     fileChange: (message: any) => {
       this.recentlyChanged.add(message.path);
@@ -86,6 +94,7 @@ export class FileTree implements Component, PaneKeyHandler {
    */
   initialize(): void {
     this.ws.on("file-tree", this.boundHandlers.fileTree);
+    this.ws.on("file-children", this.boundHandlers.fileChildren);
     this.ws.on("file-change", this.boundHandlers.fileChange);
     this.ws.on("connected", this.boundHandlers.connected);
 
@@ -302,18 +311,21 @@ export class FileTree implements Component, PaneKeyHandler {
 
     const row = this.createRowElement(node, depth);
 
-    if (
-      node.type === "directory" &&
-      this.expandedPaths.has(node.path) &&
-      node.children != null &&
-      node.children.length > 0
-    ) {
-      const childList = document.createElement("ul");
-      childList.className = "file-tree-children";
-      for (const child of node.children) {
-        childList.appendChild(this.renderNode(child, depth + 1));
+    if (node.type === "directory" && this.expandedPaths.has(node.path)) {
+      if (node.children != null && node.children.length > 0) {
+        const childList = document.createElement("ul");
+        childList.className = "file-tree-children";
+        for (const child of node.children) {
+          childList.appendChild(this.renderNode(child, depth + 1));
+        }
+        li.appendChild(childList);
+      } else if (node.hasMore || this.pendingLoads.has(node.path)) {
+        const loading = document.createElement("div");
+        loading.className = "file-tree-loading";
+        loading.style.paddingLeft = `${(depth + 1) * 16 + 8}px`;
+        loading.textContent = "Loading…";
+        li.appendChild(loading);
       }
-      li.appendChild(childList);
     }
 
     li.insertBefore(row, li.firstChild);
@@ -329,6 +341,7 @@ export class FileTree implements Component, PaneKeyHandler {
       this.expandedPaths.delete(path);
     } else {
       this.expandedPaths.add(path);
+      this.requestChildrenIfNeeded(path);
     }
     this.render();
     this.onExpandChangeCallback?.();
@@ -365,11 +378,11 @@ export class FileTree implements Component, PaneKeyHandler {
    * Reveal and select a file in the tree, expanding parent folders.
    * Does not emit file-select event (use when file is already being loaded).
    */
-  revealFile(path: string): void {
+  async revealFile(path: string): Promise<void> {
     this.selectedPath = path;
     this.openPath = path;
 
-    // Expand all parent folders
+    // Expand all parent folders, loading children as needed
     const parts = path.split("/");
     let currentPath = "";
     for (let i = 0; i < parts.length - 1; i++) {
@@ -377,6 +390,11 @@ export class FileTree implements Component, PaneKeyHandler {
       if (part !== undefined) {
         currentPath = currentPath ? `${currentPath}/${part}` : part;
         this.expandedPaths.add(currentPath);
+
+        const node = this.findNodeByPath(currentPath);
+        if (node && node.hasMore && !node.children) {
+          await this.loadChildren(currentPath);
+        }
       }
     }
 
@@ -604,6 +622,73 @@ export class FileTree implements Component, PaneKeyHandler {
   }
 
   /**
+   * Request children from server if the node needs lazy loading.
+   */
+  private requestChildrenIfNeeded(path: string): void {
+    const node = this.findNodeByPath(path);
+    if (!node) return;
+    if (node.hasMore && !node.children && !this.pendingLoads.has(path)) {
+      this.pendingLoads.add(path);
+      this.ws.requestChildren(path, this.showIgnored);
+    }
+  }
+
+  /**
+   * Load children for a path and return a promise that resolves when done.
+   */
+  private loadChildren(path: string): Promise<void> {
+    if (this.pendingLoads.has(path)) {
+      return new Promise((resolve) => {
+        this.pendingLoadResolvers.set(path, resolve);
+      });
+    }
+    this.pendingLoads.add(path);
+    this.ws.requestChildren(path, this.showIgnored);
+    return new Promise((resolve) => {
+      this.pendingLoadResolvers.set(path, resolve);
+    });
+  }
+
+  /**
+   * Handle children loaded from server.
+   */
+  private handleChildrenLoaded(path: string, children: FileNode[]): void {
+    this.pendingLoads.delete(path);
+    const node = this.findNodeByPath(path);
+    if (node) {
+      if (children.length > 0) {
+        node.children = children;
+      } else {
+        delete node.children;
+      }
+      node.hasMore = false;
+    }
+    this.render();
+
+    const resolve = this.pendingLoadResolvers.get(path);
+    if (resolve) {
+      this.pendingLoadResolvers.delete(path);
+      resolve();
+    }
+  }
+
+  /**
+   * Load children for all expanded paths that need lazy loading.
+   * Called after tree refresh and session restore.
+   */
+  async loadExpandedChildren(): Promise<void> {
+    // Sort paths so parents load before children
+    const paths = Array.from(this.expandedPaths).sort();
+
+    for (const path of paths) {
+      const node = this.findNodeByPath(path);
+      if (node && node.hasMore && !node.children) {
+        await this.loadChildren(path);
+      }
+    }
+  }
+
+  /**
    * Handle keyboard navigation (called by KeybindingManager).
    * Returns true if the key was handled.
    */
@@ -708,6 +793,7 @@ export class FileTree implements Component, PaneKeyHandler {
     if (item.node.type === "directory") {
       if (!this.expandedPaths.has(item.node.path)) {
         this.expandedPaths.add(item.node.path);
+        this.requestChildrenIfNeeded(item.node.path);
         this.render();
         this.onExpandChangeCallback?.();
       }
@@ -926,6 +1012,7 @@ export class FileTree implements Component, PaneKeyHandler {
 
     // Unregister WebSocket handlers
     this.ws.off("file-tree", this.boundHandlers.fileTree);
+    this.ws.off("file-children", this.boundHandlers.fileChildren);
     this.ws.off("file-change", this.boundHandlers.fileChange);
     this.ws.off("connected", this.boundHandlers.connected);
 

@@ -11,6 +11,7 @@ import { HelpOverlay } from "./ui/help-overlay";
 import { KeybindingManager } from "./input/keybindings";
 import { MobileUI } from "./ui/mobile";
 import { ProjectContextImpl, TabBar, TabManager } from "./tabs";
+import { hasConnectedProfileTab } from "./tabs/tab-manager";
 import type { TabState } from "./tabs";
 import { pickProjectFolder, getUserHomePath } from "./platform/tauri-bridge";
 import { setUserConfig, getUserConfig, matchesKeybinding } from "./config/user-config";
@@ -294,6 +295,14 @@ class App {
 
       // Only show one auth dialog per profile — close duplicate tabs silently
       if (this.activeAuthDialogs.has(tab.remoteProfileId)) {
+        await this.tabManager.closeTab(tab.id);
+        return;
+      }
+
+      // If another tab on the same profile is already connected, this tab
+      // is stale (e.g. restored from session with an old token). Close it
+      // silently instead of prompting the user again.
+      if (hasConnectedProfileTab(this.tabManager.getTabs(), tab.id, tab.remoteProfileId)) {
         await this.tabManager.closeTab(tab.id);
         return;
       }

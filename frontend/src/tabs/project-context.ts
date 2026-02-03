@@ -408,9 +408,10 @@ export class ProjectContextImpl implements IProjectContext {
   /**
    * Restore session state.
    */
-  private restoreSession(session: SessionState): void {
+  private async restoreSession(session: SessionState): Promise<void> {
     if (session.expandedPaths != null && this.fileTree != null) {
       this.fileTree.setExpandedPaths(session.expandedPaths);
+      await this.fileTree.loadExpandedChildren();
     }
 
     if (session.layout != null && this.layout != null) {

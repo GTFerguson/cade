@@ -40,6 +40,21 @@ function getProjectName(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
+/**
+ * Check whether another tab sharing the same remote profile is already
+ * connected. Used to suppress redundant auth dialogs when a stale tab
+ * fires auth-failed but the user already authenticated on a sibling tab.
+ */
+export function hasConnectedProfileTab(
+  tabs: { id: string; remoteProfileId?: string; isConnected: boolean }[],
+  excludeTabId: string,
+  profileId: string,
+): boolean {
+  return tabs.some(
+    (t) => t.id !== excludeTabId && t.remoteProfileId === profileId && t.isConnected,
+  );
+}
+
 export class TabManager {
   private tabs: Map<string, TabState> = new Map();
   private activeTabId: string | null = null;

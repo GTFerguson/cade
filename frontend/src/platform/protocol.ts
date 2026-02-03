@@ -28,10 +28,12 @@ export const MessageType = {
   SAVE_SESSION: "save-session",
   SET_PROJECT: "set-project",
   GET_LATEST_PLAN: "get-latest-plan",
+  GET_CHILDREN: "get-children",
 
   // Server -> Client
   OUTPUT: "output",
   FILE_TREE: "file-tree",
+  FILE_CHILDREN: "file-children",
   FILE_CHANGE: "file-change",
   FILE_CONTENT: "file-content",
   FILE_WRITTEN: "file-written",

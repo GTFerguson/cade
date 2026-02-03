@@ -11,6 +11,7 @@ import type {
   ErrorMessage,
   EventHandler,
   FileChangeMessage,
+  FileChildrenMessage,
   FileContentMessage,
   FileTreeMessage,
   NeovimExitedMessage,
@@ -34,6 +35,7 @@ interface WebSocketEvents {
   disconnected: void;
   output: OutputMessage;
   "file-tree": FileTreeMessage;
+  "file-children": FileChildrenMessage;
   "file-change": FileChangeMessage;
   "file-content": FileContentMessage;
   "file-written": { path: string };
@@ -283,6 +285,20 @@ export class WebSocketClient {
   }
 
   /**
+   * Request children of a specific directory (lazy loading).
+   */
+  requestChildren(path: string, showIgnored?: boolean): void {
+    const message: { type: string; path: string; showIgnored?: boolean } = {
+      type: MessageType.GET_CHILDREN,
+      path,
+    };
+    if (showIgnored !== undefined) {
+      message.showIgnored = showIgnored;
+    }
+    this.send(message as ClientMessage);
+  }
+
+  /**
    * Request file content.
    */
   requestFile(path: string): void {
@@ -440,6 +456,10 @@ export class WebSocketClient {
 
       case MessageType.FILE_TREE:
         this.emit("file-tree", message);
+        break;
+
+      case MessageType.FILE_CHILDREN:
+        this.emit("file-children", message as FileChildrenMessage);
         break;
 
       case MessageType.FILE_CHANGE:

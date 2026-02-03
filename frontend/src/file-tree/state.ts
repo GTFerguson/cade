@@ -8,6 +8,7 @@ export interface FileNode {
   path: string;
   type: "file" | "directory";
   children?: FileNode[];
+  hasMore?: boolean;
 }
 
 export interface FlatNode {

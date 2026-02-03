@@ -14,6 +14,7 @@ export interface FileNode {
   type: "file" | "directory";
   children?: FileNode[];
   modified?: number;
+  hasMore?: boolean;
 }
 
 /**
@@ -71,6 +72,15 @@ export interface GetTreeMessage extends BaseMessage {
  */
 export interface GetLatestPlanMessage extends BaseMessage {
   type: "get-latest-plan";
+}
+
+/**
+ * Get directory children request (client -> server).
+ */
+export interface GetChildrenMessage extends BaseMessage {
+  type: "get-children";
+  path: string;
+  showIgnored?: boolean;
 }
 
 /**
@@ -144,6 +154,15 @@ export interface OutputMessage extends BaseMessage {
 export interface FileTreeMessage extends BaseMessage {
   type: "file-tree";
   data: FileNode[];
+}
+
+/**
+ * Directory children response (server -> client).
+ */
+export interface FileChildrenMessage extends BaseMessage {
+  type: "file-children";
+  path: string;
+  children: FileNode[];
 }
 
 /**
@@ -329,6 +348,7 @@ export type ClientMessage =
   | ResizeMessage
   | GetFileMessage
   | GetTreeMessage
+  | GetChildrenMessage
   | GetLatestPlanMessage
   | WriteFileMessage
   | CreateFileMessage
@@ -346,6 +366,7 @@ export type ClientMessage =
 export type ServerMessage =
   | OutputMessage
   | FileTreeMessage
+  | FileChildrenMessage
   | FileChangeMessage
   | FileContentMessage
   | FileWrittenMessage

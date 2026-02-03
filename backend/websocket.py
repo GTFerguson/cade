@@ -17,7 +17,7 @@ from backend.terminal.connections import get_connection_manager
 from backend.connection_registry import get_connection_registry
 from backend.errors import CADEError, ProtocolError
 from backend.files.operations import create_file, write_file_content
-from backend.files.tree import build_file_tree_cached, get_file_type, read_file_content
+from backend.files.tree import build_directory_children, build_file_tree_cached, get_file_type, read_file_content
 from backend.files.watcher import FileWatcher
 from backend.neovim.manager import get_neovim_manager
 from backend.protocol import ErrorCode, MessageType, SessionKey
@@ -414,6 +414,8 @@ class ConnectionHandler:
                 await self._handle_create_file(data)
             elif msg_type == MessageType.SAVE_SESSION:
                 await self._handle_save_session(data)
+            elif msg_type == MessageType.GET_CHILDREN:
+                await self._handle_get_children(data)
             elif msg_type == MessageType.GET_LATEST_PLAN:
                 await self._handle_get_latest_plan()
             elif msg_type == MessageType.NEOVIM_SPAWN:
@@ -484,11 +486,32 @@ class ConnectionHandler:
         # scanning large directories (e.g. /home/user with datasets)
         # can take minutes synchronously
         tree = await asyncio.to_thread(
-            build_file_tree_cached, self._working_dir, respect_gitignore=not show_ignored
+            build_file_tree_cached, self._working_dir, max_depth=2, respect_gitignore=not show_ignored
         )
         await self._send({
             "type": MessageType.FILE_TREE,
             "data": [node.to_dict() for node in tree],
+        })
+
+    async def _handle_get_children(self, data: dict) -> None:
+        """Handle lazy-load request for directory children."""
+        path = data.get("path", "")
+        if data and "showIgnored" in data:
+            show_ignored = data["showIgnored"]
+        else:
+            show_ignored = self._user_config.behavior.file_tree.show_ignored if self._user_config else True
+
+        children = await asyncio.to_thread(
+            build_directory_children,
+            self._working_dir,
+            path,
+            max_depth=2,
+            respect_gitignore=not show_ignored,
+        )
+        await self._send({
+            "type": MessageType.FILE_CHILDREN,
+            "path": path,
+            "children": [n.to_dict() for n in children],
         })
 
     async def _handle_get_file(self, data: dict) -> None:

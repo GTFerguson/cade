@@ -101,16 +101,42 @@ if [ "$SKIP_BUILD" = true ]; then
 else
     echo -e "${CYAN}[1/4]${NC} Building frontend..."
 
-    if [ ! -d "$PROJECT_ROOT/frontend/node_modules" ]; then
-        echo "  Installing npm dependencies..."
-        (cd "$PROJECT_ROOT/frontend" && npm install)
+    # Detect environment: WSL bash sees /mnt/c, Git Bash (MINGW) does not.
+    # Under WSL, npm resolves to a broken shim via a stray node_modules in
+    # the user's home dir. Use cmd.exe to run in native Windows context.
+    if [ -d "/mnt/c" ] && command -v cmd.exe >/dev/null 2>&1; then
+        WIN_FRONTEND="$(wslpath -w "$PROJECT_ROOT/frontend")"
+
+        run_npm() {
+            cmd.exe /C "cd /d ${WIN_FRONTEND} && npm $*"
+        }
+        run_npm_env() {
+            # Forward env vars to cmd.exe (first arg is the env prefix)
+            local env_prefix="$1"; shift
+            cmd.exe /C "cd /d ${WIN_FRONTEND} && ${env_prefix} npm $*"
+        }
+    else
+        run_npm() {
+            (cd "$PROJECT_ROOT/frontend" && npm "$@")
+        }
+        run_npm_env() {
+            local env_prefix="$1"; shift
+            (cd "$PROJECT_ROOT/frontend" && env $env_prefix npm "$@")
+        }
     fi
 
-    # MSYS_NO_PATHCONV prevents Git Bash from mangling /cade/ to a Windows path
-    (
-        cd "$PROJECT_ROOT/frontend"
-        MSYS_NO_PATHCONV=1 VITE_BASE_PATH="${ROOT_PATH}/" npm run build
-    )
+    if [ ! -d "$PROJECT_ROOT/frontend/node_modules" ]; then
+        echo "  Installing npm dependencies..."
+        run_npm install
+    fi
+
+    # MSYS_NO_PATHCONV prevents Git Bash from mangling /cade/ to a Windows path.
+    # Under WSL it's harmless; under cmd.exe we pass it via 'set'.
+    if [ -d "/mnt/c" ] && command -v cmd.exe >/dev/null 2>&1; then
+        run_npm_env "set \"VITE_BASE_PATH=${ROOT_PATH}/\" &&" run build
+    else
+        run_npm_env "MSYS_NO_PATHCONV=1 VITE_BASE_PATH=${ROOT_PATH}/" run build
+    fi
 
     if [ ! -f "$PROJECT_ROOT/frontend/dist/index.html" ]; then
         echo -e "${RED}✗ Frontend build failed — dist/index.html not found${NC}"

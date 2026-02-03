@@ -2,7 +2,7 @@
  * Tab module exports.
  */
 
-export { TabManager } from "./tab-manager";
+export { TabManager, hasConnectedProfileTab } from "./tab-manager";
 export { TabBar } from "./tab-bar";
 export { ProjectContextImpl } from "./project-context";
 export type {
