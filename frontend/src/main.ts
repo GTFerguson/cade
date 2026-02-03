@@ -16,6 +16,8 @@ import { pickProjectFolder, getUserHomePath } from "./platform/tauri-bridge";
 import { setUserConfig, getUserConfig, matchesKeybinding } from "./config/user-config";
 import { RemoteProfileManager } from "./remote/profile-manager";
 import { RemoteConnectionModal } from "./remote/RemoteConnectionModal";
+import { AuthTokenDialog } from "./remote/AuthTokenDialog";
+import type { RemoteProfile } from "./remote/types";
 
 class App {
   private tabManager: TabManager;
@@ -26,6 +28,7 @@ class App {
   private keybindingManager: KeybindingManager;
   private helpOverlay: HelpOverlay;
   private profileManager: RemoteProfileManager;
+  private activeAuthDialogs = new Set<string>();
 
   constructor() {
     this.tabManager = new TabManager();
@@ -284,6 +287,52 @@ class App {
 
     tab.ws.on("disconnected", () => {
       this.tabManager.setConnected(tab.id, false);
+    });
+
+    tab.ws.on("auth-failed", async () => {
+      if (!tab.remoteProfileId) return;
+
+      // Only show one auth dialog per profile — close duplicate tabs silently
+      if (this.activeAuthDialogs.has(tab.remoteProfileId)) {
+        await this.tabManager.closeTab(tab.id);
+        return;
+      }
+
+      this.activeAuthDialogs.add(tab.remoteProfileId);
+
+      await this.profileManager.loadProfiles();
+      const profile = await this.profileManager.getProfile(tab.remoteProfileId);
+
+      // Use profile name if available, fall back to tab name
+      const displayName = profile?.name ?? tab.name.split(":")[0]?.trim() ?? "Remote";
+      const dialog = new AuthTokenDialog(displayName);
+      const newToken = await dialog.show();
+
+      // Close the dead tab — restored tabs have no SSH tunnel running
+      await this.tabManager.closeTab(tab.id);
+      this.activeAuthDialogs.delete(tab.remoteProfileId!);
+
+      if (newToken) {
+        if (profile) {
+          profile.authToken = newToken;
+          await this.profileManager.saveProfile(profile);
+          const newTab = await this.tabManager.createRemoteTab(profile);
+          this.tabManager.switchTab(newTab.id);
+        } else if (tab.remoteUrl) {
+          // Profile lost (storage failure) — reconstruct from tab metadata
+          const fallbackProfile: RemoteProfile = {
+            id: tab.remoteProfileId!,
+            name: displayName,
+            url: tab.remoteUrl,
+            authToken: newToken,
+            connectionType: "direct",
+            defaultPath: tab.projectPath,
+          };
+          await this.profileManager.saveProfile(fallbackProfile);
+          const newTab = await this.tabManager.createRemoteTab(fallbackProfile);
+          this.tabManager.switchTab(newTab.id);
+        }
+      }
     });
 
     tab.ws.sendSetProject(tab.projectPath, tab.id);

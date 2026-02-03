@@ -365,7 +365,13 @@ export class TabManager {
    */
   private createTabState(info: TabInfo, authToken?: string): TabState {
     const ws = info.remoteUrl
-      ? new WebSocketClient(toWebSocketUrl(info.remoteUrl), authToken)
+      ? new WebSocketClient(
+          toWebSocketUrl(info.remoteUrl),
+          authToken,
+          // Restored remote tabs have no auth token and no SSH tunnel —
+          // skip retries so the recovery modal appears immediately
+          authToken ? undefined : 0
+        )
       : new WebSocketClient();
 
     return {

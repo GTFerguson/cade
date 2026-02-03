@@ -30,11 +30,21 @@ describe("toWebSocketUrl", () => {
     );
   });
 
-  it("strips existing path from backend URL", () => {
-    // Remote profiles should store just the host, but if a path
-    // slips in, we still connect to /ws on that host
-    expect(toWebSocketUrl("http://localhost:3000/some/path")).toBe(
-      "ws://localhost:3000/ws"
+  it("preserves base path for reverse-proxy deployments", () => {
+    expect(toWebSocketUrl("http://localhost:3000/cade")).toBe(
+      "ws://localhost:3000/cade/ws"
+    );
+  });
+
+  it("preserves base path with IP and no port", () => {
+    expect(toWebSocketUrl("http://52.30.205.70/cade")).toBe(
+      "ws://52.30.205.70/cade/ws"
+    );
+  });
+
+  it("strips trailing slash from base path", () => {
+    expect(toWebSocketUrl("http://localhost:3000/cade/")).toBe(
+      "ws://localhost:3000/cade/ws"
     );
   });
 

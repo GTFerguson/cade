@@ -71,6 +71,10 @@ class ConnectionHandler:
 
         if not validate_token(token, cfg=self._config):
             logger.warning("WebSocket connection rejected: invalid or missing auth token")
+            # Accept first so the close frame (with code 1008) is actually
+            # transmitted over the WebSocket — closing before accept causes
+            # the HTTP upgrade to be rejected and the client only sees code 1006
+            await self._ws.accept()
             await self._ws.close(code=1008, reason="Authentication failed")
             return
 
@@ -476,7 +480,12 @@ class ConnectionHandler:
         else:
             show_ignored = self._user_config.behavior.file_tree.show_ignored if self._user_config else True
 
-        tree = build_file_tree_cached(self._working_dir, respect_gitignore=not show_ignored)
+        # Run in thread pool to avoid blocking the async event loop —
+        # scanning large directories (e.g. /home/user with datasets)
+        # can take minutes synchronously
+        tree = await asyncio.to_thread(
+            build_file_tree_cached, self._working_dir, respect_gitignore=not show_ignored
+        )
         await self._send({
             "type": MessageType.FILE_TREE,
             "data": [node.to_dict() for node in tree],

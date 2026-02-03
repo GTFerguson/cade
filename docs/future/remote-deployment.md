@@ -344,8 +344,8 @@ max_agents_per_user = 5
 - [ ] Let's Encrypt SSL certificate
 - [ ] Live Nginx deployment
 
-> [!NOTE]
-> Currently bypassed via SSH tunnel from the desktop app, which provides equivalent encryption. Nginx/SSL only needed for direct browser access without tunneling.
+> [!IMPORTANT]
+> TLS on nginx is the proper solution for encrypted remote connections. SSH tunnels from the desktop app have a known compatibility issue: the Tauri WebView (WebView2 on Windows) produces "Invalid HTTP request" errors on the backend when connecting through an SSH tunnel, despite identical `curl` requests working correctly. Root cause is undiagnosed — likely related to how the WebView formats HTTP upgrade requests through the tunnel. Adding TLS to nginx (`wss://` end-to-end) would eliminate the need for SSH tunnels entirely and provide encryption for both browser and desktop connections.
 
 ### Phase 3: Authentication ✅
 

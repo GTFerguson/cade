@@ -85,6 +85,12 @@ export class ProjectContextImpl implements IProjectContext {
     ptyExited: (msg: PtyExitedMessage) => {
       console.error(`[${this.name}] PTY exited:`, msg.message);
     },
+    authFailed: () => {
+      console.warn(`[${this.name}] Authentication failed`);
+      if (this.splash?.isVisible()) {
+        this.splash.setStatus("authentication failed");
+      }
+    },
   };
 
   constructor(
@@ -196,6 +202,7 @@ export class ProjectContextImpl implements IProjectContext {
     this.ws.on("disconnected", this.boundHandlers.disconnected);
     this.ws.on("error", this.boundHandlers.error);
     this.ws.on("pty-exited", this.boundHandlers.ptyExited);
+    this.ws.on("auth-failed", this.boundHandlers.authFailed);
 
     // Agent lifecycle events
     this.ws.on("agent-spawned" as any, (msg: any) => {
@@ -469,9 +476,16 @@ export class ProjectContextImpl implements IProjectContext {
     this.ws.off("disconnected", this.boundHandlers.disconnected);
     this.ws.off("error", this.boundHandlers.error);
     this.ws.off("pty-exited", this.boundHandlers.ptyExited);
+    this.ws.off("auth-failed", this.boundHandlers.authFailed);
 
-    this.agentManager?.dispose();
-    this.terminalManager?.dispose();
+    try {
+      this.agentManager?.dispose();
+      this.terminalManager?.dispose();
+    } catch (e) {
+      // xterm throws if terminal was never fully initialized (e.g. auth
+      // failed before the terminal attached to the DOM)
+      console.warn(`[${this.name}] Error disposing terminal:`, e);
+    }
     this.fileTree?.dispose();
     this.rightPane?.dispose();
     this.layout?.dispose();

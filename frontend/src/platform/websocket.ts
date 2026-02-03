@@ -47,6 +47,7 @@ interface WebSocketEvents {
   "neovim-rpc-response": NeovimRpcResponseMessage;
   "neovim-exited": NeovimExitedMessage;
   error: ErrorMessage;
+  "auth-failed": { code: number };
 }
 
 export class WebSocketClient {
@@ -62,12 +63,14 @@ export class WebSocketClient {
   private readonly explicitUrl: boolean;
   private fatalError = false;
   private remoteAuthToken: string | null = null;
+  private maxReconnectAttempts: number;
   private url: string;
 
-  constructor(url?: string, authToken?: string) {
+  constructor(url?: string, authToken?: string, maxReconnectAttempts?: number) {
     this.explicitUrl = url !== undefined;
     this.url = url || config.wsUrl;
     this.remoteAuthToken = authToken ?? null;
+    this.maxReconnectAttempts = maxReconnectAttempts ?? config.reconnectMaxAttempts;
   }
 
   /**
@@ -175,9 +178,14 @@ export class WebSocketClient {
         window.location.hostname === "tauri.localhost" ||
         (window as any).__TAURI__ === true;
 
-      if (event.code === 1008 && !isTauri) {
-        console.warn("WebSocket auth rejected (1008), redirecting to login");
-        window.location.href = basePath + "/login";
+      if (event.code === 1008) {
+        if (!isTauri) {
+          console.warn("WebSocket auth rejected (1008), redirecting to login");
+          window.location.href = basePath + "/login";
+        } else {
+          console.warn("WebSocket auth rejected (1008)");
+          this.emit("auth-failed", { code: event.code });
+        }
         return;
       }
 
@@ -213,6 +221,15 @@ export class WebSocketClient {
     }
 
     this.state = "disconnected";
+  }
+
+  /**
+   * Update the auth token for reconnection after auth failure.
+   */
+  setAuthToken(token: string): void {
+    this.remoteAuthToken = token;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = config.reconnectMaxAttempts;
   }
 
   /**
@@ -496,8 +513,9 @@ export class WebSocketClient {
       return;
     }
 
-    if (this.reconnectAttempts >= config.reconnectMaxAttempts) {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error("Max reconnection attempts reached");
+      this.emit("auth-failed", { code: 0 });
       return;
     }
 
