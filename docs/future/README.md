@@ -74,6 +74,10 @@ See [[blocking-issues]] for critical issues that must be resolved before major p
 
 *No blocking issues documented yet.*
 
+## Low Priority Optimizations
+
+- **Shared file watcher pool**: When multiple tabs open the same project directory, each tab creates its own `FileWatcher` on the backend. The file tree cache is already shared globally (second tab gets a cache hit), but the watchers are redundant. A watcher pool keyed by directory path would eliminate the duplication.
+
 ## Contents
 
 ### Integration & Architecture

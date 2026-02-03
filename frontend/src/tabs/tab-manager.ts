@@ -171,7 +171,33 @@ export class TabManager {
         });
         console.log(`SSH tunnel started: PID ${tunnelPid}`);
 
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Probe the tunnel until it's forwarding (or timeout after 10s)
+        // mode: "no-cors" avoids CORS rejection — an opaque response still
+        // proves the tunnel is forwarding, while connection refused throws
+        const probeUrl = `http://localhost:${profile.localPort}`;
+        const deadline = Date.now() + 10_000;
+        let tunnelReady = false;
+
+        while (Date.now() < deadline) {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 1500);
+            await fetch(probeUrl, {
+              method: "HEAD",
+              mode: "no-cors",
+              signal: controller.signal,
+            });
+            clearTimeout(timer);
+            tunnelReady = true;
+            break;
+          } catch {
+            await new Promise(resolve => setTimeout(resolve, 250));
+          }
+        }
+
+        if (!tunnelReady) {
+          console.warn("SSH tunnel probe timed out, proceeding anyway");
+        }
       } catch (error) {
         console.error("Failed to start SSH tunnel:", error);
         throw new Error(`SSH tunnel failed: ${error}`);

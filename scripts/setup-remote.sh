@@ -294,6 +294,19 @@ echo -e "  ${GREEN}✓${NC} Service installed and enabled"
 
 echo -e "${CYAN}[8/8]${NC} Starting backend..."
 
+# Kill any non-systemd process holding our port (e.g. stale tmux-launched instance)
+BLOCKING_PID=$(fuser "${PORT}/tcp" 2>/dev/null | tr -d '[:space:]' || true)
+SYSTEMD_PID=$(systemctl show cade --property=MainPID --value 2>/dev/null || echo "0")
+
+if [ -n "$BLOCKING_PID" ] && [ "$BLOCKING_PID" != "$SYSTEMD_PID" ]; then
+    echo "  Killing stale process $BLOCKING_PID on port $PORT..."
+    kill "$BLOCKING_PID" 2>/dev/null || true
+    sleep 1
+    # Force kill if still alive
+    kill -9 "$BLOCKING_PID" 2>/dev/null || true
+    sleep 1
+fi
+
 sudo systemctl restart cade
 
 # Wait for the service to come up
