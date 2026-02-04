@@ -1,7 +1,7 @@
 ---
 title: Technical Documentation
 created: 2026-01-16
-updated: 2026-01-17
+updated: 2026-02-04
 status: active
 tags: [index, technical]
 ---
@@ -29,7 +29,7 @@ API documentation and specifications.
 
 Design rationale and decision records.
 
-*No documents yet.*
+- [[design/visual-design-philosophy|Visual Design Philosophy]] - UI/UX principles, terminal aesthetics, keyboard-first design
 
 ## Adding Documentation
 

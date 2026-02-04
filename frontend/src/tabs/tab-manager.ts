@@ -71,9 +71,24 @@ export class TabManager {
   constructor() {}
 
   /**
-   * Initialize the tab manager and restore state from localStorage.
+   * Initialize the tab manager (doesn't auto-restore - user chooses via splash).
    */
   async initialize(): Promise<void> {
+    // Don't auto-restore - let user choose from splash screen
+  }
+
+  /**
+   * Check if there's a saved session available to restore.
+   */
+  hasSavedSession(): boolean {
+    const state = this.loadState();
+    return state !== null && state.tabs.length > 0;
+  }
+
+  /**
+   * Restore tabs from saved session.
+   */
+  async restoreSession(): Promise<void> {
     const state = this.loadState();
 
     if (state && state.tabs.length > 0) {
@@ -88,6 +103,8 @@ export class TabManager {
       } else {
         this.activeTabId = state.tabs[0]!.id;
       }
+
+      this.emit("tabs-changed", this.getTabs());
     }
   }
 
@@ -216,6 +233,45 @@ export class TabManager {
     if (tunnelPid !== undefined) {
       tabState.tunnelPid = tunnelPid;
     }
+
+    this.tabs.set(id, tabState);
+    this.saveState();
+
+    this.emit("tab-created", tabState);
+    this.emit("tabs-changed", this.getTabs());
+
+    return tabState;
+  }
+
+  /**
+   * Create a remote tab using an existing WebSocket connection.
+   * Used when the connection was already established (e.g., for browsing).
+   */
+  async createRemoteTabWithWebSocket(
+    profile: RemoteProfile,
+    projectPath: string,
+    ws: WebSocketClient
+  ): Promise<TabState> {
+    const id = generateId();
+    const path = projectPath || profile.defaultPath || "/";
+    const name = `${profile.name}: ${getProjectName(path)}`;
+
+    const tabInfo: TabInfo = {
+      id,
+      projectPath: path,
+      name,
+      isRemote: true,
+      remoteProfileId: profile.id,
+      remoteUrl: profile.url,
+    };
+
+    // Use the provided WebSocket instead of creating a new one
+    const tabState: TabState = {
+      ...tabInfo,
+      ws,
+      context: null,
+      isConnected: false,
+    };
 
     this.tabs.set(id, tabState);
     this.saveState();

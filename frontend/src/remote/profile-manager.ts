@@ -1,5 +1,5 @@
 import { toWebSocketUrl } from "../platform/url-utils";
-import type { RemoteProfile, RemoteProfilesConfig } from "./types";
+import type { RemoteProfile, RemoteProfilesConfig, SavedProject } from "./types";
 
 const STORAGE_KEY = "cade_remote_profiles";
 const CONFIG_VERSION = 1;
@@ -128,6 +128,52 @@ export class RemoteProfileManager {
       version: CONFIG_VERSION,
       profiles: [],
     };
+  }
+
+  // Project management methods
+  async getProjects(profileId: string): Promise<SavedProject[]> {
+    const profile = this.profiles.find((p) => p.id === profileId);
+    if (!profile) return [];
+    return profile.projects || [];
+  }
+
+  async saveProject(profileId: string, project: SavedProject): Promise<void> {
+    const profile = this.profiles.find((p) => p.id === profileId);
+    if (!profile) {
+      throw new Error(`Profile ${profileId} not found`);
+    }
+
+    if (!profile.projects) {
+      profile.projects = [];
+    }
+
+    const existingIndex = profile.projects.findIndex((p) => p.id === project.id);
+    if (existingIndex >= 0) {
+      profile.projects[existingIndex] = project;
+    } else {
+      profile.projects.push(project);
+    }
+
+    await this.saveConfig();
+  }
+
+  async deleteProject(profileId: string, projectId: string): Promise<void> {
+    const profile = this.profiles.find((p) => p.id === profileId);
+    if (!profile || !profile.projects) return;
+
+    profile.projects = profile.projects.filter((p) => p.id !== projectId);
+    await this.saveConfig();
+  }
+
+  async markProjectUsed(profileId: string, projectId: string): Promise<void> {
+    const profile = this.profiles.find((p) => p.id === profileId);
+    if (!profile || !profile.projects) return;
+
+    const project = profile.projects.find((p) => p.id === projectId);
+    if (project) {
+      project.lastUsed = Date.now();
+      await this.saveConfig();
+    }
   }
 
 }

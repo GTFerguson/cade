@@ -72,7 +72,7 @@ export class Splash {
           return;
         }
 
-        if (e.key === "Enter") {
+        if (e.key === "Enter" || e.key === "l" || e.key === " ") {
           e.preventDefault();
           e.stopPropagation();
           this.options[this.selectedIndex]!.action();

@@ -16,7 +16,7 @@ import type { TabState } from "./tabs";
 import { pickProjectFolder, getUserHomePath } from "./platform/tauri-bridge";
 import { setUserConfig, getUserConfig, matchesKeybinding } from "./config/user-config";
 import { RemoteProfileManager } from "./remote/profile-manager";
-import { RemoteConnectionModal } from "./remote/RemoteConnectionModal";
+import { RemoteProjectSelector } from "./remote/RemoteProjectSelector";
 import { AuthTokenDialog } from "./remote/AuthTokenDialog";
 import { Splash } from "./ui/splash";
 import type { RemoteProfile } from "./remote/types";
@@ -112,20 +112,8 @@ class App {
       }
     });
 
-    if (!this.tabManager.hasTabs()) {
-      this.showStartSplash();
-    } else {
-      const tabs = this.tabManager.getTabs();
-      for (const tab of tabs) {
-        await this.initializeTabContext(tab);
-      }
-      this.tabBar.render(tabs, this.tabManager.getActiveTabId());
-
-      const restoredActiveTab = this.tabManager.getActiveTab();
-      if (restoredActiveTab) {
-        this.handleTabSwitch(restoredActiveTab);
-      }
-    }
+    // Always show splash on startup - user chooses to resume or start fresh
+    this.showStartSplash();
 
     this.initMobileUIIfNeeded();
 
@@ -396,14 +384,27 @@ class App {
   private async handleAddRemoteTab(): Promise<void> {
     console.log("[CADE] handleAddRemoteTab called");
     try {
-      console.log("[CADE] Creating RemoteConnectionModal");
-      const modal = new RemoteConnectionModal(this.profileManager);
-      console.log("[CADE] Showing modal");
-      const profile = await modal.show();
-      console.log("[CADE] Modal result:", profile);
+      if (!this.tabContentContainer) {
+        throw new Error("Tab content container not found");
+      }
 
-      if (profile) {
-        const tab = await this.tabManager.createRemoteTab(profile);
+      // Create container for selector
+      const selectorContainer = document.createElement("div");
+      this.tabContentContainer.appendChild(selectorContainer);
+
+      console.log("[CADE] Creating RemoteProjectSelector");
+      const selector = new RemoteProjectSelector(selectorContainer, this.profileManager);
+      console.log("[CADE] Showing selector");
+      const result = await selector.show();
+      console.log("[CADE] Selector result:", result);
+
+      if (result) {
+        // Use the WebSocket from the selector (already connected for browsing)
+        const tab = await this.tabManager.createRemoteTabWithWebSocket(
+          result.profile,
+          result.path,
+          result.ws
+        );
         this.tabManager.switchTab(tab.id);
       }
     } catch (error) {
@@ -414,17 +415,43 @@ class App {
 
   /**
    * Show the start splash with project type options.
-   * Appears when there are no tabs open.
+   * Appears on startup or when all tabs are closed.
    */
   private showStartSplash(): void {
     if (this.startSplash?.isVisible()) return;
     if (!this.tabContentContainer) return;
 
     this.startSplash = new Splash(this.tabContentContainer);
-    this.startSplash.setOptions([
-      { label: "LOCAL PROJECT", action: () => this.handleAddTab() },
-      { label: "REMOTE PROJECT", action: () => this.handleAddRemoteTab() },
-    ]);
+
+    const options = [];
+
+    // If there's a saved session, offer to resume it (top option)
+    if (this.tabManager.hasSavedSession()) {
+      options.push({ label: "RESUME SESSION", action: () => this.handleResumeSession() });
+    }
+
+    options.push({ label: "LOCAL PROJECT", action: () => this.handleAddTab() });
+    options.push({ label: "REMOTE PROJECT", action: () => this.handleAddRemoteTab() });
+
+    this.startSplash.setOptions(options);
+  }
+
+  /**
+   * Restore tabs from saved session.
+   */
+  private async handleResumeSession(): Promise<void> {
+    await this.tabManager.restoreSession();
+
+    const tabs = this.tabManager.getTabs();
+    for (const tab of tabs) {
+      await this.initializeTabContext(tab);
+    }
+    this.tabBar?.render(tabs, this.tabManager.getActiveTabId());
+
+    const activeTab = this.tabManager.getActiveTab();
+    if (activeTab) {
+      this.handleTabSwitch(activeTab);
+    }
   }
 
   /**

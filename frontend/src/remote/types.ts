@@ -1,3 +1,10 @@
+export interface SavedProject {
+  id: string;
+  name: string;
+  path: string;
+  lastUsed?: number;
+}
+
 export interface RemoteProfile {
   id: string;
   name: string;
@@ -9,6 +16,7 @@ export interface RemoteProfile {
   sshHost?: string;
   localPort?: number;
   remotePort?: number;
+  projects?: SavedProject[];
 }
 
 export interface RemoteProfilesConfig {
