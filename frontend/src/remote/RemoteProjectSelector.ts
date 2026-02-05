@@ -12,6 +12,7 @@ interface SelectionResult {
   path: string;
   projectName: string | undefined;
   ws: WebSocketClient;
+  tunnelPid?: number;
 }
 
 export class RemoteProjectSelector {
@@ -25,6 +26,7 @@ export class RemoteProjectSelector {
   private resolve: ((result: SelectionResult | null) => void) | null = null;
   private boundHandleKeyDown = this.handleKeyDown.bind(this);
   private ws: WebSocketClient | null = null;
+  private tunnelPid: number | undefined;
   private currentBrowsePath: string = "";
   private browseEntries: FileNode[] = [];
 
@@ -234,6 +236,54 @@ export class RemoteProjectSelector {
     this.attachOptionListeners();
   }
 
+  private async startTunnelIfNeeded(profile: RemoteProfile): Promise<void> {
+    if (profile.connectionType !== "ssh-tunnel") return;
+
+    const isTauri = (window as any).__TAURI__ === true;
+    if (!isTauri) {
+      throw new Error(
+        "SSH tunnels require the desktop app. " +
+        "Either use the desktop app or edit this profile to use direct connection."
+      );
+    }
+
+    const { invoke } = await import("@tauri-apps/api/core");
+    this.tunnelPid = await invoke<number>("start_ssh_tunnel", {
+      sshHost: profile.sshHost,
+      localPort: profile.localPort || 3000,
+      remotePort: profile.remotePort || 3000,
+      sshUser: profile.sshUser || null,
+      sshKeyPath: profile.sshKeyPath || null,
+    });
+    console.log(`[CADE] SSH tunnel started: PID ${this.tunnelPid}`);
+
+    // Probe the tunnel until it's forwarding (or timeout after 10s)
+    const probeUrl = `http://localhost:${profile.localPort || 3000}`;
+    const deadline = Date.now() + 10_000;
+    let tunnelReady = false;
+
+    while (Date.now() < deadline) {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 1500);
+        await fetch(probeUrl, {
+          method: "HEAD",
+          mode: "no-cors",
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        tunnelReady = true;
+        break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    }
+
+    if (!tunnelReady) {
+      console.warn("[CADE] SSH tunnel probe timed out, proceeding anyway");
+    }
+  }
+
   private async showProjectsScreen(): Promise<void> {
     this.currentScreen = "projects";
     this.selectedIndex = 0;
@@ -242,8 +292,17 @@ export class RemoteProjectSelector {
     // Sort by most recently used
     this.projects.sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0));
 
-    // Create WebSocket connection for this profile (for browsing)
+    // Start SSH tunnel before connecting WebSocket
     if (!this.ws && this.selectedProfile) {
+      try {
+        await this.startTunnelIfNeeded(this.selectedProfile);
+      } catch (error) {
+        console.error("[CADE] Tunnel failed:", error);
+        // Go back to connections screen on failure
+        this.showConnectionsScreen();
+        return;
+      }
+
       const wsUrl = toWebSocketUrl(this.selectedProfile.url);
       this.ws = new WebSocketClient(wsUrl, this.selectedProfile.authToken);
 
@@ -475,14 +534,19 @@ export class RemoteProjectSelector {
 
   private finishSelection(path: string, projectName?: string): void {
     if (this.resolve && this.selectedProfile && this.ws) {
-      this.resolve({
+      const result: SelectionResult = {
         profile: this.selectedProfile,
         path,
         projectName,
         ws: this.ws,
-      });
-      // Don't close WebSocket - we're passing it to the tab
+      };
+      if (this.tunnelPid !== undefined) {
+        result.tunnelPid = this.tunnelPid;
+      }
+      this.resolve(result);
+      // Don't close WebSocket or tunnel - we're passing them to the tab
       this.ws = null;
+      this.tunnelPid = undefined;
     }
     this.remove();
   }
@@ -529,9 +593,25 @@ export class RemoteProjectSelector {
       this.ws = null;
     }
 
+    // Stop SSH tunnel if user cancelled
+    if (this.tunnelPid !== undefined) {
+      this.stopTunnel(this.tunnelPid);
+      this.tunnelPid = undefined;
+    }
+
     // Remove the container from DOM
     if (this.container.parentNode) {
       this.container.parentNode.removeChild(this.container);
+    }
+  }
+
+  private async stopTunnel(pid: number): Promise<void> {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("stop_ssh_tunnel", { tunnelPid: pid });
+      console.log(`[CADE] SSH tunnel stopped: PID ${pid}`);
+    } catch (error) {
+      console.warn("[CADE] Failed to stop tunnel:", error);
     }
   }
 }

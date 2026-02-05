@@ -415,11 +415,12 @@ class App {
       console.log("[CADE] Selector result:", result);
 
       if (result) {
-        // Use the WebSocket from the selector (already connected for browsing)
+        // Use the WebSocket and tunnel from the selector (already connected)
         const tab = await this.tabManager.createRemoteTabWithWebSocket(
           result.profile,
           result.path,
-          result.ws
+          result.ws,
+          result.tunnelPid
         );
         this.tabManager.switchTab(tab.id);
       }

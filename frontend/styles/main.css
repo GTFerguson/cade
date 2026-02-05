@@ -2558,16 +2558,6 @@ body {
   border-bottom-color: var(--accent-green);
 }
 
-.remote-project-selector .input-field.medium {
-  flex: none;
-  width: 180px;
-}
-
-.remote-project-selector .input-field.short {
-  flex: none;
-  width: 70px;
-}
-
 .remote-project-selector .btn-browse {
   background: transparent;
   border: 1px solid var(--border-color);

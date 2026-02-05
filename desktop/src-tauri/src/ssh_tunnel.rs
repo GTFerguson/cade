@@ -13,11 +13,22 @@ impl SshTunnel {
         ssh_host: String,
         local_port: u16,
         remote_port: u16,
+        ssh_user: Option<String>,
+        ssh_key_path: Option<String>,
     ) -> io::Result<Self> {
         let mut cmd = Command::new("ssh");
         cmd.arg("-L")
-            .arg(format!("{}:localhost:{}", local_port, remote_port))
-            .arg(&ssh_host)
+            .arg(format!("{}:localhost:{}", local_port, remote_port));
+
+        if let Some(ref user) = ssh_user {
+            cmd.arg("-l").arg(user);
+        }
+
+        if let Some(ref key_path) = ssh_key_path {
+            cmd.arg("-i").arg(key_path);
+        }
+
+        cmd.arg(&ssh_host)
             .arg("-N")
             .arg("-o").arg("ExitOnForwardFailure=yes")
             .stdout(Stdio::null())

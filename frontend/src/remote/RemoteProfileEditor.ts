@@ -16,7 +16,6 @@ export class RemoteProfileEditor {
   private container: HTMLDivElement;
   private nameInput: HTMLInputElement;
   private hostInput: HTMLInputElement;
-  private portInput: HTMLInputElement;
   private userInput: HTMLInputElement;
   private keyInput: HTMLInputElement;
   private keyBrowseButton: HTMLButtonElement;
@@ -45,9 +44,7 @@ export class RemoteProfileEditor {
 
           <div class="input-wrapper">
             <span class="input-prompt">host:</span>
-            <input type="text" class="input-field medium" placeholder="hostname or ip" data-field="host" />
-            <span class="input-prompt" style="margin-left: 4px;">port:</span>
-            <input type="text" class="input-field short" placeholder="3000" data-field="port" />
+            <input type="text" class="input-field" placeholder="hostname or ip" data-field="host" />
           </div>
 
           <div class="input-wrapper">
@@ -84,7 +81,6 @@ export class RemoteProfileEditor {
 
     this.nameInput = this.container.querySelector('[data-field="name"]')!;
     this.hostInput = this.container.querySelector('[data-field="host"]')!;
-    this.portInput = this.container.querySelector('[data-field="port"]')!;
     this.userInput = this.container.querySelector('[data-field="user"]')!;
     this.keyInput = this.container.querySelector('[data-field="key"]')!;
     this.keyBrowseButton = this.container.querySelector(".btn-browse")!;
@@ -93,7 +89,6 @@ export class RemoteProfileEditor {
     if (profile) {
       this.nameInput.value = profile.name;
       this.hostInput.value = profile.sshHost || "";
-      this.portInput.value = profile.remotePort?.toString() || "3000";
       this.userInput.value = profile.sshUser || "";
       this.keyInput.value = profile.sshKeyPath || "";
     }
@@ -102,7 +97,7 @@ export class RemoteProfileEditor {
   }
 
   private getInputFields(): HTMLInputElement[] {
-    return [this.nameInput, this.hostInput, this.portInput, this.userInput, this.keyInput];
+    return [this.nameInput, this.hostInput, this.userInput, this.keyInput];
   }
 
   private navigateFields(direction: number, current: HTMLInputElement): void {
@@ -224,7 +219,6 @@ export class RemoteProfileEditor {
   private async handleSave(): Promise<void> {
     const name = this.nameInput.value.trim();
     const host = this.hostInput.value.trim();
-    const port = this.portInput.value.trim();
     const user = this.userInput.value.trim();
     const key = this.keyInput.value.trim();
 
@@ -248,7 +242,7 @@ export class RemoteProfileEditor {
       return;
     }
 
-    const remotePort = port ? parseInt(port) : 3000;
+    const remotePort = 3000;
     const localPort = 3000;
 
     const profile: RemoteProfile = {

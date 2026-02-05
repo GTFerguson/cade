@@ -26,8 +26,10 @@ fn start_ssh_tunnel(
     ssh_host: String,
     local_port: u16,
     remote_port: u16,
+    ssh_user: Option<String>,
+    ssh_key_path: Option<String>,
 ) -> Result<u32, String> {
-    state.tunnels.start_or_reuse(ssh_host, local_port, remote_port)
+    state.tunnels.start_or_reuse(ssh_host, local_port, remote_port, ssh_user, ssh_key_path)
 }
 
 #[tauri::command]

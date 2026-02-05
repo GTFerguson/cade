@@ -21,6 +21,8 @@ impl TunnelRegistry {
         ssh_host: String,
         local_port: u16,
         remote_port: u16,
+        ssh_user: Option<String>,
+        ssh_key_path: Option<String>,
     ) -> Result<u32, String> {
         let key = (ssh_host.clone(), local_port, remote_port);
         let mut tunnels = self.tunnels.lock().map_err(|e| format!("Lock error: {}", e))?;
@@ -33,7 +35,7 @@ impl TunnelRegistry {
             }
         }
 
-        let tunnel = SshTunnel::start(ssh_host, local_port, remote_port)
+        let tunnel = SshTunnel::start(ssh_host, local_port, remote_port, ssh_user, ssh_key_path)
             .map_err(|e| format!("Failed to start SSH tunnel: {}", e))?;
 
         let pid = tunnel.pid().ok_or_else(|| "Failed to get tunnel PID".to_string())?;

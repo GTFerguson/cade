@@ -185,6 +185,8 @@ export class TabManager {
           sshHost: profile.sshHost,
           localPort: profile.localPort,
           remotePort: profile.remotePort,
+          sshUser: profile.sshUser || null,
+          sshKeyPath: profile.sshKeyPath || null,
         });
         console.log(`SSH tunnel started: PID ${tunnelPid}`);
 
@@ -250,7 +252,8 @@ export class TabManager {
   async createRemoteTabWithWebSocket(
     profile: RemoteProfile,
     projectPath: string,
-    ws: WebSocketClient
+    ws: WebSocketClient,
+    tunnelPid?: number
   ): Promise<TabState> {
     const id = generateId();
     const path = projectPath || profile.defaultPath || "/";
@@ -272,6 +275,9 @@ export class TabManager {
       context: null,
       isConnected: false,
     };
+    if (tunnelPid !== undefined) {
+      tabState.tunnelPid = tunnelPid;
+    }
 
     this.tabs.set(id, tabState);
     this.saveState();
