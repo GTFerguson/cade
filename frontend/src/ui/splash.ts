@@ -8,6 +8,8 @@
  *    Navigate with ↑↓ / j/k, confirm with Enter, or click.
  */
 
+import { MenuNav, renderHelpBar } from "./menu-nav";
+
 export interface SplashOption {
   label: string;
   action: () => void;
@@ -31,8 +33,8 @@ export class Splash {
   private tapHandler: ((e: Event) => void) | null = null;
 
   private options: SplashOption[] | null = null;
-  private selectedIndex = 0;
   private optionEls: HTMLElement[] = [];
+  private nav: MenuNav;
 
   constructor(container: HTMLElement) {
     this.element = document.createElement("div");
@@ -50,33 +52,24 @@ export class Splash {
     this.element.appendChild(this.statusEl);
     container.appendChild(this.element);
 
+    this.nav = new MenuNav({
+      getOptions: () => this.optionEls,
+      onSelect: (i) => this.options?.[i]?.action(),
+    });
+
     this.setupKeyListener();
     this.setupTapListener();
   }
 
   private setupKeyListener(): void {
     this.keyHandler = (e: KeyboardEvent) => {
-      // Options mode: navigate and select
+      // Options mode: delegate to MenuNav
       if (this.options) {
         // Don't intercept keys when another screen is overlaid
         if (document.querySelector(".modal-overlay, .remote-project-selector")) return;
 
-        if (e.key === "ArrowUp" || e.key === "ArrowDown" ||
-            e.key === "j" || e.key === "k") {
-          e.preventDefault();
+        if (this.nav.handleKeyDown(e)) {
           e.stopPropagation();
-          this.selectedIndex =
-            (this.selectedIndex + (e.key === "ArrowUp" || e.key === "k" ? -1 : 1) +
-             this.options.length) % this.options.length;
-          this.renderSelection();
-          return;
-        }
-
-        if (e.key === "Enter" || e.key === "l" || e.key === " ") {
-          e.preventDefault();
-          e.stopPropagation();
-          this.options[this.selectedIndex]!.action();
-          return;
         }
         return;
       }
@@ -133,7 +126,7 @@ export class Splash {
    */
   setOptions(options: SplashOption[]): void {
     this.options = options;
-    this.selectedIndex = 0;
+    this.nav.reset();
     this.ready = true;
 
     this.statusEl.style.display = "none";
@@ -151,20 +144,15 @@ export class Splash {
     });
 
     this.element.appendChild(container);
-    this.renderSelection();
+    this.nav.renderSelection();
 
     const helpEl = document.createElement("div");
     helpEl.className = "splash-help";
-    helpEl.innerHTML =
-      `<div><span class="help-key">j/k</span> navigate</div>` +
-      `<div><span class="help-key">l</span> select</div>`;
+    helpEl.innerHTML = renderHelpBar([
+      { key: "j/k", label: "navigate" },
+      { key: "l", label: "select" },
+    ]);
     this.element.appendChild(helpEl);
-  }
-
-  private renderSelection(): void {
-    this.optionEls.forEach((el, i) => {
-      el.classList.toggle("selected", i === this.selectedIndex);
-    });
   }
 
   /**

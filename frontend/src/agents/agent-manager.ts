@@ -6,6 +6,7 @@
  * registration for the overview pane.
  */
 
+import { wrapIndex } from "../nav";
 import { SessionKey, type AnySessionKey } from "../platform/protocol";
 import { Terminal, type CustomKeyHandler } from "../terminal/terminal";
 import type { Component, OutputMessage, SessionRestoredMessage } from "../types";
@@ -269,7 +270,7 @@ export class AgentManager implements Component {
 
     const currentIndex = ids.indexOf(this.activeAgentId);
     const delta = direction === "next" ? 1 : -1;
-    const newIndex = (currentIndex + delta + ids.length) % ids.length;
+    const newIndex = wrapIndex(currentIndex, delta, ids.length);
     this.switchToAgent(ids[newIndex]!);
   }
 

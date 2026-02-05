@@ -5,14 +5,16 @@
  * can appear at any time over active terminal content.
  */
 
+import { MenuNav, escapeHtml, renderHelpBar } from "../ui/menu-nav";
+
 export class AuthTokenDialog {
   private overlay: HTMLDivElement;
   private tokenInput: HTMLInputElement;
   private statusEl: HTMLDivElement;
-  private selectedIndex = 0;
   private optionEls: HTMLElement[] = [];
   private resolve: ((token: string | null) => void) | null = null;
-  private boundHandleKeyDown = this.handleKeyDown.bind(this);
+  private nav: MenuNav;
+  private boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor(profileName: string) {
     this.overlay = document.createElement("div");
@@ -23,7 +25,7 @@ export class AuthTokenDialog {
     modal.innerHTML = `
       <div class="pane-header">[ AUTH FAILED ]</div>
       <p class="auth-token-message">
-        Connection to <strong>${this.escapeHtml(profileName)}</strong> was rejected.
+        Connection to <strong>${escapeHtml(profileName)}</strong> was rejected.
       </p>
       <div class="input-wrapper">
         <span class="input-prompt">token:</span>
@@ -41,8 +43,10 @@ export class AuthTokenDialog {
         <div class="auth-option" data-action="cancel">[cancel]</div>
       </div>
       <div class="pane-help">
-        <span class="help-key">enter</span> submit
-        <span class="help-key">esc</span> cancel
+        ${renderHelpBar([
+          { key: "enter", label: "submit" },
+          { key: "esc", label: "cancel" },
+        ])}
       </div>
     `;
 
@@ -50,21 +54,32 @@ export class AuthTokenDialog {
 
     this.tokenInput = modal.querySelector(".input-field")!;
     this.statusEl = modal.querySelector(".auth-token-status")!;
-
     this.optionEls = Array.from(modal.querySelectorAll(".auth-option"));
-    this.optionEls.forEach((el, index) => {
-      el.addEventListener("click", () => {
-        this.selectedIndex = index;
-        this.renderSelection();
-        this.handleOptionSelect();
-      });
+
+    this.nav = new MenuNav({
+      getOptions: () => this.optionEls,
+      getInputFields: () => [this.tokenInput],
+      onSelect: () => this.handleOptionSelect(),
+      onCancel: () => this.close(null),
+      onInputKey: (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          this.submit();
+          return true;
+        }
+        return false;
+      },
     });
+
+    this.nav.wireClickHandlers();
 
     this.overlay.addEventListener("click", (e) => {
       if (e.target === this.overlay) {
         this.tokenInput.focus();
       }
     });
+
+    this.boundHandleKeyDown = (e: KeyboardEvent) => this.nav.handleKeyDown(e);
   }
 
   show(): Promise<string | null> {
@@ -79,18 +94,12 @@ export class AuthTokenDialog {
   }
 
   private handleOptionSelect(): void {
-    const action = this.optionEls[this.selectedIndex]?.dataset.action;
+    const action = this.optionEls[this.nav.selectedIndex]?.dataset.action;
     if (action === "connect") {
       this.submit();
     } else if (action === "cancel") {
       this.close(null);
     }
-  }
-
-  private renderSelection(): void {
-    this.optionEls.forEach((el, i) => {
-      el.classList.toggle("selected", i === this.selectedIndex);
-    });
   }
 
   private submit(): void {
@@ -109,43 +118,5 @@ export class AuthTokenDialog {
     this.overlay.remove();
     this.resolve?.(result);
     this.resolve = null;
-  }
-
-  private handleKeyDown(e: KeyboardEvent): void {
-    if ((e.target as HTMLElement).tagName === "INPUT") {
-      if (e.key === "Escape") {
-        (e.target as HTMLInputElement).blur();
-        return;
-      }
-      if (e.key === "Enter") {
-        e.preventDefault();
-        this.submit();
-        return;
-      }
-      return;
-    }
-
-    if (e.key === "j" || e.key === "ArrowDown") {
-      e.preventDefault();
-      this.selectedIndex = (this.selectedIndex + 1) % this.optionEls.length;
-      this.renderSelection();
-    } else if (e.key === "k" || e.key === "ArrowUp") {
-      e.preventDefault();
-      this.selectedIndex =
-        (this.selectedIndex - 1 + this.optionEls.length) % this.optionEls.length;
-      this.renderSelection();
-    } else if (e.key === "l" || e.key === " " || e.key === "Enter") {
-      e.preventDefault();
-      this.handleOptionSelect();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      this.close(null);
-    }
-  }
-
-  private escapeHtml(text: string): string {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
   }
 }

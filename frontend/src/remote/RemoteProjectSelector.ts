@@ -3,6 +3,8 @@ import { RemoteProfileManager } from "./profile-manager";
 import { RemoteProfileEditor } from "./RemoteProfileEditor";
 import { WebSocketClient } from "../platform/websocket";
 import { toWebSocketUrl } from "../platform/url-utils";
+import { MenuNav, escapeHtml } from "../ui/menu-nav";
+import { buildTunnelArgs, computeParentPath, filterDirectories, sortProjectsByLastUsed } from "./profile-utils";
 import type { FileNode } from "../types";
 
 type Screen = "connections" | "projects" | "new-project" | "new-connection" | "browse";
@@ -22,9 +24,9 @@ export class RemoteProjectSelector {
   private selectedProfile: RemoteProfile | null = null;
   private projects: SavedProject[] = [];
   private currentScreen: Screen = "connections";
-  private selectedIndex: number = 0;
   private resolve: ((result: SelectionResult | null) => void) | null = null;
-  private boundHandleKeyDown = this.handleKeyDown.bind(this);
+  private nav: MenuNav;
+  private boundHandleKeyDown: (e: KeyboardEvent) => void;
   private ws: WebSocketClient | null = null;
   private tunnelPid: number | undefined;
   private currentBrowsePath: string = "";
@@ -35,98 +37,40 @@ export class RemoteProjectSelector {
     this.profileManager = profileManager;
 
     this.container.className = "remote-project-selector";
-  }
 
-  private navigateInputFields(direction: number, current: HTMLInputElement): void {
-    const inputs = Array.from(this.container.querySelectorAll<HTMLInputElement>(".input-field"));
-    const idx = inputs.indexOf(current);
-    if (idx < 0) return;
-
-    const nextIdx = idx + direction;
-    if (nextIdx >= 0 && nextIdx < inputs.length) {
-      inputs[nextIdx]!.focus();
-    } else if (direction > 0) {
-      // Past last input — select first option
-      current.blur();
-      this.selectedIndex = 0;
-      this.updateSelection();
-    }
-  }
-
-  private handleKeyDown(e: KeyboardEvent): void {
-    // Arrow keys navigate between fields; other keys pass through to inputs
-    if ((e.target as HTMLElement).tagName === "INPUT") {
-      if (e.key === "Escape") {
-        (e.target as HTMLInputElement).blur();
-      } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        e.preventDefault();
-        this.navigateInputFields(e.key === "ArrowDown" ? 1 : -1, e.target as HTMLInputElement);
-      }
-      return;
-    }
-
-    const options = this.container.querySelectorAll(".option");
-    const inputs = this.container.querySelectorAll<HTMLInputElement>(".input-field");
-
-    if (e.key === "j" || e.key === "ArrowDown") {
-      e.preventDefault();
-      this.selectedIndex = (this.selectedIndex + 1) % options.length;
-      this.updateSelection();
-    } else if (e.key === "k" || e.key === "ArrowUp") {
-      e.preventDefault();
-      if (this.selectedIndex === 0 && inputs.length > 0) {
-        // Jump from first option back to last input field
-        options[0]?.classList.remove("selected");
-        inputs[inputs.length - 1]!.focus();
-      } else {
-        this.selectedIndex = (this.selectedIndex - 1 + options.length) % options.length;
-        this.updateSelection();
-      }
-    } else if (e.key === "l" || e.key === " " || e.key === "Enter") {
-      e.preventDefault();
-      this.handleSelect();
-    } else if (e.key === "h" || e.key === "Backspace") {
-      e.preventDefault();
-      this.handleBack();
-    }
-  }
-
-  private updateSelection(): void {
-    const options = this.container.querySelectorAll(".option");
-    options.forEach((opt, i) => {
-      opt.classList.toggle("selected", i === this.selectedIndex);
+    this.nav = new MenuNav({
+      getOptions: () => this.container.querySelectorAll(".option"),
+      getInputFields: () => this.container.querySelectorAll<HTMLInputElement>(".input-field"),
+      onSelect: () => this.handleSelect(),
+      onBack: () => this.handleBack(),
     });
+
+    this.boundHandleKeyDown = (e: KeyboardEvent) => this.nav.handleKeyDown(e);
   }
 
   private async handleSelect(): Promise<void> {
     if (this.currentScreen === "connections") {
-      if (this.selectedIndex < this.profiles.length) {
-        // Select connection
-        const profile = this.profiles[this.selectedIndex];
+      if (this.nav.selectedIndex < this.profiles.length) {
+        const profile = this.profiles[this.nav.selectedIndex];
         if (!profile) return;
         this.selectedProfile = profile;
         await this.showProjectsScreen();
       } else {
-        // [+ new connection]
         this.showNewConnectionScreen();
       }
     } else if (this.currentScreen === "projects") {
-      if (this.selectedIndex < this.projects.length) {
-        // Select saved project
-        const project = this.projects[this.selectedIndex];
+      if (this.nav.selectedIndex < this.projects.length) {
+        const project = this.projects[this.nav.selectedIndex];
         if (!project) return;
         await this.profileManager.markProjectUsed(this.selectedProfile!.id, project.id);
         this.finishSelection(project.path, project.name);
       } else {
-        // [+ new project]
         this.showNewProjectScreen();
       }
     } else if (this.currentScreen === "new-project") {
-      if (this.selectedIndex === 0) {
-        // [save & open]
+      if (this.nav.selectedIndex === 0) {
         await this.saveAndOpen();
-      } else if (this.selectedIndex === 1) {
-        // [browse files]
+      } else if (this.nav.selectedIndex === 1) {
         this.showBrowseScreen();
       }
     } else if (this.currentScreen === "browse") {
@@ -134,11 +78,9 @@ export class RemoteProjectSelector {
       const isFocusedOnSelect = actionEl?.classList.contains('selected');
 
       if (isFocusedOnSelect) {
-        // Select current directory
         this.selectBrowseDirectory();
-      } else if (this.selectedIndex < this.browseEntries.length) {
-        // Enter selected directory
-        const entry = this.browseEntries[this.selectedIndex];
+      } else if (this.nav.selectedIndex < this.browseEntries.length) {
+        const entry = this.browseEntries[this.nav.selectedIndex];
         if (entry) {
           this.navigateToDirectory(entry.path);
         }
@@ -152,7 +94,6 @@ export class RemoteProjectSelector {
     } else if (this.currentScreen === "new-project") {
       this.showProjectsScreen();
     } else if (this.currentScreen === "browse") {
-      // Go to parent directory
       this.navigateToParent();
     } else if (this.currentScreen === "connections") {
       this.close();
@@ -161,10 +102,9 @@ export class RemoteProjectSelector {
 
   private navigateToDirectory(path: string): void {
     this.currentBrowsePath = path;
-    this.selectedIndex = 0;
+    this.nav.reset();
     if (this.ws) {
       this.ws.requestChildren(path);
-      // Show loading state
       const browserList = this.container.querySelector('.browser-list');
       if (browserList) {
         browserList.innerHTML = '<p style="color: var(--text-muted); text-align: center;">Loading...</p>';
@@ -173,13 +113,9 @@ export class RemoteProjectSelector {
   }
 
   private navigateToParent(): void {
-    // Simple parent directory logic - go up one level
-    const parts = this.currentBrowsePath.split('/').filter(p => p);
-    if (parts.length > 0) {
-      parts.pop();
-      this.currentBrowsePath = '/' + parts.join('/');
-      if (!this.currentBrowsePath) this.currentBrowsePath = '/';
-      this.navigateToDirectory(this.currentBrowsePath);
+    const parent = computeParentPath(this.currentBrowsePath);
+    if (parent !== this.currentBrowsePath) {
+      this.navigateToDirectory(parent);
     }
   }
 
@@ -188,7 +124,6 @@ export class RemoteProjectSelector {
     const name = nameInput?.value.trim();
 
     if (name) {
-      // Save as project
       const project: SavedProject = {
         id: crypto.randomUUID(),
         name,
@@ -198,14 +133,13 @@ export class RemoteProjectSelector {
       this.profileManager.saveProject(this.selectedProfile!.id, project);
       this.finishSelection(this.currentBrowsePath, name);
     } else {
-      // One-time open
       this.finishSelection(this.currentBrowsePath);
     }
   }
 
   private async showConnectionsScreen(): Promise<void> {
     this.currentScreen = "connections";
-    this.selectedIndex = 0;
+    this.nav.reset();
     this.profiles = await this.profileManager.loadProfiles();
 
     this.container.innerHTML = `
@@ -215,8 +149,8 @@ export class RemoteProjectSelector {
           <div class="options-list">
             ${this.profiles.map((profile, i) => `
               <div class="option ${i === 0 ? 'selected' : ''}" data-index="${i}">
-                <span class="option-label">[${this.escapeHtml(profile.name)}]</span>
-                <span class="option-meta">${this.escapeHtml(profile.url)}</span>
+                <span class="option-label">[${escapeHtml(profile.name)}]</span>
+                <span class="option-meta">${escapeHtml(profile.url)}</span>
               </div>
             `).join("")}
             <div class="divider"></div>
@@ -233,7 +167,7 @@ export class RemoteProjectSelector {
       </div>
     `;
 
-    this.attachOptionListeners();
+    this.nav.wireClickHandlers();
   }
 
   private async startTunnelIfNeeded(profile: RemoteProfile): Promise<void> {
@@ -248,13 +182,8 @@ export class RemoteProjectSelector {
     }
 
     const { invoke } = await import("@tauri-apps/api/core");
-    this.tunnelPid = await invoke<number>("start_ssh_tunnel", {
-      sshHost: profile.sshHost,
-      localPort: profile.localPort || 3000,
-      remotePort: profile.remotePort || 3000,
-      sshUser: profile.sshUser || null,
-      sshKeyPath: profile.sshKeyPath || null,
-    });
+    const args = buildTunnelArgs(profile);
+    this.tunnelPid = await invoke<number>("start_ssh_tunnel", args);
     console.log(`[CADE] SSH tunnel started: PID ${this.tunnelPid}`);
 
     // Probe the tunnel until it's forwarding (or timeout after 10s)
@@ -286,11 +215,10 @@ export class RemoteProjectSelector {
 
   private async showProjectsScreen(): Promise<void> {
     this.currentScreen = "projects";
-    this.selectedIndex = 0;
+    this.nav.reset();
     this.projects = await this.profileManager.getProjects(this.selectedProfile!.id);
 
-    // Sort by most recently used
-    this.projects.sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0));
+    this.projects = sortProjectsByLastUsed(this.projects);
 
     // Start SSH tunnel before connecting WebSocket
     if (!this.ws && this.selectedProfile) {
@@ -298,7 +226,6 @@ export class RemoteProjectSelector {
         await this.startTunnelIfNeeded(this.selectedProfile);
       } catch (error) {
         console.error("[CADE] Tunnel failed:", error);
-        // Go back to connections screen on failure
         this.showConnectionsScreen();
         return;
       }
@@ -306,24 +233,22 @@ export class RemoteProjectSelector {
       const wsUrl = toWebSocketUrl(this.selectedProfile.url);
       this.ws = new WebSocketClient(wsUrl, this.selectedProfile.authToken);
 
-      // Set up handler for directory listings
       this.ws.on("file-children", (message) => {
         this.handleBrowseResults(message.children);
       });
 
-      // Set default browse path to home or defaultPath
       this.currentBrowsePath = this.selectedProfile.defaultPath || "~";
     }
 
     this.container.innerHTML = `
       <div class="pane-view">
         <div class="pane-content">
-          <div class="pane-header">[ ${this.escapeHtml(this.selectedProfile!.name).toUpperCase()} ]</div>
+          <div class="pane-header">[ ${escapeHtml(this.selectedProfile!.name).toUpperCase()} ]</div>
           <div class="options-list">
             ${this.projects.map((project, i) => `
               <div class="option ${i === 0 ? 'selected' : ''}" data-index="${i}">
-                <span class="option-label">[${this.escapeHtml(project.name)}]</span>
-                <span class="option-meta">${this.escapeHtml(project.path)}</span>
+                <span class="option-label">[${escapeHtml(project.name)}]</span>
+                <span class="option-meta">${escapeHtml(project.path)}</span>
               </div>
             `).join("")}
             <div class="divider"></div>
@@ -340,22 +265,20 @@ export class RemoteProjectSelector {
       </div>
     `;
 
-    this.attachOptionListeners();
+    this.nav.wireClickHandlers();
   }
 
   private showNewConnectionScreen(): void {
     this.currentScreen = "new-connection";
-    this.selectedIndex = 0;
+    this.nav.reset();
 
     const editor = new RemoteProfileEditor(this.profileManager);
 
     editor.setSaveCallback(async () => {
-      // Profile saved, go back to connections list and reload
       await this.showConnectionsScreen();
     });
 
     editor.setCancelCallback(() => {
-      // Cancelled, go back to connections list
       void this.showConnectionsScreen();
     });
 
@@ -366,7 +289,7 @@ export class RemoteProjectSelector {
 
   private showNewProjectScreen(): void {
     this.currentScreen = "new-project";
-    this.selectedIndex = 0;
+    this.nav.reset();
 
     this.container.innerHTML = `
       <div class="pane-view">
@@ -406,7 +329,7 @@ export class RemoteProjectSelector {
       </div>
     `;
 
-    this.attachOptionListeners();
+    this.nav.wireClickHandlers();
 
     const nameInput = this.container.querySelector("#project-name") as HTMLInputElement;
     nameInput?.focus();
@@ -414,15 +337,14 @@ export class RemoteProjectSelector {
 
   private showBrowseScreen(): void {
     this.currentScreen = "browse";
-    this.selectedIndex = 0;
+    this.nav.reset();
 
-    // Show loading state initially
     this.container.innerHTML = `
       <div class="pane-view">
         <div class="pane-content">
           <div class="pane-header">[ BROWSE ]</div>
           <div class="browser-section">
-            <div class="browser-path">${this.escapeHtml(this.currentBrowsePath)}</div>
+            <div class="browser-path">${escapeHtml(this.currentBrowsePath)}</div>
             <div class="browser-loading">
               <p style="color: var(--text-muted); text-align: center;">Loading...</p>
             </div>
@@ -436,16 +358,13 @@ export class RemoteProjectSelector {
       </div>
     `;
 
-    // Request directory listing
     if (this.ws) {
       this.ws.requestChildren(this.currentBrowsePath);
     }
   }
 
   private handleBrowseResults(entries: FileNode[]): void {
-    this.browseEntries = entries.filter((e) => e.type === "directory");
-
-    // Re-render browse screen with results
+    this.browseEntries = filterDirectories(entries);
     this.renderBrowseScreen();
   }
 
@@ -454,8 +373,8 @@ export class RemoteProjectSelector {
 
     const directoriesHtml = this.browseEntries
       .map((entry, i) => `
-        <div class="option ${i === this.selectedIndex ? 'selected' : ''}" data-index="${i}">
-          <span class="option-label">[${this.escapeHtml(entry.name)}/]</span>
+        <div class="option ${i === this.nav.selectedIndex ? 'selected' : ''}" data-index="${i}">
+          <span class="option-label">[${escapeHtml(entry.name)}/]</span>
         </div>
       `)
       .join("");
@@ -463,15 +382,14 @@ export class RemoteProjectSelector {
     const nameInput = this.container.querySelector("#browse-project-name") as HTMLInputElement;
     const currentName = nameInput?.value || "";
 
-    // Button is selected when selectedIndex is beyond all directories
-    const isButtonSelected = this.selectedIndex >= this.browseEntries.length;
+    const isButtonSelected = this.nav.selectedIndex >= this.browseEntries.length;
 
     this.container.innerHTML = `
       <div class="pane-view">
         <div class="pane-content">
           <div class="pane-header">[ BROWSE ]</div>
           <div class="browser-section">
-            <div class="browser-path">${this.escapeHtml(this.currentBrowsePath)}</div>
+            <div class="browser-path">${escapeHtml(this.currentBrowsePath)}</div>
             <div class="options-list browser-list">
               ${this.browseEntries.length > 0 ? directoriesHtml : '<p style="color: var(--text-muted); text-align: center;">No directories found</p>'}
             </div>
@@ -480,7 +398,7 @@ export class RemoteProjectSelector {
               <div class="input-label">project name (optional)</div>
               <div class="input-wrapper">
                 <span class="input-prompt">name:</span>
-                <input type="text" class="input-field" id="browse-project-name" placeholder="" value="${this.escapeHtml(currentName)}" />
+                <input type="text" class="input-field" id="browse-project-name" placeholder="" value="${escapeHtml(currentName)}" />
               </div>
             </div>
             <div class="divider"></div>
@@ -499,7 +417,7 @@ export class RemoteProjectSelector {
       </div>
     `;
 
-    this.attachOptionListeners();
+    this.nav.wireClickHandlers();
   }
 
   private async saveAndOpen(): Promise<void> {
@@ -516,7 +434,6 @@ export class RemoteProjectSelector {
     }
 
     if (name) {
-      // Save as project
       const project: SavedProject = {
         id: crypto.randomUUID(),
         name,
@@ -527,7 +444,6 @@ export class RemoteProjectSelector {
       await this.profileManager.saveProject(this.selectedProfile!.id, project);
       this.finishSelection(path, name);
     } else {
-      // One-time open
       this.finishSelection(path);
     }
   }
@@ -544,28 +460,10 @@ export class RemoteProjectSelector {
         result.tunnelPid = this.tunnelPid;
       }
       this.resolve(result);
-      // Don't close WebSocket or tunnel - we're passing them to the tab
       this.ws = null;
       this.tunnelPid = undefined;
     }
     this.remove();
-  }
-
-  private attachOptionListeners(): void {
-    const options = this.container.querySelectorAll(".option");
-    options.forEach((opt, index) => {
-      opt.addEventListener("click", () => {
-        this.selectedIndex = index;
-        this.updateSelection();
-        this.handleSelect();
-      });
-    });
-  }
-
-  private escapeHtml(text: string): string {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
   }
 
   async show(): Promise<SelectionResult | null> {
@@ -587,19 +485,16 @@ export class RemoteProjectSelector {
   private remove(): void {
     document.removeEventListener("keydown", this.boundHandleKeyDown);
 
-    // Clean up WebSocket if user cancelled
     if (this.ws) {
       this.ws.disconnect();
       this.ws = null;
     }
 
-    // Stop SSH tunnel if user cancelled
     if (this.tunnelPid !== undefined) {
       this.stopTunnel(this.tunnelPid);
       this.tunnelPid = undefined;
     }
 
-    // Remove the container from DOM
     if (this.container.parentNode) {
       this.container.parentNode.removeChild(this.container);
     }

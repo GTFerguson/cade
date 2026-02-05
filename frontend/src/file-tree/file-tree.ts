@@ -5,6 +5,7 @@
 import type { PaneKeyHandler } from "../input/keybindings";
 import type { Component, EventHandler, FileChildrenMessage, FileNode } from "../types";
 import { getUserConfig, matchesKeybinding } from "../config/user-config";
+import { computeFileCreationBasePath } from "../remote/profile-utils";
 import type { WebSocketClient } from "../platform/websocket";
 
 interface FileTreeEvents {
@@ -498,20 +499,11 @@ export class FileTree implements Component, PaneKeyHandler {
    * Show modal to create a new file.
    */
   private showFileCreationModal(): void {
-    // Get the currently selected directory
-    let basePath = "";
-    if (this.selectedPath) {
-      const selectedNode = this.findNodeByPath(this.selectedPath);
-      if (selectedNode?.type === "directory") {
-        basePath = this.selectedPath + "/";
-      } else {
-        // If a file is selected, use its parent directory
-        const lastSlash = this.selectedPath.lastIndexOf("/");
-        if (lastSlash !== -1) {
-          basePath = this.selectedPath.substring(0, lastSlash + 1);
-        }
-      }
-    }
+    const selectedNode = this.selectedPath ? this.findNodeByPath(this.selectedPath) : null;
+    const basePath = computeFileCreationBasePath(
+      this.selectedPath,
+      selectedNode?.type ?? null
+    );
 
     // Create TUI dialog
     const overlay = document.createElement("div");

@@ -8,6 +8,7 @@
 import { AgentManager } from "../agents";
 import { FileTree } from "../file-tree";
 import type { PaneKeyHandler, PaneType } from "../input/keybindings";
+import { wrapIndex } from "../nav";
 import { Layout } from "../ui/layout";
 import { MarkdownViewer } from "../markdown/markdown";
 import { RightPaneManager, type RightPaneMode } from "../right-pane";
@@ -275,8 +276,7 @@ export class ProjectContextImpl implements IProjectContext {
   cycleFocus(direction: "left" | "right"): void {
     const currentIndex = PANE_ORDER.indexOf(this.focusedPane);
     const delta = direction === "left" ? -1 : 1;
-    const newIndex =
-      (currentIndex + delta + PANE_ORDER.length) % PANE_ORDER.length;
+    const newIndex = wrapIndex(currentIndex, delta, PANE_ORDER.length);
     const newPane = PANE_ORDER[newIndex];
     if (newPane) {
       this.focusPane(newPane);

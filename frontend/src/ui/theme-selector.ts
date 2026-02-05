@@ -7,26 +7,46 @@
  */
 
 import { themes, getSavedThemeId, applyTheme, type Theme } from "../config/themes";
+import { MenuNav, renderHelpBar } from "./menu-nav";
 
 export class ThemeSelector {
   private overlay: HTMLElement | null = null;
   private optionEls: HTMLElement[] = [];
-  private selectedIndex = 0;
   private previousThemeId: string;
   private isVisible = false;
+  private nav: MenuNav;
   private boundKeyHandler: (e: KeyboardEvent) => void;
 
   constructor() {
     this.previousThemeId = getSavedThemeId();
-    this.boundKeyHandler = this.handleKeydown.bind(this);
+
+    this.nav = new MenuNav({
+      getOptions: () => this.optionEls,
+      onSelect: () => this.confirm(),
+      onBack: () => this.cancel(),
+      onCancel: () => this.cancel(),
+      onNavigate: (i) => this.previewTheme(themes[i]!),
+    });
+
+    this.boundKeyHandler = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // 'q' is theme-selector specific
+      if (e.key === "q") {
+        this.cancel();
+        return;
+      }
+      this.nav.handleKeyDown(e);
+    };
   }
 
   show(): void {
     if (this.isVisible) return;
 
     this.previousThemeId = getSavedThemeId();
-    this.selectedIndex = themes.findIndex((t) => t.id === this.previousThemeId);
-    if (this.selectedIndex < 0) this.selectedIndex = 0;
+    this.nav.selectedIndex = themes.findIndex((t) => t.id === this.previousThemeId);
+    if (this.nav.selectedIndex < 0) this.nav.selectedIndex = 0;
 
     this.isVisible = true;
     this.render();
@@ -113,7 +133,7 @@ export class ThemeSelector {
       row.appendChild(desc);
 
       row.addEventListener("click", () => {
-        this.selectedIndex = i;
+        this.nav.selectedIndex = i;
         this.confirm();
       });
 
@@ -126,10 +146,11 @@ export class ThemeSelector {
     // Help text
     const help = document.createElement("div");
     help.className = "theme-selector-help";
-    help.innerHTML =
-      `<span class="help-key">j/k</span> navigate  ` +
-      `<span class="help-key">enter</span> select  ` +
-      `<span class="help-key">esc</span> cancel`;
+    help.innerHTML = renderHelpBar([
+      { key: "j/k", label: "navigate" },
+      { key: "enter", label: "select" },
+      { key: "esc", label: "cancel" },
+    ]);
     panel.appendChild(help);
 
     this.overlay.appendChild(panel);
@@ -139,19 +160,8 @@ export class ThemeSelector {
     void this.overlay.offsetHeight;
     this.overlay.classList.add("visible");
 
-    this.renderSelection();
-  }
-
-  private renderSelection(): void {
-    this.optionEls.forEach((el, i) => {
-      el.classList.toggle("selected", i === this.selectedIndex);
-    });
-
-    // Live preview
-    const theme = themes[this.selectedIndex];
-    if (theme) {
-      this.previewTheme(theme);
-    }
+    this.nav.renderSelection();
+    this.previewTheme(themes[this.nav.selectedIndex]!);
   }
 
   private previewTheme(theme: Theme): void {
@@ -172,7 +182,7 @@ export class ThemeSelector {
   }
 
   private confirm(): void {
-    const theme = themes[this.selectedIndex];
+    const theme = themes[this.nav.selectedIndex];
     if (theme) {
       applyTheme(theme.id);
     }
@@ -180,40 +190,8 @@ export class ThemeSelector {
   }
 
   private cancel(): void {
-    // Revert to previously saved theme
     applyTheme(this.previousThemeId);
     this.hide();
-  }
-
-  private handleKeydown(e: KeyboardEvent): void {
-    e.preventDefault();
-    e.stopPropagation();
-
-    switch (e.key) {
-      case "j":
-      case "ArrowDown":
-        this.selectedIndex = (this.selectedIndex + 1) % themes.length;
-        this.renderSelection();
-        break;
-
-      case "k":
-      case "ArrowUp":
-        this.selectedIndex = (this.selectedIndex - 1 + themes.length) % themes.length;
-        this.renderSelection();
-        break;
-
-      case "Enter":
-      case "l":
-      case " ":
-        this.confirm();
-        break;
-
-      case "Escape":
-      case "h":
-      case "q":
-        this.cancel();
-        break;
-    }
   }
 
   dispose(): void {

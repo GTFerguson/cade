@@ -1,6 +1,8 @@
 import type { RemoteProfile } from "./types";
 import { RemoteProfileManager } from "./profile-manager";
+import { MenuNav } from "../ui/menu-nav";
 import { pickFile, getUserHomePath } from "../platform/tauri-bridge";
+import { buildSshTunnelProfile } from "./profile-utils";
 
 function generateId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -22,7 +24,7 @@ export class RemoteProfileEditor {
   private optionsList: HTMLDivElement;
   private profile: RemoteProfile | null;
   private profileManager: RemoteProfileManager;
-  private selectedIndex: number = 0;
+  private nav: MenuNav;
   private onSave: ((profile: RemoteProfile) => void) | null = null;
   private onCancel: (() => void) | null = null;
 
@@ -93,6 +95,13 @@ export class RemoteProfileEditor {
       this.keyInput.value = profile.sshKeyPath || "";
     }
 
+    this.nav = new MenuNav({
+      getOptions: () => this.optionsList.querySelectorAll(".option"),
+      getInputFields: () => this.getInputFields(),
+      onSelect: () => this.handleOptionSelect(),
+      onBack: () => this.handleCancel(),
+    });
+
     this.setupEventListeners();
   }
 
@@ -100,103 +109,25 @@ export class RemoteProfileEditor {
     return [this.nameInput, this.hostInput, this.userInput, this.keyInput];
   }
 
-  private navigateFields(direction: number, current: HTMLInputElement): void {
-    const fields = this.getInputFields();
-    const idx = fields.indexOf(current);
-    if (idx < 0) return;
-
-    const nextIdx = idx + direction;
-    if (nextIdx >= 0 && nextIdx < fields.length) {
-      fields[nextIdx]!.focus();
-    } else if (direction > 0) {
-      // Past last input — select first option
-      current.blur();
-      this.selectedIndex = 0;
-      this.renderSelection();
-    }
-  }
-
   private setupEventListeners(): void {
     this.keyBrowseButton.addEventListener("click", () => this.handleBrowseKey());
 
+    this.nav.wireClickHandlers();
+
     const options = this.optionsList.querySelectorAll(".option");
     options.forEach((option, index) => {
-      option.addEventListener("click", () => {
-        this.selectedIndex = index;
-        this.handleOptionSelect();
-      });
       option.addEventListener("focus", () => {
-        this.selectedIndex = index;
-        this.renderSelection();
+        this.nav.selectedIndex = index;
+        this.nav.renderSelection();
       });
     });
 
-    this.container.addEventListener("keydown", (e) => {
-      if ((e.target as HTMLElement).tagName === "INPUT") {
-        if (e.key === "Escape") {
-          (e.target as HTMLInputElement).blur();
-        } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-          e.preventDefault();
-          this.navigateFields(e.key === "ArrowDown" ? 1 : -1, e.target as HTMLInputElement);
-        }
-        return;
-      }
-
-      switch (e.key) {
-        case "j":
-        case "ArrowDown":
-          e.preventDefault();
-          this.navigateOptions(1);
-          break;
-
-        case "k":
-        case "ArrowUp":
-          e.preventDefault();
-          this.navigateOptions(-1);
-          break;
-
-        case "l":
-        case " ":
-        case "Enter":
-          e.preventDefault();
-          this.handleOptionSelect();
-          break;
-
-        case "h":
-        case "Backspace":
-          e.preventDefault();
-          this.handleCancel();
-          break;
-      }
-    });
-  }
-
-  private renderSelection(): void {
-    const options = this.optionsList.querySelectorAll(".option");
-    options.forEach((opt, i) => {
-      opt.classList.toggle("selected", i === this.selectedIndex);
-    });
-  }
-
-  private navigateOptions(delta: number): void {
-    const options = this.optionsList.querySelectorAll(".option");
-
-    if (delta < 0 && this.selectedIndex === 0) {
-      // Going up from first option — jump to last input field
-      options[0]?.classList.remove("selected");
-      const fields = this.getInputFields();
-      fields[fields.length - 1]?.focus();
-      return;
-    }
-
-    options[this.selectedIndex]?.classList.remove("selected");
-    this.selectedIndex = (this.selectedIndex + delta + options.length) % options.length;
-    options[this.selectedIndex]?.classList.add("selected");
+    this.container.addEventListener("keydown", (e) => this.nav.handleKeyDown(e));
   }
 
   private handleOptionSelect(): void {
     const options = this.optionsList.querySelectorAll(".option");
-    const selectedOption = options[this.selectedIndex] as HTMLElement;
+    const selectedOption = options[this.nav.selectedIndex] as HTMLElement;
     const action = selectedOption?.dataset.action;
 
     if (action === "save") {
@@ -242,21 +173,17 @@ export class RemoteProfileEditor {
       return;
     }
 
-    const remotePort = 3000;
-    const localPort = 3000;
-
-    const profile: RemoteProfile = {
-      id: this.profile?.id || generateId(),
-      name,
-      url: `http://localhost:${localPort}`,
-      connectionType: "ssh-tunnel",
-      sshHost: host,
-      sshUser: user,
-      sshKeyPath: key,
-      localPort,
-      remotePort,
-      ...(this.profile?.lastUsed !== undefined ? { lastUsed: this.profile.lastUsed } : {}),
-    };
+    const profile = buildSshTunnelProfile(
+      {
+        name,
+        host,
+        user,
+        keyPath: key,
+        id: this.profile?.id,
+        lastUsed: this.profile?.lastUsed,
+      },
+      generateId
+    );
 
     try {
       await this.profileManager.saveProfile(profile);

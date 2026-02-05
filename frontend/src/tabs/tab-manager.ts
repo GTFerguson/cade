@@ -2,8 +2,10 @@
  * Tab state management with localStorage persistence.
  */
 
+import { wrapIndex } from "../nav";
 import { toWebSocketUrl } from "../platform/url-utils";
 import { WebSocketClient } from "../platform/websocket";
+import { buildTunnelArgs } from "../remote/profile-utils";
 import type { EventHandler } from "../types";
 import type { AppState, TabInfo, TabManagerEvents, TabState } from "./types";
 import type { RemoteProfile } from "../remote/types";
@@ -181,13 +183,8 @@ export class TabManager {
     if (this.isTauri && profile.connectionType === "ssh-tunnel") {
       try {
         const { invoke } = await import("@tauri-apps/api/core");
-        tunnelPid = await invoke<number>("start_ssh_tunnel", {
-          sshHost: profile.sshHost,
-          localPort: profile.localPort,
-          remotePort: profile.remotePort,
-          sshUser: profile.sshUser || null,
-          sshKeyPath: profile.sshKeyPath || null,
-        });
+        const args = buildTunnelArgs(profile);
+        tunnelPid = await invoke<number>("start_ssh_tunnel", args);
         console.log(`SSH tunnel started: PID ${tunnelPid}`);
 
         // Probe the tunnel until it's forwarding (or timeout after 10s)
@@ -362,7 +359,7 @@ export class TabManager {
     }
 
     const currentIndex = tabs.findIndex((t) => t.id === this.activeTabId);
-    const nextIndex = (currentIndex + 1) % tabs.length;
+    const nextIndex = wrapIndex(currentIndex, 1, tabs.length);
     const nextTab = tabs[nextIndex];
     if (nextTab) {
       this.switchTab(nextTab.id);
@@ -379,7 +376,7 @@ export class TabManager {
     }
 
     const currentIndex = tabs.findIndex((t) => t.id === this.activeTabId);
-    const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    const prevIndex = wrapIndex(currentIndex, -1, tabs.length);
     const prevTab = tabs[prevIndex];
     if (prevTab) {
       this.switchTab(prevTab.id);
