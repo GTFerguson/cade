@@ -318,6 +318,16 @@ export class AgentManager implements Component {
   }
 
   /**
+   * Update theme on all agent terminals.
+   */
+  updateAllThemes(): void {
+    for (const entry of this.agents.values()) {
+      entry.claudeTerminal.updateTheme();
+      entry.manualTerminal?.updateTheme();
+    }
+  }
+
+  /**
    * Fit the active agent's visible terminal to its container.
    */
   fit(): void {

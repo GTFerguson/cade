@@ -13,17 +13,18 @@ from dataclasses import dataclass, field
 
 @dataclass
 class ColorsConfig:
-    """Color theme overrides - maps to CSS variables."""
+    """Color theme overrides - maps to CSS variables.
+    Defaults to True Black theme. Override via appearance.toml."""
 
-    bg_primary: str = "#1c1b1a"
-    bg_secondary: str = "#242321"
-    bg_tertiary: str = "#35322d"
-    bg_hover: str = "#45413b"
-    bg_selected: str = "#45413b"
+    bg_primary: str = "#0a0a09"
+    bg_secondary: str = "#111110"
+    bg_tertiary: str = "#1a1918"
+    bg_hover: str = "#222120"
+    bg_selected: str = "#222120"
 
     text_primary: str = "#f8f6f2"
-    text_secondary: str = "#d9cec3"
-    text_muted: str = "#857f78"
+    text_secondary: str = "#c4b9ad"
+    text_muted: str = "#5e5955"
 
     accent_blue: str = "#0a9dff"
     accent_green: str = "#aeee00"
@@ -33,12 +34,12 @@ class ColorsConfig:
     accent_red: str = "#ff2c4b"
     accent_cyan: str = "#8cffba"
 
-    border_color: str = "#45413b"
+    border_color: str = "#2a2827"
     border_focus: str = "#aeee00"
 
-    scrollbar_bg: str = "#1c1b1a"
-    scrollbar_thumb: str = "#45413b"
-    scrollbar_thumb_hover: str = "#857f78"
+    scrollbar_bg: str = "#0a0a09"
+    scrollbar_thumb: str = "#2a2827"
+    scrollbar_thumb_hover: str = "#5e5955"
 
 
 @dataclass

@@ -9,38 +9,50 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { SessionKey, type AnySessionKey } from "../platform/protocol";
 import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
+import { getSavedThemeId, getThemeById } from "../config/themes";
 
 /**
- * Badwolf-inspired color scheme.
- * @see https://github.com/sjl/badwolf
+ * Build an xterm.js theme from the current CADE theme.
+ * Reads the active theme's neutral colors and maps them to xterm properties.
+ * ANSI accent colors are shared across all themes.
  */
-const BADWOLF_THEME = {
-  background: "#1c1b1a", // blackgravel
-  foreground: "#f8f6f2", // plain
-  cursor: "#aeee00", // lime
-  cursorAccent: "#1c1b1a", // blackgravel
-  selectionBackground: "#45413b", // deepgravel
+function buildXtermTheme(): Record<string, string> {
+  const theme = getThemeById(getSavedThemeId());
+  const c = theme?.colors;
 
-  // ANSI colors
-  black: "#141413", // blackestgravel
-  red: "#ff2c4b", // taffy
-  green: "#aeee00", // lime
-  yellow: "#fade3e", // dalespale
-  blue: "#0a9dff", // tardis
-  magenta: "#ff9eb8", // dress
-  cyan: "#8cffba", // saltwatertaffy
-  white: "#f8f6f2", // plain
+  const bg = c?.bgPrimary ?? "#0a0a09";
+  const fg = c?.textPrimary ?? "#f8f6f2";
+  const muted = c?.textMuted ?? "#5e5955";
+  const selection = c?.bgHover ?? "#222120";
 
-  // Bright variants
-  brightBlack: "#857f78", // gravel
-  brightRed: "#ff2c4b", // taffy
-  brightGreen: "#aeee00", // lime
-  brightYellow: "#ffa724", // orange
-  brightBlue: "#0a9dff", // tardis
-  brightMagenta: "#ff9eb8", // dress
-  brightCyan: "#8cffba", // saltwatertaffy
-  brightWhite: "#ffffff", // snow
-};
+  return {
+    background: bg,
+    foreground: fg,
+    cursor: "#aeee00",
+    cursorAccent: bg,
+    selectionBackground: selection,
+
+    // ANSI colors (shared across all themes)
+    black: bg,
+    red: "#ff2c4b",
+    green: "#aeee00",
+    yellow: "#fade3e",
+    blue: "#0a9dff",
+    magenta: "#ff9eb8",
+    cyan: "#8cffba",
+    white: fg,
+
+    // Bright variants
+    brightBlack: muted,
+    brightRed: "#ff2c4b",
+    brightGreen: "#aeee00",
+    brightYellow: "#ffa724",
+    brightBlue: "#0a9dff",
+    brightMagenta: "#ff9eb8",
+    brightCyan: "#8cffba",
+    brightWhite: "#ffffff",
+  };
+}
 
 export type CustomKeyHandler = (e: KeyboardEvent) => boolean;
 
@@ -87,9 +99,10 @@ export class Terminal implements Component {
    * Initialize the terminal.
    */
   initialize(): void {
+    const xtermTheme = buildXtermTheme();
     const theme = this.hideCursor
-      ? { ...BADWOLF_THEME, cursor: "transparent", cursorAccent: "transparent" }
-      : BADWOLF_THEME;
+      ? { ...xtermTheme, cursor: "transparent", cursorAccent: "transparent" }
+      : xtermTheme;
 
     this.terminal = new XTerm({
       cursorBlink: !this.hideCursor,
@@ -241,6 +254,17 @@ export class Terminal implements Component {
           });
       }
     });
+  }
+
+  /**
+   * Update the terminal color theme (e.g. when user switches themes).
+   */
+  updateTheme(): void {
+    if (!this.terminal) return;
+    const xtermTheme = buildXtermTheme();
+    this.terminal.options.theme = this.hideCursor
+      ? { ...xtermTheme, cursor: "transparent", cursorAccent: "transparent" }
+      : xtermTheme;
   }
 
   /**

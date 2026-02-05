@@ -354,7 +354,7 @@ export class TerminalManager implements Component {
     if (this.agentManager?.getActiveAgentId() == null) {
       primaryOption.classList.add("active");
     }
-    primaryOption.textContent = "● main (primary)";
+    primaryOption.textContent = "[main]";
     primaryOption.addEventListener("click", () => {
       this.agentManager?.switchToAgent(null);
       this.hideAgentDropdown();
@@ -369,7 +369,7 @@ export class TerminalManager implements Component {
       if (agent.agentId === this.agentManager?.getActiveAgentId()) {
         option.classList.add("active");
       }
-      option.textContent = `◉ ${agent.label} (${agent.role})`;
+      option.textContent = `[${agent.label}]`;
       option.addEventListener("click", () => {
         this.agentManager?.switchToAgent(agent.agentId);
         this.hideAgentDropdown();
@@ -434,6 +434,15 @@ export class TerminalManager implements Component {
     } else {
       this.manualTerminal?.focus();
     }
+  }
+
+  /**
+   * Update terminal color theme (called when user switches themes).
+   */
+  updateTheme(): void {
+    this.claudeTerminal?.updateTheme();
+    this.manualTerminal?.updateTheme();
+    this.agentManager?.updateAllThemes();
   }
 
   /**

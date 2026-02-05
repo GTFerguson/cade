@@ -1,12 +1,16 @@
 /**
- * Lightweight dialog for re-entering an auth token after authentication failure.
- * Shows a simple prompt instead of the full profile manager.
+ * Auth token re-entry dialog.
+ * TUI-styled modal for recovering from authentication failures.
+ * Kept as a modal (not full-pane) because it's error recovery that
+ * can appear at any time over active terminal content.
  */
 
 export class AuthTokenDialog {
   private overlay: HTMLDivElement;
   private tokenInput: HTMLInputElement;
   private statusEl: HTMLDivElement;
+  private selectedIndex = 0;
+  private optionEls: HTMLElement[] = [];
   private resolve: ((token: string | null) => void) | null = null;
   private boundHandleKeyDown = this.handleKeyDown.bind(this);
 
@@ -17,41 +21,45 @@ export class AuthTokenDialog {
     const modal = document.createElement("div");
     modal.className = "auth-token-dialog";
     modal.innerHTML = `
-      <div class="modal-title">Authentication Failed</div>
+      <div class="pane-header">[ AUTH FAILED ]</div>
       <p class="auth-token-message">
         Connection to <strong>${this.escapeHtml(profileName)}</strong> was rejected.
-        Enter the current auth token to reconnect.
       </p>
-      <input
-        type="password"
-        class="modal-input"
-        placeholder="Paste auth token"
-        spellcheck="false"
-        autocomplete="off"
-      />
+      <div class="input-wrapper">
+        <span class="input-prompt">token:</span>
+        <input
+          type="password"
+          class="input-field"
+          placeholder=""
+          spellcheck="false"
+          autocomplete="off"
+        />
+      </div>
       <div class="auth-token-status"></div>
-      <div class="modal-buttons">
-        <button class="modal-button auth-token-cancel">Cancel</button>
-        <button class="modal-button modal-button-primary auth-token-connect">Connect</button>
+      <div class="auth-options">
+        <div class="auth-option selected" data-action="connect">[connect]</div>
+        <div class="auth-option" data-action="cancel">[cancel]</div>
+      </div>
+      <div class="pane-help">
+        <span class="help-key">enter</span> submit
+        <span class="help-key">esc</span> cancel
       </div>
     `;
 
     this.overlay.appendChild(modal);
 
-    this.tokenInput = modal.querySelector(".modal-input")!;
+    this.tokenInput = modal.querySelector(".input-field")!;
     this.statusEl = modal.querySelector(".auth-token-status")!;
 
-    modal.querySelector(".auth-token-cancel")!.addEventListener("click", () => {
-      this.close(null);
+    this.optionEls = Array.from(modal.querySelectorAll(".auth-option"));
+    this.optionEls.forEach((el, index) => {
+      el.addEventListener("click", () => {
+        this.selectedIndex = index;
+        this.renderSelection();
+        this.handleOptionSelect();
+      });
     });
 
-    modal.querySelector(".auth-token-connect")!.addEventListener("click", () => {
-      this.submit();
-    });
-
-    // Clicking outside the modal does nothing — prevent accidental dismissal
-    // since losing this dialog can leave the app with zero tabs.
-    // Users can still press Escape or click Cancel intentionally.
     this.overlay.addEventListener("click", (e) => {
       if (e.target === this.overlay) {
         this.tokenInput.focus();
@@ -59,14 +67,10 @@ export class AuthTokenDialog {
     });
   }
 
-  /**
-   * Show the dialog and return the entered token, or null if cancelled.
-   */
   show(): Promise<string | null> {
     document.body.appendChild(this.overlay);
     document.addEventListener("keydown", this.boundHandleKeyDown);
 
-    // Focus input after DOM paint
     requestAnimationFrame(() => this.tokenInput.focus());
 
     return new Promise((resolve) => {
@@ -74,10 +78,25 @@ export class AuthTokenDialog {
     });
   }
 
+  private handleOptionSelect(): void {
+    const action = this.optionEls[this.selectedIndex]?.dataset.action;
+    if (action === "connect") {
+      this.submit();
+    } else if (action === "cancel") {
+      this.close(null);
+    }
+  }
+
+  private renderSelection(): void {
+    this.optionEls.forEach((el, i) => {
+      el.classList.toggle("selected", i === this.selectedIndex);
+    });
+  }
+
   private submit(): void {
     const token = this.tokenInput.value.trim();
     if (!token) {
-      this.statusEl.textContent = "Token cannot be empty";
+      this.statusEl.textContent = "token cannot be empty";
       this.statusEl.className = "auth-token-status auth-token-error";
       this.tokenInput.focus();
       return;
@@ -93,12 +112,34 @@ export class AuthTokenDialog {
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
-    if (e.key === "Escape") {
+    if ((e.target as HTMLElement).tagName === "INPUT") {
+      if (e.key === "Escape") {
+        (e.target as HTMLInputElement).blur();
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        this.submit();
+        return;
+      }
+      return;
+    }
+
+    if (e.key === "j" || e.key === "ArrowDown") {
+      e.preventDefault();
+      this.selectedIndex = (this.selectedIndex + 1) % this.optionEls.length;
+      this.renderSelection();
+    } else if (e.key === "k" || e.key === "ArrowUp") {
+      e.preventDefault();
+      this.selectedIndex =
+        (this.selectedIndex - 1 + this.optionEls.length) % this.optionEls.length;
+      this.renderSelection();
+    } else if (e.key === "l" || e.key === " " || e.key === "Enter") {
+      e.preventDefault();
+      this.handleOptionSelect();
+    } else if (e.key === "Escape") {
       e.preventDefault();
       this.close(null);
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      this.submit();
     }
   }
 

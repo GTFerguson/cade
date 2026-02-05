@@ -108,10 +108,10 @@ export class TabBar implements Component {
       icon.className = "tab-remote-icon";
 
       if (tab.tunnelPid) {
-        icon.textContent = "🔒";
+        icon.textContent = "ssh";
         icon.title = `Remote via SSH tunnel (PID: ${tab.tunnelPid})`;
       } else {
-        icon.textContent = "🌐";
+        icon.textContent = "tcp";
         icon.title = "Remote direct connection";
       }
 

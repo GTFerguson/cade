@@ -33,6 +33,7 @@ export interface KeybindingCallbacks {
   scrollTerminalToBottom: () => void;
   cycleAgentNext: () => void;
   cycleAgentPrev: () => void;
+  showThemeSelector: () => void;
   getFocusedPane: () => PaneType;
   getPaneHandler: (pane: PaneType) => PaneKeyHandler | null;
 }
@@ -361,6 +362,13 @@ export class KeybindingManager implements Component {
     }
     if (this.matchesBinding(e, config.misc.cycleAgentPrev)) {
       this.callbacks?.cycleAgentPrev();
+      this.onPrefixShortcutUsed();
+      return;
+    }
+
+    // Theme selector: prefix + t
+    if (e.key === "t") {
+      this.callbacks?.showThemeSelector();
       this.onPrefixShortcutUsed();
       return;
     }

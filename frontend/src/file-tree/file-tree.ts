@@ -276,25 +276,18 @@ export class FileTree implements Component, PaneKeyHandler {
       const isExpanded = this.expandedPaths.has(node.path);
 
       const chevron = document.createElement("span");
-      chevron.className = `file-tree-chevron ${isExpanded ? "expanded" : ""}`;
+      chevron.className = `file-tree-chevron${isExpanded ? " expanded" : ""}`;
+      chevron.textContent = isExpanded ? "\u25BE" : "\u25B8";
       row.appendChild(chevron);
-
-      const icon = document.createElement("span");
-      icon.className = `file-tree-icon folder${isExpanded ? " expanded" : ""}`;
-      row.appendChild(icon);
     } else {
       const spacer = document.createElement("span");
       spacer.className = "file-tree-spacer";
       row.appendChild(spacer);
-
-      const icon = document.createElement("span");
-      const typeClass = this.getFileTypeClass(node.name);
-      icon.className = `file-tree-icon file${typeClass ? ` ${typeClass}` : ""}`;
-      row.appendChild(icon);
     }
 
     const name = document.createElement("span");
-    name.className = "file-tree-name";
+    const typeClass = node.type === "file" ? this.getFileTypeClass(node.name) : "";
+    name.className = `file-tree-name${typeClass ? ` ${typeClass}` : ""}`;
     name.textContent = node.name;
     row.appendChild(name);
 
@@ -520,7 +513,7 @@ export class FileTree implements Component, PaneKeyHandler {
       }
     }
 
-    // Create modal overlay
+    // Create TUI dialog
     const overlay = document.createElement("div");
     overlay.className = "file-creation-modal-overlay";
 
@@ -529,31 +522,47 @@ export class FileTree implements Component, PaneKeyHandler {
 
     const title = document.createElement("div");
     title.className = "modal-title";
-    title.textContent = "Create New File";
+    title.textContent = "[ CREATE FILE ]";
+
+    const inputWrapper = document.createElement("div");
+    inputWrapper.style.cssText = "display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:20px";
+
+    const inputPrompt = document.createElement("span");
+    inputPrompt.style.cssText = `color:var(--accent-green);font-size:13px;font-family:var(--font-mono)`;
+    inputPrompt.textContent = "path:";
 
     const input = document.createElement("input");
     input.type = "text";
     input.className = "modal-input";
-    input.placeholder = "Enter file path (e.g., plans/new-feature.md)";
+    input.placeholder = "plans/new-feature.md";
     input.value = basePath;
+    input.style.marginBottom = "0";
+
+    inputWrapper.appendChild(inputPrompt);
+    inputWrapper.appendChild(input);
 
     const buttonContainer = document.createElement("div");
     buttonContainer.className = "modal-buttons";
 
     const createBtn = document.createElement("button");
-    createBtn.textContent = "Create";
+    createBtn.textContent = "[create]";
     createBtn.className = "modal-button modal-button-primary";
 
     const cancelBtn = document.createElement("button");
-    cancelBtn.textContent = "Cancel";
+    cancelBtn.textContent = "[cancel]";
     cancelBtn.className = "modal-button";
 
     buttonContainer.appendChild(createBtn);
     buttonContainer.appendChild(cancelBtn);
 
+    const helpText = document.createElement("div");
+    helpText.style.cssText = "margin-top:16px;font-size:11px;color:var(--text-muted);font-family:var(--font-mono)";
+    helpText.innerHTML = `<span style="color:var(--accent-green)">enter</span> create  <span style="color:var(--accent-green)">esc</span> cancel`;
+
     modal.appendChild(title);
-    modal.appendChild(input);
+    modal.appendChild(inputWrapper);
     modal.appendChild(buttonContainer);
+    modal.appendChild(helpText);
     overlay.appendChild(modal);
 
     // Handle create

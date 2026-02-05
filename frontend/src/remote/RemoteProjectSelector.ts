@@ -1,10 +1,11 @@
 import type { RemoteProfile, SavedProject } from "./types";
 import { RemoteProfileManager } from "./profile-manager";
+import { RemoteProfileEditor } from "./RemoteProfileEditor";
 import { WebSocketClient } from "../platform/websocket";
 import { toWebSocketUrl } from "../platform/url-utils";
 import type { FileNode } from "../types";
 
-type Screen = "connections" | "projects" | "new-project" | "browse";
+type Screen = "connections" | "projects" | "new-project" | "new-connection" | "browse";
 
 interface SelectionResult {
   profile: RemoteProfile;
@@ -34,16 +35,36 @@ export class RemoteProjectSelector {
     this.container.className = "remote-project-selector";
   }
 
+  private navigateInputFields(direction: number, current: HTMLInputElement): void {
+    const inputs = Array.from(this.container.querySelectorAll<HTMLInputElement>(".input-field"));
+    const idx = inputs.indexOf(current);
+    if (idx < 0) return;
+
+    const nextIdx = idx + direction;
+    if (nextIdx >= 0 && nextIdx < inputs.length) {
+      inputs[nextIdx]!.focus();
+    } else if (direction > 0) {
+      // Past last input — select first option
+      current.blur();
+      this.selectedIndex = 0;
+      this.updateSelection();
+    }
+  }
+
   private handleKeyDown(e: KeyboardEvent): void {
-    // Don't interfere with input fields
+    // Arrow keys navigate between fields; other keys pass through to inputs
     if ((e.target as HTMLElement).tagName === "INPUT") {
       if (e.key === "Escape") {
         (e.target as HTMLInputElement).blur();
+      } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        this.navigateInputFields(e.key === "ArrowDown" ? 1 : -1, e.target as HTMLInputElement);
       }
       return;
     }
 
     const options = this.container.querySelectorAll(".option");
+    const inputs = this.container.querySelectorAll<HTMLInputElement>(".input-field");
 
     if (e.key === "j" || e.key === "ArrowDown") {
       e.preventDefault();
@@ -51,8 +72,14 @@ export class RemoteProjectSelector {
       this.updateSelection();
     } else if (e.key === "k" || e.key === "ArrowUp") {
       e.preventDefault();
-      this.selectedIndex = (this.selectedIndex - 1 + options.length) % options.length;
-      this.updateSelection();
+      if (this.selectedIndex === 0 && inputs.length > 0) {
+        // Jump from first option back to last input field
+        options[0]?.classList.remove("selected");
+        inputs[inputs.length - 1]!.focus();
+      } else {
+        this.selectedIndex = (this.selectedIndex - 1 + options.length) % options.length;
+        this.updateSelection();
+      }
     } else if (e.key === "l" || e.key === " " || e.key === "Enter") {
       e.preventDefault();
       this.handleSelect();
@@ -78,8 +105,8 @@ export class RemoteProjectSelector {
         this.selectedProfile = profile;
         await this.showProjectsScreen();
       } else {
-        // [+ new connection] - TODO: implement connection editor
-        alert("New connection editor not yet implemented");
+        // [+ new connection]
+        this.showNewConnectionScreen();
       }
     } else if (this.currentScreen === "projects") {
       if (this.selectedIndex < this.projects.length) {
@@ -257,6 +284,27 @@ export class RemoteProjectSelector {
     this.attachOptionListeners();
   }
 
+  private showNewConnectionScreen(): void {
+    this.currentScreen = "new-connection";
+    this.selectedIndex = 0;
+
+    const editor = new RemoteProfileEditor(this.profileManager);
+
+    editor.setSaveCallback(async () => {
+      // Profile saved, go back to connections list and reload
+      await this.showConnectionsScreen();
+    });
+
+    editor.setCancelCallback(() => {
+      // Cancelled, go back to connections list
+      void this.showConnectionsScreen();
+    });
+
+    this.container.innerHTML = "";
+    this.container.appendChild(editor.getElement());
+    editor.focus();
+  }
+
   private showNewProjectScreen(): void {
     this.currentScreen = "new-project";
     this.selectedIndex = 0;
@@ -282,17 +330,17 @@ export class RemoteProjectSelector {
             </div>
             <div class="divider"></div>
             <div class="options-list">
-              <div class="option selected" data-index="0">
+              <div class="option" data-index="0" tabindex="0">
                 <span class="option-label">[save & open]</span>
               </div>
-              <div class="option" data-index="1">
+              <div class="option" data-index="1" tabindex="0">
                 <span class="option-label">[browse files]</span>
               </div>
             </div>
           </div>
         </div>
         <div class="pane-help">
-          <div><span class="help-key">j/k</span> navigate actions</div>
+          <div><span class="help-key">↑/↓</span> navigate fields</div>
           <div><span class="help-key">l</span> select action</div>
           <div><span class="help-key">h</span> back</div>
         </div>
@@ -300,6 +348,9 @@ export class RemoteProjectSelector {
     `;
 
     this.attachOptionListeners();
+
+    const nameInput = this.container.querySelector("#project-name") as HTMLInputElement;
+    nameInput?.focus();
   }
 
   private showBrowseScreen(): void {

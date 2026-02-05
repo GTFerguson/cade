@@ -8,6 +8,7 @@ import "../styles/main.css";
 
 import { basePath, config } from "./config/config";
 import { HelpOverlay } from "./ui/help-overlay";
+import { ThemeSelector } from "./ui/theme-selector";
 import { KeybindingManager } from "./input/keybindings";
 import { MobileUI } from "./ui/mobile";
 import { ProjectContextImpl, TabBar, TabManager } from "./tabs";
@@ -15,6 +16,7 @@ import { hasConnectedProfileTab } from "./tabs/tab-manager";
 import type { TabState } from "./tabs";
 import { pickProjectFolder, getUserHomePath } from "./platform/tauri-bridge";
 import { setUserConfig, getUserConfig, matchesKeybinding } from "./config/user-config";
+import { applySavedTheme, onThemeChange } from "./config/themes";
 import { RemoteProfileManager } from "./remote/profile-manager";
 import { RemoteProjectSelector } from "./remote/RemoteProjectSelector";
 import { AuthTokenDialog } from "./remote/AuthTokenDialog";
@@ -29,6 +31,7 @@ class App {
   private defaultProjectPath: string;
   private keybindingManager: KeybindingManager;
   private helpOverlay: HelpOverlay;
+  private themeSelector: ThemeSelector;
   private profileManager: RemoteProfileManager;
   private activeAuthDialogs = new Set<string>();
   private startSplash: Splash | null = null;
@@ -38,6 +41,7 @@ class App {
     this.defaultProjectPath = this.getDefaultProjectPath();
     this.keybindingManager = new KeybindingManager();
     this.helpOverlay = new HelpOverlay();
+    this.themeSelector = new ThemeSelector();
     this.profileManager = new RemoteProfileManager();
   }
 
@@ -211,6 +215,9 @@ class App {
         const activeTab = this.tabManager.getActiveTab();
         activeTab?.context?.cycleAgent("prev");
       },
+      showThemeSelector: () => {
+        this.themeSelector.toggle();
+      },
       getFocusedPane: () => {
         const activeTab = this.tabManager.getActiveTab();
         return activeTab?.context?.getFocusedPane() ?? "terminal";
@@ -219,6 +226,13 @@ class App {
         const activeTab = this.tabManager.getActiveTab();
         return activeTab?.context?.getPaneHandler(pane) ?? null;
       },
+    });
+
+    // Update all terminal themes when user switches themes
+    onThemeChange(() => {
+      for (const tab of this.tabManager.getTabs()) {
+        tab.context?.getTerminalManager()?.updateTheme();
+      }
     });
 
     window.addEventListener("beforeunload", () => {
@@ -251,9 +265,11 @@ class App {
       if (message.workingDir) {
         this.tabManager.updateTabPath(tab.id, message.workingDir);
       }
-      // Apply user config from server
+      // Apply user config from server (keybindings, behavior, fonts, etc.)
+      // then re-apply the saved theme so server colors don't stomp it
       if (message.config) {
         setUserConfig(message.config);
+        applySavedTheme();
         console.log("[main] Applied user config from server");
       }
     });
@@ -502,6 +518,7 @@ class App {
   async dispose(): Promise<void> {
     this.keybindingManager.dispose();
     this.helpOverlay.dispose();
+    this.themeSelector.dispose();
     this.mobileUI?.dispose();
     this.tabBar?.dispose();
     this.tabManager.dispose();
@@ -539,6 +556,9 @@ async function checkAuth(): Promise<boolean> {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  // Apply saved theme immediately to prevent flash of default colors
+  applySavedTheme();
+
   const authed = await checkAuth();
   if (!authed) return;
 

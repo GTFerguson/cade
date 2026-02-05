@@ -37,6 +37,41 @@ export async function pickProjectFolder(
 }
 
 /**
+ * Open a native file picker dialog.
+ * Falls back to window.prompt() in browser mode.
+ * Returns the selected path, or null if cancelled.
+ */
+export async function pickFile(
+  defaultPath?: string,
+  filters?: { name: string; extensions: string[] }[]
+): Promise<string | null> {
+  if (isTauri()) {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const resolvedDefault = defaultPath ?? getUserHomePath();
+      const options: Record<string, unknown> = {
+        directory: false,
+        multiple: false,
+        title: "Select SSH Key",
+      };
+      if (resolvedDefault) {
+        options.defaultPath = resolvedDefault;
+      }
+      if (filters) {
+        options.filters = filters;
+      }
+      const selected = await open(options as any);
+      return typeof selected === "string" ? selected : null;
+    } catch (e) {
+      console.error("[tauri-bridge] Failed to open file picker:", e);
+      return null;
+    }
+  }
+
+  return window.prompt("Enter SSH key path:", defaultPath ?? "~/.ssh/id_rsa");
+}
+
+/**
  * Get the user's home directory path, injected by the Rust backend.
  * Returns null in browser mode.
  */

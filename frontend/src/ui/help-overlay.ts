@@ -59,6 +59,13 @@ const KEYBINDINGS_HTML = `
   </div>
 
   <div class="help-section">
+    <h3>Appearance</h3>
+    <table>
+      <tr><td><kbd>prefix</kbd> + <kbd>t</kbd></td><td>Open theme selector</td></tr>
+    </table>
+  </div>
+
+  <div class="help-section">
     <h3>File Tree (when focused)</h3>
     <table>
       <tr><td><kbd>j</kbd> / <kbd>↓</kbd></td><td>Move selection down</td></tr>

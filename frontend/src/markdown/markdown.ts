@@ -349,13 +349,14 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
     const filename = document.createElement("span");
     filename.className = "viewer-filename";
-    filename.textContent = this.currentPath;
+    const displayName = this.currentPath.split("/").pop() ?? this.currentPath;
+    filename.textContent = displayName;
     header.appendChild(filename);
 
     if (this.isPlanOverlayActive) {
       const closeBtn = document.createElement("button");
       closeBtn.className = "viewer-close-btn";
-      closeBtn.innerHTML = "&times;";
+      closeBtn.textContent = "[x]";
       closeBtn.title = "Close plan (Esc)";
       closeBtn.addEventListener("click", () => this.closePlanOverlay());
       header.appendChild(closeBtn);
@@ -380,14 +381,43 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
       this.attachLinkHandlers(content);
     } else {
+      content.classList.add("code-viewer");
       content.appendChild(
         this.renderCode(this.currentContent, this.currentFileType)
       );
     }
 
+    // Vim-style statusline at bottom
+    const statusline = document.createElement("div");
+    statusline.className = "viewer-statusline";
+
+    const statusMode = document.createElement("span");
+    statusMode.className = "status-mode";
+    statusMode.textContent = "VIEW";
+
+    const statusFilename = document.createElement("span");
+    statusFilename.className = "status-filename";
+    statusFilename.textContent = this.currentPath;
+
+    statusline.appendChild(statusMode);
+    statusline.appendChild(statusFilename);
+
+    if (this.currentFileType !== "markdown") {
+      const statusLang = document.createElement("span");
+      statusLang.className = "status-lang";
+      statusLang.textContent = this.currentFileType;
+      statusline.appendChild(statusLang);
+
+      const statusLines = document.createElement("span");
+      statusLines.className = "status-lines";
+      statusLines.textContent = `${this.currentContent.split("\n").length} ln`;
+      statusline.appendChild(statusLines);
+    }
+
     this.container.innerHTML = "";
     this.container.appendChild(header);
     this.container.appendChild(content);
+    this.container.appendChild(statusline);
     this.contentContainer = content;
 
     // Restore scroll position after DOM is ready
@@ -509,26 +539,82 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   }
 
   /**
-   * Render code with syntax highlighting.
+   * Split highlighted HTML by newlines while preserving span context across lines.
+   * Each output line is valid self-contained HTML.
    */
-  private renderCode(code: string, language: string): HTMLPreElement {
-    const pre = document.createElement("pre");
-    const codeEl = document.createElement("code");
+  private splitHighlightedLines(html: string): string[] {
+    const rawLines = html.split("\n");
+    const result: string[] = [];
+    let openSpans: string[] = [];
 
-    codeEl.className = `hljs language-${language}`;
+    for (const rawLine of rawLines) {
+      const prefix = openSpans.join("");
+
+      const tagRegex = /<(\/?)span([^>]*)>/g;
+      let m;
+      while ((m = tagRegex.exec(rawLine)) !== null) {
+        if (m[1] === "/") {
+          openSpans.pop();
+        } else {
+          openSpans.push(`<span${m[2]}>`);
+        }
+      }
+
+      const suffix = "</span>".repeat(openSpans.length);
+      result.push(prefix + rawLine + suffix);
+    }
+
+    return result;
+  }
+
+  /**
+   * Render code with syntax highlighting in a two-column layout
+   * (line numbers | code) with a subtle border separator.
+   */
+  private renderCode(code: string, language: string): HTMLElement {
+    let highlightedHtml: string;
 
     try {
       if (language !== "plaintext" && hljs.getLanguage(language) !== undefined) {
-        codeEl.innerHTML = hljs.highlight(code, { language }).value;
+        highlightedHtml = hljs.highlight(code, { language }).value;
       } else {
-        codeEl.innerHTML = hljs.highlightAuto(code).value;
+        highlightedHtml = hljs.highlightAuto(code).value;
       }
     } catch {
-      codeEl.textContent = code;
+      highlightedHtml = code
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
     }
 
-    pre.appendChild(codeEl);
-    return pre;
+    const lines = this.splitHighlightedLines(highlightedHtml);
+
+    const codeView = document.createElement("div");
+    codeView.className = "code-view";
+
+    // Line numbers column
+    const numbersCol = document.createElement("div");
+    numbersCol.className = "code-numbers";
+    for (let i = 1; i <= lines.length; i++) {
+      const ln = document.createElement("span");
+      ln.className = "ln";
+      ln.textContent = String(i);
+      numbersCol.appendChild(ln);
+    }
+
+    // Code column
+    const codeCol = document.createElement("div");
+    codeCol.className = "code-body";
+    for (const lineHtml of lines) {
+      const lineEl = document.createElement("div");
+      lineEl.className = "code-line";
+      lineEl.innerHTML = lineHtml || "\u200b";
+      codeCol.appendChild(lineEl);
+    }
+
+    codeView.appendChild(numbersCol);
+    codeView.appendChild(codeCol);
+    return codeView;
   }
 
   /**
@@ -995,6 +1081,13 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     const SCROLL_AMOUNT = 40;
     const delta = direction === "left" ? -SCROLL_AMOUNT : SCROLL_AMOUNT;
 
+    // Code viewer mode: scroll the content container itself
+    if (this.contentContainer?.classList.contains("code-viewer")) {
+      this.contentContainer.scrollLeft += delta;
+      return;
+    }
+
+    // Markdown mode: scroll visible pre blocks
     const codeBlocks = this.contentContainer?.querySelectorAll("pre");
     if (!codeBlocks) {
       return;
@@ -1158,17 +1251,18 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
     const filename = document.createElement("span");
     filename.className = "viewer-filename";
-    filename.textContent = this.currentPath;
+    const displayName = this.currentPath.split("/").pop() ?? this.currentPath;
+    filename.textContent = displayName;
     header.appendChild(filename);
 
     const modeIndicator = document.createElement("span");
     modeIndicator.className = "mode-indicator mode-normal";
-    modeIndicator.textContent = "NORMAL";
+    modeIndicator.textContent = "[NORMAL]";
     header.appendChild(modeIndicator);
 
     const dirtyIndicator = document.createElement("span");
     dirtyIndicator.className = "viewer-dirty-indicator";
-    dirtyIndicator.textContent = " (unsaved)";
+    dirtyIndicator.textContent = "[+]";
     dirtyIndicator.style.display = "none";
     header.appendChild(dirtyIndicator);
 
@@ -1257,7 +1351,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     // Update mode indicator
     const indicator = this.container.querySelector(".mode-indicator");
     if (indicator) {
-      indicator.textContent = "EDIT";
+      indicator.textContent = "[EDIT]";
       indicator.classList.remove("mode-normal");
       indicator.classList.add("mode-edit");
     }
@@ -1289,7 +1383,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     // Update mode indicator
     const indicator = this.container.querySelector(".mode-indicator");
     if (indicator) {
-      indicator.textContent = "NORMAL";
+      indicator.textContent = "[NORMAL]";
       indicator.classList.remove("mode-edit");
       indicator.classList.add("mode-normal");
     }

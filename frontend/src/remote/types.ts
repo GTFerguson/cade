@@ -14,6 +14,8 @@ export interface RemoteProfile {
   lastUsed?: number;
   connectionType: "direct" | "ssh-tunnel";
   sshHost?: string;
+  sshUser?: string;
+  sshKeyPath?: string;
   localPort?: number;
   remotePort?: number;
   projects?: SavedProject[];

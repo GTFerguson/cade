@@ -7,3 +7,4 @@ export {
   type UserConfig,
   type KeybindingsConfig,
 } from "./user-config";
+export { applySavedTheme, applyTheme, onThemeChange, themes, getSavedThemeId } from "./themes";

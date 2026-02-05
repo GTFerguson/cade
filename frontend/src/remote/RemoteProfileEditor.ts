@@ -1,5 +1,6 @@
 import type { RemoteProfile } from "./types";
 import { RemoteProfileManager } from "./profile-manager";
+import { pickFile, getUserHomePath } from "../platform/tauri-bridge";
 
 function generateId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -14,251 +15,253 @@ function generateId(): string {
 export class RemoteProfileEditor {
   private container: HTMLDivElement;
   private nameInput: HTMLInputElement;
-  private urlInput: HTMLInputElement;
-  private tokenInput: HTMLInputElement;
-  private pathInput: HTMLInputElement;
-  private connectionTypeSelect: HTMLSelectElement;
-  private sshHostInput: HTMLInputElement;
-  private localPortInput: HTMLInputElement;
-  private remotePortInput: HTMLInputElement;
-  private tunnelFields: HTMLDivElement;
-  private testButton: HTMLButtonElement;
-  private saveButton: HTMLButtonElement;
-  private cancelButton: HTMLButtonElement;
-  private statusMessage: HTMLDivElement;
+  private hostInput: HTMLInputElement;
+  private portInput: HTMLInputElement;
+  private userInput: HTMLInputElement;
+  private keyInput: HTMLInputElement;
+  private keyBrowseButton: HTMLButtonElement;
+  private optionsList: HTMLDivElement;
   private profile: RemoteProfile | null;
   private profileManager: RemoteProfileManager;
-  private isTauri: boolean;
+  private selectedIndex: number = 0;
   private onSave: ((profile: RemoteProfile) => void) | null = null;
   private onCancel: (() => void) | null = null;
 
   constructor(profileManager: RemoteProfileManager, profile?: RemoteProfile) {
     this.profileManager = profileManager;
     this.profile = profile || null;
-    this.isTauri = typeof window !== "undefined" && "__TAURI__" in window;
     this.container = document.createElement("div");
-    this.container.className = "remote-profile-editor";
+    this.container.className = "pane-view";
 
     this.container.innerHTML = `
-      <div class="profile-editor-header">
-        <h3>${profile ? "Edit Profile" : "New Remote Profile"}</h3>
+      <div class="pane-content">
+        <div class="pane-header">[ ${profile ? "EDIT CONNECTION" : "NEW CONNECTION"} ]</div>
+
+        <div class="input-section">
+          <div class="input-wrapper">
+            <span class="input-prompt">name:</span>
+            <input type="text" class="input-field" placeholder="" data-field="name" />
+          </div>
+
+          <div class="input-wrapper">
+            <span class="input-prompt">host:</span>
+            <input type="text" class="input-field medium" placeholder="hostname or ip" data-field="host" />
+            <span class="input-prompt" style="margin-left: 4px;">port:</span>
+            <input type="text" class="input-field short" placeholder="3000" data-field="port" />
+          </div>
+
+          <div class="input-wrapper">
+            <span class="input-prompt">user:</span>
+            <input type="text" class="input-field" placeholder="" data-field="user" />
+          </div>
+
+          <div class="input-wrapper">
+            <span class="input-prompt">key:</span>
+            <input type="text" class="input-field" placeholder="~/.ssh/id_rsa" data-field="key" />
+            <button type="button" class="btn-browse" title="Browse for SSH key">...</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="options-list">
+            <div class="option selected" data-action="save" tabindex="0">
+              <span class="option-label">[save & connect]</span>
+            </div>
+            <div class="option" data-action="cancel" tabindex="0">
+              <span class="option-label">[cancel]</span>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="profile-editor-form">
-        <div class="form-group">
-          <label for="profile-name">Name</label>
-          <input type="text" id="profile-name" placeholder="e.g., ML Server" required />
-        </div>
-        <div class="form-group">
-          <label for="connection-type">Connection Type</label>
-          <select id="connection-type">
-            <option value="direct">Direct Connection</option>
-            ${this.isTauri ? '<option value="ssh-tunnel">SSH Tunnel</option>' : ""}
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="profile-url">Backend URL</label>
-          <input type="text" id="profile-url" placeholder="http://52.30.205.70:3000" required />
-        </div>
-        <div class="tunnel-fields" style="display: none">
-          <div class="form-group">
-            <label for="ssh-host">SSH Host (from ~/.ssh/config)</label>
-            <input type="text" id="ssh-host" placeholder="clann-vm" />
-          </div>
-          <div class="form-group">
-            <label for="local-port">Local Port</label>
-            <input type="number" id="local-port" placeholder="3000" />
-          </div>
-          <div class="form-group">
-            <label for="remote-port">Remote Port</label>
-            <input type="number" id="remote-port" placeholder="3000" />
-          </div>
-        </div>
-        <div class="form-group">
-          <label for="profile-token">Auth Token (optional)</label>
-          <input type="password" id="profile-token" placeholder="••••••••" />
-        </div>
-        <div class="form-group">
-          <label for="profile-path">Default Path (optional)</label>
-          <input type="text" id="profile-path" placeholder="/" />
-        </div>
-        <div class="form-status"></div>
-        <div class="form-actions">
-          <button type="button" class="btn btn-test">Test Connection</button>
-          <button type="button" class="btn btn-cancel">Cancel</button>
-          <button type="button" class="btn btn-primary btn-save">Save</button>
-        </div>
+
+      <div class="pane-help">
+        <div><span class="help-key">↑/↓</span> navigate fields</div>
+        <div><span class="help-key">tab</span> next field</div>
+        <div><span class="help-key">l</span> select</div>
+        <div><span class="help-key">h</span> back</div>
       </div>
     `;
 
-    this.nameInput = this.container.querySelector("#profile-name")!;
-    this.urlInput = this.container.querySelector("#profile-url")!;
-    this.tokenInput = this.container.querySelector("#profile-token")!;
-    this.pathInput = this.container.querySelector("#profile-path")!;
-    this.connectionTypeSelect = this.container.querySelector("#connection-type")!;
-    this.sshHostInput = this.container.querySelector("#ssh-host")!;
-    this.localPortInput = this.container.querySelector("#local-port")!;
-    this.remotePortInput = this.container.querySelector("#remote-port")!;
-    this.tunnelFields = this.container.querySelector(".tunnel-fields")!;
-    this.testButton = this.container.querySelector(".btn-test")!;
-    this.saveButton = this.container.querySelector(".btn-save")!;
-    this.cancelButton = this.container.querySelector(".btn-cancel")!;
-    this.statusMessage = this.container.querySelector(".form-status")!;
+    this.nameInput = this.container.querySelector('[data-field="name"]')!;
+    this.hostInput = this.container.querySelector('[data-field="host"]')!;
+    this.portInput = this.container.querySelector('[data-field="port"]')!;
+    this.userInput = this.container.querySelector('[data-field="user"]')!;
+    this.keyInput = this.container.querySelector('[data-field="key"]')!;
+    this.keyBrowseButton = this.container.querySelector(".btn-browse")!;
+    this.optionsList = this.container.querySelector(".options-list")!;
 
     if (profile) {
       this.nameInput.value = profile.name;
-      this.urlInput.value = profile.url;
-      this.tokenInput.value = profile.authToken || "";
-      this.pathInput.value = profile.defaultPath || "";
-      this.connectionTypeSelect.value = profile.connectionType || "direct";
-      if (profile.sshHost) this.sshHostInput.value = profile.sshHost;
-      if (profile.localPort) this.localPortInput.value = profile.localPort.toString();
-      if (profile.remotePort) this.remotePortInput.value = profile.remotePort.toString();
-
-      if (profile.connectionType === "ssh-tunnel") {
-        this.tunnelFields.style.display = "block";
-      }
+      this.hostInput.value = profile.sshHost || "";
+      this.portInput.value = profile.remotePort?.toString() || "3000";
+      this.userInput.value = profile.sshUser || "";
+      this.keyInput.value = profile.sshKeyPath || "";
     }
 
     this.setupEventListeners();
-    this.setupKeyboardNavigation();
+  }
+
+  private getInputFields(): HTMLInputElement[] {
+    return [this.nameInput, this.hostInput, this.portInput, this.userInput, this.keyInput];
+  }
+
+  private navigateFields(direction: number, current: HTMLInputElement): void {
+    const fields = this.getInputFields();
+    const idx = fields.indexOf(current);
+    if (idx < 0) return;
+
+    const nextIdx = idx + direction;
+    if (nextIdx >= 0 && nextIdx < fields.length) {
+      fields[nextIdx]!.focus();
+    } else if (direction > 0) {
+      // Past last input — select first option
+      current.blur();
+      this.selectedIndex = 0;
+      this.renderSelection();
+    }
   }
 
   private setupEventListeners(): void {
-    this.testButton.addEventListener("click", () => this.handleTestConnection());
-    this.saveButton.addEventListener("click", () => this.handleSave());
-    this.cancelButton.addEventListener("click", () => this.handleCancel());
+    this.keyBrowseButton.addEventListener("click", () => this.handleBrowseKey());
 
-    this.connectionTypeSelect.addEventListener("change", () => {
-      const isTunnel = this.connectionTypeSelect.value === "ssh-tunnel";
-      this.tunnelFields.style.display = isTunnel ? "block" : "none";
-
-      if (isTunnel) {
-        const localPort = this.localPortInput.value || "3000";
-        this.urlInput.value = `http://localhost:${localPort}`;
-      }
-    });
-
-    this.localPortInput.addEventListener("input", () => {
-      if (this.connectionTypeSelect.value === "ssh-tunnel") {
-        const localPort = this.localPortInput.value || "3000";
-        this.urlInput.value = `http://localhost:${localPort}`;
-      }
-    });
-  }
-
-  private setupKeyboardNavigation(): void {
-    this.container.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        this.handleCancel();
-      } else if (e.key === "Enter" && e.target === this.saveButton) {
-        e.preventDefault();
-        this.handleSave();
-      } else if (e.ctrlKey && e.key === "Enter") {
-        e.preventDefault();
-        this.handleTestConnection();
-      }
-    });
-
-    const inputs = [this.nameInput, this.urlInput, this.tokenInput, this.pathInput];
-    inputs.forEach((input, index) => {
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          if (index < inputs.length - 1) {
-            const next = inputs[index + 1];
-            if (next) next.focus();
-          } else {
-            this.handleSave();
-          }
-        }
+    const options = this.optionsList.querySelectorAll(".option");
+    options.forEach((option, index) => {
+      option.addEventListener("click", () => {
+        this.selectedIndex = index;
+        this.handleOptionSelect();
+      });
+      option.addEventListener("focus", () => {
+        this.selectedIndex = index;
+        this.renderSelection();
       });
     });
+
+    this.container.addEventListener("keydown", (e) => {
+      if ((e.target as HTMLElement).tagName === "INPUT") {
+        if (e.key === "Escape") {
+          (e.target as HTMLInputElement).blur();
+        } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          this.navigateFields(e.key === "ArrowDown" ? 1 : -1, e.target as HTMLInputElement);
+        }
+        return;
+      }
+
+      switch (e.key) {
+        case "j":
+        case "ArrowDown":
+          e.preventDefault();
+          this.navigateOptions(1);
+          break;
+
+        case "k":
+        case "ArrowUp":
+          e.preventDefault();
+          this.navigateOptions(-1);
+          break;
+
+        case "l":
+        case " ":
+        case "Enter":
+          e.preventDefault();
+          this.handleOptionSelect();
+          break;
+
+        case "h":
+        case "Backspace":
+          e.preventDefault();
+          this.handleCancel();
+          break;
+      }
+    });
   }
 
-  private async handleTestConnection(): Promise<void> {
-    const url = this.urlInput.value.trim();
-    if (!url) {
-      this.showStatus("Please enter a backend URL", "error");
+  private renderSelection(): void {
+    const options = this.optionsList.querySelectorAll(".option");
+    options.forEach((opt, i) => {
+      opt.classList.toggle("selected", i === this.selectedIndex);
+    });
+  }
+
+  private navigateOptions(delta: number): void {
+    const options = this.optionsList.querySelectorAll(".option");
+
+    if (delta < 0 && this.selectedIndex === 0) {
+      // Going up from first option — jump to last input field
+      options[0]?.classList.remove("selected");
+      const fields = this.getInputFields();
+      fields[fields.length - 1]?.focus();
       return;
     }
 
-    if (!this.isValidUrl(url)) {
-      this.showStatus("Invalid URL format", "error");
-      return;
+    options[this.selectedIndex]?.classList.remove("selected");
+    this.selectedIndex = (this.selectedIndex + delta + options.length) % options.length;
+    options[this.selectedIndex]?.classList.add("selected");
+  }
+
+  private handleOptionSelect(): void {
+    const options = this.optionsList.querySelectorAll(".option");
+    const selectedOption = options[this.selectedIndex] as HTMLElement;
+    const action = selectedOption?.dataset.action;
+
+    if (action === "save") {
+      this.handleSave();
+    } else if (action === "cancel") {
+      this.handleCancel();
     }
+  }
 
-    this.showStatus("Testing connection...", "info");
-    this.testButton.disabled = true;
+  private async handleBrowseKey(): Promise<void> {
+    const homePath = getUserHomePath();
+    const defaultPath = homePath ? `${homePath}/.ssh` : undefined;
 
-    const success = await this.profileManager.testConnection(
-      url,
-      this.tokenInput.value || undefined
-    );
-
-    this.testButton.disabled = false;
-
-    if (success) {
-      this.showStatus("✓ Connection successful", "success");
-    } else {
-      this.showStatus("✗ Connection failed - check URL and network", "error");
+    const selectedPath = await pickFile(defaultPath);
+    if (selectedPath) {
+      this.keyInput.value = selectedPath;
     }
   }
 
   private async handleSave(): Promise<void> {
     const name = this.nameInput.value.trim();
-    const url = this.urlInput.value.trim();
-    const connectionType = this.connectionTypeSelect.value as "direct" | "ssh-tunnel";
+    const host = this.hostInput.value.trim();
+    const port = this.portInput.value.trim();
+    const user = this.userInput.value.trim();
+    const key = this.keyInput.value.trim();
 
     if (!name) {
-      this.showStatus("Please enter a profile name", "error");
       this.nameInput.focus();
       return;
     }
 
-    if (!url) {
-      this.showStatus("Please enter a backend URL", "error");
-      this.urlInput.focus();
+    if (!host) {
+      this.hostInput.focus();
       return;
     }
 
-    if (!this.isValidUrl(url)) {
-      this.showStatus("Invalid URL format", "error");
-      this.urlInput.focus();
+    if (!user) {
+      this.userInput.focus();
       return;
     }
 
-    if (connectionType === "ssh-tunnel") {
-      if (!this.sshHostInput.value.trim()) {
-        this.showStatus("Please enter SSH host", "error");
-        this.sshHostInput.focus();
-        return;
-      }
-      if (!this.localPortInput.value) {
-        this.showStatus("Please enter local port", "error");
-        this.localPortInput.focus();
-        return;
-      }
-      if (!this.remotePortInput.value) {
-        this.showStatus("Please enter remote port", "error");
-        this.remotePortInput.focus();
-        return;
-      }
+    if (!key) {
+      this.keyInput.focus();
+      return;
     }
+
+    const remotePort = port ? parseInt(port) : 3000;
+    const localPort = 3000;
 
     const profile: RemoteProfile = {
       id: this.profile?.id || generateId(),
       name,
-      url,
-      connectionType,
-      ...(this.tokenInput.value ? { authToken: this.tokenInput.value } : {}),
-      ...(this.pathInput.value ? { defaultPath: this.pathInput.value } : {}),
+      url: `http://localhost:${localPort}`,
+      connectionType: "ssh-tunnel",
+      sshHost: host,
+      sshUser: user,
+      sshKeyPath: key,
+      localPort,
+      remotePort,
       ...(this.profile?.lastUsed !== undefined ? { lastUsed: this.profile.lastUsed } : {}),
-      ...(connectionType === "ssh-tunnel" ? {
-        sshHost: this.sshHostInput.value.trim(),
-        localPort: parseInt(this.localPortInput.value),
-        remotePort: parseInt(this.remotePortInput.value),
-      } : {}),
     };
 
     try {
@@ -267,7 +270,6 @@ export class RemoteProfileEditor {
         this.onSave(profile);
       }
     } catch (error) {
-      this.showStatus("Failed to save profile", "error");
       console.error("Save error:", error);
     }
   }
@@ -275,26 +277,6 @@ export class RemoteProfileEditor {
   private handleCancel(): void {
     if (this.onCancel) {
       this.onCancel();
-    }
-  }
-
-  private isValidUrl(url: string): boolean {
-    try {
-      const parsed = new URL(url);
-      return parsed.protocol === "http:" || parsed.protocol === "https:";
-    } catch {
-      return false;
-    }
-  }
-
-  private showStatus(message: string, type: "info" | "success" | "error"): void {
-    this.statusMessage.textContent = message;
-    this.statusMessage.className = `form-status status-${type}`;
-    if (type !== "info") {
-      setTimeout(() => {
-        this.statusMessage.textContent = "";
-        this.statusMessage.className = "form-status";
-      }, 3000);
     }
   }
 

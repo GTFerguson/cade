@@ -58,8 +58,8 @@ export class Splash {
     this.keyHandler = (e: KeyboardEvent) => {
       // Options mode: navigate and select
       if (this.options) {
-        // Don't intercept keys when a modal overlay is open
-        if (document.querySelector(".modal-overlay")) return;
+        // Don't intercept keys when another screen is overlaid
+        if (document.querySelector(".modal-overlay, .remote-project-selector")) return;
 
         if (e.key === "ArrowUp" || e.key === "ArrowDown" ||
             e.key === "j" || e.key === "k") {
@@ -152,6 +152,13 @@ export class Splash {
 
     this.element.appendChild(container);
     this.renderSelection();
+
+    const helpEl = document.createElement("div");
+    helpEl.className = "splash-help";
+    helpEl.innerHTML =
+      `<div><span class="help-key">j/k</span> navigate</div>` +
+      `<div><span class="help-key">l</span> select</div>`;
+    this.element.appendChild(helpEl);
   }
 
   private renderSelection(): void {
