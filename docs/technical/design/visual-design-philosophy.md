@@ -1,7 +1,7 @@
 ---
 title: Visual Design Philosophy
 created: 2026-02-04
-updated: 2026-02-04
+updated: 2026-02-05
 status: complete
 tags: [design, ui, ux, philosophy]
 ---
@@ -19,9 +19,9 @@ CADE embraces terminal design language, not generic web UI conventions.
 **Design DNA:**
 - tmux/vim inspired layouts and interactions
 - Monospace typography throughout
-- Badwolf color scheme for consistency
 - ASCII art and bracket notation over rounded corners and gradients
 - Screen-based navigation (full-pane replacements, not overlays)
+- Zero border-radius, zero box-shadow, minimal transitions
 
 > [!IMPORTANT]
 > Avoid modern web UI patterns (modals, cards, shadows, rounded corners). CADE should feel like a powerful TUI (terminal user interface), not a web app.
@@ -68,6 +68,8 @@ CADE uses screen-based navigation, not modal overlays.
 - Back navigation (h/backspace) returns to previous screen
 - Clean transitions, no stacked layers
 
+**Exception:** Error recovery dialogs (e.g., auth token dialog) may use centered overlays since they interrupt an existing flow that must be preserved.
+
 **Why:**
 - Modals feel out of place in terminal aesthetics
 - Full-pane replacements match tmux window switching
@@ -102,6 +104,8 @@ All interactive elements and headers use bracket wrapping: `[LIKE THIS]`
 | Options | `[lowercase]` | `[local project]` |
 | Actions | `[+ prefix for new]` | `[+ new connection]` |
 | Status | `[state]` | `[loading]`, `[enter]` |
+| Viewer | `[ FILENAME.EXT ]` | `[ README.MD ]` |
+| Mode | `[MODE]` | `[NORMAL]`, `[EDIT]` |
 
 **Why brackets:**
 - Terminal/ASCII aesthetic
@@ -109,31 +113,51 @@ All interactive elements and headers use bracket wrapping: `[LIKE THIS]`
 - Consistent with tmux/vim status line conventions
 - Easy to distinguish interactive vs informational text
 
-### Color Scheme: Badwolf
+### Theme System
 
-CADE uses the Badwolf color palette throughout.
+CADE uses a theme system with 5 built-in palettes. All themes share the same accent colors (from the Badwolf palette) and vary only in neutral tones (backgrounds, text, borders).
 
-**Key Colors:**
+**Default theme:** True Black
+
+**Built-in themes:**
+
+| Theme | Background | Character |
+|-------|-----------|-----------|
+| True Black | `#0a0a09` | Near-black, maximum contrast |
+| Deep Contrast | `#141312` | Slightly lifted, still very dark |
+| Ember | `#110f0d` | Warm brown undertones |
+| Ink | `#0e0f10` | Cool blue-grey undertones |
+| Badwolf | `#1c1b1a` | Original Badwolf palette |
+
+**Shared accent colors (all themes):**
 
 | Usage | Color | Variable |
 |-------|-------|----------|
-| Background (primary) | `#1c1b1a` | `--bg-primary` |
-| Background (secondary) | `#242321` | `--bg-secondary` |
-| Text (primary) | `#f8f6f2` | `--text-primary` |
-| Text (muted) | `#857f78` | `--text-muted` |
-| Accent (red/headers) | `#ff2c4b` | `--accent-red` |
-| Accent (green/prompts) | `#aeee00` | `--accent-green` |
-| Accent (blue/paths) | `#0a9dff` | `--accent-blue` |
-| Accent (yellow/highlights) | `#ffa724` | `--accent-yellow` |
+| Headers / selection bg | `#ff2c4b` | `--accent-red` |
+| Prompts / help keys | `#aeee00` | `--accent-green` |
+| Paths / types | `#0a9dff` | `--accent-blue` |
+| Status mode indicators | `#ffa724` | `--accent-orange` |
+| Highlights | `#fade3e` | `--accent-yellow` |
+| Language tags | `#8cffba` | `--accent-cyan` |
+| Decorative | `#ff9eb8` | `--accent-purple` |
+
+**Theme architecture:**
+- Definitions in `frontend/src/config/themes.ts`
+- Selector UI in `frontend/src/ui/theme-selector.ts`
+- Keybinding: `prefix + t` opens TUI selector with live preview
+- Persistence: `localStorage` key `cade-theme`
+- Applied on DOMContentLoaded (before UI init) to prevent flash
+- Re-applied after server config merges to prevent override
+- Propagated to xterm.js terminals via `onThemeChange` listener
 
 > [!TIP]
-> Use semantic CSS variables, not raw hex values. This maintains consistency and allows future theme variants.
+> Use semantic CSS variables, not raw hex values. Themes work by overriding CSS custom properties on `:root` at runtime. All component styling should reference variables.
 
 ### Typography
 
 **Monospace everywhere:**
 - Font stack: `'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace`
-- Line height: `1.5` for readability
+- Line height: `1.5` for readability (code viewer uses `1.6`)
 - Letter spacing: `0.5px` (slightly looser for clarity)
 
 **Hierarchy:**
@@ -141,9 +165,9 @@ CADE uses the Badwolf color palette throughout.
 | Element | Size | Color | Transform |
 |---------|------|-------|-----------|
 | Headers | `16px` | `--accent-red` | `UPPERCASE` + `letter-spacing: 2px` |
-| Options | `14px` | `--text-primary` | As-is |
+| Options | `13px` | `--text-primary` | As-is |
 | Labels | `12px` | `--text-muted` | lowercase |
-| Help text | `13px` | `--text-muted` | As-is |
+| Help text | `11px` | `--text-muted` | As-is |
 
 ### Terminal Prompt Styling
 
@@ -159,7 +183,7 @@ path: ___________
 - Prompt label: `--accent-green`, inline with input
 - Input field: transparent background, bottom border only
 - No boxes, no rounded corners, no shadows
-- Cursor: block style when possible
+- Arrow keys navigate between fields and option buttons
 
 **Example CSS:**
 ```css
@@ -199,10 +223,11 @@ path: ___________
 ```
 
 **Behavior:**
-- Selected state: yellow highlight (`--accent-yellow`)
+- Selected state: `--accent-red` background highlight
 - Keyboard navigation: j/k to move, l/space/enter to select
 - Mouse optional: click to select and activate
 - Dividers separate sections (saved vs new actions)
+- Options: 13px, padding 6px 16px
 
 ### Headers
 
@@ -214,7 +239,7 @@ path: ___________
   letter-spacing: 2px;
   text-align: center;
   text-transform: uppercase;
-  margin-bottom: 24px; /* breathing room */
+  margin-bottom: 24px;
 }
 ```
 
@@ -238,8 +263,107 @@ Always show keyboard shortcuts at bottom of screen:
 
 **Style:**
 - Fixed to bottom of pane
-- Muted colors (`--text-muted`)
-- Highlight keybindings (`--accent-yellow` background, dark text)
+- Muted text (`--text-muted`), 11px
+- Key highlights: `--accent-green` color
+
+## Workspace Components
+
+The three-pane workspace has its own design vocabulary within the TUI system.
+
+### Tab Bar
+
+Flat, minimal tabs with pipe separators. No rounded corners, no chrome.
+
+- Active tab merges into content (bottom border removed, background matches content pane)
+- Inactive tabs: transparent background, muted text, bottom border visible
+- Pipe separators (`border-right`) between tabs
+- Remote indicators: text labels (`ssh`, `tcp`) instead of emoji
+- Add button: plain `+`, no brackets
+
+### File Tree
+
+Simple chevron indicators with indented hierarchy. No CSS-shape icons.
+
+- `▸` collapsed / `▾` expanded folders (text characters, not CSS triangles)
+- File names colored by type:
+  - Source files (`.ts`, `.js`, `.py`): `--accent-blue`
+  - Markup files (`.md`, `.html`): `--accent-green`
+  - Config files (`.json`, `.toml`): `--accent-yellow`
+  - Style files (`.css`): `--accent-red`
+- Indentation via padding only (no tree-drawing connectors)
+- Filter input: terminal prompt style, bottom border only
+- No colored dots, no folder icons, no file icons
+
+### Code Viewer (B5 Layout)
+
+Source code files use a two-column flex layout with sticky line numbers.
+
+**Structure:**
+```
+┌──────────────────────────────────────────┐
+│           [ FILENAME.TS ]                │  ← bracket header
+├────┬─────────────────────────────────────┤
+│  1 │ import { foo } from "./bar";       │  ← line numbers | code
+│  2 │                                     │     hairline border
+│  3 │ function main(): void {             │     between columns
+│  4 │   console.log("hello");             │
+│  5 │ }                                   │
+├────┴─────────────────────────────────────┤
+│ VIEW  src/main.ts     typescript  5 ln   │  ← vim statusline
+└──────────────────────────────────────────┘
+```
+
+**Key properties:**
+- Line numbers: `position: sticky; left: 0` (pinned during horizontal scroll)
+- Hairline border: `border-right: 1px solid var(--bg-tertiary)` between columns
+- Line numbers: `12px`, muted color, right-aligned, `user-select: none`
+- Code: `13px`, `white-space: pre`, `line-height: 1.6`
+- Syntax highlighting: highlight.js with `vs2015` theme
+- Both columns scroll together vertically; content scrolls horizontally
+- Statusline shows: mode (`VIEW`) + filepath + language + line count
+
+### Markdown Viewer
+
+Markdown files render with mertex.md (marked + highlight.js). Embedded code blocks use `bg-tertiary` background. YAML frontmatter renders as key-value pairs.
+
+**Modes:**
+- `VIEW` — Read-only, vim scroll keys (j/k/gg/G/Ctrl-d/Ctrl-u)
+- `NORMAL` — Milkdown editor in navigation mode (vim motions)
+- `EDIT` — Milkdown editor in insert mode
+
+### Viewer Header & Statusline
+
+**Header:** Bracket notation, centered, uppercase.
+```css
+.viewer-header {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 12px;
+  background: var(--bg-secondary);
+  text-align: center;
+}
+```
+
+**Statusline:** Vim-inspired, bottom-pinned.
+- Mode indicator: `--accent-orange`, bold
+- Filename: muted, ellipsis overflow
+- Language: `--accent-cyan` (code files only)
+- Line count: muted (code files only)
+
+### Terminal
+
+- Agent dropdown: bracket notation `[claude]`, `[shell]`
+- No border-radius, no box-shadow on dropdown
+- Status label (CLAUDE/SHELL) top-right
+- xterm.js theme synced with CADE theme via `onThemeChange` listener
+
+### File Creation Dialog
+
+TUI-style inline dialog (not a web modal):
+- Bracket header: `[ CREATE FILE ]`
+- Terminal prompt input: `path: ___`
+- Bracket options: `[create]` / `[cancel]`
+- Help text: `enter submit  esc cancel`
 
 ## Keyboard Interaction Patterns
 
@@ -256,6 +380,16 @@ All screens must use the same bindings for the same actions.
 | Select/confirm | `l`, `space` | `enter` | l = vim right/forward |
 | Back/cancel | `h`, `backspace` | `escape` (context) | h = vim left/back |
 
+**Prefix shortcuts (`Ctrl+a` then key):**
+
+| Key | Action |
+|-----|--------|
+| `t` | Open theme selector |
+| `n` | New tab |
+| `w` | Close tab |
+| `1-9` | Switch to tab N |
+| `?` | Help overlay |
+
 > [!WARNING]
 > Never use only one key for selection. Always support l/space/enter. Users have different preferences and muscle memory.
 
@@ -271,11 +405,20 @@ All screens must use the same bindings for the same actions.
 - l/space/enter: select item, advance to next screen
 - h/backspace: return to previous screen
 - Escape: blur input fields
+- Arrow keys: navigate between form fields and option buttons
 
 **File browser:**
 - j/k: navigate directories + "select current" button
 - l/space/enter: enter directory OR confirm selection (context-aware)
 - h/backspace: parent directory
+
+**Code/markdown viewer:**
+- j/k: scroll vertically
+- h/l: scroll horizontally (code blocks)
+- gg: scroll to top (double-tap)
+- G: scroll to bottom
+- Ctrl+d/Ctrl+u: page down/up
+- i: enter normal mode (markdown only)
 
 ### Event Handling
 
@@ -293,19 +436,19 @@ Always check if user is typing in an input field before handling navigation keys
 
 ## Anti-Patterns
 
-### ❌ Don't: Generic Web UI
+### Don't: Generic Web UI
 
 **Bad:**
-- Rounded corners on everything
-- Drop shadows and blur effects
-- Cards with padding and borders
+- Rounded corners on anything (`border-radius > 0`)
+- Drop shadows and blur effects (`box-shadow`)
+- Long transitions (`transition > 0.05s`)
 - Gradients and animations
 - Material Design / Bootstrap aesthetics
 
 **Why:**
 These visual patterns scream "web app" and clash with terminal aesthetics.
 
-### ❌ Don't: Modal Overlays
+### Don't: Modal Overlays
 
 **Bad:**
 ```html
@@ -319,7 +462,19 @@ These visual patterns scream "web app" and clash with terminal aesthetics.
 **Instead:**
 Full-pane replacements with back navigation.
 
-### ❌ Don't: Inconsistent Keybindings
+### Don't: Emoji/Icon UI Elements
+
+**Bad:**
+- 🔒 for SSH connections
+- 📁 for folders
+- Colored CSS-shape icons for file types
+
+**Instead:**
+- Text labels: `ssh`, `tcp`
+- Text chevrons: `▸`, `▾`
+- Colored filenames by type
+
+### Don't: Inconsistent Keybindings
 
 **Bad:**
 - Splash uses only Enter
@@ -329,7 +484,7 @@ Full-pane replacements with back navigation.
 **Why:**
 Users can't build muscle memory. Every screen feels different.
 
-### ❌ Don't: Mouse-Required Interactions
+### Don't: Mouse-Required Interactions
 
 **Bad:**
 - Drag-and-drop as only option
@@ -339,7 +494,7 @@ Users can't build muscle memory. Every screen feels different.
 **Why:**
 CADE is keyboard-first. Mouse support should be convenience, not necessity.
 
-### ❌ Don't: Auto-Restore Without Choice
+### Don't: Auto-Restore Without Choice
 
 **Bad:**
 ```typescript
@@ -387,53 +542,7 @@ If yes, make it opt-in instead. Examples:
 ### 5. Does this duplicate existing functionality?
 Check if the backend/frontend already does this. Reuse instead of rebuild.
 
-## Examples
-
-### Good: Remote Project Selector
-
-**Why it works:**
-- Full-pane replacement (not modal)
-- Bracket notation throughout: `[ BROWSE ]`, `[project name]`
-- Vim keybindings: j/k navigate, l select, h back
-- Terminal prompt inputs: `name: ___`
-- Reuses WebSocket file-tree protocol (DRY)
-- Badwolf colors consistently applied
-
-### Good: Session Resume Splash
-
-**Why it works:**
-- Opt-in restoration (user chooses)
-- Top option when available (easy to access)
-- Keyboard-first: j/k + l/space/enter
-- ASCII logo + bracket status: `[RESUME SESSION]`
-- Clean, centered layout
-
-### Bad: Hypothetical "Settings Modal"
-
-**Why it fails:**
-- Modal overlays clash with terminal aesthetic
-- Requires mouse to close (X button in corner)
-- Form fields look like web forms, not terminal
-- Inconsistent keybindings (Tab to navigate?)
-- Auto-saves settings without confirmation
-
-**Better approach:**
-Full-pane settings screen:
-- Bracket headers: `[ SETTINGS ]`
-- Terminal-style prompts: `theme: ___`
-- Vim navigation between fields
-- h to cancel, l to save
-- Screen replacement, not overlay
-
 ## Future Considerations
-
-### Themes
-
-If CADE adds theme support:
-- Keep Badwolf as default/canonical
-- Other themes should maintain terminal aesthetic
-- Avoid "light mode with pastels" (breaks philosophy)
-- Consider: Gruvbox, Nord, Dracula (terminal-focused palettes)
 
 ### Mobile/Touch
 
@@ -448,7 +557,7 @@ CADE's desktop-first philosophy may not translate to mobile:
 
 Terminal aesthetics can conflict with accessibility:
 - Monospace may be less readable for some users
-- Low contrast in some Badwolf combinations
+- Low contrast in some theme combinations
 - Keyboard-first is good for screen readers, but needs proper ARIA
 
 **Balance:** Maintain aesthetic while ensuring:
@@ -462,6 +571,7 @@ Terminal aesthetics can conflict with accessibility:
 - [[cli-conventions]] - Command-line interface design
 - [[tmux-integration-design]] - tmux workflow integration
 - `frontend/styles/main.css` - Reference implementation
+- `frontend/src/config/themes.ts` - Theme definitions
 - `frontend/src/remote/RemoteProjectSelector.ts` - Exemplar component
 
 ---
