@@ -1,0 +1,99 @@
+/* CADE — Splash screen, scramble effect phases */
+
+.splash {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  transition: opacity 0.3s ease;
+}
+
+.splash.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-logo {
+  color: var(--accent-red);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.splash-status {
+  margin-top: 24px;
+  color: var(--accent-red);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.splash-status.blink {
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.splash-options {
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.splash-option {
+  padding: 6px 16px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 0.1s, color 0.1s;
+}
+
+.splash-option:hover {
+  background: var(--bg-hover);
+}
+
+.splash-option.selected {
+  background: var(--accent-red);
+  color: var(--bg-primary);
+}
+
+.splash-help {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  line-height: 1.6;
+  text-align: right;
+}
+
+.splash-help .help-key {
+  color: var(--accent-green);
+}
+
+/* Splash phase colors for scramble effects */
+.splash-logo.phase-binary { color: var(--accent-green); }
+.splash-logo.phase-blocks { color: var(--accent-orange); }
+.splash-logo.phase-final  { color: var(--accent-red); }
+.splash-logo.phase-dying  { color: var(--text-muted); }
+
+/* Mobile splash logo variant */
+.splash-logo-mobile {
+  color: var(--accent-red);
+  font-size: 11px;
+  line-height: 1.15;
+  white-space: pre;
+  font-family: Consolas, 'Courier New', 'Liberation Mono', monospace;
+  font-variant-ligatures: none;
+  letter-spacing: 0;
+}

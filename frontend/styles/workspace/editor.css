@@ -1,0 +1,121 @@
+/* CADE — Milkdown editor overrides, cursor styling */
+
+/* Milkdown editor styles */
+.milkdown-editor {
+  flex: 1;
+  overflow: auto;
+  background: var(--bg-primary);
+  padding: 16px;
+}
+
+.milkdown-editor .milkdown {
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* Override Milkdown Nord theme with Badwolf colors */
+.milkdown-editor .editor {
+  background: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.milkdown-editor .prose {
+  max-width: 100%;
+  color: var(--text-primary);
+}
+
+.milkdown-editor h1,
+.milkdown-editor h2,
+.milkdown-editor h3,
+.milkdown-editor h4,
+.milkdown-editor h5,
+.milkdown-editor h6 {
+  color: var(--text-primary) !important;
+  font-weight: 600;
+}
+
+.milkdown-editor h1 {
+  font-size: 24px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+}
+
+.milkdown-editor h2 {
+  font-size: 20px;
+}
+
+.milkdown-editor h3 {
+  font-size: 16px;
+}
+
+.milkdown-editor a {
+  color: var(--accent-blue) !important;
+}
+
+.milkdown-editor code {
+  background: var(--bg-tertiary) !important;
+  color: var(--accent-orange) !important;
+  padding: 2px 6px;
+  border-radius: 0;
+  font-family: var(--font-mono);
+}
+
+.milkdown-editor pre {
+  background: var(--bg-tertiary) !important;
+  border-radius: 0;
+  padding: 12px;
+}
+
+.milkdown-editor pre code {
+  background: transparent !important;
+  padding: 0;
+}
+
+.milkdown-editor blockquote {
+  border-left: 4px solid var(--accent-blue) !important;
+  padding-left: 12px;
+  color: var(--text-secondary);
+}
+
+.milkdown-editor table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.milkdown-editor th,
+.milkdown-editor td {
+  border: 1px solid var(--border-color) !important;
+  padding: 8px 12px;
+}
+
+.milkdown-editor th {
+  background: var(--bg-tertiary) !important;
+  font-weight: 600;
+}
+
+.milkdown-editor .ProseMirror-focused {
+  outline: none;
+}
+
+/* Normal mode cursor styling */
+.milkdown-editor.mode-normal .ProseMirror {
+  caret-color: var(--accent-orange);
+}
+
+.milkdown-editor.mode-normal .ProseMirror::selection,
+.milkdown-editor.mode-normal .ProseMirror *::selection {
+  background-color: rgba(255, 167, 36, 0.4);
+}
+
+/* Edit mode - normal caret */
+.milkdown-editor.mode-edit .ProseMirror {
+  caret-color: var(--accent-green);
+}
+
+.milkdown-editor.mode-edit .ProseMirror::selection,
+.milkdown-editor.mode-edit .ProseMirror *::selection {
+  background-color: rgba(174, 238, 0, 0.3);
+}

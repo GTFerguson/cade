@@ -48,7 +48,7 @@ Issues with terminal display and interaction that need investigation and fixing.
 Force hide xterm cursor for Claude terminal regardless of theme state:
 
 ```css
-/* In frontend/styles/main.css */
+/* In frontend/styles/workspace/terminal.css */
 .terminal-claude .xterm-cursor-layer {
   display: none !important;
 }
@@ -230,7 +230,7 @@ This breaks Unix convention but prioritizes familiar copy/paste for CADE's brows
 **Resolution:** Removed `text-align: center` from `.splash-logo` in `main.css`. The parent `.splash` container already uses flexbox centering, so the text-align was unnecessary and was interfering with `<pre>` whitespace preservation.
 
 **Related code:**
-- `frontend/styles/main.css:1106-1112` - `.splash-logo` styling
+- `frontend/styles/screens/splash.css` - `.splash-logo` styling
 
 ### ~~5. Tab Position Bug on Project Switch~~ ✓ RESOLVED
 

@@ -1,0 +1,93 @@
+/* CADE — File tree hierarchy, chevrons, type colors, search input */
+
+/* File tree styles */
+.file-tree-root {
+  list-style: none;
+  padding: 8px 0;
+}
+
+.file-tree-item {
+  list-style: none;
+}
+
+.file-tree-row {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.file-tree-row:hover {
+  background: var(--bg-hover);
+}
+
+.file-tree-row.selected {
+  background: var(--bg-selected);
+}
+
+.file-tree-row.recently-changed {
+  background: rgba(78, 154, 6, 0.2);
+}
+
+/* Chevron - text character ▸/▾ */
+.file-tree-chevron {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Expanded folder name emphasis */
+.file-tree-row:has(.file-tree-chevron.expanded) .file-tree-name {
+  font-weight: 600;
+}
+
+/* Spacer for alignment (files without chevron) */
+.file-tree-spacer {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* File type colors applied to filename */
+.file-tree-name.source { color: var(--accent-blue); }
+.file-tree-name.markup { color: var(--accent-green); }
+.file-tree-name.config { color: var(--accent-orange); }
+.file-tree-name.style { color: var(--accent-purple); }
+
+.file-tree-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-tree-children {
+  list-style: none;
+}
+
+/* File tree search input */
+.file-tree-search {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.file-tree-search-input {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+}
+
+.file-tree-search-input::placeholder {
+  color: var(--text-muted);
+}

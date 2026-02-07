@@ -1,0 +1,154 @@
+/* CADE — Tab bar, tab states, remote indicators */
+
+/* Tab bar styles */
+.tab-bar {
+  display: grid;
+  grid-template-columns: var(--layout-file-tree) 4px var(--layout-terminal) 4px var(--layout-viewer);
+  height: 36px;
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+  position: relative;
+  overflow: visible; /* Allow window controls to extend beyond grid */
+}
+
+/* Empty space above file tree - DRAGGABLE in Tauri */
+.tab-bar::before {
+  content: '';
+  grid-column: 1 / 3;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* Empty space above viewer - DRAGGABLE in Tauri */
+.tab-bar::after {
+  content: '';
+  grid-column: 4 / 6;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tab-area {
+  grid-column: 3;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Draggable spacers replace pseudo-elements in Tauri */
+.tab-bar-spacer-left {
+  grid-column: 1 / 3;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  cursor: move; /* Visual feedback that this area is draggable */
+}
+
+.tab-bar-spacer-right {
+  grid-column: 4 / 6;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  cursor: move; /* Visual feedback that this area is draggable */
+}
+
+.tab-bar.empty::before,
+.tab-bar.empty::after,
+.tab-bar.empty .tab-bar-spacer-left,
+.tab-bar.empty .tab-bar-spacer-right,
+.tab-bar.empty .tab-area {
+  border-bottom: none;
+}
+
+.tab-bar.empty .tab-add-button {
+  display: none;
+}
+
+.tab-list {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  min-width: 0;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+  cursor: pointer;
+  max-width: 200px;
+  min-width: 80px;
+  pointer-events: auto;
+}
+
+.tab:hover {
+  background: var(--bg-hover);
+}
+
+.tab.active {
+  background: var(--bg-primary);
+  border-bottom-color: var(--bg-primary);
+}
+
+.tab-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tab.active .tab-name {
+  color: var(--text-primary);
+}
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 0;
+  opacity: 0;
+  pointer-events: auto;
+}
+
+.tab:hover .tab-close {
+  opacity: 0.6;
+}
+
+.tab-close:hover {
+  opacity: 1;
+  color: var(--accent-red);
+}
+
+.tab-add-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 22px;
+  cursor: pointer;
+  margin-left: 4px;
+  flex-shrink: 0;
+  pointer-events: auto;
+}
+
+.tab-add-button:hover {
+  color: var(--text-primary);
+}

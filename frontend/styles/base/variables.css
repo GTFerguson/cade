@@ -1,0 +1,43 @@
+/* CADE — CSS custom properties (theme variables) */
+
+:root {
+  /* Background colors - True Black (default theme) */
+  --bg-primary: #0a0a09;
+  --bg-secondary: #111110;
+  --bg-tertiary: #1a1918;
+  --bg-hover: #222120;
+  --bg-selected: #222120;
+
+  /* Text colors */
+  --text-primary: #f8f6f2;
+  --text-secondary: #c4b9ad;
+  --text-muted: #5e5955;
+
+  /* Accent colors - badwolf highlights (shared across all themes) */
+  --accent-blue: #0a9dff; /* tardis */
+  --accent-green: #aeee00; /* lime */
+  --accent-orange: #ffa724; /* orange */
+  --accent-yellow: #fade3e; /* dalespale */
+  --accent-purple: #ff9eb8; /* dress */
+  --accent-red: #ff2c4b; /* taffy */
+  --accent-cyan: #8cffba; /* saltwatertaffy */
+
+  /* Border colors */
+  --border-color: #2a2827;
+  --border-focus: #aeee00; /* lime */
+
+  /* Scrollbar */
+  --scrollbar-bg: #0a0a09;
+  --scrollbar-thumb: #2a2827;
+  --scrollbar-thumb-hover: #5e5955;
+
+  /* Font */
+  --font-mono: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+    Ubuntu, sans-serif;
+
+  /* Layout proportions (updated dynamically by Layout.ts) */
+  --layout-file-tree: 20%;
+  --layout-terminal: 50%;
+  --layout-viewer: 30%;
+}

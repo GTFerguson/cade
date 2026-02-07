@@ -1,7 +1,7 @@
 ---
 title: Visual Design Philosophy
 created: 2026-02-04
-updated: 2026-02-05
+updated: 2026-02-07
 status: complete
 tags: [design, ui, ux, philosophy]
 ---
@@ -153,6 +153,34 @@ CADE uses a theme system with 5 built-in palettes. All themes share the same acc
 > [!TIP]
 > Use semantic CSS variables, not raw hex values. Themes work by overriding CSS custom properties on `:root` at runtime. All component styling should reference variables.
 
+**CSS directory structure:**
+
+`frontend/styles/main.css` is a thin `@import` index — Vite inlines everything at build time (zero runtime cost). Files are ordered from most foundational to most specific (ITCSS pattern):
+
+```
+frontend/styles/
+├── main.css              ← @import index only
+├── mobile.css            ← Mobile/touch overrides (cross-cutting)
+├── base/
+│   ├── variables.css     ← :root custom properties
+│   └── reset.css         ← Reset, html/body, scrollbar
+├── layout/
+│   ├── structure.css     ← App wrapper, 3-pane grid, resize handles
+│   └── tabs.css          ← Tab bar, tab states
+├── workspace/
+│   ├── file-tree.css     ← Tree hierarchy, chevrons, type colors
+│   ├── viewer.css        ← Code/markdown viewer, frontmatter, tables
+│   ├── editor.css        ← Milkdown overrides, cursor styling
+│   └── terminal.css      ← Terminal, neovim, agent multi-terminal
+└── screens/
+    ├── dialogs.css       ← File creation, auth token, settings
+    ├── splash.css        ← Splash screen, scramble effect phases
+    ├── overlays.css      ← Help overlay, theme selector, keyboard nav
+    └── remote.css        ← Remote profiles, project selector, big-toggle
+```
+
+Import order = cascade order. Add new component styles to the appropriate file; add new files to the index in the correct layer.
+
 ### Typography
 
 **Monospace everywhere:**
@@ -228,6 +256,24 @@ path: ___________
 - Mouse optional: click to select and activate
 - Dividers separate sections (saved vs new actions)
 - Options: 13px, padding 6px 16px
+
+### Binary Toggle
+
+Use for any two-state mode selection (e.g., direct/ssh-tunnel, on/off). Default/preferred option goes on the left.
+
+**Structure:**
+```html
+<div class="big-toggle">
+  <div class="big-toggle-half active" data-mode="a">option a</div>
+  <div class="big-toggle-divider"></div>
+  <div class="big-toggle-half" data-mode="b">option b</div>
+</div>
+```
+
+Toggle `.active` class between halves on click. All visual styling (fill, text color, divider, font weight) is handled by CSS.
+
+CSS: `.big-toggle`, `.big-toggle-half`, `.big-toggle-half.active`, `.big-toggle-divider` (`screens/remote.css`)
+Reference: `frontend/src/remote/RemoteProfileEditor.ts`
 
 ### Headers
 
@@ -365,6 +411,44 @@ TUI-style inline dialog (not a web modal):
 - Bracket options: `[create]` / `[cancel]`
 - Help text: `enter submit  esc cancel`
 
+### Splash Screen
+
+The app entry point. Two modes:
+
+**Status mode** — ASCII logo + `[loading]`/`[enter]` status. Dismiss with Enter/Space/tap. Used during connection/initialization.
+
+**Options mode** — Logo + selectable actions (Local/Remote/Resume). j/k navigate, Enter/l select. MenuNav-powered.
+
+**Scramble effects** — Load-in and dismiss animations using character replacement (binary `01`, braille patterns, ghost punctuation, block chars). Color phases: green → orange → red → muted.
+
+**Mobile** — Narrower box-drawing logo, 14px font, no transform scaling.
+
+CSS: `.splash`, `.splash-logo`, `.splash-status`, `.splash-options`, `.splash-help` (`screens/splash.css`)
+Files: `frontend/src/ui/splash.ts`, `frontend/src/ui/splash-effects.ts`
+
+### Mobile Adaptation
+
+CADE adapts to touch devices (≤768px) with enlarged targets and gesture navigation.
+
+**Touch Toolbar** (`.touch-toolbar`):
+- Fixed bottom bar, 48px height
+- Keys: `esc`, `tab`, `^c`, `^d`, `↑`, `[cmd]`
+- Pipe separators between keys
+- `[cmd]` button: accent-red, opens command menu
+- Repositions above virtual keyboard when detected
+
+**Full-Pane Screens** (`.mobile-screen`):
+- Stack-based navigation via `ScreenManager`
+- Swipe right from edge to go back
+- Standard structure: `.mobile-screen-header` + `.mobile-screen-body` + `.mobile-screen-statusline`
+- Touch-safe scrolling (`-webkit-overflow-scrolling: touch`)
+
+**Touch targets:** Minimum 48px hit area for all interactive elements.
+
+**Command Menu:** Full-pane option list, section labels, tab indicators.
+
+Files: `frontend/src/ui/mobile.ts`, `frontend/src/ui/touch-toolbar.ts`, `frontend/src/ui/mobile/`
+
 ## Keyboard Interaction Patterns
 
 ### Consistency is Critical
@@ -392,6 +476,52 @@ All screens must use the same bindings for the same actions.
 
 > [!WARNING]
 > Never use only one key for selection. Always support l/space/enter. Users have different preferences and muscle memory.
+
+### MenuNav Controller
+
+All TUI screens share a single navigation controller (`MenuNav`) that handles vim keybindings, selection state, and input field navigation.
+
+**Usage:** Create a `MenuNav` instance, delegate `keydown` events to it, and call `wireClickHandlers()` for mouse support.
+
+**Provided behaviors:**
+- j/k navigation with circular wrapping
+- l/Space/Enter to select
+- h/Backspace to go back, Escape to cancel
+- Arrow ↑/↓ between input fields and option buttons
+- Auto-blur input on Escape
+- `renderSelection()` toggles `.selected` class
+
+**Utilities:**
+- `escapeHtml(text)` — safe entity escaping for dynamic content
+- `renderHelpBar(bindings)` — generates `.pane-help` with `.help-key` spans
+
+File: `frontend/src/ui/menu-nav.ts`
+Used by: splash, auth dialog, remote selector, profile editor, theme selector
+
+### Form Interaction Patterns
+
+Forms combine terminal prompt inputs with option buttons. Navigation flows between them seamlessly:
+
+- **↑/↓ arrows** move between input fields (when focused on an input)
+- **↓ from last input** jumps to first option button
+- **↑ from first option** jumps to last input field
+- **Tab** advances to next field
+- **Escape** blurs current input (returns to option navigation)
+- **Enter in input** can submit (context-dependent)
+
+**Validation:** Focus the first empty required field. No inline error messages — the focus itself indicates the problem.
+
+**Conditional fields:** Toggle visibility with `display: none`. Re-focus first visible field in new group on mode switch.
+
+### Multi-Screen Flows
+
+Complex features use a screen stack (connections → projects → browse).
+
+- Each screen is a full-pane replacement (consistent with Principle 4)
+- h/Backspace pops back to previous screen
+- Escape cancels entire flow
+- State preserved when navigating back
+- MenuNav instance per screen
 
 ### Screen-Specific Behaviors
 
@@ -544,15 +674,6 @@ Check if the backend/frontend already does this. Reuse instead of rebuild.
 
 ## Future Considerations
 
-### Mobile/Touch
-
-CADE's desktop-first philosophy may not translate to mobile:
-- Touch requires larger targets (conflicts with dense terminal layout)
-- Virtual keyboard reduces screen space
-- Touch gestures don't map to vim keybindings
-
-**Recommendation:** Keep mobile as "view-only" or simplified interface, not primary target.
-
 ### Accessibility
 
 Terminal aesthetics can conflict with accessibility:
@@ -570,9 +691,13 @@ Terminal aesthetics can conflict with accessibility:
 
 - [[cli-conventions]] - Command-line interface design
 - [[tmux-integration-design]] - tmux workflow integration
-- `frontend/styles/main.css` - Reference implementation
+- `frontend/styles/` - CSS directory (see CSS directory structure above)
 - `frontend/src/config/themes.ts` - Theme definitions
+- `frontend/src/ui/menu-nav.ts` - MenuNav controller
+- `frontend/src/ui/splash.ts` - Splash screen
+- `frontend/src/ui/mobile.ts` - Mobile coordinator
 - `frontend/src/remote/RemoteProjectSelector.ts` - Exemplar component
+- `frontend/src/remote/RemoteProfileEditor.ts` - Binary toggle exemplar
 
 ---
 

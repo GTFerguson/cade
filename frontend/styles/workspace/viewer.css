@@ -1,0 +1,319 @@
+/* CADE — Viewer header/statusline, code view, markdown, frontmatter, tables, edit/normal modes */
+
+/* Viewer styles */
+.viewer-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 6px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  position: relative;
+}
+
+.viewer-filename {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-close-btn {
+  position: absolute;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.viewer-close-btn:hover {
+  color: var(--accent-red);
+}
+
+.viewer-content {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.viewer-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* Vim-style statusline at bottom of viewer */
+.viewer-statusline {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.viewer-statusline .status-mode {
+  color: var(--accent-orange);
+  font-weight: 600;
+  margin-right: 12px;
+}
+
+.viewer-statusline .status-filename {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-statusline .status-lang {
+  color: var(--accent-cyan);
+  margin-left: auto;
+}
+
+.viewer-statusline .status-lines {
+  color: var(--text-muted);
+  margin-left: 12px;
+}
+
+/* Code viewer — two-column layout (line numbers | code) */
+.viewer-content.code-viewer {
+  padding: 0;
+}
+
+.code-view {
+  display: flex;
+  min-width: fit-content;
+  min-height: 100%;
+  line-height: 1.6;
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+
+.code-numbers {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg-primary);
+  flex-shrink: 0;
+  padding: 8px 12px 8px 16px;
+  text-align: right;
+  user-select: none;
+  border-right: 1px solid var(--bg-tertiary);
+}
+
+.code-numbers .ln {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.code-body {
+  flex: 1;
+  padding: 8px 12px 8px 16px;
+}
+
+.code-body .code-line {
+  white-space: pre;
+}
+
+/* Markdown embedded code blocks */
+.viewer-content pre {
+  background: var(--bg-tertiary);
+  border-radius: 0;
+  padding: 12px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.viewer-content code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.viewer-content .inline-code {
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 0;
+}
+
+/* Markdown styles */
+.viewer-content h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 16px 0 8px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+}
+
+.viewer-content h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 16px 0 8px;
+  color: var(--text-primary);
+}
+
+.viewer-content h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 12px 0 8px;
+  color: var(--text-primary);
+}
+
+.viewer-content p {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.viewer-content ul,
+.viewer-content ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.viewer-content li {
+  margin: 4px 0;
+  line-height: 1.6;
+}
+
+.viewer-content blockquote {
+  border-left: 4px solid var(--accent-blue);
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--text-secondary);
+}
+
+.viewer-content a {
+  color: var(--accent-blue);
+  text-decoration: none;
+}
+
+.viewer-content a:hover {
+  text-decoration: underline;
+}
+
+.viewer-content .wiki-link {
+  color: var(--accent-purple);
+}
+
+.viewer-content strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.viewer-content em {
+  font-style: italic;
+}
+
+/* Frontmatter display */
+.frontmatter {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.frontmatter-row {
+  padding: 2px 0;
+}
+
+.frontmatter-key {
+  color: var(--accent-blue);
+}
+
+.frontmatter-separator {
+  color: var(--text-muted);
+}
+
+.frontmatter-value {
+  color: var(--text-secondary);
+}
+
+/* Table styles */
+.viewer-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 16px 0;
+}
+
+.viewer-content th,
+.viewer-content td {
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.viewer-content th {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.viewer-content tr:nth-child(even) {
+  background: var(--bg-secondary);
+}
+
+.viewer-content tr:hover {
+  background: var(--bg-hover);
+}
+
+/* Edit mode styles */
+.viewer-header.edit-mode {
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--accent-green);
+}
+
+/* Normal mode styles */
+.viewer-header.normal-mode {
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--accent-orange);
+}
+
+.mode-indicator {
+  position: absolute;
+  right: 8px;
+  padding: 2px 8px;
+  background: transparent;
+  color: var(--accent-green);
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.mode-indicator.mode-normal {
+  color: var(--accent-orange);
+  background: transparent;
+}
+
+.mode-indicator.mode-edit {
+  color: var(--accent-green);
+  background: transparent;
+}
+
+.viewer-dirty-indicator {
+  position: absolute;
+  left: 8px;
+  color: var(--accent-orange);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
