@@ -112,63 +112,111 @@ options:
 ## Project Structure
 
 ```
-cade/
-├── backend/
-│   ├── __init__.py       # Package init
-│   ├── main.py           # Entry point, FastAPI app
-│   ├── config.py         # Configuration management
-│   ├── protocol.py       # WebSocket message types
-│   ├── types.py          # Data types (FileNode, etc.)
-│   ├── errors.py         # Custom exceptions
-│   ├── pty_manager.py    # PTY lifecycle (cross-platform)
-│   ├── websocket.py      # WebSocket handlers
-│   ├── file_watcher.py   # File system watching
-│   └── file_tree.py      # Tree building and file reading
-│
-├── frontend/
-│   ├── index.html        # Main HTML
-│   ├── src/
-│   │   ├── main.ts       # Entry point
-│   │   ├── config.ts     # Client config
-│   │   ├── protocol.ts   # Message types (mirrors backend)
-│   │   ├── types.ts      # TypeScript interfaces
-│   │   ├── websocket.ts  # WebSocket client
-│   │   ├── terminal.ts   # xterm.js wrapper
-│   │   ├── markdown.ts   # Markdown/code viewer
-│   │   ├── file-tree.ts  # File tree component
-│   │   └── layout.ts     # Three-pane layout
-│   ├── styles/
-│   │   └── main.css      # Dark theme styles
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── vite.config.ts
-│
-├── pyproject.toml        # Python project config
-├── requirements.txt      # Python dependencies
-└── README.md             # This file
+backend/
+├── main.py                # FastAPI app, CLI entry point
+├── config.py              # Configuration management
+├── protocol.py            # WebSocket message types
+├── auth.py                # Token auth + session cookies
+├── websocket.py           # WebSocket handler
+├── models.py              # Data models
+├── middleware.py           # CORS setup
+├── connection_registry.py # Multi-connection tracking
+├── cc_session_resolver.py # Claude Code session discovery
+├── files/                 # File operations
+│   ├── tree.py            # File tree building
+│   ├── watcher.py         # Filesystem watching
+│   ├── operations.py      # Read/write/create
+│   └── user_config.py     # User config files
+├── terminal/              # PTY management
+│   ├── pty.py, sessions.py, connections.py
+├── hooks/                 # Claude Code hook integration
+├── neovim/                # Neovim backend support
+├── wsl/                   # WSL path translation & health
+└── tests/
+
+frontend/src/
+├── main.ts                # App entry point
+├── config/                # Config, themes, user preferences
+├── platform/              # protocol.ts, websocket.ts, tauri-bridge.ts
+├── terminal/              # xterm.js terminal + session manager
+├── markdown/              # Markdown/code viewer + editor
+├── file-tree/             # File tree component
+├── tabs/                  # Tab management + project context
+├── remote/                # Remote connection profiles, SSH
+├── agents/                # Agent session management
+├── input/                 # Keybinding system
+├── ui/                    # Splash, layout, help, theme selector, mobile
+├── neovim/                # Neovim pane
+├── auth/                  # Token management
+└── right-pane/            # Right pane manager
+
+desktop/                   # Tauri 2.0 native wrapper (Windows, macOS, Linux)
+scripts/                   # Build, deploy, and dev scripts
 ```
 
 ## WebSocket Protocol
 
-### Client -> Server
+The protocol is defined in `backend/protocol.py` (server) and `frontend/src/platform/protocol.ts` (client). All messages are JSON with a `type` field.
 
-| Type | Payload | Description |
-|------|---------|-------------|
-| `input` | `{ data: string }` | Terminal input |
-| `resize` | `{ cols: number, rows: number }` | Terminal resize |
-| `get-tree` | `{}` | Request file tree |
-| `get-file` | `{ path: string }` | Request file content |
+### Terminal
 
-### Server -> Client
+| Type | Direction | Payload | Description |
+|------|-----------|---------|-------------|
+| `input` | C→S | `{ data, sessionKey? }` | Terminal input |
+| `resize` | C→S | `{ cols, rows, sessionKey? }` | Terminal resize |
+| `output` | S→C | `{ data, sessionKey? }` | Terminal output |
+| `pty-exited` | S→C | `{ code, message, sessionKey? }` | PTY process exited |
 
-| Type | Payload | Description |
-|------|---------|-------------|
-| `connected` | `{ workingDir: string }` | Connection established |
-| `output` | `{ data: string }` | Terminal output |
-| `file-tree` | `{ data: FileNode[] }` | File tree response |
-| `file-content` | `{ path, content, fileType }` | File content |
-| `file-change` | `{ event, path }` | File changed |
-| `error` | `{ code, message }` | Error message |
+### Files
+
+| Type | Direction | Payload | Description |
+|------|-----------|---------|-------------|
+| `get-tree` | C→S | `{}` | Request file tree |
+| `get-file` | C→S | `{ path }` | Request file content |
+| `write-file` | C→S | `{ path, content }` | Write file |
+| `create-file` | C→S | `{ path, content? }` | Create new file |
+| `get-children` | C→S | `{ path, showIgnored? }` | Request directory children |
+| `browse-children` | C→S | `{ path }` | Browse absolute filesystem path |
+| `file-tree` | S→C | `{ data: FileNode[] }` | File tree response |
+| `file-children` | S→C | `{ path, children }` | Directory children response |
+| `file-content` | S→C | `{ path, content, fileType }` | File content |
+| `file-written` | S→C | `{ path }` | Write confirmation |
+| `file-created` | S→C | `{ path }` | Create confirmation |
+| `file-change` | S→C | `{ event, path }` | Filesystem change notification |
+| `view-file` | S→C | `{ path, content, fileType, isPlan? }` | External view request (e.g. plan overlay) |
+
+### Session
+
+| Type | Direction | Payload | Description |
+|------|-----------|---------|-------------|
+| `connected` | S→C | `{ workingDir }` | Connection established |
+| `set-project` | C→S | `{ path, sessionId? }` | Set project directory |
+| `save-session` | C→S | `{ state }` | Persist session state |
+| `session-restored` | S→C | `{ sessionId, scrollback }` | Session reattached after reconnect |
+| `startup-status` | S→C | `{ message }` | Startup progress indicator |
+| `get-latest-plan` | C→S | `{}` | Request most recent plan file |
+
+### Neovim
+
+| Type | Direction | Payload | Description |
+|------|-----------|---------|-------------|
+| `neovim-spawn` | C→S | `{ sessionId }` | Spawn Neovim instance |
+| `neovim-kill` | C→S | `{ sessionId }` | Terminate Neovim |
+| `neovim-input` | C→S | `{ data }` | Terminal input to Neovim |
+| `neovim-resize` | C→S | `{ cols, rows }` | Resize Neovim terminal |
+| `neovim-rpc` | C→S | `{ method, args, requestId }` | RPC command |
+| `neovim-ready` | S→C | `{ pid }` | Neovim running |
+| `neovim-output` | S→C | `{ data }` | Terminal output from Neovim |
+| `neovim-rpc-response` | S→C | `{ requestId, result?, error? }` | RPC response |
+| `neovim-exited` | S→C | `{ exitCode }` | Neovim exited |
+
+### Errors
+
+| Type | Direction | Payload | Description |
+|------|-----------|---------|-------------|
+| `error` | S→C | `{ code, message }` | Error response |
+
+Error codes: `pty-spawn-failed`, `pty-read-failed`, `pty-write-failed`, `file-not-found`, `file-read-failed`, `file-write-failed`, `file-create-failed`, `file-exists`, `invalid-path`, `invalid-message`, `pty-exited`, `internal-error`, `neovim-spawn-failed`, `neovim-not-found`, `neovim-rpc-failed`
 
 ## License
 
