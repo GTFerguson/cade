@@ -4,7 +4,7 @@ import { RemoteProfileEditor } from "./RemoteProfileEditor";
 import { WebSocketClient } from "../platform/websocket";
 import { toWebSocketUrl } from "../platform/url-utils";
 import { MenuNav, escapeHtml } from "../ui/menu-nav";
-import { buildTunnelArgs, computeParentPath, filterDirectories, sortProjectsByLastUsed } from "./profile-utils";
+import { buildTunnelArgs, computeParentPath, filterDirectories, sortProjectsByLastUsed, getProfileDisplayMeta } from "./profile-utils";
 import type { FileNode } from "../types";
 
 type Screen = "connections" | "projects" | "new-project" | "new-connection" | "browse";
@@ -28,6 +28,8 @@ export class RemoteProjectSelector {
   private nav: MenuNav;
   private boundHandleKeyDown: (e: KeyboardEvent) => void;
   private ws: WebSocketClient | null = null;
+  private wsUrl: string = "";
+  private wsAuthToken: string | undefined;
   private tunnelPid: number | undefined;
   private currentBrowsePath: string = "";
   private browseEntries: FileNode[] = [];
@@ -43,6 +45,7 @@ export class RemoteProjectSelector {
       getInputFields: () => this.container.querySelectorAll<HTMLInputElement>(".input-field"),
       onSelect: () => this.handleSelect(),
       onBack: () => this.handleBack(),
+      onCancel: () => this.handleEscape(),
     });
 
     this.boundHandleKeyDown = (e: KeyboardEvent) => this.nav.handleKeyDown(e);
@@ -94,8 +97,25 @@ export class RemoteProjectSelector {
     } else if (this.currentScreen === "new-project") {
       this.showProjectsScreen();
     } else if (this.currentScreen === "browse") {
-      this.navigateToParent();
+      const parent = computeParentPath(this.currentBrowsePath);
+      if (parent !== this.currentBrowsePath) {
+        this.navigateToDirectory(parent);
+      } else {
+        this.showNewProjectScreen();
+      }
     } else if (this.currentScreen === "connections") {
+      this.close();
+    }
+  }
+
+  private handleEscape(): void {
+    if (this.currentScreen === "browse") {
+      this.showNewProjectScreen();
+    } else if (this.currentScreen === "new-project") {
+      this.showProjectsScreen();
+    } else if (this.currentScreen === "projects") {
+      this.showConnectionsScreen();
+    } else {
       this.close();
     }
   }
@@ -104,18 +124,11 @@ export class RemoteProjectSelector {
     this.currentBrowsePath = path;
     this.nav.reset();
     if (this.ws) {
-      this.ws.requestChildren(path);
+      this.ws.requestBrowseChildren(path);
       const browserList = this.container.querySelector('.browser-list');
       if (browserList) {
         browserList.innerHTML = '<p style="color: var(--text-muted); text-align: center;">Loading...</p>';
       }
-    }
-  }
-
-  private navigateToParent(): void {
-    const parent = computeParentPath(this.currentBrowsePath);
-    if (parent !== this.currentBrowsePath) {
-      this.navigateToDirectory(parent);
     }
   }
 
@@ -150,7 +163,7 @@ export class RemoteProjectSelector {
             ${this.profiles.map((profile, i) => `
               <div class="option ${i === 0 ? 'selected' : ''}" data-index="${i}">
                 <span class="option-label">[${escapeHtml(profile.name)}]</span>
-                <span class="option-meta">${escapeHtml(profile.url)}</span>
+                <span class="option-meta">${escapeHtml(getProfileDisplayMeta(profile))}</span>
               </div>
             `).join("")}
             <div class="divider"></div>
@@ -230,14 +243,22 @@ export class RemoteProjectSelector {
         return;
       }
 
-      const wsUrl = toWebSocketUrl(this.selectedProfile.url);
-      this.ws = new WebSocketClient(wsUrl, this.selectedProfile.authToken);
+      this.wsUrl = toWebSocketUrl(this.selectedProfile.url);
+      this.wsAuthToken = this.selectedProfile.authToken;
+      this.ws = new WebSocketClient(this.wsUrl, this.wsAuthToken);
 
-      this.ws.on("file-children", (message) => {
+      this.ws.on("browse-children", (message) => {
+        if (message.path) {
+          this.currentBrowsePath = message.path;
+        }
         this.handleBrowseResults(message.children);
       });
 
       this.currentBrowsePath = this.selectedProfile.defaultPath || "~";
+
+      // Connect now so browse-children requests work
+      this.ws.sendSetProject(this.selectedProfile.defaultPath || "~");
+      this.ws.connect();
     }
 
     this.container.innerHTML = `
@@ -310,6 +331,7 @@ export class RemoteProjectSelector {
                 <input type="text" class="input-field" id="project-path" placeholder="/home/user/..." />
               </div>
             </div>
+            <div class="new-project-status"></div>
             <div class="divider"></div>
             <div class="options-list">
               <div class="option" data-index="0" tabindex="0">
@@ -324,7 +346,7 @@ export class RemoteProjectSelector {
         <div class="pane-help">
           <div><span class="help-key">↑/↓</span> navigate fields</div>
           <div><span class="help-key">l</span> select action</div>
-          <div><span class="help-key">h</span> back</div>
+          <div><span class="help-key">h/esc</span> back</div>
         </div>
       </div>
     `;
@@ -353,13 +375,14 @@ export class RemoteProjectSelector {
         <div class="pane-help">
           <div><span class="help-key">j/k</span> navigate files</div>
           <div><span class="help-key">l</span> enter directory</div>
-          <div><span class="help-key">h</span> parent directory</div>
+          <div><span class="help-key">h</span> parent dir</div>
+          <div><span class="help-key">esc</span> back</div>
         </div>
       </div>
     `;
 
     if (this.ws) {
-      this.ws.requestChildren(this.currentBrowsePath);
+      this.ws.requestBrowseChildren(this.currentBrowsePath);
     }
   }
 
@@ -412,7 +435,8 @@ export class RemoteProjectSelector {
         <div class="pane-help">
           <div><span class="help-key">j/k</span> navigate files</div>
           <div><span class="help-key">l</span> enter directory</div>
-          <div><span class="help-key">h</span> parent directory</div>
+          <div><span class="help-key">h</span> parent dir</div>
+          <div><span class="help-key">esc</span> back</div>
         </div>
       </div>
     `;
@@ -428,8 +452,12 @@ export class RemoteProjectSelector {
     const path = pathInput?.value.trim();
 
     if (!path) {
-      alert("Please enter a remote path");
       pathInput?.focus();
+      const statusEl = this.container.querySelector(".new-project-status");
+      if (statusEl) {
+        statusEl.textContent = "enter a valid remote path";
+        statusEl.className = "new-project-status auth-token-error";
+      }
       return;
     }
 
@@ -450,11 +478,17 @@ export class RemoteProjectSelector {
 
   private finishSelection(path: string, projectName?: string): void {
     if (this.resolve && this.selectedProfile && this.ws) {
+      // Disconnect the browse ws — it has the wrong project context.
+      // Create a fresh ws for the tab so initializeTabContext can send
+      // SET_PROJECT with the correct path on connect.
+      this.ws.disconnect();
+      const tabWs = new WebSocketClient(this.wsUrl, this.wsAuthToken);
+
       const result: SelectionResult = {
         profile: this.selectedProfile,
         path,
         projectName,
-        ws: this.ws,
+        ws: tabWs,
       };
       if (this.tunnelPid !== undefined) {
         result.tunnelPid = this.tunnelPid;

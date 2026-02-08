@@ -18,6 +18,7 @@ import {
   sortProjectsByLastUsed,
   computeFileCreationBasePath,
   wrapIndex,
+  getProfileDisplayMeta,
 } from "./profile-utils";
 import type { RemoteProfile, SavedProject } from "./types";
 import type { FileNode } from "../types";
@@ -211,6 +212,22 @@ describe("computeParentPath", () => {
   it("handles empty string as root", () => {
     expect(computeParentPath("")).toBe("/");
   });
+
+  it("stays at ~ when already at home directory", () => {
+    expect(computeParentPath("~")).toBe("~");
+  });
+
+  it("goes up to ~ from a subdirectory of home", () => {
+    expect(computeParentPath("~/projects")).toBe("~");
+  });
+
+  it("navigates within ~-prefixed paths correctly", () => {
+    expect(computeParentPath("~/projects/cade")).toBe("~/projects");
+  });
+
+  it("handles ~/single-dir path", () => {
+    expect(computeParentPath("~/Documents")).toBe("~");
+  });
 });
 
 // ─── Directory Filtering ────────────────────────────────────────────
@@ -346,6 +363,51 @@ describe("computeFileCreationBasePath", () => {
 
   it("handles root-level directories", () => {
     expect(computeFileCreationBasePath("src", "directory")).toBe("src/");
+  });
+});
+
+// ─── Profile Display Meta ──────────────────────────────────────────
+
+describe("getProfileDisplayMeta", () => {
+  it("shows user@host for SSH tunnel profiles", () => {
+    const profile: RemoteProfile = {
+      id: "1",
+      name: "clann",
+      url: "http://localhost:3000",
+      connectionType: "ssh-tunnel",
+      sshHost: "52.30.205.70",
+      sshUser: "ubuntu",
+      sshKeyPath: "~/.ssh/id_ed25519",
+      localPort: 3000,
+      remotePort: 3000,
+    };
+
+    expect(getProfileDisplayMeta(profile)).toBe("ubuntu@52.30.205.70");
+  });
+
+  it("shows host only when sshUser is missing", () => {
+    const profile: RemoteProfile = {
+      id: "1",
+      name: "test",
+      url: "http://localhost:3000",
+      connectionType: "ssh-tunnel",
+      sshHost: "10.0.0.1",
+      localPort: 3000,
+      remotePort: 3000,
+    };
+
+    expect(getProfileDisplayMeta(profile)).toBe("10.0.0.1");
+  });
+
+  it("shows URL for direct connections", () => {
+    const profile: RemoteProfile = {
+      id: "1",
+      name: "direct",
+      url: "http://52.30.205.70/cade/",
+      connectionType: "direct",
+    };
+
+    expect(getProfileDisplayMeta(profile)).toBe("http://52.30.205.70/cade/");
   });
 });
 

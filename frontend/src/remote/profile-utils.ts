@@ -10,6 +10,43 @@ export interface ProfileInputs {
   lastUsed?: number | undefined;
 }
 
+export interface DirectProfileInputs {
+  name: string;
+  url: string;
+  token?: string | undefined;
+  id?: string | undefined;
+  lastUsed?: number | undefined;
+}
+
+/**
+ * Build a RemoteProfile from user-provided SSH connection inputs.
+ * Pure function — no DOM or side effects.
+ */
+/**
+ * Build a RemoteProfile for a direct WebSocket connection (no SSH tunnel).
+ * Pure function — no DOM or side effects.
+ */
+export function buildDirectProfile(
+  inputs: DirectProfileInputs,
+  generateId: () => string
+): RemoteProfile {
+  const profile: RemoteProfile = {
+    id: inputs.id || generateId(),
+    name: inputs.name,
+    url: inputs.url,
+    connectionType: "direct",
+  };
+
+  if (inputs.token) {
+    profile.authToken = inputs.token;
+  }
+  if (inputs.lastUsed !== undefined) {
+    profile.lastUsed = inputs.lastUsed;
+  }
+
+  return profile;
+}
+
 /**
  * Build a RemoteProfile from user-provided SSH connection inputs.
  * Pure function — no DOM or side effects.
@@ -65,9 +102,21 @@ export function buildTunnelArgs(profile: RemoteProfile): TunnelArgs {
 
 /**
  * Compute the parent path for directory navigation.
- * Strips the last path segment. Returns "/" at root.
+ * Strips the last path segment. Handles both absolute paths (/...) and
+ * tilde paths (~...) — tilde acts as a root that can't be navigated above.
  */
 export function computeParentPath(currentPath: string): string {
+  // Tilde-prefixed paths: ~ is the root
+  if (currentPath === "~") return "~";
+  if (currentPath.startsWith("~/")) {
+    const rest = currentPath.slice(2); // strip "~/"
+    const parts = rest.split("/").filter((p) => p);
+    if (parts.length <= 1) return "~";
+    parts.pop();
+    return "~/" + parts.join("/");
+  }
+
+  // Absolute paths
   const parts = currentPath.split("/").filter((p) => p);
   if (parts.length === 0) return "/";
   parts.pop();
@@ -120,6 +169,19 @@ export function computeFileCreationBasePath(
 
   const lastSlash = selectedPath.lastIndexOf("/");
   return lastSlash !== -1 ? selectedPath.substring(0, lastSlash + 1) : "";
+}
+
+/**
+ * Get a human-readable connection description for display in the connections list.
+ * SSH tunnel profiles show user@host; direct profiles show the URL.
+ */
+export function getProfileDisplayMeta(profile: RemoteProfile): string {
+  if (profile.connectionType === "ssh-tunnel" && profile.sshHost) {
+    return profile.sshUser
+      ? `${profile.sshUser}@${profile.sshHost}`
+      : profile.sshHost;
+  }
+  return profile.url;
 }
 
 // Re-export shared navigation utility so existing imports keep working

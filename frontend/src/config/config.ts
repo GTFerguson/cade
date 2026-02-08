@@ -32,6 +32,24 @@ const needsInjectedUrl = (): boolean => {
     || (window as any).__TAURI__ === true;
 };
 
+/**
+ * Returns true if running inside the Tauri desktop app.
+ */
+export function isTauri(): boolean {
+  return window.location.hostname === "tauri.localhost"
+    || (window as any).__TAURI__ === true;
+}
+
+/**
+ * Returns true if running in a browser accessing a remote server.
+ * (Not Tauri desktop app, and not localhost)
+ */
+export function isRemoteBrowserAccess(): boolean {
+  if (isTauri()) return false;
+  const host = window.location.hostname;
+  return host !== "localhost" && host !== "127.0.0.1" && host !== "tauri.localhost";
+}
+
 export const config = {
   /**
    * WebSocket URL. Re-evaluated each access so the Tauri-injected

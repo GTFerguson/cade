@@ -24,19 +24,7 @@ pub fn load_remote_profiles() -> Result<String, String> {
 fn get_default_profiles() -> String {
     r#"{
   "version": 1,
-  "profiles": [
-    {
-      "id": "clann-vm-default",
-      "name": "clann-vm",
-      "url": "http://localhost:3000",
-      "connectionType": "ssh-tunnel",
-      "sshHost": "clann-vm",
-      "localPort": 3000,
-      "remotePort": 3000,
-      "defaultPath": "/home/gary/cade-test",
-      "authToken": "9994173863a133f5377fe23f771630ab2310ac8d50200275cce2ee24de8af67f"
-    }
-  ]
+  "profiles": []
 }"#.to_string()
 }
 
