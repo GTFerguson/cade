@@ -21,6 +21,7 @@ class MessageType:
     SET_PROJECT = "set-project"  # Set project directory: { type, path: str, sessionId?: str }
     GET_LATEST_PLAN = "get-latest-plan"  # Request most recent plan file: { type }
     GET_CHILDREN = "get-children"  # Request directory children: { type, path: str, showIgnored?: bool }
+    BROWSE_CHILDREN = "browse-children"  # Browse absolute filesystem path: { type, path: str }
 
     # Server -> Client
     OUTPUT = "output"  # Terminal output: { type, data: str, sessionKey?: str }

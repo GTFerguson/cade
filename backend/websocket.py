@@ -154,6 +154,11 @@ class ConnectionHandler:
                     if data.get("type") == MessageType.SET_PROJECT:
                         path = data.get("path")
                         if path:
+                            # expanduser() needs HOME in env; fall back to
+                            # pwd-based Path.home() when it isn't set
+                            if path.startswith("~"):
+                                home = str(Path.home())
+                                path = home + path[1:]
                             project_path = Path(path).resolve()
                             logger.debug(
                                 "Path validation: input=%s, resolved=%s, exists=%s, is_dir=%s",
@@ -416,6 +421,8 @@ class ConnectionHandler:
                 await self._handle_save_session(data)
             elif msg_type == MessageType.GET_CHILDREN:
                 await self._handle_get_children(data)
+            elif msg_type == MessageType.BROWSE_CHILDREN:
+                await self._handle_browse_children(data)
             elif msg_type == MessageType.GET_LATEST_PLAN:
                 await self._handle_get_latest_plan()
             elif msg_type == MessageType.NEOVIM_SPAWN:
@@ -512,6 +519,43 @@ class ConnectionHandler:
             "type": MessageType.FILE_CHILDREN,
             "path": path,
             "children": [n.to_dict() for n in children],
+        })
+
+    async def _handle_browse_children(self, data: dict) -> None:
+        """Handle filesystem browse request for project directory selection.
+
+        Unlike get-children, this resolves absolute paths and expands ~,
+        allowing navigation anywhere on the filesystem. Used by the
+        remote project selector's browse screen.
+        """
+        raw_path = data.get("path", "~")
+        target = Path(raw_path).expanduser().resolve()
+
+        if not target.is_dir():
+            await self._send({
+                "type": MessageType.BROWSE_CHILDREN,
+                "path": raw_path,
+                "children": [],
+            })
+            return
+
+        entries = []
+        try:
+            for child in sorted(target.iterdir(), key=lambda p: p.name.lower()):
+                if child.name.startswith("."):
+                    continue
+                entries.append({
+                    "name": child.name,
+                    "path": str(child),
+                    "type": "directory" if child.is_dir() else "file",
+                })
+        except PermissionError:
+            pass
+
+        await self._send({
+            "type": MessageType.BROWSE_CHILDREN,
+            "path": str(target),
+            "children": entries,
         })
 
     async def _handle_get_file(self, data: dict) -> None:
