@@ -426,6 +426,24 @@ The app entry point. Two modes:
 CSS: `.splash`, `.splash-logo`, `.splash-status`, `.splash-options`, `.splash-help` (`screens/splash.css`)
 Files: `frontend/src/ui/splash.ts`, `frontend/src/ui/splash-effects.ts`
 
+#### Auth Splash Variant
+
+When authentication is required, the splash screen shows an auth form instead of project options. Uses `Splash.setAuthMode()`.
+
+**CSS Classes:**
+- `.splash-auth-content` — Main container for auth form content (400px, centered)
+- `.auth-message` — "authentication required" text (12px, letter-spacing: 1px)
+- `.auth-input-wrapper` — Container for terminal prompt-style token input
+- `.auth-input-prompt` — Green "token:" label
+- `.auth-input-field` — Password input field with terminal aesthetic
+- `.auth-status` — Status/error message area (`.error` or `.validating` modifiers)
+- `.splash-options` / `.splash-option` — Reused for `[connect]` `[cancel]` buttons
+- `.splash-help` — Reused for help text
+
+**Mobile (≤768px):** Input wrapper switches to vertical layout; 16px font to prevent iOS auto-zoom.
+
+Used for both initial connection auth and mid-session re-auth.
+
 ### Mobile Adaptation
 
 CADE adapts to touch devices (≤768px) with enlarged targets and gesture navigation.

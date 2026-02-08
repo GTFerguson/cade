@@ -118,6 +118,104 @@
 .splash-logo.phase-final  { color: var(--accent-red); }
 .splash-logo.phase-dying  { color: var(--text-muted); }
 
+/* ── Auth Splash Variant ──────────────────────────── */
+
+.splash-auth-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 400px;
+  max-width: 90vw;
+  margin-top: 32px;
+}
+
+.auth-message {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+.auth-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.auth-input-prompt {
+  color: var(--accent-green);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.auth-input-field {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--text-muted);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 4px 0;
+  outline: none;
+  transition: border-color 0.05s;
+}
+
+.auth-input-field:focus {
+  border-bottom-color: var(--accent-green);
+}
+
+.auth-status {
+  min-height: 18px;
+  font-size: 11px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.auth-status.error {
+  color: var(--accent-red);
+}
+
+.auth-status.validating {
+  color: var(--accent-blue);
+}
+
+.splash-auth-content .splash-options {
+  margin-top: 0;
+  width: 100%;
+  max-width: 300px;
+  gap: 8px;
+}
+
+.splash-auth-content .splash-option {
+  text-align: center;
+}
+
+/* Improved logo rendering */
+.splash-logo {
+  font-variant-ligatures: none;
+  letter-spacing: 0;
+  white-space: pre;
+}
+
+/* Mobile auth form adjustments */
+@media (max-width: 768px) {
+  .auth-input-wrapper {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .auth-input-field {
+    font-size: 16px;
+    padding: 12px 8px;
+    border-bottom-width: 2px;
+  }
+}
+
 /* Mobile splash logo variant */
 .splash-logo-mobile {
   color: var(--accent-red);

@@ -19,10 +19,9 @@ import { setUserConfig, getUserConfig, matchesKeybinding } from "./config/user-c
 import { applySavedTheme, onThemeChange, getSavedThemeId, themes } from "./config/themes";
 import { RemoteProfileManager } from "./remote/profile-manager";
 import { RemoteProjectSelector } from "./remote/RemoteProjectSelector";
-import { AuthTokenDialog } from "./remote/AuthTokenDialog";
 import { Splash } from "./ui/splash";
 import type { RemoteProfile } from "./remote/types";
-import { setAuthToken } from "./auth/tokenManager";
+import { getAuthToken, setAuthToken } from "./auth/tokenManager";
 
 class App {
   private tabManager: TabManager;
@@ -287,38 +286,30 @@ class App {
       if (!tab.remoteProfileId && isRemoteBrowserAccess()) {
         const dialogKey = "__local_remote_browser__";
 
-        // Prevent duplicate dialogs
-        if (this.activeAuthDialogs.has(dialogKey)) {
-          return;
-        }
+        if (this.activeAuthDialogs.has(dialogKey)) return;
         this.activeAuthDialogs.add(dialogKey);
 
-        const dialog = new AuthTokenDialog("Server");
-        const newToken = await dialog.show();
+        this.showAuthSplash("Server", (newToken) => {
+          this.activeAuthDialogs.delete(dialogKey);
 
-        this.activeAuthDialogs.delete(dialogKey);
-
-        if (newToken) {
-          // Store token globally for future connections
-          setAuthToken(newToken);
-          // Update this tab's WebSocket and retry
-          tab.ws.setAuthToken(newToken);
-          tab.ws.connect();
-        }
+          if (newToken) {
+            setAuthToken(newToken);
+            tab.ws.setAuthToken(newToken);
+            tab.ws.connect();
+          }
+        });
         return;
       }
 
       if (!tab.remoteProfileId) return;
 
-      // Only show one auth dialog per profile — close duplicate tabs silently
+      // Only show one auth splash per profile — close duplicate tabs silently
       if (this.activeAuthDialogs.has(tab.remoteProfileId)) {
         await this.tabManager.closeTab(tab.id);
         return;
       }
 
-      // If another tab on the same profile is already connected, this tab
-      // is stale (e.g. restored from session with an old token). Close it
-      // silently instead of prompting the user again.
+      // Stale tab: another tab on same profile already connected
       if (hasConnectedProfileTab(this.tabManager.getTabs(), tab.id, tab.remoteProfileId)) {
         await this.tabManager.closeTab(tab.id);
         return;
@@ -328,37 +319,33 @@ class App {
 
       await this.profileManager.loadProfiles();
       const profile = await this.profileManager.getProfile(tab.remoteProfileId);
-
-      // Use profile name if available, fall back to tab name
       const displayName = profile?.name ?? tab.name.split(":")[0]?.trim() ?? "Remote";
-      const dialog = new AuthTokenDialog(displayName);
-      const newToken = await dialog.show();
 
-      // Close the dead tab — restored tabs have no SSH tunnel running
-      await this.tabManager.closeTab(tab.id);
-      this.activeAuthDialogs.delete(tab.remoteProfileId!);
+      this.showAuthSplash(displayName, async (newToken) => {
+        await this.tabManager.closeTab(tab.id);
+        this.activeAuthDialogs.delete(tab.remoteProfileId!);
 
-      if (newToken) {
-        if (profile) {
-          profile.authToken = newToken;
-          await this.profileManager.saveProfile(profile);
-          const newTab = await this.tabManager.createRemoteTab(profile);
-          this.tabManager.switchTab(newTab.id);
-        } else if (tab.remoteUrl) {
-          // Profile lost (storage failure) — reconstruct from tab metadata
-          const fallbackProfile: RemoteProfile = {
-            id: tab.remoteProfileId!,
-            name: displayName,
-            url: tab.remoteUrl,
-            authToken: newToken,
-            connectionType: "direct",
-            defaultPath: tab.projectPath,
-          };
-          await this.profileManager.saveProfile(fallbackProfile);
-          const newTab = await this.tabManager.createRemoteTab(fallbackProfile);
-          this.tabManager.switchTab(newTab.id);
+        if (newToken) {
+          if (profile) {
+            profile.authToken = newToken;
+            await this.profileManager.saveProfile(profile);
+            const newTab = await this.tabManager.createRemoteTab(profile);
+            this.tabManager.switchTab(newTab.id);
+          } else if (tab.remoteUrl) {
+            const fallbackProfile: RemoteProfile = {
+              id: tab.remoteProfileId!,
+              name: displayName,
+              url: tab.remoteUrl,
+              authToken: newToken,
+              connectionType: "direct",
+              defaultPath: tab.projectPath,
+            };
+            await this.profileManager.saveProfile(fallbackProfile);
+            const newTab = await this.tabManager.createRemoteTab(fallbackProfile);
+            this.tabManager.switchTab(newTab.id);
+          }
         }
-      }
+      });
     });
 
     // Progress bar: advance through checkpoints until shell is ready
@@ -483,6 +470,31 @@ class App {
   }
 
   /**
+   * Show an auth splash screen for token re-entry.
+   * Replaces the old AuthTokenDialog modal with a full-pane splash variant.
+   */
+  private showAuthSplash(profileName: string, onResult: (token: string | null) => void): void {
+    if (!this.tabContentContainer) return;
+
+    // Reuse the visible splash — just switch its mode to auth.
+    // This avoids a destroy-recreate cycle that flashes the background.
+    if (!this.startSplash?.isVisible()) {
+      this.startSplash = new Splash(this.tabContentContainer);
+    }
+
+    this.startSplash.setAuthMode(profileName, (token) => {
+      this.startSplash?.hide();
+      this.startSplash = null;
+      onResult(token);
+
+      // Return to start splash if no tabs remain
+      if (this.tabManager.getTabs().length === 0) {
+        this.showStartSplash();
+      }
+    });
+  }
+
+  /**
    * Show the start splash with project type options.
    * Appears on startup or when all tabs are closed.
    *
@@ -493,11 +505,31 @@ class App {
     if (this.startSplash?.isVisible()) return;
     if (!this.tabContentContainer) return;
 
+    // Remote browser/mobile: require auth before showing menu
+    if (isRemoteBrowserAccess() && !getAuthToken()) {
+      this.showAuthSplash("Server", (token) => {
+        if (token) {
+          setAuthToken(token);
+          this.showStartSplashMenu();
+        }
+      });
+      return;
+    }
+
+    this.showStartSplashMenu();
+  }
+
+  /**
+   * Show the start splash menu with project type options.
+   * Called directly (desktop) or after auth gate (remote browser).
+   */
+  private showStartSplashMenu(): void {
+    if (!this.tabContentContainer) return;
+
     this.startSplash = new Splash(this.tabContentContainer);
 
     const options = [];
 
-    // If there's a saved session, offer to resume it (top option)
     if (this.tabManager.hasSavedSession()) {
       options.push({ label: "RESUME SESSION", action: () => {
         this.startSplash?.setLoading();
@@ -506,10 +538,8 @@ class App {
     }
 
     if (isRemoteBrowserAccess()) {
-      // Remote browser: just "PROJECT" (picks directory on server)
       options.push({ label: "PROJECT", action: () => this.handleAddTab() });
     } else {
-      // Desktop/Tauri or localhost: show local + remote options
       options.push({ label: "LOCAL PROJECT", action: () => this.handleAddTab() });
       options.push({ label: "REMOTE PROJECT", action: () => this.handleAddRemoteTab() });
     }

@@ -39,6 +39,7 @@ export class Splash {
   private options: SplashOption[] | null = null;
   private optionEls: HTMLElement[] = [];
   private nav: MenuNav;
+  private authActive = false;
 
   private progressEl: HTMLElement | null = null;
   private progressSegs: HTMLElement[] = [];
@@ -82,8 +83,8 @@ export class Splash {
 
   private setupKeyListener(): void {
     this.keyHandler = (e: KeyboardEvent) => {
-      // Options mode: delegate to MenuNav
-      if (this.options) {
+      // Options/auth mode: delegate to MenuNav
+      if (this.options || this.authActive) {
         // Don't intercept keys when another screen is overlaid
         if (document.querySelector(".modal-overlay, .remote-project-selector")) return;
 
@@ -106,8 +107,8 @@ export class Splash {
 
   private setupTapListener(): void {
     this.tapHandler = (e: Event) => {
-      // Only dismiss on tap in status mode
-      if (this.ready && !this.options) {
+      // Only dismiss on tap in status mode (not options or auth)
+      if (this.ready && !this.options && !this.authActive) {
         e.preventDefault();
         this.dismiss();
       }
@@ -171,6 +172,105 @@ export class Splash {
       { key: "l", label: "select" },
     ]);
     this.element.appendChild(helpEl);
+  }
+
+  /**
+   * Switch to auth mode: replace status with token input form.
+   * Used when authentication is required for initial connection or re-auth.
+   */
+  setAuthMode(_profileName: string, onSubmit: (token: string | null) => void): void {
+    this.options = null;
+    this.optionEls = [];
+    this.authActive = true;
+    this.ready = true;
+
+    // Clear any existing content (options, help, progress) from prior mode
+    this.statusEl.style.display = "none";
+    this.element.querySelector(".splash-options")?.remove();
+    this.element.querySelector(".splash-help")?.remove();
+    this.element.querySelector(".splash-progress")?.remove();
+    this.element.querySelector(".splash-auth-content")?.remove();
+
+    const container = document.createElement("div");
+    container.className = "splash-auth-content";
+
+    container.innerHTML = `
+      <div class="auth-message">authentication required</div>
+      <div class="auth-input-wrapper">
+        <span class="auth-input-prompt">token:</span>
+        <input type="password" class="auth-input-field"
+               placeholder="●●●●●●●●●●●●●●●●"
+               autocomplete="current-password" />
+      </div>
+      <div class="auth-status"></div>
+    `;
+
+    this.element.appendChild(container);
+
+    const input = container.querySelector<HTMLInputElement>(".auth-input-field")!;
+    const statusEl = container.querySelector<HTMLElement>(".auth-status")!;
+
+    const submit = () => {
+      const token = input.value.trim();
+      if (!token) {
+        statusEl.textContent = "token cannot be empty";
+        statusEl.className = "auth-status error";
+        input.focus();
+        return;
+      }
+      statusEl.textContent = "validating...";
+      statusEl.className = "auth-status validating";
+      onSubmit(token);
+    };
+
+    // Build option buttons
+    const optionsContainer = document.createElement("div");
+    optionsContainer.className = "splash-options";
+
+    const actions = [
+      { label: "connect", action: () => submit() },
+      { label: "cancel", action: () => onSubmit(null) },
+    ];
+
+    this.optionEls = actions.map((opt) => {
+      const el = document.createElement("div");
+      el.className = "splash-option";
+      el.textContent = `[${opt.label}]`;
+      el.addEventListener("click", () => opt.action());
+      optionsContainer.appendChild(el);
+      return el;
+    });
+
+    container.appendChild(optionsContainer);
+
+    // Rebuild nav with input field support for arrow key navigation
+    this.nav = new MenuNav({
+      getOptions: () => this.optionEls,
+      getInputFields: () => [input],
+      onSelect: (i) => actions[i]?.action(),
+      onCancel: () => onSubmit(null),
+      onInputKey: (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          submit();
+          return true;
+        }
+        return false;
+      },
+    });
+    this.nav.renderSelection();
+
+    // Help text
+    const helpEl = document.createElement("div");
+    helpEl.className = "splash-help";
+    helpEl.innerHTML = renderHelpBar([
+      { key: "j/k", label: "navigate" },
+      { key: "enter", label: "select" },
+      { key: "esc", label: "cancel" },
+    ]);
+    this.element.appendChild(helpEl);
+
+    input.focus();
   }
 
   /**
