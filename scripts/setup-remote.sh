@@ -43,6 +43,7 @@ PORT="${CADE_PORT:-3000}"
 WORKING_DIR="${CADE_WORKING_DIR:-$HOME}"
 WORKING_DIR="${WORKING_DIR/#\~/$HOME}"
 CURRENT_USER="$(whoami)"
+USER_HOME="$(eval echo ~${CURRENT_USER})"
 
 echo -e "${BOLD}══════════════════════════════════════${NC}"
 echo -e "${BOLD}  CADE Remote Setup${NC}"
@@ -141,21 +142,38 @@ echo -e "${CYAN}[3/8]${NC} Claude Code CLI..."
 
 if [ -n "${CADE_SKIP_CLAUDE:-}" ]; then
     echo -e "  ${YELLOW}⤳${NC} Skipped (CADE_SKIP_CLAUDE set)"
-elif command_exists claude; then
-    CLAUDE_VERSION=$(claude --version 2>/dev/null || echo "unknown")
-    echo -e "  ${GREEN}✓${NC} Already installed: $CLAUDE_VERSION"
 else
-    echo "  Installing Claude Code CLI..."
-    curl -fsSL https://claude.ai/install.sh | bash
+    # Ensure ~/.local/bin is in PATH (where claude installs to)
+    LOCAL_BIN_PATH='export PATH="$HOME/.local/bin:$PATH"'
+    if ! grep -qF '.local/bin' "${USER_HOME}/.bashrc" 2>/dev/null; then
+        echo "$LOCAL_BIN_PATH" >> "${USER_HOME}/.bashrc"
+        echo -e "  ${GREEN}✓${NC} Added ~/.local/bin to PATH in .bashrc"
+    fi
+    export PATH="${USER_HOME}/.local/bin:$PATH"
+
     if command_exists claude; then
-        echo -e "  ${GREEN}✓${NC} Installed: $(claude --version 2>/dev/null)"
+        CLAUDE_VERSION=$(claude --version 2>/dev/null || echo "unknown")
+        echo -e "  ${GREEN}✓${NC} Already installed: $CLAUDE_VERSION"
     else
-        echo -e "  ${YELLOW}⚠${NC} Installation completed but 'claude' not on PATH"
-        echo "  You may need to restart your shell or add it to PATH"
+        echo "  Installing Claude Code CLI..."
+        curl -fsSL https://claude.ai/install.sh | bash
+        # Re-check with updated PATH
+        export PATH="${USER_HOME}/.local/bin:$PATH"
+        if command_exists claude; then
+            echo -e "  ${GREEN}✓${NC} Installed: $(claude --version 2>/dev/null)"
+        else
+            echo -e "  ${YELLOW}⚠${NC} Installation completed but 'claude' not found"
+        fi
     fi
 fi
 
 # ── Step 4: nginx reverse proxy ────────────────────────────────────────────
+#
+# Uses a registry pattern so multiple apps can coexist:
+#   /etc/nginx/apps.d/*.conf           - individual app location blocks
+#   /etc/nginx/sites-available/00-apps-registry.conf - server block that includes them
+#
+# Each app only manages its own file in apps.d/, never touching others.
 
 echo -e "${CYAN}[4/8]${NC} nginx reverse proxy..."
 
@@ -172,35 +190,43 @@ else
     # Strip leading slash for location block matching
     LOCATION_PATH="${ROOT_PATH#/}"
 
-    NGINX_CONF="/etc/nginx/sites-available/cade"
-    echo "  Writing nginx config to $NGINX_CONF"
+    # Ensure apps.d directory exists
+    APPS_DIR="/etc/nginx/apps.d"
+    if [ ! -d "$APPS_DIR" ]; then
+        sudo mkdir -p "$APPS_DIR"
+        echo "  Created $APPS_DIR"
+    fi
 
-    sudo tee "$NGINX_CONF" > /dev/null << NGINX_EOF
+    # Create registry server block if it doesn't exist
+    REGISTRY_CONF="/etc/nginx/sites-available/00-apps-registry.conf"
+    if [ ! -f "$REGISTRY_CONF" ]; then
+        echo "  Creating nginx apps registry..."
+        sudo tee "$REGISTRY_CONF" > /dev/null << 'REGISTRY_EOF'
+# Apps registry - includes all location blocks from /etc/nginx/apps.d/
+# Each app manages its own .conf file in apps.d/, this file just includes them.
 server {
-    listen 80;
+    listen 80 default_server;
     server_name _;
 
-    location /${LOCATION_PATH}/ {
-        proxy_pass http://localhost:${PORT}/;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+    # Include all app location configs
+    include /etc/nginx/apps.d/*.conf;
 
-        # WebSocket support
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-
-        # Long-lived connections for terminals
-        proxy_read_timeout 86400s;
-        proxy_send_timeout 86400s;
+    # Fallback for root
+    location / {
+        return 404;
     }
 }
-NGINX_EOF
+REGISTRY_EOF
+        sudo ln -sf "$REGISTRY_CONF" /etc/nginx/sites-enabled/00-apps-registry.conf
+        echo -e "  ${GREEN}✓${NC} Created apps registry"
+    fi
 
-    # Enable the site
-    sudo ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/cade
+    # Remove old standalone cade config if it exists (migrate to registry)
+    if [ -f /etc/nginx/sites-enabled/cade ]; then
+        sudo rm -f /etc/nginx/sites-enabled/cade
+        sudo rm -f /etc/nginx/sites-available/cade
+        echo "  Migrated from standalone config to registry"
+    fi
 
     # Disable default site to avoid port 80 conflicts
     if [ -L /etc/nginx/sites-enabled/default ]; then
@@ -208,14 +234,50 @@ NGINX_EOF
         echo "  Disabled default nginx site"
     fi
 
-    # Test and reload
-    if sudo nginx -t 2>/dev/null; then
-        sudo systemctl reload nginx
-        echo -e "  ${GREEN}✓${NC} nginx configured at /${LOCATION_PATH}/"
+    # Generate CADE's location block
+    CADE_CONF="$APPS_DIR/cade.conf"
+    CADE_CONF_CONTENT="# CADE - Claude Agentic Development Environment
+location /${LOCATION_PATH}/ {
+    proxy_pass http://localhost:${PORT}/;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+
+    # WebSocket support
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection \"upgrade\";
+
+    # Long-lived connections for terminals
+    proxy_read_timeout 86400s;
+    proxy_send_timeout 86400s;
+}"
+
+    # Check if config already exists and matches
+    if [ -f "$CADE_CONF" ]; then
+        EXISTING=$(cat "$CADE_CONF")
+        if [ "$EXISTING" = "$CADE_CONF_CONTENT" ]; then
+            echo -e "  ${GREEN}✓${NC} nginx already configured at /${LOCATION_PATH}/"
+        else
+            echo "  Updating CADE nginx config..."
+            echo "$CADE_CONF_CONTENT" | sudo tee "$CADE_CONF" > /dev/null
+            sudo systemctl reload nginx
+            echo -e "  ${GREEN}✓${NC} nginx updated at /${LOCATION_PATH}/"
+        fi
     else
-        echo -e "  ${RED}✗${NC} nginx config test failed!"
-        sudo nginx -t
-        exit 1
+        echo "  Writing CADE nginx config..."
+        echo "$CADE_CONF_CONTENT" | sudo tee "$CADE_CONF" > /dev/null
+
+        # Test and reload
+        if sudo nginx -t 2>/dev/null; then
+            sudo systemctl reload nginx
+            echo -e "  ${GREEN}✓${NC} nginx configured at /${LOCATION_PATH}/"
+        else
+            echo -e "  ${RED}✗${NC} nginx config test failed!"
+            sudo nginx -t
+            exit 1
+        fi
     fi
 fi
 
@@ -274,8 +336,10 @@ Environment=CADE_ROOT_PATH=${ROOT_PATH}
 Environment=CADE_WORKING_DIR=${WORKING_DIR}
 Environment=CADE_AUTO_START_CLAUDE=false
 Environment=CADE_AUTO_OPEN_BROWSER=false
-Environment=CADE_SHELL_COMMAND=bash
+Environment=CADE_SHELL_COMMAND=bash -l
 Environment=PYTHONPATH=${INSTALL_DIR}
+Environment=HOME=${USER_HOME}
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${USER_HOME}/.local/bin
 ExecStart=${VENV_DIR}/bin/python3 -m backend.main serve --no-browser
 Restart=on-failure
 RestartSec=5

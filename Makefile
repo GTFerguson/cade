@@ -128,12 +128,11 @@ dev-desktop:
 	cd desktop && npm run dev
 
 # Set up a remote server for CADE backend deployment
-# Usage: make setup-remote HOST=clann-vm
-#        make setup-remote HOST=user@192.168.1.10
+# Usage: make setup-remote HOST=<ssh-host>
 HOST ?=
 setup-remote:
 ifndef HOST
-	$(error HOST is required. Usage: make setup-remote HOST=clann-vm)
+	$(error HOST is required. Usage: make setup-remote HOST=<ssh-host>)
 endif
 	@echo "Setting up remote server: $(HOST)"
 	@scp scripts/setup-remote.sh $(HOST):/tmp/cade-setup-remote.sh

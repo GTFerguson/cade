@@ -75,9 +75,9 @@ Creates an SSH tunnel to forward a local port to the remote backend. Only availa
 1. Open the Remote Connection Modal (`Ctrl-a` + `Shift+C`)
 2. Press `n` for New Profile
 3. Fill in:
-   - **Name**: A label (e.g., "clann-vm")
+   - **Name**: A label (e.g., "my-server")
    - **Connection Type**: SSH Tunnel
-   - **SSH Host**: Hostname from `~/.ssh/config` (e.g., "clann-vm")
+   - **SSH Host**: Hostname from `~/.ssh/config` (e.g., "my-server")
    - **Local Port**: Port to forward locally (e.g., 3000)
    - **Remote Port**: Backend port on the remote server (e.g., 3000)
    - **URL**: Auto-fills to `http://localhost:<localPort>`

@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
-# One-time setup: enable passwordless sudo for gary on clann-vm.
+# One-time setup: enable passwordless sudo for the deploy user on a remote host.
 #
 # Run this manually in your terminal (you'll need to type the sudo password once):
-#   bash scripts/setup-sudo.sh clann-vm
+#   bash scripts/setup-sudo.sh <host>
 #
 # After this, deploy.sh can run fully unattended.
 
 set -euo pipefail
 
-HOST="${1:-clann-vm}"
+if [ $# -lt 1 ]; then
+  echo "Usage: bash scripts/setup-sudo.sh <ssh-host>"
+  exit 1
+fi
+
+HOST="$1"
 
 echo "Setting up passwordless sudo on ${HOST}..."
 echo "You'll be prompted for the sudo password once."

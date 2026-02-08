@@ -332,7 +332,7 @@ max_agents_per_user = 5
 - [x] Backend binds to `0.0.0.0` (`CADE_HOST` env var)
 - [x] Environment variables for all config (`CADE_PORT`, `CADE_HOST`, `CADE_ROOT_PATH`, etc.)
 - [x] CORS configuration (`CADE_CORS_ORIGINS`, middleware in `backend/middleware.py`)
-- [x] Deploy to EC2, test connection (running on clann-vm)
+- [x] Deploy to EC2, test connection
 
 ### Phase 2: HTTPS & WSS — Partial
 

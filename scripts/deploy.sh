@@ -9,9 +9,9 @@
 #   ./scripts/deploy.sh <ssh-host> [options]
 #
 # Examples:
-#   ./scripts/deploy.sh clann-vm
-#   ./scripts/deploy.sh clann-vm --skip-build
-#   ./scripts/deploy.sh clann-vm --root-path /cade --port 3000
+#   ./scripts/deploy.sh <host>
+#   ./scripts/deploy.sh <host> --skip-build
+#   ./scripts/deploy.sh <host> --root-path /cade --port 3000
 
 set -euo pipefail
 
@@ -245,15 +245,16 @@ fi
 
 # ── Summary ─────────────────────────────────────────────────────────────────
 
-# Resolve remote IP for the access URL
-REMOTE_IP=$(ssh "$SSH_HOST" "hostname -I 2>/dev/null | awk '{print \$1}'" 2>/dev/null || echo "$SSH_HOST")
+# Resolve the actual hostname/IP from SSH config (handles aliases like "glann" → "52.30.205.70")
+# Falls back to the SSH host if resolution fails
+REMOTE_HOST=$(ssh -G "$SSH_HOST" 2>/dev/null | awk '/^hostname / {print $2}' || echo "$SSH_HOST")
 
 echo ""
 echo -e "${BOLD}══════════════════════════════════════${NC}"
 echo -e "${GREEN}  Deployment complete!${NC}"
 echo -e "${BOLD}══════════════════════════════════════${NC}"
 echo ""
-echo -e "  Access:  ${CYAN}http://${REMOTE_IP}${ROOT_PATH}/${NC}"
+echo -e "  Access:  ${CYAN}http://${REMOTE_HOST}${ROOT_PATH}/${NC}"
 echo -e "  Token:   ${TOKEN}"
 echo -e "  Logs:    ssh ${SSH_HOST} \"journalctl -u cade -f\""
 echo -e "  Status:  ssh ${SSH_HOST} \"systemctl status cade\""

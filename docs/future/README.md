@@ -66,7 +66,11 @@ Implemented in [[../technical/core/frontend-architecture#Tab System|Frontend Arc
 
 ## Planned Features
 
-*Features being actively developed have been moved to `plans/` for rapid iteration.*
+### QR Code Sign-In
+
+Generate a QR code on desktop that encodes the remote URL with auth token. Scanning with phone camera takes user directly into CADE, bypassing manual token entry. Useful for quick mobile access to remote deployments.
+
+*Other features being actively developed have been moved to `plans/` for rapid iteration.*
 
 ## Blocking Issues
 

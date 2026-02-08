@@ -32,6 +32,14 @@ cade/
 | Future plans/roadmap | `docs/future/README.md` |
 | User-facing guides | `docs/user/README.md` |
 
+## Key Files
+
+| What | Where |
+|------|-------|
+| Design bible | `docs/technical/design/visual-design-philosophy.md` |
+| CSS directory | `frontend/styles/` (see `main.css` index for layout) |
+| Theme definitions | `frontend/src/config/themes.ts` |
+
 ## Conventions
 
 Rules are defined in `.claude/rules/` - read these files for full details:
