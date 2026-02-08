@@ -50,7 +50,7 @@ export interface ProjectContext {
   readonly projectPath: string;
   readonly name: string;
   readonly container: HTMLElement;
-  initialize(): Promise<void>;
+  initialize(skipSplash?: boolean): Promise<void>;
   show(): void;
   hide(): void;
   focus(): void;

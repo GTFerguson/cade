@@ -35,10 +35,8 @@ export class ProjectContextImpl implements IProjectContext {
   private isVisible = false;
   private focusedPane: PaneType = "terminal";
   private boundHandlers = {
-    startupStatus: (msg: any) => {
-      if (this.splash?.isVisible()) {
-        this.splash.setStatus(msg.message);
-      }
+    startupStatus: (_msg: any) => {
+      // Progress bar handles visual feedback; no per-message status updates
     },
     sessionRestored: (msg: any) => {
       console.log(`[${this.name}] Session restored:`, msg.sessionId, msg.sessionKey);
@@ -49,12 +47,7 @@ export class ProjectContextImpl implements IProjectContext {
         this.pendingSession = msg.session;
       }
       if (this.splash?.isVisible()) {
-        const shouldSkip = this.shouldSkipSplash(msg);
-        if (shouldSkip) {
-          this.splash.autoSkip(() => this.terminalManager?.focus());
-        } else {
-          this.splash.setReady(() => this.terminalManager?.focus());
-        }
+        this.splash.setProgress(3, "starting shell");
       }
     },
     fileTree: () => {
@@ -74,9 +67,7 @@ export class ProjectContextImpl implements IProjectContext {
         msg.code === ErrorCode.PTY_EXITED
       ) {
         // Dismiss splash if still showing so the error is visible
-        if (this.splash?.isVisible()) {
-          this.splash.autoSkip(() => {});
-        }
+        this.splash?.hide();
         this.terminalManager?.write(
           `\r\n\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`
         );
@@ -89,7 +80,7 @@ export class ProjectContextImpl implements IProjectContext {
     authFailed: () => {
       console.warn(`[${this.name}] Authentication failed`);
       if (this.splash?.isVisible()) {
-        this.splash.setStatus("authentication failed");
+        this.splash.setProgress(0, "auth failed");
       }
     },
   };
@@ -108,8 +99,9 @@ export class ProjectContextImpl implements IProjectContext {
 
   /**
    * Initialize the project context and its components.
+   * @param skipSplash - Don't create a per-tab splash (start splash is already showing)
    */
-  async initialize(): Promise<void> {
+  async initialize(skipSplash = false): Promise<void> {
     this.container.innerHTML = `
       <div class="app-container project-container">
         <div class="pane file-tree-pane"></div>
@@ -158,8 +150,20 @@ export class ProjectContextImpl implements IProjectContext {
       this.rightPane?.getAgentPane()?.setActiveAgent(agentId);
     });
 
-    // Create splash overlay in terminal pane
-    this.splash = new Splash(terminalEl);
+    // Create splash overlay in terminal pane (skipped when start splash is active)
+    if (!skipSplash) {
+      this.splash = new Splash(terminalEl);
+      this.splash.setLoading();
+
+      // Dismiss on first shell output
+      const onFirstOutput = () => {
+        this.ws.off("output", onFirstOutput);
+        this.splash?.setProgress(4, "ready");
+        this.splash?.hide();
+        this.terminalManager?.focus();
+      };
+      this.ws.on("output", onFirstOutput);
+    }
 
     this.fileTree = new FileTree(fileTreeEl, this.ws);
     this.fileTree.initialize();
@@ -294,24 +298,6 @@ export class ProjectContextImpl implements IProjectContext {
     fileTreePane?.classList.toggle("pane-focused", this.focusedPane === "file-tree");
     terminalPane?.classList.toggle("pane-focused", this.focusedPane === "terminal");
     viewerPane?.classList.toggle("pane-focused", this.focusedPane === "viewer");
-  }
-
-  /**
-   * Determine if splash screen should be skipped based on session state.
-   */
-  private shouldSkipSplash(message: ConnectedMessage): boolean {
-    const splash = message.config?.behavior?.splash;
-    const mode = splash?.mode ?? "auto";
-
-    if (mode === "always") return false;
-    if (mode === "never") return true;
-
-    // "auto" mode logic
-    if (!message.sessionRestored) return false;
-    if (!message.wslHealthy) return false;
-
-    const idleThreshold = splash?.idleThreshold ?? 1800;
-    return (message.idleSeconds ?? 0) < idleThreshold;
   }
 
   /**

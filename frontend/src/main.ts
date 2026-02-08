@@ -6,7 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 import "highlight.js/styles/vs2015.css";
 import "../styles/main.css";
 
-import { basePath, config } from "./config/config";
+import { basePath, config, isRemoteBrowserAccess } from "./config/config";
 import { HelpOverlay } from "./ui/help-overlay";
 import { ThemeSelector } from "./ui/theme-selector";
 import { KeybindingManager } from "./input/keybindings";
@@ -16,12 +16,13 @@ import { hasConnectedProfileTab } from "./tabs/tab-manager";
 import type { TabState } from "./tabs";
 import { pickProjectFolder, getUserHomePath } from "./platform/tauri-bridge";
 import { setUserConfig, getUserConfig, matchesKeybinding } from "./config/user-config";
-import { applySavedTheme, onThemeChange } from "./config/themes";
+import { applySavedTheme, onThemeChange, getSavedThemeId, themes } from "./config/themes";
 import { RemoteProfileManager } from "./remote/profile-manager";
 import { RemoteProjectSelector } from "./remote/RemoteProjectSelector";
 import { AuthTokenDialog } from "./remote/AuthTokenDialog";
 import { Splash } from "./ui/splash";
 import type { RemoteProfile } from "./remote/types";
+import { setAuthToken } from "./auth/tokenManager";
 
 class App {
   private tabManager: TabManager;
@@ -35,6 +36,7 @@ class App {
   private profileManager: RemoteProfileManager;
   private activeAuthDialogs = new Set<string>();
   private startSplash: Splash | null = null;
+  private resumeInProgress = false;
 
   constructor() {
     this.tabManager = new TabManager();
@@ -105,15 +107,16 @@ class App {
 
     this.tabManager.on("tab-switched", (tab) => {
       this.handleTabSwitch(tab);
+      this.initMobileUIIfNeeded();
     });
 
     this.tabManager.on("tabs-changed", (tabs) => {
       this.tabBar?.render(tabs, this.tabManager.getActiveTabId());
+      if (this.resumeInProgress) return;
       if (tabs.length === 0) {
         this.showStartSplash();
-      } else {
-        this.hideStartSplash();
       }
+      // Splash is hidden by first shell output, not by tab creation
     });
 
     // Always show splash on startup - user chooses to resume or start fresh
@@ -258,7 +261,8 @@ class App {
 
     tab.context = context;
 
-    await context.initialize();
+    const splashActive = this.startSplash?.isVisible() ?? false;
+    await context.initialize(splashActive);
 
     tab.ws.on("connected", (message) => {
       this.tabManager.setConnected(tab.id, true);
@@ -279,6 +283,31 @@ class App {
     });
 
     tab.ws.on("auth-failed", async () => {
+      // Local tab on remote browser — prompt for server's auth token
+      if (!tab.remoteProfileId && isRemoteBrowserAccess()) {
+        const dialogKey = "__local_remote_browser__";
+
+        // Prevent duplicate dialogs
+        if (this.activeAuthDialogs.has(dialogKey)) {
+          return;
+        }
+        this.activeAuthDialogs.add(dialogKey);
+
+        const dialog = new AuthTokenDialog("Server");
+        const newToken = await dialog.show();
+
+        this.activeAuthDialogs.delete(dialogKey);
+
+        if (newToken) {
+          // Store token globally for future connections
+          setAuthToken(newToken);
+          // Update this tab's WebSocket and retry
+          tab.ws.setAuthToken(newToken);
+          tab.ws.connect();
+        }
+        return;
+      }
+
       if (!tab.remoteProfileId) return;
 
       // Only show one auth dialog per profile — close duplicate tabs silently
@@ -331,6 +360,27 @@ class App {
         }
       }
     });
+
+    // Progress bar: advance through checkpoints until shell is ready
+    if (this.startSplash?.isVisible()) {
+      // Step 2: WebSocket connecting
+      this.startSplash.setProgress(2, "connecting");
+
+      // Step 3: backend acknowledged connection
+      const onConnected = () => {
+        tab.ws.off("connected", onConnected);
+        this.startSplash?.setProgress(3, "starting shell");
+      };
+      tab.ws.on("connected", onConnected);
+
+      // Step 4: shell produced output → dismiss
+      const onFirstOutput = () => {
+        tab.ws.off("output", onFirstOutput);
+        this.startSplash?.setProgress(4, "ready");
+        this.hideStartSplash();
+      };
+      tab.ws.on("output", onFirstOutput);
+    }
 
     tab.ws.sendSetProject(tab.projectPath, tab.id);
     tab.ws.connect();
@@ -389,6 +439,7 @@ class App {
     const path = await pickProjectFolder(this.defaultProjectPath);
 
     if (path) {
+      this.startSplash?.setLoading();
       const tab = this.tabManager.createTab(path);
       this.tabManager.switchTab(tab.id);
     }
@@ -415,6 +466,7 @@ class App {
       console.log("[CADE] Selector result:", result);
 
       if (result) {
+        this.startSplash?.setLoading();
         // Use the WebSocket and tunnel from the selector (already connected)
         const tab = await this.tabManager.createRemoteTabWithWebSocket(
           result.profile,
@@ -433,6 +485,9 @@ class App {
   /**
    * Show the start splash with project type options.
    * Appears on startup or when all tabs are closed.
+   *
+   * When accessing via browser on a remote server, shows simplified options
+   * since "LOCAL" means the server's filesystem and "REMOTE" is redundant.
    */
   private showStartSplash(): void {
     if (this.startSplash?.isVisible()) return;
@@ -444,27 +499,88 @@ class App {
 
     // If there's a saved session, offer to resume it (top option)
     if (this.tabManager.hasSavedSession()) {
-      options.push({ label: "RESUME SESSION", action: () => this.handleResumeSession() });
+      options.push({ label: "RESUME SESSION", action: () => {
+        this.startSplash?.setLoading();
+        this.handleResumeSession();
+      }});
     }
 
-    options.push({ label: "LOCAL PROJECT", action: () => this.handleAddTab() });
-    options.push({ label: "REMOTE PROJECT", action: () => this.handleAddRemoteTab() });
+    if (isRemoteBrowserAccess()) {
+      // Remote browser: just "PROJECT" (picks directory on server)
+      options.push({ label: "PROJECT", action: () => this.handleAddTab() });
+    } else {
+      // Desktop/Tauri or localhost: show local + remote options
+      options.push({ label: "LOCAL PROJECT", action: () => this.handleAddTab() });
+      options.push({ label: "REMOTE PROJECT", action: () => this.handleAddRemoteTab() });
+    }
 
     this.startSplash.setOptions(options);
   }
 
   /**
    * Restore tabs from saved session.
+   *
+   * Local tabs are re-initialised directly. Remote tabs are re-created
+   * via createRemoteTab() so the SSH tunnel is started and the auth
+   * token (stored in the profile, not in tab state) is attached to the
+   * WebSocket before connecting.
    */
   private async handleResumeSession(): Promise<void> {
-    await this.tabManager.restoreSession();
+    this.resumeInProgress = true;
 
-    const tabs = this.tabManager.getTabs();
-    for (const tab of tabs) {
-      await this.initializeTabContext(tab);
+    try {
+      await this.tabManager.restoreSession();
+      await this.profileManager.loadProfiles();
+
+      const tabs = [...this.tabManager.getTabs()];
+      const remoteReplacements: { tab: TabState; profile: RemoteProfile }[] = [];
+
+      for (const tab of tabs) {
+        if (tab.remoteProfileId) {
+          const profile = await this.profileManager.getProfile(tab.remoteProfileId);
+          if (profile) {
+            remoteReplacements.push({ tab, profile });
+          } else {
+            await this.tabManager.closeTab(tab.id);
+          }
+        } else {
+          await this.initializeTabContext(tab);
+        }
+      }
+
+      // Replace dead remote tabs with properly-connected ones
+      // (createRemoteTab starts the SSH tunnel and passes the stored auth token)
+      for (const { tab, profile } of remoteReplacements) {
+        tab.ws.disconnect();
+        await this.tabManager.closeTab(tab.id);
+        try {
+          // Use saved tab path if meaningful, otherwise fall back to
+          // the profile's most-recently-used project or defaultPath
+          let resumePath: string | undefined = tab.projectPath;
+          if (!resumePath || resumePath === "/") {
+            const projects = profile.projects ?? [];
+            const sorted = [...projects].sort((a, b) => (b.lastUsed ?? 0) - (a.lastUsed ?? 0));
+            resumePath = sorted[0]?.path ?? profile.defaultPath ?? undefined;
+          }
+          const newTab = await this.tabManager.createRemoteTab(profile, resumePath);
+          this.tabManager.switchTab(newTab.id);
+        } catch (error) {
+          console.error("Failed to reconnect remote tab:", error);
+        }
+      }
+    } finally {
+      this.resumeInProgress = false;
     }
-    this.tabBar?.render(tabs, this.tabManager.getActiveTabId());
 
+    const updatedTabs = this.tabManager.getTabs();
+    this.tabBar?.render(updatedTabs, this.tabManager.getActiveTabId());
+
+    if (updatedTabs.length === 0) {
+      this.showStartSplash();
+      return;
+    }
+
+    // Splash is hidden by first shell output listener in initializeTabContext
     const activeTab = this.tabManager.getActiveTab();
     if (activeTab) {
       this.handleTabSwitch(activeTab);
@@ -508,6 +624,11 @@ class App {
       },
       getActiveWs: () => {
         return this.tabManager.getActiveTab()?.ws ?? tab.ws;
+      },
+      onTheme: () => this.themeSelector.toggle(),
+      getCurrentThemeName: () => {
+        const id = getSavedThemeId();
+        return themes.find((t) => t.id === id)?.name ?? id;
       },
     });
     this.mobileUI.initialize();
