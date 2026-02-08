@@ -29,6 +29,7 @@ export const MessageType = {
   SET_PROJECT: "set-project",
   GET_LATEST_PLAN: "get-latest-plan",
   GET_CHILDREN: "get-children",
+  BROWSE_CHILDREN: "browse-children",
 
   // Server -> Client
   OUTPUT: "output",

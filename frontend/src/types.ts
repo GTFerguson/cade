@@ -83,6 +83,17 @@ export interface GetChildrenMessage extends BaseMessage {
   showIgnored?: boolean;
 }
 
+export interface BrowseChildrenMessage extends BaseMessage {
+  type: "browse-children";
+  path: string;
+}
+
+export interface BrowseChildrenResponseMessage extends BaseMessage {
+  type: "browse-children";
+  path: string;
+  children: FileNode[];
+}
+
 /**
  * Write file request (client -> server).
  */
@@ -349,6 +360,7 @@ export type ClientMessage =
   | GetFileMessage
   | GetTreeMessage
   | GetChildrenMessage
+  | BrowseChildrenMessage
   | GetLatestPlanMessage
   | WriteFileMessage
   | CreateFileMessage
@@ -367,6 +379,7 @@ export type ServerMessage =
   | OutputMessage
   | FileTreeMessage
   | FileChildrenMessage
+  | BrowseChildrenResponseMessage
   | FileChangeMessage
   | FileContentMessage
   | FileWrittenMessage

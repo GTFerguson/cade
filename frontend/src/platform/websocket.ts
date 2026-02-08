@@ -3,7 +3,7 @@
  */
 
 import { appendTokenToUrl } from "../auth/tokenManager";
-import { basePath, config } from "../config/config";
+import { basePath, config, isRemoteBrowserAccess } from "../config/config";
 import { ErrorCode, MessageType, type AnySessionKey } from "./protocol";
 import type {
   ClientMessage,
@@ -36,6 +36,7 @@ interface WebSocketEvents {
   output: OutputMessage;
   "file-tree": FileTreeMessage;
   "file-children": FileChildrenMessage;
+  "browse-children": FileChildrenMessage;
   "file-change": FileChangeMessage;
   "file-content": FileContentMessage;
   "file-written": { path: string };
@@ -174,19 +175,20 @@ export class WebSocketClient {
       this.ws = null;
       this.emit("disconnected", undefined);
 
-      // Code 1008 = Policy Violation (auth failure) — redirect to login
-      // instead of reconnecting in a loop
-      const isTauri =
-        window.location.hostname === "tauri.localhost" ||
-        (window as any).__TAURI__ === true;
-
+      // Code 1008 = Policy Violation (auth failure)
+      // Emit auth-failed for Tauri and remote browser access (shows dialog)
+      // Redirect to /login only for local dev browser
       if (event.code === 1008) {
-        if (!isTauri) {
+        const isTauri =
+          window.location.hostname === "tauri.localhost" ||
+          (window as any).__TAURI__ === true;
+
+        if (isTauri || isRemoteBrowserAccess()) {
+          console.warn("WebSocket auth rejected (1008), showing auth dialog");
+          this.emit("auth-failed", { code: event.code });
+        } else {
           console.warn("WebSocket auth rejected (1008), redirecting to login");
           window.location.href = basePath + "/login";
-        } else {
-          console.warn("WebSocket auth rejected (1008)");
-          this.emit("auth-failed", { code: event.code });
         }
         return;
       }
@@ -296,6 +298,17 @@ export class WebSocketClient {
       message.showIgnored = showIgnored;
     }
     this.send(message as ClientMessage);
+  }
+
+  /**
+   * Browse absolute filesystem paths (for project directory selection).
+   * Unlike requestChildren, this expands ~ and allows navigation anywhere.
+   */
+  requestBrowseChildren(path: string): void {
+    this.send({
+      type: MessageType.BROWSE_CHILDREN,
+      path,
+    } as ClientMessage);
   }
 
   /**
@@ -460,6 +473,10 @@ export class WebSocketClient {
 
       case MessageType.FILE_CHILDREN:
         this.emit("file-children", message as FileChildrenMessage);
+        break;
+
+      case MessageType.BROWSE_CHILDREN:
+        this.emit("browse-children", message as unknown as FileChildrenMessage);
         break;
 
       case MessageType.FILE_CHANGE:
