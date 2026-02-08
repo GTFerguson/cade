@@ -1,8 +1,9 @@
 /**
- * Mobile touch toolbar providing keys that virtual keyboards can't produce.
+ * Mobile touch toolbar — vim statusline aesthetic.
  *
- * Renders a 6-button bar (↑, Tab, Esc, ^C, ^D, ⋯) fixed to the bottom
- * of the viewport, repositioning above the virtual keyboard when it opens.
+ * Renders a 6-button bar (esc | tab | ^c | ^d | ↑ | [cmd]) fixed to
+ * the bottom of the viewport. Repositions above the virtual keyboard
+ * when it opens, and debounces terminal resize.
  */
 
 import type { Component } from "../types";
@@ -10,15 +11,17 @@ import type { Component } from "../types";
 interface ToolbarKey {
   label: string;
   data: string | null;
+  /** CSS class added to this button */
+  className?: string;
 }
 
 const TOOLBAR_KEYS: ToolbarKey[] = [
-  { label: "↑",   data: "\x1b[A" },
-  { label: "Tab", data: "\t"     },
-  { label: "Esc", data: "\x1b"   },
-  { label: "^C",  data: "\x03"   },
-  { label: "^D",  data: "\x04"   },
-  { label: "⋯",   data: null     },
+  { label: "esc", data: "\x1b" },
+  { label: "tab", data: "\t" },
+  { label: "^c", data: "\x03" },
+  { label: "^d", data: "\x04" },
+  { label: "\u2191", data: "\x1b[A" },
+  { label: "[cmd]", data: null, className: "key-cmd" },
 ];
 
 const TOOLBAR_HEIGHT = 48;
@@ -26,13 +29,13 @@ const RESIZE_DEBOUNCE_MS = 150;
 
 export class TouchToolbar implements Component {
   private toolbar: HTMLElement;
-  private buttons: HTMLButtonElement[] = [];
+  private cmdButton: HTMLButtonElement | null = null;
   private resizeTimer: number | null = null;
   private boundViewportResize: () => void;
 
   constructor(
     private sendInput: (data: string) => void,
-    private onOverflowMenu: () => void,
+    private onCmd: () => void,
   ) {
     this.toolbar = document.getElementById("touch-toolbar") as HTMLElement;
     this.boundViewportResize = () => this.handleViewportResize();
@@ -47,9 +50,16 @@ export class TouchToolbar implements Component {
   private createButtons(): void {
     this.toolbar.innerHTML = "";
 
-    for (const key of TOOLBAR_KEYS) {
+    for (let i = 0; i < TOOLBAR_KEYS.length; i++) {
+      const key = TOOLBAR_KEYS[i]!;
       const btn = document.createElement("button");
-      btn.className = "touch-toolbar-btn";
+
+      let cls = "touch-toolbar-btn";
+      if (key.className) cls += ` ${key.className}`;
+      // Pipe separator on all keys except the last
+      if (i < TOOLBAR_KEYS.length - 1) cls += " key-separator";
+      btn.className = cls;
+
       btn.textContent = key.label;
       btn.setAttribute("aria-label", key.label);
 
@@ -58,12 +68,15 @@ export class TouchToolbar implements Component {
         if (key.data !== null) {
           this.sendInput(key.data);
         } else {
-          this.onOverflowMenu();
+          this.onCmd();
         }
       });
 
       this.toolbar.appendChild(btn);
-      this.buttons.push(btn);
+
+      if (key.className === "key-cmd") {
+        this.cmdButton = btn;
+      }
     }
   }
 
@@ -114,24 +127,19 @@ export class TouchToolbar implements Component {
     this.toolbar.style.display = "none";
   }
 
-  /**
-   * Get the toolbar height for layout calculations.
-   */
   getHeight(): number {
     return TOOLBAR_HEIGHT;
   }
 
   /**
-   * Show a notification indicator on the overflow (⋯) button.
+   * Show a notification indicator on the [cmd] button.
    */
-  showOverflowIndicator(): void {
-    const overflowBtn = this.buttons[this.buttons.length - 1];
-    overflowBtn?.classList.add("has-indicator");
+  showCmdIndicator(): void {
+    this.cmdButton?.classList.add("has-indicator");
   }
 
-  clearOverflowIndicator(): void {
-    const overflowBtn = this.buttons[this.buttons.length - 1];
-    overflowBtn?.classList.remove("has-indicator");
+  clearCmdIndicator(): void {
+    this.cmdButton?.classList.remove("has-indicator");
   }
 
   dispose(): void {
@@ -147,6 +155,6 @@ export class TouchToolbar implements Component {
 
     this.hide();
     this.toolbar.innerHTML = "";
-    this.buttons = [];
+    this.cmdButton = null;
   }
 }
