@@ -6,51 +6,70 @@
  *  - Status mode (default): Shows "[loading]" / "[enter]", dismissed with Enter/Space.
  *  - Options mode: Shows selectable actions (e.g. Local/Remote project picker).
  *    Navigate with ↑↓ / j/k, confirm with Enter, or click.
+ *
+ * On mobile (≤768px), uses a narrower box-drawing logo and scramble effects.
  */
 
 import { MenuNav, renderHelpBar } from "./menu-nav";
+import {
+  CADE_LOGO,
+  CADE_LOGO_MOBILE,
+  runLoadIn,
+  runDismiss,
+} from "./splash-effects";
 
 export interface SplashOption {
   label: string;
   action: () => void;
 }
 
-const CADE_LOGO = `   █████████    █████████   ██████████   ██████████
-  ███░░░░░███  ███░░░░░███ ░░███░░░░███ ░░███░░░░░█
- ███     ░░░  ░███    ░███  ░███   ░░███ ░███  █ ░
-░███          ░███████████  ░███    ░███ ░██████
-░███          ░███░░░░░███  ░███    ░███ ░███░░█
-░░███     ███ ░███    ░███  ░███    ███  ░███ ░   █
- ░░█████████  █████   █████ ██████████   ██████████
-  ░░░░░░░░░  ░░░░░   ░░░░░ ░░░░░░░░░░   ░░░░░░░░░░`;
+const MOBILE_BREAKPOINT = 768;
 
 export class Splash {
   private element: HTMLElement;
+  private logoEl: HTMLPreElement;
   private statusEl: HTMLElement;
   private ready = false;
   private onEnter: (() => void) | null = null;
   private keyHandler: ((e: KeyboardEvent) => void) | null = null;
   private tapHandler: ((e: Event) => void) | null = null;
+  private isMobile: boolean;
+  private logo: string;
 
   private options: SplashOption[] | null = null;
   private optionEls: HTMLElement[] = [];
   private nav: MenuNav;
 
+  private progressEl: HTMLElement | null = null;
+  private progressSegs: HTMLElement[] = [];
+  private progressLabelEl: HTMLElement | null = null;
+  private static TOTAL_STEPS = 4;
+
   constructor(container: HTMLElement) {
+    this.isMobile = window.innerWidth <= MOBILE_BREAKPOINT;
+    this.logo = this.isMobile ? CADE_LOGO_MOBILE : CADE_LOGO;
+
     this.element = document.createElement("div");
     this.element.className = "splash";
 
-    const logo = document.createElement("pre");
-    logo.className = "splash-logo";
-    logo.textContent = CADE_LOGO;
+    this.logoEl = document.createElement("pre");
+    this.logoEl.className = this.isMobile
+      ? "splash-logo splash-logo-mobile"
+      : "splash-logo";
+    this.logoEl.textContent = "";
 
     this.statusEl = document.createElement("div");
     this.statusEl.className = "splash-status";
     this.statusEl.textContent = "[loading]";
 
-    this.element.appendChild(logo);
+    this.element.appendChild(this.logoEl);
     this.element.appendChild(this.statusEl);
     container.appendChild(this.element);
+
+    // Run load-in scramble effect
+    runLoadIn(this.logoEl, this.logo, "binaryBootSlow", () => {
+      // Animation complete — logo is now fully visible
+    });
 
     this.nav = new MenuNav({
       getOptions: () => this.optionEls,
@@ -115,8 +134,7 @@ export class Splash {
   setReady(callback: () => void): void {
     this.ready = true;
     this.onEnter = callback;
-    const isMobile = window.innerWidth <= 768;
-    this.setStatus(isMobile ? "tap" : "enter");
+    this.setStatus(this.isMobile ? "tap" : "enter");
     this.statusEl.classList.add("blink");
   }
 
@@ -156,6 +174,57 @@ export class Splash {
   }
 
   /**
+   * Transition from options mode to a progress bar.
+   * Called when user has selected an action and we're waiting for shell readiness.
+   */
+  setLoading(): void {
+    this.options = null;
+    this.optionEls = [];
+    this.ready = false;
+
+    this.element.querySelector(".splash-options")?.remove();
+    this.element.querySelector(".splash-help")?.remove();
+    this.statusEl.style.display = "none";
+
+    this.progressEl = document.createElement("div");
+    this.progressEl.className = "splash-progress";
+
+    const bar = document.createElement("div");
+    bar.className = "splash-progress-bar";
+
+    this.progressSegs = [];
+    for (let i = 0; i < Splash.TOTAL_STEPS; i++) {
+      const seg = document.createElement("div");
+      seg.className = "seg";
+      bar.appendChild(seg);
+      this.progressSegs.push(seg);
+    }
+
+    this.progressLabelEl = document.createElement("div");
+    this.progressLabelEl.className = "splash-progress-label";
+    this.progressLabelEl.textContent = "initializing";
+
+    this.progressEl.appendChild(bar);
+    this.progressEl.appendChild(this.progressLabelEl);
+    this.element.appendChild(this.progressEl);
+
+    // Start at step 1
+    this.setProgress(1, "initializing");
+  }
+
+  /**
+   * Update the progress bar to the given step (1-based).
+   */
+  setProgress(step: number, label: string): void {
+    for (let i = 0; i < this.progressSegs.length; i++) {
+      this.progressSegs[i]?.classList.toggle("filled", i < step);
+    }
+    if (this.progressLabelEl) {
+      this.progressLabelEl.textContent = label;
+    }
+  }
+
+  /**
    * Auto-skip the splash screen and immediately call the callback.
    * Used when reconnecting to an active session.
    */
@@ -166,7 +235,7 @@ export class Splash {
   }
 
   /**
-   * Hide the splash screen with a fade animation.
+   * Hide the splash screen with dismiss scramble effect.
    */
   hide(): void {
     if (this.keyHandler) {
@@ -177,8 +246,12 @@ export class Splash {
       this.element.removeEventListener("click", this.tapHandler);
       this.tapHandler = null;
     }
-    this.element.classList.add("hidden");
-    setTimeout(() => this.element.remove(), 300);
+
+    // Run dismiss effect, then remove element
+    runDismiss(this.logoEl, this.logo, "binaryEntropySmooth", () => {
+      this.element.classList.add("hidden");
+      setTimeout(() => this.element.remove(), 100);
+    });
   }
 
   /**
