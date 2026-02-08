@@ -103,9 +103,14 @@ function mockInput(): HTMLInputElement & { _classes: Set<string>; blurred: boole
   return el;
 }
 
-function mockKeyEvent(key: string, target?: HTMLElement): KeyboardEvent {
+function mockKeyEvent(
+  key: string,
+  target?: HTMLElement,
+  opts?: { altKey?: boolean }
+): KeyboardEvent {
   return {
     key,
+    altKey: opts?.altKey ?? false,
     target: target || { tagName: "DIV" },
     preventDefault: vi.fn(),
     stopPropagation: vi.fn(),
@@ -384,6 +389,49 @@ describe("MenuNav", () => {
       });
 
       const e = mockKeyEvent("ArrowDown", input2);
+      nav.handleKeyDown(e);
+
+      expect(input2.blurred).toBe(true);
+      expect(nav.selectedIndex).toBe(0);
+    });
+
+    it("navigates between input fields on Alt+j", () => {
+      const opts = [mockElement()];
+      const input1 = mockInput();
+      const input2 = mockInput();
+      const { nav } = createNav(opts, {
+        getInputFields: () => [input1, input2],
+      });
+
+      const e = mockKeyEvent("j", input1, { altKey: true });
+      nav.handleKeyDown(e);
+
+      expect((input2.focus as ReturnType<typeof vi.fn>)).toHaveBeenCalled();
+    });
+
+    it("navigates between input fields on Alt+k", () => {
+      const opts = [mockElement()];
+      const input1 = mockInput();
+      const input2 = mockInput();
+      const { nav } = createNav(opts, {
+        getInputFields: () => [input1, input2],
+      });
+
+      const e = mockKeyEvent("k", input2, { altKey: true });
+      nav.handleKeyDown(e);
+
+      expect((input1.focus as ReturnType<typeof vi.fn>)).toHaveBeenCalled();
+    });
+
+    it("jumps from last input to first option on Alt+j", () => {
+      const opts = [mockElement(), mockElement()];
+      const input1 = mockInput();
+      const input2 = mockInput();
+      const { nav } = createNav(opts, {
+        getInputFields: () => [input1, input2],
+      });
+
+      const e = mockKeyEvent("j", input2, { altKey: true });
       nav.handleKeyDown(e);
 
       expect(input2.blurred).toBe(true);

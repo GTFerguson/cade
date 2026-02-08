@@ -172,7 +172,11 @@ export class MenuNav {
       return true;
     }
 
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    const isFieldNav =
+      e.key === "ArrowDown" ||
+      e.key === "ArrowUp" ||
+      (e.altKey && (e.key === "j" || e.key === "k"));
+    if (isFieldNav) {
       const fields = this.config.getInputFields?.();
       if (!fields || fields.length === 0) return false;
 
@@ -181,7 +185,7 @@ export class MenuNav {
       const idx = fieldsArr.indexOf(input);
       if (idx < 0) return false;
 
-      const direction = e.key === "ArrowDown" ? 1 : -1;
+      const direction = e.key === "ArrowDown" || e.key === "j" ? 1 : -1;
       const nextIdx = idx + direction;
 
       if (nextIdx >= 0 && nextIdx < fields.length) {
