@@ -71,7 +71,7 @@ export class ProjectContextImpl implements IProjectContext {
         this.terminalManager?.write(
           `\r\n\x1b[1;31mError: ${msg.message}\x1b[0m\r\n`
         );
-        this.terminalManager?.focus();
+        this.terminalManager?.focusAtBottom();
       }
     },
     ptyExited: (msg: PtyExitedMessage) => {
@@ -160,7 +160,7 @@ export class ProjectContextImpl implements IProjectContext {
         this.ws.off("output", onFirstOutput);
         this.splash?.setProgress(4, "ready");
         this.splash?.hide();
-        this.terminalManager?.focus();
+        this.terminalManager?.focusAtBottom();
       };
       this.ws.on("output", onFirstOutput);
     }

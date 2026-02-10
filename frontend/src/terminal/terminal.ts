@@ -81,6 +81,12 @@ export class Terminal implements Component {
   private scrollbackOverride: number | null;
   private lastSentSize: { cols: number; rows: number } | null = null;
 
+  // Scroll lock: xterm.js has a bug where alternate buffer transitions
+  // clear the internal isUserScrolling flag, causing the viewport to snap
+  // to the bottom on the next output write. We track scroll state ourselves
+  // and restore it when xterm loses it.
+  private savedScrollPos: number | null = null;
+
   constructor(
     private container: HTMLElement,
     private ws: WebSocketClient,
@@ -173,6 +179,18 @@ export class Terminal implements Component {
 
     this.fit();
 
+    // Track user scroll position to work around xterm.js bug where
+    // alternate buffer transitions clear the isUserScrolling flag
+    this.terminal.onScroll(() => {
+      const buf = this.terminal?.buffer.active;
+      if (!buf) return;
+      if (buf.viewportY < buf.baseY) {
+        this.savedScrollPos = buf.viewportY;
+      } else {
+        this.savedScrollPos = null;
+      }
+    });
+
     if (!this.readOnly) {
       this.terminal.onData((data) => {
         this.ws.sendInput(data, this.sessionKey);
@@ -209,14 +227,6 @@ export class Terminal implements Component {
       }, 150);
     });
     this.resizeObserver.observe(this.container);
-
-    // Scroll to bottom on click if no text is selected
-    this.container.addEventListener("click", () => {
-      const selection = this.terminal?.getSelection();
-      if (!selection) {
-        this.scrollToBottom();
-      }
-    });
 
     // Prevent default browser paste events (xterm.js has its own paste handler that conflicts)
     this.container.addEventListener('paste', (e) => {
@@ -319,9 +329,16 @@ export class Terminal implements Component {
   }
 
   /**
-   * Focus the terminal and scroll to bottom.
+   * Focus the terminal without changing scroll position.
    */
   focus(): void {
+    this.terminal?.focus();
+  }
+
+  /**
+   * Focus the terminal and scroll to bottom.
+   */
+  focusAtBottom(): void {
     this.terminal?.focus();
     this.scrollToBottom();
   }
@@ -330,6 +347,7 @@ export class Terminal implements Component {
    * Scroll terminal to the top of the buffer.
    */
   scrollToTop(): void {
+    this.savedScrollPos = 0;
     this.terminal?.scrollToTop();
   }
 
@@ -337,6 +355,7 @@ export class Terminal implements Component {
    * Scroll terminal to the bottom of the buffer.
    */
   scrollToBottom(): void {
+    this.savedScrollPos = null;
     this.terminal?.scrollToBottom();
   }
 
@@ -357,9 +376,22 @@ export class Terminal implements Component {
 
   /**
    * Write data to terminal (for local echo or status messages).
+   * Protects scroll position from xterm.js alt-buffer bug.
    */
   write(data: string): void {
-    this.terminal?.write(data);
+    if (!this.terminal) return;
+    const restoreTo = this.savedScrollPos;
+    if (restoreTo != null) {
+      this.terminal.write(data, () => {
+        // If we were scrolled up but xterm snapped to bottom, restore
+        if (this.savedScrollPos == null && restoreTo != null) {
+          this.terminal?.scrollToLine(restoreTo);
+          this.savedScrollPos = restoreTo;
+        }
+      });
+    } else {
+      this.terminal.write(data);
+    }
   }
 
   /**
@@ -386,6 +418,7 @@ export class Terminal implements Component {
     if (this.terminal == null) {
       return;
     }
+    this.savedScrollPos = null;
 
     // Reset to initial state without triggering device queries:
     // - SGR 0: Reset text attributes

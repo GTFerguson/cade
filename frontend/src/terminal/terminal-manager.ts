@@ -421,7 +421,7 @@ export class TerminalManager implements Component {
   }
 
   /**
-   * Focus the active terminal.
+   * Focus the active terminal without changing scroll position.
    */
   focus(): void {
     if (this.agentManager?.getActiveAgentId() != null) {
@@ -433,6 +433,17 @@ export class TerminalManager implements Component {
       this.claudeTerminal?.focus();
     } else {
       this.manualTerminal?.focus();
+    }
+  }
+
+  /**
+   * Focus the active terminal and scroll to bottom.
+   */
+  focusAtBottom(): void {
+    if (this.activeTerminal === SessionKey.CLAUDE) {
+      this.claudeTerminal?.focusAtBottom();
+    } else {
+      this.manualTerminal?.focusAtBottom();
     }
   }
 

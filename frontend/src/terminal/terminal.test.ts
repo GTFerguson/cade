@@ -34,6 +34,7 @@ vi.mock("@xterm/xterm", () => {
     open = vi.fn();
     onData = vi.fn();
     onResize = vi.fn();
+    onScroll = vi.fn();
     write = vi.fn();
     clear = vi.fn();
     dispose = vi.fn();
@@ -41,6 +42,8 @@ vi.mock("@xterm/xterm", () => {
     focus = vi.fn();
     scrollToTop = vi.fn();
     scrollToBottom = vi.fn();
+    scrollToLine = vi.fn();
+    buffer = { active: { viewportY: 0, baseY: 0 } };
 
     attachCustomKeyEventHandler(handler: (e: KeyboardEvent) => boolean) {
       this.keyHandler = handler;
