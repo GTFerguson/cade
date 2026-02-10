@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from backend.hooks.config import HookType
-from backend.hooks.settings import ClaudeSettings
+from backend.hooks.settings import ClaudeSettings, _is_cade_hook
 
 
 class TestClaudeSettings:
@@ -211,3 +211,129 @@ class TestClaudeSettings:
 
         result = settings.get_hooks(HookType.POST_TOOL_USE)
         assert result == []
+
+    def test_add_hook_updates_new_style_command(self, temp_dir: Path) -> None:
+        """Existing hook with view_file.py (new style) is updated, not duplicated."""
+        settings_path = temp_dir / ".claude" / "settings.json"
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+        existing_data = {
+            "hooks": {
+                "PostToolUse": [
+                    {
+                        "matcher": "Edit|Write",
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": "python3 ~/.cade/hooks/view_file.py",
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+        settings_path.write_text(json.dumps(existing_data))
+
+        settings = ClaudeSettings(settings_path)
+        settings.load()
+
+        new_hook = {
+            "matcher": "Edit|Write",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python3 ~/.cade/hooks/view_file.py",
+                }
+            ],
+        }
+        updated = settings.add_hook(HookType.POST_TOOL_USE, new_hook)
+
+        assert updated
+        assert len(settings.data["hooks"]["PostToolUse"]) == 1
+
+
+class TestIsCadeHook:
+    """Tests for _is_cade_hook() helper."""
+
+    def test_old_style_curl_command(self) -> None:
+        """Detects old-style one-liner with api/view."""
+        cmd = 'curl -sf -X POST http://host:3001/api/view'
+        assert _is_cade_hook(cmd)
+
+    def test_new_style_script_command(self) -> None:
+        """Detects new-style script-based command."""
+        cmd = "python3 ~/.cade/hooks/view_file.py"
+        assert _is_cade_hook(cmd)
+
+    def test_unrelated_command(self) -> None:
+        """Does not match unrelated commands."""
+        cmd = "echo hello"
+        assert not _is_cade_hook(cmd)
+
+    def test_empty_command(self) -> None:
+        """Empty string does not match."""
+        assert not _is_cade_hook("")
+
+    def test_old_style_complex_oneliner(self) -> None:
+        """Detects old-style complex one-liner with nested api/view."""
+        cmd = (
+            'python3 -c "import sys,json; p=json.load(sys.stdin)" '
+            '| xargs -r -I {} curl http://host/api/view'
+        )
+        assert _is_cade_hook(cmd)
+
+
+class TestHasCadeHook:
+    """Tests for ClaudeSettings.has_cade_hook()."""
+
+    def test_detects_old_style_hook(self, temp_dir: Path) -> None:
+        """Detects old-style one-liner hook."""
+        settings_path = temp_dir / ".claude" / "settings.json"
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(json.dumps({
+            "hooks": {"PostToolUse": [{
+                "matcher": "Edit|Write",
+                "hooks": [{"type": "command", "command": "curl http://host/api/view"}],
+            }]}
+        }))
+
+        settings = ClaudeSettings(settings_path)
+        settings.load()
+        assert settings.has_cade_hook(HookType.POST_TOOL_USE)
+
+    def test_detects_new_style_hook(self, temp_dir: Path) -> None:
+        """Detects new-style script hook."""
+        settings_path = temp_dir / ".claude" / "settings.json"
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(json.dumps({
+            "hooks": {"PostToolUse": [{
+                "matcher": "Edit|Write",
+                "hooks": [{"type": "command", "command": "python3 ~/.cade/hooks/view_file.py"}],
+            }]}
+        }))
+
+        settings = ClaudeSettings(settings_path)
+        settings.load()
+        assert settings.has_cade_hook(HookType.POST_TOOL_USE)
+
+    def test_no_hook_returns_false(self, temp_dir: Path) -> None:
+        """Returns False when no CADE hook exists."""
+        settings_path = temp_dir / ".claude" / "settings.json"
+        settings = ClaudeSettings(settings_path)
+        settings.load()
+        assert not settings.has_cade_hook(HookType.POST_TOOL_USE)
+
+    def test_unrelated_hook_returns_false(self, temp_dir: Path) -> None:
+        """Returns False when hooks exist but none are CADE."""
+        settings_path = temp_dir / ".claude" / "settings.json"
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(json.dumps({
+            "hooks": {"PostToolUse": [{
+                "matcher": "Edit|Write",
+                "hooks": [{"type": "command", "command": "echo done"}],
+            }]}
+        }))
+
+        settings = ClaudeSettings(settings_path)
+        settings.load()
+        assert not settings.has_cade_hook(HookType.POST_TOOL_USE)

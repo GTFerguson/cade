@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from backend.hooks.commands import build_hook_config
 from backend.hooks.config import CADEHookOptions, HookType
+from backend.hooks.installer import install_hook_script
 from backend.hooks.settings import ClaudeSettings
 from backend.hooks.wsl_path import get_wsl_settings_path
 
@@ -37,6 +38,7 @@ class SetupResult:
     Attributes:
         success: Whether the operation succeeded.
         settings_path: Path to the settings file.
+        script_path: Path to the installed hook script.
         is_wsl: Whether writing to WSL from Windows.
         hook_updated: Whether an existing hook was updated (vs. new).
         backup_created: Whether a backup was created.
@@ -45,6 +47,7 @@ class SetupResult:
 
     success: bool
     settings_path: "Path"
+    script_path: "Path | None"
     is_wsl: bool
     hook_updated: bool
     backup_created: bool
@@ -83,11 +86,15 @@ def setup_cade_hooks(
         return SetupResult(
             success=False,
             settings_path=settings_path,
+            script_path=None,
             is_wsl=is_wsl,
             hook_updated=False,
             backup_created=False,
             message=f"Failed to load settings: {e}",
         )
+
+    # Install the hook script to ~/.cade/hooks/
+    script_path = install_hook_script(options, dry_run=dry_run)
 
     hook_config = build_hook_config(options)
     hook_updated = settings.add_hook(HookType.POST_TOOL_USE, hook_config)
@@ -97,6 +104,7 @@ def setup_cade_hooks(
         return SetupResult(
             success=True,
             settings_path=settings_path,
+            script_path=script_path,
             is_wsl=is_wsl,
             hook_updated=hook_updated,
             backup_created=False,
@@ -112,6 +120,7 @@ def setup_cade_hooks(
     return SetupResult(
         success=True,
         settings_path=settings_path,
+        script_path=script_path,
         is_wsl=is_wsl,
         hook_updated=hook_updated,
         backup_created=backup_created,

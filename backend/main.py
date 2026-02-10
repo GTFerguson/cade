@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import secrets
+import subprocess
 import sys
 import webbrowser
 from contextlib import asynccontextmanager
@@ -72,6 +73,112 @@ async def _check_wsl_health_async() -> None:
         logger.warning("WSL not ready: %s", msg)
 
 
+def _write_discovery_files(config: Config) -> list[Path]:
+    """Write port and host files so hook scripts can find the server.
+
+    Returns list of files written (for cleanup on shutdown).
+    """
+    from backend.hooks.wsl_path import get_wsl_cade_dir
+
+    cade_dir = get_wsl_cade_dir()
+    written: list[Path] = []
+
+    try:
+        cade_dir.mkdir(parents=True, exist_ok=True)
+
+        port_file = cade_dir / "port"
+        port_file.write_text(str(config.port), encoding="utf-8")
+        written.append(port_file)
+        logger.info("Wrote %s", port_file)
+
+        host_file = cade_dir / "host"
+        host_value = _resolve_host_for_hooks()
+        host_file.write_text(host_value, encoding="utf-8")
+        written.append(host_file)
+        logger.info("Wrote %s (host=%s)", host_file, host_value)
+
+    except Exception as e:
+        logger.warning("Failed to write discovery files: %s", e)
+
+    return written
+
+
+def _resolve_host_for_hooks() -> str:
+    """Determine the host value that hook scripts should use to reach us.
+
+    On Windows (where CADE server runs), the hook runs in WSL and needs
+    the gateway IP. On Linux, both server and hook are local.
+    """
+    if sys.platform == "win32":
+        try:
+            result = subprocess.run(
+                ["wsl", "ip", "route", "show", "default"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            # Output: "default via 172.x.x.x dev eth0"
+            parts = result.stdout.strip().split()
+            if len(parts) >= 3 and parts[0] == "default":
+                return parts[2]
+        except Exception as e:
+            logger.warning("Failed to get WSL gateway IP: %s", e)
+
+    return "localhost"
+
+
+def _cleanup_discovery_files(files: list[Path]) -> None:
+    """Remove discovery files written at startup."""
+    for f in files:
+        try:
+            f.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+def _read_existing_filter_mode() -> bool:
+    """Read the filter mode from an existing hook script.
+
+    Preserves user customization (e.g. --all-files) across restarts.
+
+    Returns:
+        True if the existing script uses all_files mode, False otherwise.
+    """
+    from backend.hooks.installer import SCRIPT_FILENAME
+    from backend.hooks.wsl_path import get_wsl_cade_dir
+
+    try:
+        script = get_wsl_cade_dir() / "hooks" / SCRIPT_FILENAME
+        content = script.read_text(encoding="utf-8")
+        return 'FILTER_MODE = "all_files"' in content
+    except Exception:
+        return False
+
+
+def _auto_setup_hook() -> None:
+    """Ensure the CADE hook is installed and up to date.
+
+    Runs every startup. Idempotent — safe to call repeatedly:
+    - Writes/refreshes the hook script (preserving existing filter mode)
+    - Upgrades old one-liner hooks in settings.json to script-based
+    - Adds the hook if missing entirely
+    """
+    from backend.hooks import CADEHookOptions, setup_cade_hooks
+
+    try:
+        all_files = _read_existing_filter_mode()
+        options = CADEHookOptions(all_files=all_files)
+
+        result = setup_cade_hooks(options, dry_run=False)
+        if result.success:
+            logger.info("Hook setup: %s", result.message)
+        else:
+            logger.warning("Hook setup failed: %s", result.message)
+
+    except Exception as e:
+        logger.debug("Auto hook setup skipped: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan handler."""
@@ -85,6 +192,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     registry = get_registry()
     await registry.start()
+
+    # Write port/host files for hook script discovery
+    discovery_files = _write_discovery_files(config)
+
+    # Install hook if not already configured
+    _auto_setup_hook()
 
     # Start WSL health check in background (non-blocking)
     import asyncio
@@ -105,6 +218,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     logger.info("CADE shutting down")
+    _cleanup_discovery_files(discovery_files)
+
     wsl_task.cancel()
     try:
         await wsl_task
@@ -122,6 +237,8 @@ class ViewFileRequest(BaseModel):
     """Request body for /api/view endpoint."""
 
     path: str
+    session_id: str | None = None
+    cwd: str | None = None
 
 
 class LoginRequest(BaseModel):
@@ -265,6 +382,23 @@ def create_app(config: Config | None = None) -> FastAPI:
                         "path": str(file_path),
                         "connections": sent_count,
                     }
+
+        # Fallback: use cwd from hook context to route to the right project
+        if request.cwd:
+            cwd_connections = registry.get_connections_for_project(request.cwd)
+            if cwd_connections:
+                sent_count = await _send_to_connections(cwd_connections, message)
+                logger.info(
+                    "Sent VIEW_FILE to %d connection(s) via cwd '%s': %s",
+                    sent_count,
+                    request.cwd,
+                    file_path,
+                )
+                return {
+                    "success": True,
+                    "path": str(file_path),
+                    "connections": sent_count,
+                }
 
         # No routing match - don't broadcast to avoid cross-project leakage
         logger.warning(
@@ -576,13 +710,16 @@ def run_setup_hook(args: argparse.Namespace) -> None:
 
         from backend.hooks.commands import build_hook_config
         from backend.hooks.config import HookType
+        from backend.hooks.installer import install_hook_script
 
+        script_path = install_hook_script(options, dry_run=True)
         hook_config = build_hook_config(options)
         hook_updated = settings.add_hook(HookType.POST_TOOL_USE, hook_config)
 
         action = "Would update existing" if hook_updated else "Would add new"
         print(f"{action} PostToolUse hook")
-        print(f"\nSettings path: {settings_path}")
+        print(f"\nHook script: {script_path}")
+        print(f"Settings path: {settings_path}")
         if is_wsl:
             print("(Writing to WSL home directory from Windows)")
         print("\nSettings that would be written:")
@@ -601,15 +738,19 @@ def run_setup_hook(args: argparse.Namespace) -> None:
 
     print(result.message)
 
+    if result.script_path:
+        print(f"Hook script installed: {result.script_path}")
+
     if result.backup_created:
         backup_path = result.settings_path.parent / "settings.json.backup"
         print(f"Backed up existing settings to {backup_path}")
 
     file_filter = "all file edits" if options.all_files else "plan files (plans/*.md)"
-    print(f"Hook configured to POST {file_filter} to http://localhost:{options.port}/api/view")
+    print(f"Hook configured to POST {file_filter} to CADE server")
+    print(f"Settings: {result.settings_path}")
 
     if result.is_wsl:
-        print(f"Settings written to WSL path: {result.settings_path}")
+        print("(Written to WSL home directory from Windows)")
 
 
 def main() -> None:

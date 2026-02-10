@@ -1,131 +1,120 @@
-"""Tests for the hook command builders."""
+"""Tests for the hook command/script builders."""
 
 from __future__ import annotations
 
 import pytest
 
 from backend.hooks.commands import (
+    HOOK_SCRIPT_TEMPLATE,
+    build_hook_command,
     build_hook_config,
-    build_view_file_command,
-    _build_all_files_command,
-    _build_plan_files_command,
-    _get_gateway_ip_command,
+    generate_hook_script,
 )
 from backend.hooks.config import CADEHookOptions
 
 
-class TestBuildViewFileCommand:
-    """Tests for build_view_file_command."""
+class TestGenerateHookScript:
+    """Tests for generate_hook_script()."""
 
-    def test_plan_files_only_filters_correctly(self) -> None:
-        """Default command filters for plans/*.md."""
-        options = CADEHookOptions(port=3001, all_files=False)
-        command = build_view_file_command(options)
+    def test_plans_only_mode(self) -> None:
+        """Default options produce plans_only filter mode."""
+        options = CADEHookOptions(all_files=False)
+        script = generate_hook_script(options)
 
-        assert "plans/" in command
-        assert ".md" in command
-        assert "api/view" in command
+        assert 'FILTER_MODE = "plans_only"' in script
 
-    def test_all_files_no_filter(self) -> None:
-        """--all-files command has no path filter."""
-        options = CADEHookOptions(port=3001, all_files=True)
-        command = build_view_file_command(options)
+    def test_all_files_mode(self) -> None:
+        """--all-files produces all_files filter mode."""
+        options = CADEHookOptions(all_files=True)
+        script = generate_hook_script(options)
 
-        assert "plans/" not in command
-        assert "api/view" in command
+        assert 'FILTER_MODE = "all_files"' in script
 
-    def test_custom_port(self) -> None:
-        """Custom port is included in curl command."""
-        options = CADEHookOptions(port=8080, all_files=False)
-        command = build_view_file_command(options)
-
-        assert ":8080/" in command
-
-    def test_default_port(self) -> None:
-        """Default port (3001) is used."""
+    def test_script_is_valid_python(self) -> None:
+        """Generated script compiles as valid Python."""
         options = CADEHookOptions()
-        command = build_view_file_command(options)
+        script = generate_hook_script(options)
 
-        assert ":3001/" in command
+        # compile() raises SyntaxError if invalid
+        compile(script, "view_file.py", "exec")
+
+    def test_all_files_script_is_valid_python(self) -> None:
+        """All-files variant also compiles as valid Python."""
+        options = CADEHookOptions(all_files=True)
+        script = generate_hook_script(options)
+
+        compile(script, "view_file.py", "exec")
+
+    def test_script_has_shebang(self) -> None:
+        """Script starts with Python shebang."""
+        script = generate_hook_script(CADEHookOptions())
+        assert script.startswith("#!/usr/bin/env python3")
+
+    def test_script_reads_stdin(self) -> None:
+        """Script reads JSON from stdin."""
+        script = generate_hook_script(CADEHookOptions())
+        assert "json.load(sys.stdin)" in script
+
+    def test_script_posts_to_api_view(self) -> None:
+        """Script POSTs to /api/view endpoint."""
+        script = generate_hook_script(CADEHookOptions())
+        assert "/api/view" in script
+
+    def test_script_uses_urllib(self) -> None:
+        """Script uses urllib (no curl dependency)."""
+        script = generate_hook_script(CADEHookOptions())
+        assert "urllib.request" in script
+        assert "curl" not in script
+
+    def test_script_always_exits_zero(self) -> None:
+        """Script always exits 0 to never block Claude Code."""
+        script = generate_hook_script(CADEHookOptions())
+        assert "sys.exit(0)" in script
+
+    def test_script_logs_to_file(self) -> None:
+        """Script logs to ~/.cade/hook.log."""
+        script = generate_hook_script(CADEHookOptions())
+        assert "hook.log" in script
+
+    def test_script_reads_port_file(self) -> None:
+        """Script reads port from ~/.cade/port."""
+        script = generate_hook_script(CADEHookOptions())
+        assert '"port"' in script or "'port'" in script
+
+    def test_script_reads_host_file(self) -> None:
+        """Script reads host from ~/.cade/host."""
+        script = generate_hook_script(CADEHookOptions())
+        assert '"host"' in script or "'host'" in script
+
+    def test_script_detects_wsl(self) -> None:
+        """Script detects WSL via /proc/version."""
+        script = generate_hook_script(CADEHookOptions())
+        assert "/proc/version" in script
+        assert "microsoft" in script
+
+    def test_script_extracts_session_id(self) -> None:
+        """Script extracts session_id from hook data."""
+        script = generate_hook_script(CADEHookOptions())
+        assert "session_id" in script
+
+    def test_script_extracts_cwd(self) -> None:
+        """Script extracts cwd from hook data."""
+        script = generate_hook_script(CADEHookOptions())
+        assert '"cwd"' in script
 
 
-class TestGatewayIpCommand:
-    """Tests for gateway IP extraction command."""
+class TestBuildHookCommand:
+    """Tests for build_hook_command()."""
 
-    def test_gateway_ip_method(self) -> None:
-        """Gateway method uses ip route command."""
-        cmd = _get_gateway_ip_command()
+    def test_invokes_python3(self) -> None:
+        """Command uses python3 to run the script."""
+        cmd = build_hook_command()
+        assert cmd.startswith("python3 ")
 
-        assert "ip route" in cmd
-        assert "awk" in cmd
-
-
-class TestBuildPlanFilesCommand:
-    """Tests for plan files command builder."""
-
-    def test_contains_required_elements(self) -> None:
-        """Command contains all required elements."""
-        command = _build_plan_files_command(3001)
-
-        # Should parse JSON from stdin
-        assert "json.load(sys.stdin)" in command
-        # Should filter for plans/
-        assert "plans/" in command
-        # Should filter for .md
-        assert ".md" in command
-        # Should use xargs with -r (no-run-if-empty)
-        assert "xargs -r" in command
-        # Should POST to api/view
-        assert "curl" in command
-        assert "POST" in command
-        assert "api/view" in command
-
-    def test_port_included(self) -> None:
-        """Port is included in the command."""
-        command = _build_plan_files_command(9999)
-        assert ":9999/" in command
-
-    def test_fallback_port_included(self) -> None:
-        """Fallback port is included for robustness."""
-        # When primary is 3001, fallback should be 3000
-        command = _build_plan_files_command(3001)
-        assert ":3001/" in command
-        assert ":3000/" in command
-        # Uses || for fallback logic
-        assert "||" in command
-
-    def test_fallback_port_swapped(self) -> None:
-        """Fallback port is swapped when primary is 3000."""
-        command = _build_plan_files_command(3000)
-        assert ":3000/" in command
-        assert ":3001/" in command
-
-
-class TestBuildAllFilesCommand:
-    """Tests for all files command builder."""
-
-    def test_no_path_filter(self) -> None:
-        """All files command doesn't filter paths."""
-        command = _build_all_files_command(3001)
-
-        # Should parse JSON and print path directly
-        assert "json.load(sys.stdin)" in command
-        # Should NOT have plans/ filter
-        assert "plans/" not in command
-        # Should still POST to api/view
-        assert "api/view" in command
-
-    def test_port_included(self) -> None:
-        """Port is included in the command."""
-        command = _build_all_files_command(7777)
-        assert ":7777/" in command
-
-    def test_fallback_port_included(self) -> None:
-        """Fallback port is included for robustness."""
-        command = _build_all_files_command(3001)
-        assert ":3001/" in command
-        assert ":3000/" in command
-        assert "||" in command
+    def test_points_to_script(self) -> None:
+        """Command points to the hook script in ~/.cade/hooks/."""
+        cmd = build_hook_command()
+        assert "~/.cade/hooks/view_file.py" in cmd
 
 
 class TestBuildHookConfig:
@@ -143,12 +132,25 @@ class TestBuildHookConfig:
         assert config["hooks"][0]["type"] == "command"
         assert "command" in config["hooks"][0]
 
-    def test_uses_options(self) -> None:
-        """Hook config respects options."""
-        options = CADEHookOptions(port=5000, all_files=True)
+    def test_command_is_script_based(self) -> None:
+        """Hook config uses the script-based command."""
+        options = CADEHookOptions()
         config = build_hook_config(options)
 
         command = config["hooks"][0]["command"]
-        assert ":5000/" in command
-        # all_files means no plans/ filter
-        assert "plans/" not in command
+        assert "view_file.py" in command
+        assert "curl" not in command
+
+
+class TestHookScriptTemplate:
+    """Tests for the raw template constant."""
+
+    def test_template_has_placeholder(self) -> None:
+        """Template contains the filter_mode placeholder."""
+        assert "{filter_mode}" in HOOK_SCRIPT_TEMPLATE
+
+    def test_template_no_unresolved_placeholders_after_render(self) -> None:
+        """After rendering, the filter_mode placeholder is replaced."""
+        rendered = HOOK_SCRIPT_TEMPLATE.replace("{filter_mode}", "plans_only")
+        assert "{filter_mode}" not in rendered
+        compile(rendered, "view_file.py", "exec")

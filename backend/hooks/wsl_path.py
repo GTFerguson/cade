@@ -7,6 +7,30 @@ import sys
 from pathlib import Path
 
 
+def get_wsl_cade_dir() -> Path:
+    """Get the ~/.cade directory path, handling Windows/WSL correctly.
+
+    When running on Windows, derives the WSL home directory from
+    get_wsl_settings_path() and returns the UNC path to ~/.cade.
+    On Linux/macOS, returns ~/.cade directly.
+
+    Returns:
+        Path to the .cade directory.
+    """
+    if sys.platform != "win32":
+        return Path.home() / ".cade"
+
+    settings_path, is_wsl = get_wsl_settings_path()
+    if is_wsl:
+        # settings_path is \\wsl$\Distro\home\user\.claude\settings.json
+        # Go up to home dir, then into .cade
+        home_dir = settings_path.parent.parent  # up from .claude/settings.json
+        return home_dir / ".cade"
+
+    # Fallback: Windows-native (no WSL)
+    return Path.home() / ".cade"
+
+
 def get_wsl_settings_path() -> tuple[Path, bool]:
     """Get the Claude Code settings path, handling Windows/WSL correctly.
 

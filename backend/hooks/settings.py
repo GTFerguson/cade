@@ -10,6 +10,21 @@ from typing import Any
 from backend.hooks.config import HookType
 
 
+def _is_cade_hook(command: str) -> bool:
+    """Check whether a hook command belongs to CADE.
+
+    Recognizes both the old one-liner style (contains 'api/view') and
+    the new script-based style (contains 'view_file.py').
+
+    Args:
+        command: The hook command string to check.
+
+    Returns:
+        True if the command is a CADE hook.
+    """
+    return "api/view" in command or "view_file.py" in command
+
+
 class ClaudeSettings:
     """Manages Claude Code settings.json file.
 
@@ -93,11 +108,26 @@ class ClaudeSettings:
             if existing.get("matcher") == matcher:
                 hook_cmds = existing.get("hooks", [])
                 for cmd in hook_cmds:
-                    if "api/view" in cmd.get("command", ""):
+                    if _is_cade_hook(cmd.get("command", "")):
                         existing_hooks[i] = hook
                         return True
 
         existing_hooks.append(hook)
+        return False
+
+    def has_cade_hook(self, hook_type: HookType) -> bool:
+        """Check if a CADE hook already exists for the given type.
+
+        Args:
+            hook_type: The type of hook to check.
+
+        Returns:
+            True if a CADE hook (old or new style) is already configured.
+        """
+        for existing in self.get_hooks(hook_type):
+            for cmd in existing.get("hooks", []):
+                if _is_cade_hook(cmd.get("command", "")):
+                    return True
         return False
 
     def remove_hook(
