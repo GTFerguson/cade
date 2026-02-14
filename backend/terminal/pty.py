@@ -198,11 +198,14 @@ class WindowsPTY(BasePTY):
         # it as a file path, resulting in ERROR_PATH_NOT_FOUND.
         if is_wsl:
             wsl_cwd = windows_to_wsl_path(str(cwd)) or "~"
+            # Quote the path — spaces in directory names (e.g. "Dream Decks")
+            # break WSL's --cd argument parsing without quotes
+            quoted_cwd = f'"{wsl_cwd}"' if " " in wsl_cwd else wsl_cwd
             attempts: list[tuple[int, str, str]] = [
-                (Backend.WinPTY, exe, f" --cd {wsl_cwd}"),
-                (Backend.ConPTY, exe, f" --cd {wsl_cwd}"),
-                (Backend.WinPTY, exe, f" --cd {wsl_cwd} -e bash --login"),
-                (Backend.ConPTY, exe, f" --cd {wsl_cwd} -e bash --login"),
+                (Backend.WinPTY, exe, f" --cd {quoted_cwd}"),
+                (Backend.ConPTY, exe, f" --cd {quoted_cwd}"),
+                (Backend.WinPTY, exe, f" --cd {quoted_cwd} -e bash --login"),
+                (Backend.ConPTY, exe, f" --cd {quoted_cwd} -e bash --login"),
                 (Backend.WinPTY, exe, " --cd ~"),
                 (Backend.ConPTY, exe, " --cd ~"),
             ]

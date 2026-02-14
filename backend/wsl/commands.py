@@ -38,5 +38,6 @@ def build_wsl_command(command: str, cwd: Path) -> str:
     resolved = resolve_command(command)
     wsl_path = windows_to_wsl_path(str(cwd))
     if wsl_path:
-        return f"{resolved} --cd {wsl_path}"
+        quoted = f'"{wsl_path}"' if " " in wsl_path else wsl_path
+        return f"{resolved} --cd {quoted}"
     return resolved
