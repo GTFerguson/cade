@@ -35,6 +35,7 @@ class App {
   private profileManager: RemoteProfileManager;
   private activeAuthDialogs = new Set<string>();
   private startSplash: Splash | null = null;
+  private splashTimeout: number | null = null;
   private resumeInProgress = false;
 
   constructor() {
@@ -427,6 +428,7 @@ class App {
 
     if (path) {
       this.startSplash?.setLoading();
+      this.startSplashTimeout();
       const tab = this.tabManager.createTab(path);
       this.tabManager.switchTab(tab.id);
     }
@@ -454,6 +456,7 @@ class App {
 
       if (result) {
         this.startSplash?.setLoading();
+        this.startSplashTimeout();
         // Use the WebSocket and tunnel from the selector (already connected)
         const tab = await this.tabManager.createRemoteTabWithWebSocket(
           result.profile,
@@ -533,6 +536,7 @@ class App {
     if (this.tabManager.hasSavedSession()) {
       options.push({ label: "RESUME SESSION", action: () => {
         this.startSplash?.setLoading();
+        this.startSplashTimeout();
         this.handleResumeSession();
       }});
     }
@@ -621,8 +625,29 @@ class App {
    * Hide the start splash when a tab is created.
    */
   private hideStartSplash(): void {
+    if (this.splashTimeout != null) {
+      window.clearTimeout(this.splashTimeout);
+      this.splashTimeout = null;
+    }
     this.startSplash?.hide();
     this.startSplash = null;
+  }
+
+  /**
+   * Start a safety timer that auto-dismisses the splash if the backend
+   * never sends an "output" event (e.g. PTY dies silently, stale binary).
+   */
+  private startSplashTimeout(): void {
+    if (this.splashTimeout != null) {
+      window.clearTimeout(this.splashTimeout);
+    }
+    this.splashTimeout = window.setTimeout(() => {
+      this.splashTimeout = null;
+      if (this.startSplash?.isVisible()) {
+        console.warn("Splash progress timed out after 15s, forcing dismiss");
+        this.hideStartSplash();
+      }
+    }, 15_000);
   }
 
   /**

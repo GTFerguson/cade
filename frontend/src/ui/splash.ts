@@ -284,6 +284,7 @@ export class Splash {
 
     this.element.querySelector(".splash-options")?.remove();
     this.element.querySelector(".splash-help")?.remove();
+    this.element.querySelector(".splash-progress")?.remove();
     this.statusEl.style.display = "none";
 
     this.progressEl = document.createElement("div");

@@ -70,6 +70,33 @@ plans/ (active) --> docs/technical/ (complete)
                 --> docs/future/ (deferred)
 ```
 
+## Building the Desktop App
+
+The desktop app has **two binaries** built by separate systems:
+
+| Binary | Build system | Source |
+|--------|-------------|--------|
+| `cade.exe` | Tauri (Rust/Cargo) | `desktop/src-tauri/src/` |
+| `cade-backend.exe` | PyInstaller (Python) | `backend/` |
+
+### How to build
+
+```bash
+# 1. Build frontend first
+cd frontend && npm run build
+
+# 2. Build desktop (this auto-rebuilds the Python backend via beforeBuildCommand)
+cd desktop && npm run tauri build
+```
+
+The `beforeBuildCommand` in `tauri.conf.json` automatically runs `scripts/build-backend-sidecar.py`, which rebuilds the PyInstaller binary and copies it to `desktop/src-tauri/resources/`. A single `npm run tauri build` always produces a fully up-to-date app.
+
+For a full build including Neovim bundling: `scripts/build-desktop.ps1`
+
+### IMPORTANT: Never run PyInstaller manually
+
+Do NOT run PyInstaller with a custom `--distpath` — it bypasses the copy to `resources/` and Tauri will bundle a stale binary. Always use `npm run tauri build` or `scripts/build-desktop.ps1`.
+
 ## Git Commits
 
 - **Do NOT include `Co-Authored-By` lines** in commit messages

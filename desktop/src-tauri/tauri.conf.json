@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "",
+    "beforeBuildCommand": "python ../scripts/build-backend-sidecar.py",
     "frontendDist": "../../frontend/dist"
   },
   "bundle": {
