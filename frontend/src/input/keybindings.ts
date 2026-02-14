@@ -15,6 +15,22 @@ import {
 
 export type PaneType = "file-tree" | "terminal" | "viewer";
 
+/**
+ * Determine whether a keydown event should be delegated to the focused pane's
+ * key handler. Returns false when xterm.js should handle the event natively
+ * (terminal pane or active Neovim in the viewer pane).
+ */
+export function shouldDelegateToPaneHandler(
+  target: { classList: DOMTokenList; closest(selector: string): Element | null },
+  focusedPane: PaneType | undefined,
+): boolean {
+  if (focusedPane == null || focusedPane === "terminal") return false;
+
+  const isXtermTextarea = target.classList.contains("xterm-helper-textarea");
+  const isNeovimXterm = isXtermTextarea && target.closest(".right-pane-neovim") != null;
+  return !isNeovimXterm;
+}
+
 export interface KeybindingCallbacks {
   focusPane: (direction: "left" | "right") => void;
   resizePane: (direction: "left" | "right") => void;
@@ -151,10 +167,11 @@ export class KeybindingManager implements Component {
       return;
     }
 
-    // Delegate to focused pane handler (except terminal)
     const focusedPane = this.callbacks?.getFocusedPane();
-    if (focusedPane && focusedPane !== "terminal") {
-      const handler = this.callbacks?.getPaneHandler(focusedPane);
+    const shouldDelegate = shouldDelegateToPaneHandler(target, focusedPane);
+    console.log(`[keybindings] key=${e.key}, focusedPane=${focusedPane}, target=${target.className}, shouldDelegate=${shouldDelegate}`);
+    if (shouldDelegate) {
+      const handler = this.callbacks?.getPaneHandler(focusedPane!);
       if (handler?.handleKeydown(e)) {
         e.preventDefault();
         e.stopPropagation();

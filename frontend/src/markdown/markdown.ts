@@ -338,10 +338,14 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       }
     }
 
-    // View mode: 'i' enters Normal mode
+    // View mode: 'i' enters Normal mode (markdown) or opens Neovim (other files)
     if (this.editorState.mode === "view") {
-      if (e.key === "i" && this.currentPath !== null && this.currentFileType === "markdown") {
-        enterNormalMode(this.editorState, this.editorCallbacks(), this.ws);
+      if (e.key === "i" && this.currentPath !== null) {
+        if (this.currentFileType === "markdown") {
+          enterNormalMode(this.editorState, this.editorCallbacks(), this.ws);
+          return true;
+        }
+        this.emit("edit-in-neovim", this.currentPath);
         return true;
       }
       if (!this.contentContainer) return false;

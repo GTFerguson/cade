@@ -78,9 +78,10 @@ export class RightPaneManager implements Component, PaneKeyHandler {
 
     this.mode = mode;
 
-    this.viewerContainer.style.display = mode === "markdown" ? "block" : "none";
-    this.neovimContainer.style.display = mode === "neovim" ? "block" : "none";
-    this.agentsContainer.style.display = mode === "agents" ? "block" : "none";
+    // Use "" (not "block") to remove inline style and let CSS `display: flex` apply
+    this.viewerContainer.style.display = mode === "markdown" ? "" : "none";
+    this.neovimContainer.style.display = mode === "neovim" ? "" : "none";
+    this.agentsContainer.style.display = mode === "agents" ? "" : "none";
 
     if (mode === "neovim") {
       this.ensureNeovim();
@@ -133,11 +134,12 @@ export class RightPaneManager implements Component, PaneKeyHandler {
 
   /**
    * Focus the active mode's component.
+   * NOTE: Neovim pane is excluded — calling focus() on its xterm textarea
+   * causes WebView2 to lose all keyboard input.  Neovim input is handled
+   * entirely via key forwarding through the keybinding manager.
    */
   focus(): void {
-    if (this.mode === "neovim" && this.neovimPane != null) {
-      this.neovimPane.focus();
-    }
+    // Neovim: no-op (key forwarding handles input)
   }
 
   /**
@@ -168,6 +170,39 @@ export class RightPaneManager implements Component, PaneKeyHandler {
   }
 
   /**
+   * Open a file in Neovim for editing, returning to the viewer on exit.
+   */
+  editFileInNeovim(filePath: string): void {
+    // Show container BEFORE initializing xterm.js so terminal.open() renders
+    // into a visible container with real dimensions (not 0×0).
+    this.mode = "neovim";
+    this.viewerContainer.style.display = "none";
+    this.neovimContainer.style.display = "";
+    this.agentsContainer.style.display = "none";
+
+    this.ensureNeovimPane();
+
+    this.neovimPane!.onExit(() => {
+      this.setMode("markdown");
+      this.viewer.refresh();
+    });
+
+    // Do NOT call focus() here. WebView2 loses ALL keyboard input when
+    // focus() is called on xterm's hidden textarea — even from user gesture
+    // context. Instead, the keybinding manager's capture handler delegates
+    // keystrokes to NeovimPane.handleKeydown which forwards via WebSocket.
+
+    // Defer fit+spawn to next animation frame so the browser has reflowed
+    // the container after display:none→flex. Without this, proposeDimensions()
+    // measures stale/zero heights and the PTY spawns at wrong size.
+    requestAnimationFrame(() => {
+      this.neovimPane!.fit();
+      this.neovimPane!.spawnForFile(filePath);
+    });
+    this.onModeChangeCallback?.();
+  }
+
+  /**
    * Lazily create and spawn NeovimPane on first use.
    */
   private ensureNeovim(): void {
@@ -183,6 +218,17 @@ export class RightPaneManager implements Component, PaneKeyHandler {
     this.neovimPane = new NeovimPane(this.neovimContainer, this.ws);
     this.neovimPane.initialize();
     this.neovimPane.spawn();
+  }
+
+  /**
+   * Ensure NeovimPane exists without spawning a process.
+   * Used by editFileInNeovim which handles spawning itself.
+   */
+  private ensureNeovimPane(): void {
+    if (this.neovimPane != null) return;
+
+    this.neovimPane = new NeovimPane(this.neovimContainer, this.ws);
+    this.neovimPane.initialize();
   }
 
   dispose(): void {

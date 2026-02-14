@@ -24,6 +24,8 @@ export class NeovimPane implements Component, PaneKeyHandler {
   private statusEl: HTMLElement;
   private terminalContainer: HTMLElement;
   private lastSentSize: { cols: number; rows: number } | null = null;
+  private openedFromViewer = false;
+  private exitCallback: (() => void) | null = null;
   private boundHandlers = {
     output: (msg: NeovimOutputMessage) => this.handleOutput(msg),
     ready: (msg: NeovimReadyMessage) => this.handleReady(msg),
@@ -49,6 +51,7 @@ export class NeovimPane implements Component, PaneKeyHandler {
     this.terminal = new XTerm({
       cursorBlink: true,
       cursorStyle: "block",
+      cursorInactiveStyle: "block",
       fontSize: 14,
       fontFamily: '"JetBrains Mono", "Fira Code", Consolas, monospace',
       fontWeight: "400",
@@ -134,11 +137,10 @@ export class NeovimPane implements Component, PaneKeyHandler {
     if (this.state === "ready" || this.state === "starting") {
       return;
     }
-    // Allow re-spawn from error state (Retry button)
 
     this.state = "starting";
     this.showStatus("starting");
-    this.ws.neovimSpawn();
+    this.ws.neovimSpawn(undefined, this.terminal?.cols, this.terminal?.rows);
   }
 
   /**
@@ -151,14 +153,44 @@ export class NeovimPane implements Component, PaneKeyHandler {
   }
 
   /**
-   * PaneKeyHandler implementation.
-   * Consumes ALL keys when Neovim pane is focused (except prefix,
-   * which is handled by KeybindingManager before this is called).
+   * Spawn Neovim to edit a specific file (triggered from viewer).
+   * Kills any existing instance, clears the terminal, and opens the file.
    */
-  handleKeydown(_e: KeyboardEvent): boolean {
-    // All keys are consumed via xterm.js onData handler
-    // The KeybindingManager only calls us for non-terminal panes,
-    // but since we use xterm.js, input flows through onData instead.
+  spawnForFile(filePath: string): void {
+    this.openedFromViewer = true;
+    this.lastSentSize = null;
+    this.state = "starting";
+    this.showStatus("starting");
+    this.terminal?.clear();
+    this.ws.neovimSpawn(filePath, this.terminal?.cols, this.terminal?.rows);
+  }
+
+  /**
+   * Register a callback invoked when Neovim exits after editing a file.
+   */
+  onExit(callback: () => void): void {
+    this.exitCallback = callback;
+  }
+
+  /**
+   * PaneKeyHandler implementation.
+   * When the xterm textarea has DOM focus, keystrokes flow through xterm.js
+   * natively and this method is never called (shouldDelegateToPaneHandler
+   * returns false for neovim xterm targets). When the textarea does NOT
+   * have focus (common in WebView2), the keybinding manager delegates here
+   * and we forward keystrokes directly to Neovim via WebSocket.
+   */
+  handleKeydown(e: KeyboardEvent): boolean {
+    console.log(`[neovim] handleKeydown: key=${e.key}, state=${this.state}`);
+    if (this.state !== "ready") return true;
+
+    // Do NOT call textarea.focus() — it causes WebView2 to lose all
+    // keyboard input.  Forward every keystroke to Neovim via WebSocket.
+    const data = keyEventToTermData(e);
+    if (data) {
+      this.ws.neovimSendInput(data);
+      console.log(`[neovim] Forwarded key: ${JSON.stringify(data)}`);
+    }
     return true;
   }
 
@@ -171,9 +203,16 @@ export class NeovimPane implements Component, PaneKeyHandler {
 
   /**
    * Focus the terminal.
+   * Bypasses xterm.js's focus({ preventScroll: true }) which can fail
+   * silently in WebView2. Directly focuses the hidden textarea.
    */
   focus(): void {
     this.terminal?.focus();
+    // Direct textarea focus without preventScroll as WebView2 fallback
+    const textarea = this.terminalContainer.querySelector(
+      ".xterm-helper-textarea",
+    ) as HTMLElement | null;
+    textarea?.focus();
   }
 
   /**
@@ -206,6 +245,44 @@ export class NeovimPane implements Component, PaneKeyHandler {
     }
   }
 
+  /**
+   * Force fit + send resize to backend regardless of cached state.
+   * Used after display changes where terminal dimensions may be stale.
+   */
+  private forceFitAndResize(): void {
+    if (this.fitAddon == null || this.terminal == null) return;
+    if (this.container.offsetWidth === 0 || this.container.offsetHeight === 0) return;
+
+    try {
+      this.fitAddon.fit();
+    } catch {
+      // Renderer may not be ready yet
+    }
+
+    const { cols, rows } = this.terminal;
+    // Always send resize to backend (don't check lastSentSize)
+    if (this.state === "ready") {
+      this.ws.neovimSendResize(cols, rows);
+    }
+    this.lastSentSize = { cols, rows };
+  }
+
+  /**
+   * Reclaim OS-level window focus via Tauri's native API.
+   * PTY spawn on Windows can steal focus from the WebView2 control.
+   * This is NOT a DOM focus() call — it operates at the OS window level.
+   */
+  private async reclaimWindowFocus(): Promise<void> {
+    if ((window as any).__TAURI__ !== true) return;
+    try {
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      await getCurrentWindow().setFocus();
+      console.log("[neovim] Reclaimed window focus via Tauri API");
+    } catch {
+      // Not in Tauri or permission not granted
+    }
+  }
+
   private handleOutput(msg: NeovimOutputMessage): void {
     this.terminal?.write(msg.data);
   }
@@ -213,15 +290,33 @@ export class NeovimPane implements Component, PaneKeyHandler {
   private handleReady(msg: NeovimReadyMessage): void {
     this.state = "ready";
     this.hideStatus();
-    this.fit();
-    this.terminal?.focus();
-    console.log(`[neovim] Ready, pid: ${msg.pid}`);
+    console.log(`[neovim] Ready, pid: ${msg.pid}, cols: ${this.terminal?.cols}, rows: ${this.terminal?.rows}`);
+
+    this.forceFitAndResize();
+    requestAnimationFrame(() => {
+      this.forceFitAndResize();
+    });
+
+    // PTY spawn on Windows (pywinpty) can steal OS-level focus from
+    // the WebView2 control, making the app stop receiving keyboard
+    // events until the user clicks. Reclaim focus via Tauri's native
+    // window API (operates at OS level, not DOM — safe for WebView2).
+    this.reclaimWindowFocus();
   }
 
   private handleExited(msg: NeovimExitedMessage): void {
     this.state = "exited";
-    this.showStatus("exited", msg.exitCode);
     console.log(`[neovim] Exited with code: ${msg.exitCode}`);
+
+    if (this.openedFromViewer) {
+      this.openedFromViewer = false;
+      // Release focus from xterm textarea so viewer keybindings work
+      this.terminal?.blur();
+      this.exitCallback?.();
+      return;
+    }
+
+    this.showStatus("exited", msg.exitCode);
   }
 
   private handleError(msg: ErrorMessage): void {
@@ -311,4 +406,58 @@ export class NeovimPane implements Component, PaneKeyHandler {
     this.terminal = null;
     this.fitAddon = null;
   }
+}
+
+/**
+ * Convert a KeyboardEvent to the byte sequence a terminal would send.
+ * Used as fallback when xterm.js's textarea doesn't have DOM focus
+ * (WebView2 rejects programmatic focus), so keystrokes must be
+ * forwarded to Neovim manually via WebSocket.
+ */
+function keyEventToTermData(e: KeyboardEvent): string | null {
+  // Modifier-only keys produce no terminal data
+  if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) {
+    return null;
+  }
+
+  // Ctrl+key → control character (Ctrl+A = 0x01 through Ctrl+Z = 0x1A)
+  if (e.ctrlKey && !e.altKey && !e.metaKey) {
+    const key = e.key.toLowerCase();
+    if (key.length === 1 && key >= "a" && key <= "z") {
+      return String.fromCharCode(key.charCodeAt(0) - 96);
+    }
+    if (key === "[") return "\x1b";
+    if (key === "\\") return "\x1c";
+    if (key === "]") return "\x1d";
+  }
+
+  // Special keys → terminal escape sequences
+  switch (e.key) {
+    case "Enter": return "\r";
+    case "Escape": return "\x1b";
+    case "Backspace": return "\x7f";
+    case "Tab": return e.shiftKey ? "\x1b[Z" : "\t";
+    case "ArrowUp": return "\x1b[A";
+    case "ArrowDown": return "\x1b[B";
+    case "ArrowRight": return "\x1b[C";
+    case "ArrowLeft": return "\x1b[D";
+    case "Home": return "\x1b[H";
+    case "End": return "\x1b[F";
+    case "PageUp": return "\x1b[5~";
+    case "PageDown": return "\x1b[6~";
+    case "Delete": return "\x1b[3~";
+    case "Insert": return "\x1b[2~";
+  }
+
+  // Alt+key → ESC prefix (for Neovim alt-mappings)
+  if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.length === 1) {
+    return "\x1b" + e.key;
+  }
+
+  // Regular printable character
+  if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    return e.key;
+  }
+
+  return null;
 }

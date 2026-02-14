@@ -2,6 +2,7 @@ import type { EventHandler } from "../types";
 
 export interface MarkdownEvents {
   "link-click": string;
+  "edit-in-neovim": string;
 }
 
 export interface ViewState {

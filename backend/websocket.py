@@ -431,7 +431,7 @@ class ConnectionHandler:
             elif msg_type == MessageType.GET_LATEST_PLAN:
                 await self._handle_get_latest_plan()
             elif msg_type == MessageType.NEOVIM_SPAWN:
-                await self._handle_neovim_spawn()
+                await self._handle_neovim_spawn(data)
             elif msg_type == MessageType.NEOVIM_KILL:
                 await self._handle_neovim_kill()
             elif msg_type == MessageType.NEOVIM_INPUT:
@@ -682,18 +682,28 @@ class ConnectionHandler:
 
     # --- Neovim handlers ---
 
-    async def _handle_neovim_spawn(self) -> None:
+    async def _handle_neovim_spawn(self, data: dict) -> None:
         """Spawn a Neovim instance for this session."""
         if self._session_id is None:
             await self._send_error(ErrorCode.INTERNAL_ERROR, "No session ID")
             return
 
+        file_path = data.get("filePath")
+
         manager = get_neovim_manager()
         try:
+            # Kill existing instance when opening a specific file so we get
+            # a fresh Neovim with that file instead of reusing the old one
+            if file_path:
+                await manager.kill(self._session_id)
+
+            cols = data.get("cols", 80)
+            rows = data.get("rows", 24)
             instance = await manager.spawn(
                 self._session_id,
                 self._working_dir,
-                TerminalSize(cols=80, rows=24),
+                TerminalSize(cols=cols, rows=rows),
+                file_path=file_path,
             )
 
             # Start forwarding Neovim PTY output to the client

@@ -386,9 +386,20 @@ export class WebSocketClient {
 
   /**
    * Spawn a Neovim instance on the backend.
+   * When filePath is provided, the backend kills any existing instance
+   * and opens a fresh Neovim with that file.
+   * cols/rows set the initial PTY size (avoids post-spawn resize race).
    */
-  neovimSpawn(): void {
-    this.send({ type: MessageType.NEOVIM_SPAWN });
+  neovimSpawn(filePath?: string, cols?: number, rows?: number): void {
+    const msg: Record<string, any> = { type: MessageType.NEOVIM_SPAWN };
+    if (filePath !== undefined) {
+      msg.filePath = filePath;
+    }
+    if (cols !== undefined && rows !== undefined) {
+      msg.cols = cols;
+      msg.rows = rows;
+    }
+    this.send(msg as any);
   }
 
   /**

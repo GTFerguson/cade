@@ -281,6 +281,7 @@ export interface FileCreatedMessage extends BaseMessage {
  */
 export interface NeovimSpawnMessage extends BaseMessage {
   type: "neovim-spawn";
+  filePath?: string;
 }
 
 /**

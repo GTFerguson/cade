@@ -161,6 +161,14 @@ export class ProjectContextImpl implements IProjectContext {
         this.splash?.setProgress(4, "ready");
         this.splash?.hide();
         this.terminalManager?.focusAtBottom();
+
+        // PTY spawn on Windows can steal OS-level focus from the WebView2.
+        // Reclaim it once the shell is ready.
+        if ((window as any).__TAURI__ === true) {
+          import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
+            getCurrentWindow().setFocus();
+          }).catch(() => {});
+        }
       };
       this.ws.on("output", onFirstOutput);
     }
@@ -190,6 +198,10 @@ export class ProjectContextImpl implements IProjectContext {
       this.rightPane?.getViewer().loadFile(path);
       this.fileTree?.revealFile(path);
       this.scheduleSave();
+    });
+
+    this.rightPane.getViewer().on("edit-in-neovim", (path) => {
+      this.rightPane?.editFileInNeovim(path);
     });
 
     this.rightPane.onModeChange(() => {

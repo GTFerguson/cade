@@ -45,11 +45,24 @@ IGNORED_FILES = {
 }
 
 
+def _safe_is_dir(path: Path) -> bool:
+    """Check is_dir(), returning False for inaccessible entries like WSL symlinks."""
+    try:
+        return path.is_dir()
+    except OSError:
+        return False
+
+
+def _dir_sort_key(p: Path) -> tuple[bool, str]:
+    """Sort key: directories first, then alphabetical. Handles inaccessible entries."""
+    return (not _safe_is_dir(p), p.name.lower())
+
+
 def _should_ignore(path: Path) -> bool:
     """Check if a path should be ignored."""
     name = path.name
 
-    if path.is_dir():
+    if _safe_is_dir(path):
         return name in IGNORED_DIRS
 
     if name in IGNORED_FILES:
@@ -135,7 +148,7 @@ def build_file_tree(
         except ValueError:
             rel_path = path.name
 
-        if path.is_dir():
+        if _safe_is_dir(path):
             if depth > max_depth:
                 # At depth limit: check if directory has visible children
                 has_children = False
@@ -147,7 +160,7 @@ def build_file_tree(
                             continue
                         has_children = True
                         break
-                except PermissionError:
+                except (PermissionError, OSError):
                     pass
                 return FileNode(
                     name=path.name,
@@ -159,11 +172,11 @@ def build_file_tree(
 
             children: list[FileNode] = []
             try:
-                for child in sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+                for child in sorted(path.iterdir(), key=_dir_sort_key):
                     child_node = _build_node(child, depth + 1)
                     if child_node is not None:
                         children.append(child_node)
-            except PermissionError:
+            except (PermissionError, OSError):
                 pass
 
             return FileNode(
@@ -190,11 +203,11 @@ def build_file_tree(
 
     nodes: list[FileNode] = []
     try:
-        for child in sorted(root.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+        for child in sorted(root.iterdir(), key=_dir_sort_key):
             node = _build_node(child, 0)
             if node is not None:
                 nodes.append(node)
-    except PermissionError:
+    except (PermissionError, OSError):
         pass
 
     return nodes
@@ -231,7 +244,7 @@ def build_directory_children(
         except ValueError:
             rel_path = path.name
 
-        if path.is_dir():
+        if _safe_is_dir(path):
             if depth > max_depth:
                 has_children = False
                 try:
@@ -242,7 +255,7 @@ def build_directory_children(
                             continue
                         has_children = True
                         break
-                except PermissionError:
+                except (PermissionError, OSError):
                     pass
                 return FileNode(
                     name=path.name,
@@ -254,11 +267,11 @@ def build_directory_children(
 
             children: list[FileNode] = []
             try:
-                for child in sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+                for child in sorted(path.iterdir(), key=_dir_sort_key):
                     child_node = _build_node(child, depth + 1)
                     if child_node is not None:
                         children.append(child_node)
-            except PermissionError:
+            except (PermissionError, OSError):
                 pass
 
             return FileNode(
@@ -283,11 +296,11 @@ def build_directory_children(
 
     nodes: list[FileNode] = []
     try:
-        for child in sorted(target_dir.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+        for child in sorted(target_dir.iterdir(), key=_dir_sort_key):
             node = _build_node(child, 0)
             if node is not None:
                 nodes.append(node)
-    except PermissionError:
+    except (PermissionError, OSError):
         pass
 
     return nodes

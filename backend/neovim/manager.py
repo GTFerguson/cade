@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shlex
 import shutil
 import subprocess
+import sys
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -50,6 +52,7 @@ class NeovimManager:
         project_path: Path,
         size: TerminalSize,
         clean_mode: bool = False,
+        file_path: str | None = None,
     ) -> NeovimInstance:
         """Spawn a new Neovim instance for a session.
 
@@ -82,10 +85,17 @@ class NeovimManager:
         cmd_parts = [nvim_path, "--listen", socket_path]
         if clean_mode:
             cmd_parts.append("--clean")
+        if file_path:
+            cmd_parts.append(file_path)
+
+        if sys.platform == "win32":
+            cmd = subprocess.list2cmdline(cmd_parts)
+        else:
+            cmd = shlex.join(cmd_parts)
 
         pty = PTYManager()
         await pty.spawn(
-            " ".join(cmd_parts),
+            cmd,
             project_path,
             size,
         )
