@@ -50,6 +50,7 @@ class ConnectionHandler:
         self._suppress_output = False
         self._suppress_start_time: float | None = None
         self._suppress_buffer: list[str] = []
+        self._suppress_timeout_task: asyncio.Task | None = None
         self._project_set = asyncio.Event()
         self._is_new_session = True
         self._output_tasks: dict[str, asyncio.Task] = {}
@@ -122,6 +123,7 @@ class ConnectionHandler:
                 await self._receive_loop()
             finally:
                 # Cancel background tasks when receive ends
+                self._cancel_suppress_timeout()
                 for task in self._output_tasks.values():
                     task.cancel()
                 watch_task.cancel()
@@ -230,6 +232,9 @@ class ConnectionHandler:
             if self._config.auto_start_claude and not self._config.dummy_mode:
                 self._suppress_output = True
                 self._suppress_start_time = time.monotonic()
+                self._suppress_timeout_task = asyncio.create_task(
+                    self._suppress_timeout(4.0)
+                )
 
             if self._config.dummy_mode:
                 await asyncio.sleep(0.5)
@@ -770,6 +775,38 @@ class ConnectionHandler:
                 "exitCode": -1,
             })
 
+    async def _suppress_timeout(self, timeout: float) -> None:
+        """Force-end output suppression after timeout, independent of PTY output.
+
+        Without this, the suppression timeout in _pty_output_loop only triggers
+        when new data arrives — if the shell goes quiet after its initial prompt,
+        the check never runs and the frontend never receives output.
+        """
+        try:
+            await asyncio.sleep(timeout)
+            if not self._suppress_output or self._closed:
+                return
+
+            logger.info("Output suppression timed out after %.1fs, flushing buffer", timeout)
+            self._suppress_output = False
+
+            if self._suppress_buffer:
+                buffered = "".join(self._suppress_buffer)
+                self._suppress_buffer.clear()
+                await self._send({
+                    "type": MessageType.OUTPUT,
+                    "data": buffered,
+                    "sessionKey": SessionKey.CLAUDE,
+                })
+        except asyncio.CancelledError:
+            pass
+
+    def _cancel_suppress_timeout(self) -> None:
+        """Cancel the suppression timeout task if still running."""
+        if self._suppress_timeout_task is not None:
+            self._suppress_timeout_task.cancel()
+            self._suppress_timeout_task = None
+
     def _start_output_loop(self, session_key: str) -> None:
         """Start the output loop for a terminal."""
         if session_key in self._output_tasks:
@@ -822,6 +859,7 @@ class ConnectionHandler:
 
                     if claude_detected or timed_out or command_not_found:
                         self._suppress_output = False
+                        self._cancel_suppress_timeout()
                         # Flush buffered output so error messages are visible
                         if self._suppress_buffer:
                             buffered = "".join(self._suppress_buffer)

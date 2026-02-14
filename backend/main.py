@@ -602,13 +602,32 @@ def parse_args() -> argparse.Namespace:
 
 
 def setup_logging(debug: bool = False) -> None:
-    """Configure logging."""
+    """Configure logging to console and rotating log file.
+
+    Log file: ~/.cade/logs/cade.log (5 MB max, 3 backups).
+    """
+    from logging.handlers import RotatingFileHandler
+
     level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler()],
-    )
+    fmt = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+
+    log_dir = Path.home() / ".cade" / "logs"
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            log_dir / "cade.log",
+            maxBytes=5 * 1024 * 1024,
+            backupCount=3,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(logging.Formatter(fmt))
+        handlers.append(file_handler)
+    except OSError:
+        pass  # Fall back to console-only if directory creation fails
+
+    logging.basicConfig(level=level, format=fmt, handlers=handlers)
 
     if not debug:
         logging.getLogger("uvicorn").setLevel(logging.WARNING)
