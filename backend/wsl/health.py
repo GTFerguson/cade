@@ -9,6 +9,8 @@ import logging
 import subprocess
 import time
 
+from backend.subprocess_utils import run_silent
+
 logger = logging.getLogger(__name__)
 
 # Known WSL error patterns that indicate WSL infrastructure failure
@@ -40,7 +42,7 @@ def check_wsl_health(timeout: float = 15.0) -> tuple[bool, str]:
         Tuple of (is_healthy, message)
     """
     try:
-        result = subprocess.run(
+        result = run_silent(
             ["wsl", "echo", "ok"],
             capture_output=True,
             text=True,
@@ -68,7 +70,7 @@ def restart_wsl(timeout: float = 60.0) -> tuple[bool, str]:
 
     try:
         # Shutdown WSL
-        shutdown_result = subprocess.run(
+        shutdown_result = run_silent(
             ["wsl", "--shutdown"],
             capture_output=True,
             text=True,
@@ -121,7 +123,7 @@ def check_wsl_network(timeout: float = 10.0) -> tuple[bool, str]:
     try:
         # Try DNS resolution first (fastest and most reliable check)
         # Using getent which is more universal than nslookup
-        result = subprocess.run(
+        result = run_silent(
             ["wsl", "bash", "-c", "getent hosts api.anthropic.com >/dev/null 2>&1"],
             capture_output=True,
             timeout=min(timeout, 5.0),
@@ -131,7 +133,7 @@ def check_wsl_network(timeout: float = 10.0) -> tuple[bool, str]:
             return True, "WSL network is ready (DNS working)"
 
         # Fall back to ping if getent fails
-        result = subprocess.run(
+        result = run_silent(
             ["wsl", "bash", "-c", "ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1"],
             capture_output=True,
             timeout=min(timeout, 3.0),

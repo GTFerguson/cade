@@ -6,6 +6,8 @@ import argparse
 import logging
 import secrets
 import subprocess
+
+from backend.subprocess_utils import run_silent
 import sys
 import webbrowser
 from contextlib import asynccontextmanager
@@ -111,7 +113,7 @@ def _resolve_host_for_hooks() -> str:
     """
     if sys.platform == "win32":
         try:
-            result = subprocess.run(
+            result = run_silent(
                 ["wsl", "ip", "route", "show", "default"],
                 capture_output=True,
                 text=True,

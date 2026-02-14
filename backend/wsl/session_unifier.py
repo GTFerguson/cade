@@ -8,6 +8,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from backend.subprocess_utils import run_silent
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,7 +32,7 @@ def is_wsl_mounted_path(path: Path) -> bool:
 def wsl_to_windows_path(wsl_path: Path) -> str | None:
     """Convert WSL path to Windows path using wslpath."""
     try:
-        result = subprocess.run(
+        result = run_silent(
             ["wslpath", "-w", str(wsl_path)],
             capture_output=True,
             text=True,

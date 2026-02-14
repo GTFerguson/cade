@@ -10,13 +10,13 @@ import asyncio
 import logging
 import shutil
 import subprocess
-import sys
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from backend.models import TerminalSize
+from backend.subprocess_utils import run_silent
 from backend.terminal.pty import PTYManager
 
 logger = logging.getLogger(__name__)
@@ -144,15 +144,10 @@ class NeovimManager:
     def _validate_nvim(nvim_path: str) -> bool:
         """Run 'nvim --version' to verify the binary actually works."""
         try:
-            result = subprocess.run(
+            result = run_silent(
                 [nvim_path, "--version"],
                 capture_output=True,
                 timeout=5,
-                creationflags=(
-                    subprocess.CREATE_NO_WINDOW
-                    if sys.platform == "win32"
-                    else 0
-                ),
             )
             return result.returncode == 0
         except (subprocess.TimeoutExpired, OSError):

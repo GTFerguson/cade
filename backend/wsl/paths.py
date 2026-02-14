@@ -9,6 +9,8 @@ import logging
 import subprocess
 from functools import lru_cache
 
+from backend.subprocess_utils import run_silent
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +25,7 @@ def get_default_wsl_distro() -> str | None:
         Distribution name or None if WSL is not available.
     """
     try:
-        result = subprocess.run(
+        result = run_silent(
             ["wsl", "-l", "-q"],
             capture_output=True,
             timeout=5.0,
@@ -142,7 +144,7 @@ def get_wsl_home_as_windows_path() -> str | None:
 
     try:
         # Get WSL username
-        result = subprocess.run(
+        result = run_silent(
             ["wsl", "-d", distro, "whoami"],
             capture_output=True,
             text=True,

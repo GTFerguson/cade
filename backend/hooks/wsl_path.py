@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from backend.subprocess_utils import run_silent
+
 
 def get_wsl_cade_dir() -> Path:
     """Get the ~/.cade directory path, handling Windows/WSL correctly.
@@ -45,7 +47,7 @@ def get_wsl_settings_path() -> tuple[Path, bool]:
         return Path.home() / ".claude" / "settings.json", False
 
     try:
-        result = subprocess.run(
+        result = run_silent(
             ["wsl", "-l", "-q"],
             capture_output=True,
             text=True,
@@ -61,7 +63,7 @@ def get_wsl_settings_path() -> tuple[Path, bool]:
             print("Warning: No WSL distro found, using Windows path")
             return Path.home() / ".claude" / "settings.json", False
 
-        result = subprocess.run(
+        result = run_silent(
             ["wsl", "-d", distro, "whoami"],
             capture_output=True,
             text=True,
