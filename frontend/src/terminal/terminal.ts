@@ -306,7 +306,19 @@ export class Terminal implements Component {
         return;
       }
 
+      // Save scroll position before fit — fitAddon.fit() reflows content
+      // and can transiently set viewportY to 0, which poisons savedScrollPos
+      // and causes the write() protection to keep restoring to line 0 (top)
+      const buf = this.terminal.buffer.active;
+      const wasScrolledUp = buf.viewportY < buf.baseY;
+      const scrollPos = wasScrolledUp ? buf.viewportY : null;
+
       this.fitAddon.fit();
+
+      if (scrollPos != null && buf.viewportY !== scrollPos) {
+        this.terminal.scrollToLine(scrollPos);
+        this.savedScrollPos = scrollPos;
+      }
     } catch {
       // Ignore fit errors during initialization
     }
