@@ -83,21 +83,13 @@ export class RightPaneManager implements Component, PaneKeyHandler {
     this.neovimContainer.style.display = mode === "neovim" ? "" : "none";
     this.agentsContainer.style.display = mode === "agents" ? "" : "none";
 
-    if (mode === "neovim") {
-      this.ensureNeovim();
-    } else if (mode === "agents") {
+    if (mode === "agents") {
       this.agentPane?.render();
     }
 
     this.onModeChangeCallback?.();
   }
 
-  /**
-   * Toggle between markdown and neovim modes.
-   */
-  toggleNeovim(): void {
-    this.setMode(this.mode === "neovim" ? "markdown" : "neovim");
-  }
 
   /**
    * PaneKeyHandler — delegates to the active mode's handler.
@@ -202,23 +194,6 @@ export class RightPaneManager implements Component, PaneKeyHandler {
     this.onModeChangeCallback?.();
   }
 
-  /**
-   * Lazily create and spawn NeovimPane on first use.
-   */
-  private ensureNeovim(): void {
-    if (this.neovimPane != null) {
-      // Already created — just trigger fit in case container resized
-      this.neovimPane.fit();
-      if (!this.neovimPane.isReady()) {
-        this.neovimPane.spawn();
-      }
-      return;
-    }
-
-    this.neovimPane = new NeovimPane(this.neovimContainer, this.ws);
-    this.neovimPane.initialize();
-    this.neovimPane.spawn();
-  }
 
   /**
    * Ensure NeovimPane exists without spawning a process.

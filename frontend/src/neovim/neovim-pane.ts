@@ -24,7 +24,6 @@ export class NeovimPane implements Component, PaneKeyHandler {
   private statusEl: HTMLElement;
   private terminalContainer: HTMLElement;
   private lastSentSize: { cols: number; rows: number } | null = null;
-  private openedFromViewer = false;
   private exitCallback: (() => void) | null = null;
   private boundHandlers = {
     output: (msg: NeovimOutputMessage) => this.handleOutput(msg),
@@ -157,7 +156,6 @@ export class NeovimPane implements Component, PaneKeyHandler {
    * Kills any existing instance, clears the terminal, and opens the file.
    */
   spawnForFile(filePath: string): void {
-    this.openedFromViewer = true;
     this.lastSentSize = null;
     this.state = "starting";
     this.showStatus("starting");
@@ -307,16 +305,13 @@ export class NeovimPane implements Component, PaneKeyHandler {
   private handleExited(msg: NeovimExitedMessage): void {
     this.state = "exited";
     console.log(`[neovim] Exited with code: ${msg.exitCode}`);
+    this.terminal?.blur();
 
-    if (this.openedFromViewer) {
-      this.openedFromViewer = false;
-      // Release focus from xterm textarea so viewer keybindings work
-      this.terminal?.blur();
-      this.exitCallback?.();
-      return;
+    if (this.exitCallback) {
+      this.exitCallback();
+    } else {
+      this.showStatus("exited", msg.exitCode);
     }
-
-    this.showStatus("exited", msg.exitCode);
   }
 
   private handleError(msg: ErrorMessage): void {

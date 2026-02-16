@@ -182,16 +182,9 @@ class App {
           layout.hideViewer();
         } else {
           layout?.showViewer();
+          // Reset right pane to markdown in case neovim was active
+          activeTab?.context?.setRightPaneMode("markdown");
         }
-      },
-      toggleNeovim: () => {
-        const activeTab = this.tabManager.getActiveTab();
-        const layout = activeTab?.context?.getLayout();
-        // Ensure viewer pane is visible before toggling mode
-        if (!layout?.isViewerVisible()) {
-          layout?.showViewer();
-        }
-        activeTab?.context?.toggleNeovim();
       },
       viewLatestPlan: () => {
         const activeTab = this.tabManager.getActiveTab();

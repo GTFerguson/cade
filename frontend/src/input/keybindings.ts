@@ -43,7 +43,7 @@ export interface KeybindingCallbacks {
   showHelp: () => void;
   toggleTerminal: () => void;
   toggleViewerCycle: () => void;
-  toggleNeovim: () => void;
+
   viewLatestPlan: () => void;
   scrollTerminalToTop: () => void;
   scrollTerminalToBottom: () => void;
@@ -364,12 +364,6 @@ export class KeybindingManager implements Component {
       return;
     }
 
-    // Neovim toggle: uses config misc.toggleNeovim (default: n)
-    if (this.matchesBinding(e, config.misc.toggleNeovim)) {
-      this.callbacks?.toggleNeovim();
-      this.onPrefixShortcutUsed();
-      return;
-    }
 
     // Agent cycling: ] for next, [ for previous
     if (this.matchesBinding(e, config.misc.cycleAgentNext)) {

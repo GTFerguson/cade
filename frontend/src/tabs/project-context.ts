@@ -186,6 +186,7 @@ export class ProjectContextImpl implements IProjectContext {
     });
 
     this.fileTree.on("file-select", (path) => {
+      this.rightPane?.setMode("markdown");
       this.rightPane?.getViewer().loadFile(path);
       this.scheduleSave();
     });
@@ -347,12 +348,6 @@ export class ProjectContextImpl implements IProjectContext {
     return this.rightPane;
   }
 
-  /**
-   * Toggle the right pane to/from Neovim mode.
-   */
-  toggleNeovim(): void {
-    this.rightPane?.toggleNeovim();
-  }
 
   /**
    * Set the right pane mode directly.

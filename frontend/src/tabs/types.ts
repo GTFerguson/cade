@@ -65,7 +65,7 @@ export interface ProjectContext {
   getRightPane(): RightPaneManager | null;
   setTerminalKeyHandler(handler: CustomKeyHandler | null): void;
   toggleTerminal(): void;
-  toggleNeovim(): void;
+
   setRightPaneMode(mode: RightPaneMode): void;
   switchToAgent(agentId: string | null): void;
   cycleAgent(direction: "next" | "prev"): void;
