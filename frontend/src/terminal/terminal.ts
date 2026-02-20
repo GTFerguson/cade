@@ -86,6 +86,7 @@ export class Terminal implements Component {
   // to the bottom on the next output write. We track scroll state ourselves
   // and restore it when xterm loses it.
   private savedScrollPos: number | null = null;
+  private isFitting = false;
 
   constructor(
     private container: HTMLElement,
@@ -180,8 +181,13 @@ export class Terminal implements Component {
     this.fit();
 
     // Track user scroll position to work around xterm.js bug where
-    // alternate buffer transitions clear the isUserScrolling flag
+    // alternate buffer transitions clear the isUserScrolling flag.
+    // Suppress during fit() reflows (transient positions) and when
+    // container is hidden (viewport freezes while baseY keeps growing,
+    // producing stale positions that lock the terminal away from bottom).
     this.terminal.onScroll(() => {
+      if (this.isFitting) return;
+      if (this.container.offsetWidth === 0 || this.container.offsetHeight === 0) return;
       const buf = this.terminal?.buffer.active;
       if (!buf) return;
       if (buf.viewportY < buf.baseY) {
@@ -207,7 +213,7 @@ export class Terminal implements Component {
         // Only handle output for our sessionKey
         const msgSessionKey = message.sessionKey ?? SessionKey.CLAUDE;
         if (msgSessionKey === this.sessionKey) {
-          this.terminal?.write(message.data);
+          this.write(message.data);
         }
       });
     }
@@ -291,36 +297,55 @@ export class Terminal implements Component {
     }
 
     try {
-      // Check if dimensions would actually change
       const dims = this.fitAddon.proposeDimensions();
       if (!dims) {
         return;
       }
 
-      // Skip if dimensions haven't changed
+      const buf = this.terminal.buffer.active;
+
+      // Use savedScrollPos as the authority on whether the user was scrolled
+      // up — NOT raw viewportY. When a tab is hidden, the viewport freezes
+      // while baseY keeps growing from output, making viewportY < baseY even
+      // though the user was at the bottom. savedScrollPos is immune to this
+      // because onScroll is suppressed while the container is hidden.
+      const userWasScrolledUp = this.savedScrollPos != null;
+
+      // Skip if dimensions haven't changed, but still fix stale viewport
       if (
         this.lastSentSize !== null &&
         dims.cols === this.lastSentSize.cols &&
         dims.rows === this.lastSentSize.rows
       ) {
+        // Viewport may be stale after tab switch (frozen while hidden)
+        if (!userWasScrolledUp && buf.viewportY < buf.baseY) {
+          this.terminal.scrollToBottom();
+        }
         return;
       }
 
-      // Save scroll position before fit — fitAddon.fit() reflows content
-      // and can transiently set viewportY to 0, which poisons savedScrollPos
-      // and causes the write() protection to keep restoring to line 0 (top)
-      const buf = this.terminal.buffer.active;
-      const wasScrolledUp = buf.viewportY < buf.baseY;
-      const scrollPos = wasScrolledUp ? buf.viewportY : null;
-
+      // Suppress onScroll during reflow — fitAddon.fit() causes transient
+      // viewport positions that would corrupt savedScrollPos
+      this.isFitting = true;
       this.fitAddon.fit();
+      this.isFitting = false;
 
-      if (scrollPos != null && buf.viewportY !== scrollPos) {
-        this.terminal.scrollToLine(scrollPos);
-        this.savedScrollPos = scrollPos;
+      if (userWasScrolledUp && this.savedScrollPos != null) {
+        // User was scrolled up — restore their position after reflow
+        const pos = this.savedScrollPos;
+        if (buf.viewportY !== pos) {
+          this.terminal.scrollToLine(pos);
+        }
+        this.savedScrollPos = pos;
+      } else {
+        // User was at bottom — ensure we're still there after reflow
+        this.savedScrollPos = null;
+        if (buf.viewportY < buf.baseY) {
+          this.terminal.scrollToBottom();
+        }
       }
     } catch {
-      // Ignore fit errors during initialization
+      this.isFitting = false;
     }
   }
 

@@ -167,6 +167,11 @@ export class KeybindingManager implements Component {
       return;
     }
 
+    // Don't delegate to pane handlers when a full-screen overlay is open
+    if (document.querySelector(".remote-project-selector, .theme-selector-overlay, .help-overlay")) {
+      return;
+    }
+
     const focusedPane = this.callbacks?.getFocusedPane();
     const shouldDelegate = shouldDelegateToPaneHandler(target, focusedPane);
     console.log(`[keybindings] key=${e.key}, focusedPane=${focusedPane}, target=${target.className}, shouldDelegate=${shouldDelegate}`);

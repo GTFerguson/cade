@@ -195,14 +195,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     registry = get_registry()
     await registry.start()
 
-    # Write port/host files for hook script discovery
-    discovery_files = _write_discovery_files(config)
-
-    # Install hook if not already configured
-    _auto_setup_hook()
-
-    # Start WSL health check in background (non-blocking)
+    # Run WSL-dependent startup tasks in the background so the HTTP server
+    # starts accepting connections immediately. These tasks involve multiple
+    # subprocess calls (wsl -l, wsl whoami, wsl ip route) that can each
+    # block for up to 5 seconds if WSL is slow or unresponsive.
     import asyncio
+
+    async def _deferred_wsl_setup() -> list[Path]:
+        """Write discovery files and install hooks in a background thread."""
+        loop = asyncio.get_running_loop()
+        files = await loop.run_in_executor(None, _write_discovery_files, config)
+        await loop.run_in_executor(None, _auto_setup_hook)
+        return files
+
+    deferred_setup_task = asyncio.create_task(_deferred_wsl_setup())
+
     wsl_task = asyncio.create_task(_check_wsl_health_async())
 
     if config.auto_open_browser:
@@ -220,6 +227,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     logger.info("CADE shutting down")
+
+    # Retrieve discovery files from the deferred setup task
+    discovery_files: list[Path] = []
+    if deferred_setup_task.done() and not deferred_setup_task.cancelled():
+        try:
+            discovery_files = deferred_setup_task.result()
+        except Exception:
+            pass
+    else:
+        deferred_setup_task.cancel()
+
     _cleanup_discovery_files(discovery_files)
 
     wsl_task.cancel()
