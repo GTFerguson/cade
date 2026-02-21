@@ -7,7 +7,7 @@ import { MenuNav, escapeHtml } from "../ui/menu-nav";
 import { buildTunnelArgs, computeParentPath, filterDirectories, sortProjectsByLastUsed, getProfileDisplayMeta } from "./profile-utils";
 import type { FileNode } from "../types";
 
-type Screen = "connections" | "projects" | "new-project" | "new-connection" | "browse";
+type Screen = "connections" | "projects" | "new-project" | "new-connection" | "browse" | "error";
 
 interface SelectionResult {
   profile: RemoteProfile;
@@ -76,6 +76,8 @@ export class RemoteProjectSelector {
       } else if (this.nav.selectedIndex === 1) {
         this.showBrowseScreen();
       }
+    } else if (this.currentScreen === "error") {
+      this.showConnectionsScreen();
     } else if (this.currentScreen === "browse") {
       const actionEl = this.container.querySelector('[data-action="select"]');
       const isFocusedOnSelect = actionEl?.classList.contains('selected');
@@ -103,13 +105,17 @@ export class RemoteProjectSelector {
       } else {
         this.showNewProjectScreen();
       }
+    } else if (this.currentScreen === "error") {
+      this.showConnectionsScreen();
     } else if (this.currentScreen === "connections") {
       this.close();
     }
   }
 
   private handleEscape(): void {
-    if (this.currentScreen === "browse") {
+    if (this.currentScreen === "error") {
+      this.showConnectionsScreen();
+    } else if (this.currentScreen === "browse") {
       this.showNewProjectScreen();
     } else if (this.currentScreen === "new-project") {
       this.showProjectsScreen();
@@ -239,11 +245,22 @@ export class RemoteProjectSelector {
         await this.startTunnelIfNeeded(this.selectedProfile);
       } catch (error) {
         console.error("[CADE] Tunnel failed:", error);
-        this.showConnectionsScreen();
+        this.showConnectionError(`Tunnel failed: ${error}`);
         return;
       }
 
-      this.wsUrl = toWebSocketUrl(this.selectedProfile.url);
+      let wsUrl: string;
+      try {
+        wsUrl = toWebSocketUrl(this.selectedProfile.url);
+      } catch (error) {
+        console.error("[CADE] Invalid URL:", this.selectedProfile.url, error);
+        this.showConnectionError(
+          `Invalid URL: "${this.selectedProfile.url}". Check the connection URL and try again.`
+        );
+        return;
+      }
+
+      this.wsUrl = wsUrl;
       this.wsAuthToken = this.selectedProfile.authToken;
       this.ws = new WebSocketClient(this.wsUrl, this.wsAuthToken);
 
@@ -252,6 +269,13 @@ export class RemoteProjectSelector {
           this.currentBrowsePath = message.path;
         }
         this.handleBrowseResults(message.children);
+      });
+
+      // Show error and return to connections if auth fails or connection drops
+      this.ws.on("auth-failed", () => {
+        this.ws?.disconnect();
+        this.ws = null;
+        this.showConnectionError("Authentication failed. Check your auth token.");
       });
 
       this.currentBrowsePath = this.selectedProfile.defaultPath || "~";
@@ -282,6 +306,31 @@ export class RemoteProjectSelector {
           <div><span class="help-key">j/k</span> or <span class="help-key">↑/↓</span> navigate</div>
           <div><span class="help-key">l</span> open project</div>
           <div><span class="help-key">h</span> back to connections</div>
+        </div>
+      </div>
+    `;
+
+    this.nav.wireClickHandlers();
+  }
+
+  private showConnectionError(message: string): void {
+    this.currentScreen = "error";
+    this.nav.reset();
+
+    this.container.innerHTML = `
+      <div class="pane-view">
+        <div class="pane-content">
+          <div class="pane-header">[ CONNECTION FAILED ]</div>
+          <div class="connection-error" style="color: var(--text-error, #ff6b6b); padding: 1em 0; white-space: pre-wrap;">${escapeHtml(message)}</div>
+          <div class="divider"></div>
+          <div class="options-list">
+            <div class="option selected" data-index="0">
+              <span class="option-label">[back to connections]</span>
+            </div>
+          </div>
+        </div>
+        <div class="pane-help">
+          <div><span class="help-key">l</span> or <span class="help-key">enter</span> go back</div>
         </div>
       </div>
     `;

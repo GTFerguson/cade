@@ -3,6 +3,7 @@ import { RemoteProfileManager } from "./profile-manager";
 import { MenuNav } from "../ui/menu-nav";
 import { pickFile, getUserHomePath } from "../platform/tauri-bridge";
 import { buildSshTunnelProfile, buildDirectProfile } from "./profile-utils";
+import { normalizeUrl } from "../platform/url-utils";
 
 function generateId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -238,13 +239,17 @@ export class RemoteProfileEditor {
     let profile: RemoteProfile;
 
     if (this.mode === "direct") {
-      const url = this.urlInput.value.trim();
+      const rawUrl = this.urlInput.value.trim();
       const token = this.tokenInput.value.trim();
 
-      if (!url) {
+      if (!rawUrl) {
         this.urlInput.focus();
         return;
       }
+
+      const url = normalizeUrl(rawUrl);
+      // Update the input so the user sees the normalized URL
+      this.urlInput.value = url;
 
       profile = buildDirectProfile(
         {
