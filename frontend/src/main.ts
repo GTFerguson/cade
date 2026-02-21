@@ -342,6 +342,11 @@ class App {
       });
     });
 
+    tab.ws.on("connection-lost", () => {
+      console.warn(`[main] Connection lost for tab ${tab.id}, still retrying...`);
+      this.tabManager.setConnected(tab.id, false);
+    });
+
     // Progress bar: advance through checkpoints until shell is ready
     if (this.startSplash?.isVisible()) {
       // Step 2: WebSocket connecting

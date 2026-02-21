@@ -51,6 +51,7 @@ interface WebSocketEvents {
   "neovim-exited": NeovimExitedMessage;
   error: ErrorMessage;
   "auth-failed": { code: number };
+  "connection-lost": void;
 }
 
 export class WebSocketClient {
@@ -562,9 +563,10 @@ export class WebSocketClient {
     }
 
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error("Max reconnection attempts reached");
-      this.emit("auth-failed", { code: 0 });
-      return;
+      console.warn("Max reconnection attempts reached, will keep retrying");
+      this.emit("connection-lost", undefined);
+      // Reset counter so we keep retrying with max delay instead of giving up
+      this.reconnectAttempts = this.maxReconnectAttempts - 1;
     }
 
     const delay = Math.min(
