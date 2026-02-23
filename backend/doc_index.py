@@ -53,11 +53,65 @@ def has_docs(project_dir: Path) -> bool:
     if not DOC_INDEX_AVAILABLE:
         return False
     config = load_config(project_dir)
-    for scan_dir in config.get("scan", []):
-        doc_root = project_dir / scan_dir
-        if doc_root.exists() and any(doc_root.rglob("*.md")):
-            return True
-    return False
+    scan_dirs = config.get("scan")
+    if scan_dirs:
+        for scan_dir in scan_dirs:
+            doc_root = project_dir / scan_dir
+            if doc_root.exists() and any(doc_root.rglob("*.md")):
+                return True
+        return False
+    else:
+        # No scan dirs configured — whole-project scan
+        return any(project_dir.rglob("*.md"))
+
+
+def ensure_setup(project_dir: Path) -> None:
+    """Ensure doc-index tooling is available for agents in this project.
+
+    Creates symlinks so agents can invoke --query, and installs the
+    doc-search rule. All operations are idempotent. Does NOT create
+    .doc-index.yaml, CLAUDE.md, or docs/ scaffolding.
+    """
+    # Symlink tools/doc_index package and wrapper script
+    tools_dir = project_dir / "tools"
+    pkg_src = _CADENCE_ROOT / "tools" / "doc_index"
+    pkg_dst = tools_dir / "doc_index"
+    bin_src = _CADENCE_ROOT / "tools" / "doc-index"
+    bin_dst = tools_dir / "doc-index"
+
+    if not pkg_dst.exists() and pkg_src.exists():
+        tools_dir.mkdir(exist_ok=True)
+        pkg_dst.symlink_to(pkg_src)
+        logger.info("Symlinked tools/doc_index -> %s", pkg_src)
+
+    if not bin_dst.exists() and bin_src.exists():
+        tools_dir.mkdir(exist_ok=True)
+        bin_dst.symlink_to(bin_src)
+        logger.info("Symlinked tools/doc-index -> %s", bin_src)
+
+    # Install doc-search rule to ~/.claude/rules/
+    rules_dir = Path.home() / ".claude" / "rules"
+    rule_src = _CADENCE_ROOT / "rules" / "doc-search.md"
+    rule_dst = rules_dir / "doc-search.md"
+
+    if not rule_dst.exists() and rule_src.exists():
+        rules_dir.mkdir(parents=True, exist_ok=True)
+        rule_dst.symlink_to(rule_src)
+        logger.info("Installed doc-search.md rule to %s", rules_dir)
+
+    # Ensure .cade/ is in .gitignore
+    gitignore = project_dir / ".gitignore"
+    cade_pattern = ".cade/"
+    if gitignore.exists():
+        content = gitignore.read_text()
+        if cade_pattern not in content:
+            with open(gitignore, "a") as f:
+                f.write(f"\n{cade_pattern}\n")
+            logger.info("Added .cade/ to .gitignore")
+    else:
+        with open(gitignore, "w") as f:
+            f.write(f"{cade_pattern}\n")
+        logger.info("Created .gitignore with .cade/")
 
 
 def build_project_index(project_dir: Path) -> dict | None:
@@ -95,6 +149,9 @@ class DocIndexService:
     async def initial_build(self) -> None:
         """Build index on project open. Call as a background task."""
         try:
+            # Make tooling available for agents before building
+            await asyncio.to_thread(ensure_setup, self._project_dir)
+
             index = await asyncio.to_thread(
                 build_project_index, self._project_dir
             )
