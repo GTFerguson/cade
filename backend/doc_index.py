@@ -36,6 +36,12 @@ if _ensure_importable():
     try:
         from tools.doc_index.builder import build_index
         from tools.doc_index.config import load_config
+        from tools.doc_index.embeddings import (
+            FASTEMBED_AVAILABLE,
+            build_embeddings,
+            load_embeddings,
+            save_embeddings,
+        )
         from tools.doc_index.search import build_tfidf, save_tfidf
 
         DOC_INDEX_AVAILABLE = True
@@ -134,6 +140,22 @@ def build_project_index(project_dir: Path) -> dict | None:
     )
     tfidf_data = build_tfidf(index["docs"], project_dir)
     save_tfidf(tfidf_data, tfidf_path)
+
+    # Build embeddings if fastembed is installed (cached, only re-embeds changes)
+    if FASTEMBED_AVAILABLE:
+        emb_path = project_dir / config.get(
+            "embeddings_output", ".cade/doc-index-embeddings.json"
+        )
+        existing = load_embeddings(emb_path)
+        emb_data, new_count = build_embeddings(
+            index["docs"], project_dir,
+            model_name=config.get("embedding_model", "BAAI/bge-small-en-v1.5"),
+            existing=existing,
+        )
+        save_embeddings(emb_data, emb_path)
+        if new_count:
+            logger.info("Embedded %d docs (%d cached)", new_count,
+                        len(emb_data) - new_count)
 
     return index
 
