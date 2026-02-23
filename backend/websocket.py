@@ -28,6 +28,7 @@ from backend.models import FileChangeEvent, TerminalSize
 
 if TYPE_CHECKING:
     from backend.config import Config
+    from backend.doc_index import DocIndexService
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class ConnectionHandler:
         self._output_tasks: dict[str, asyncio.Task] = {}
         self._terminal_sizes: dict[str, TerminalSize] = {}
         self._user_config = None
+        self._doc_index: "DocIndexService | None" = None
 
     async def _send_status(self, message: str) -> None:
         """Send a startup status message."""
@@ -117,6 +119,13 @@ class ConnectionHandler:
             ):
                 deferred_task = asyncio.create_task(self._deferred_claude_start())
 
+            # Build doc-index in background on project open
+            doc_index_task: asyncio.Task | None = None
+            if self._doc_index is not None:
+                doc_index_task = asyncio.create_task(
+                    self._doc_index.initial_build()
+                )
+
             # Receive loop controls connection lifetime
             # PTY output and watch loops run as long-lived background tasks
             try:
@@ -129,10 +138,13 @@ class ConnectionHandler:
                 watch_task.cancel()
                 if deferred_task is not None:
                     deferred_task.cancel()
+                if doc_index_task is not None:
+                    doc_index_task.cancel()
                 await asyncio.gather(
                     *self._output_tasks.values(),
                     watch_task,
                     *([] if deferred_task is None else [deferred_task]),
+                    *([] if doc_index_task is None else [doc_index_task]),
                     return_exceptions=True,
                 )
 
@@ -256,6 +268,11 @@ class ConnectionHandler:
 
         self._watcher = FileWatcher(self._working_dir)
 
+        from backend.doc_index import DOC_INDEX_AVAILABLE, DocIndexService
+        if DOC_INDEX_AVAILABLE:
+            self._doc_index = DocIndexService(self._working_dir)
+            self._watcher.on_change(self._doc_index.on_file_change)
+
     async def _cleanup(self) -> None:
         """Clean up resources."""
         self._closed = True
@@ -266,6 +283,10 @@ class ConnectionHandler:
         if self._session_id is not None:
             manager = get_neovim_manager()
             await manager.kill(self._session_id)
+
+        if self._doc_index is not None:
+            self._doc_index.cancel()
+            self._doc_index = None
 
         if self._watcher is not None:
             self._watcher.stop()
