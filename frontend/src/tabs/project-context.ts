@@ -173,6 +173,12 @@ export class ProjectContextImpl implements IProjectContext {
       this.ws.on("output", onFirstOutput);
     }
 
+    // Sync focusedPane when user clicks on a pane (fixes desync where
+    // focusedPane stays on file-tree/viewer after clicking the terminal)
+    fileTreeEl.addEventListener("mousedown", () => this.focusPane("file-tree"));
+    terminalEl.addEventListener("mousedown", () => this.focusPane("terminal"));
+    viewerEl.addEventListener("mousedown", () => this.focusPane("viewer"));
+
     this.fileTree = new FileTree(fileTreeEl, this.ws);
     this.fileTree.initialize();
 

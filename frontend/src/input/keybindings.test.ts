@@ -3,11 +3,12 @@
  *
  * Tests for keybinding pane delegation routing.
  *
- * Regression: the original guard used `!isXtermTextarea` which blocked ALL
- * xterm textareas (including the main terminal's) from pane delegation.
- * The fix narrows this to only skip delegation for Neovim's xterm textarea
- * (inside `.right-pane-neovim`), so the main terminal's textarea no longer
- * prevents file-tree/viewer keybindings from working.
+ * The guard skips delegation when:
+ * - focusedPane is "terminal" or undefined
+ * - the target is an xterm textarea inside .terminal-pane (prevents focus desync
+ *   from routing terminal keystrokes to file-tree/viewer handlers)
+ * - the target is an xterm textarea inside .right-pane-neovim (Neovim handles
+ *   its own input via key forwarding)
  */
 
 import { describe, it, expect } from "vitest";
@@ -17,6 +18,7 @@ import { shouldDelegateToPaneHandler } from "./keybindings";
 function fakeTarget(opts: {
   isXtermTextarea?: boolean;
   insideNeovimPane?: boolean;
+  insideTerminalPane?: boolean;
 } = {}): { classList: DOMTokenList; closest(selector: string): Element | null } {
   const classSet = new Set(opts.isXtermTextarea ? ["xterm-helper-textarea"] : []);
   return {
@@ -25,6 +27,9 @@ function fakeTarget(opts: {
     } as DOMTokenList,
     closest: (selector: string) => {
       if (selector === ".right-pane-neovim" && opts.insideNeovimPane) {
+        return {} as Element;
+      }
+      if (selector === ".terminal-pane" && opts.insideTerminalPane) {
         return {} as Element;
       }
       return null;
@@ -55,21 +60,28 @@ describe("shouldDelegateToPaneHandler", () => {
     expect(shouldDelegateToPaneHandler(fakeTarget(), undefined)).toBe(false);
   });
 
-  // --- Main terminal's xterm textarea (the bug scenario) ---
+  // --- Terminal-pane xterm textarea (focus desync fix) ---
 
-  it("delegates when main terminal xterm textarea has focus but file-tree is focused", () => {
-    const target = fakeTarget({ isXtermTextarea: true, insideNeovimPane: false });
-    expect(shouldDelegateToPaneHandler(target, "file-tree")).toBe(true);
+  it("does NOT delegate terminal-pane xterm textarea even when file-tree is focused", () => {
+    const target = fakeTarget({ isXtermTextarea: true, insideTerminalPane: true });
+    expect(shouldDelegateToPaneHandler(target, "file-tree")).toBe(false);
   });
 
-  it("delegates when main terminal xterm textarea has focus but viewer is focused", () => {
-    const target = fakeTarget({ isXtermTextarea: true, insideNeovimPane: false });
-    expect(shouldDelegateToPaneHandler(target, "viewer")).toBe(true);
+  it("does NOT delegate terminal-pane xterm textarea even when viewer is focused", () => {
+    const target = fakeTarget({ isXtermTextarea: true, insideTerminalPane: true });
+    expect(shouldDelegateToPaneHandler(target, "viewer")).toBe(false);
   });
 
-  it("does NOT delegate main terminal xterm textarea when terminal is focused", () => {
-    const target = fakeTarget({ isXtermTextarea: true, insideNeovimPane: false });
+  it("does NOT delegate terminal-pane xterm textarea when terminal is focused", () => {
+    const target = fakeTarget({ isXtermTextarea: true, insideTerminalPane: true });
     expect(shouldDelegateToPaneHandler(target, "terminal")).toBe(false);
+  });
+
+  // --- Non-terminal xterm textarea (e.g. agent pane outside terminal-pane) ---
+
+  it("delegates non-terminal xterm textarea when file-tree is focused", () => {
+    const target = fakeTarget({ isXtermTextarea: true, insideTerminalPane: false });
+    expect(shouldDelegateToPaneHandler(target, "file-tree")).toBe(true);
   });
 
   // --- Neovim's xterm textarea ---
@@ -84,15 +96,14 @@ describe("shouldDelegateToPaneHandler", () => {
     expect(shouldDelegateToPaneHandler(target, "file-tree")).toBe(false);
   });
 
-  // --- Regression: the exact bug scenario ---
+  // --- Regression: focus desync scenario ---
 
-  it("REGRESSION: after Neovim exit, switching to file-tree still allows delegation", () => {
-    // User exits Neovim → focus returns to main terminal textarea →
-    // user presses prefix+h to switch to file-tree → presses j/k.
-    // The main terminal textarea still has browser focus, but the
-    // logical focused pane is "file-tree". Delegation MUST happen.
-    const mainTerminalTextarea = fakeTarget({ isXtermTextarea: true, insideNeovimPane: false });
-    expect(shouldDelegateToPaneHandler(mainTerminalTextarea, "file-tree")).toBe(true);
+  it("REGRESSION: terminal-pane xterm with desynced focusedPane must NOT delegate", () => {
+    // User presses prefix+h to focus file-tree, then clicks on the terminal.
+    // focusedPane is still "file-tree" but the xterm textarea in .terminal-pane
+    // has DOM focus. Keys like j/k must NOT be routed to the file-tree handler.
+    const terminalTextarea = fakeTarget({ isXtermTextarea: true, insideTerminalPane: true });
+    expect(shouldDelegateToPaneHandler(terminalTextarea, "file-tree")).toBe(false);
   });
 
   it("REGRESSION: Neovim xterm textarea must NOT be intercepted during editing", () => {

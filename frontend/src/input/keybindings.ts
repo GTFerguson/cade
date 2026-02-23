@@ -27,6 +27,11 @@ export function shouldDelegateToPaneHandler(
   if (focusedPane == null || focusedPane === "terminal") return false;
 
   const isXtermTextarea = target.classList.contains("xterm-helper-textarea");
+
+  // If the target is a terminal-pane xterm, let it handle input natively even
+  // when focusedPane is desynced (e.g. user clicked terminal without prefix key)
+  if (isXtermTextarea && target.closest(".terminal-pane") != null) return false;
+
   const isNeovimXterm = isXtermTextarea && target.closest(".right-pane-neovim") != null;
   return !isNeovimXterm;
 }
