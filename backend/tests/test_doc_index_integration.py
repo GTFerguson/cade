@@ -7,6 +7,7 @@ and the DocIndexService lifecycle works end-to-end.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
@@ -575,6 +576,169 @@ class TestExclusions:
         assert "rebuild/notes.md" in paths, (
             f"rebuild/notes.md should NOT be excluded. Got: {paths}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Embeddings (conditional)
+# ---------------------------------------------------------------------------
+
+
+class TestOutOfBox:
+    """End-to-end: simulate CADE opening a fresh project with no config.
+
+    This is the closest to what actually happens in production:
+    DocIndexService.initial_build() runs, then an agent invokes the
+    doc-index CLI via subprocess to search.
+    """
+
+    @pytest.mark.asyncio
+    async def test_full_lifecycle_no_config(self, project_dir: Path):
+        """Fresh project, no .doc-index.yaml → build + search works."""
+        # Remove any config file (simulates a brand-new project)
+        config_file = project_dir / ".doc-index.yaml"
+        if config_file.exists():
+            config_file.unlink()
+
+        # Simulate CADE opening the project
+        service = DocIndexService(project_dir)
+        await service.initial_build()
+
+        # Verify symlinks were created (agent tooling available)
+        assert (project_dir / "tools" / "doc_index").exists(), \
+            "tools/doc_index symlink not created"
+        assert (project_dir / "tools" / "doc-index").exists(), \
+            "tools/doc-index symlink not created"
+
+        # Verify index was built
+        index_path = project_dir / ".cade" / "doc-index.json"
+        assert index_path.exists(), "Index not built"
+
+        tfidf_path = project_dir / ".cade" / "doc-index-tfidf.json"
+        assert tfidf_path.exists(), "TF-IDF not built"
+
+        # Verify .cade/ added to .gitignore
+        gitignore = project_dir / ".gitignore"
+        assert gitignore.exists() and ".cade/" in gitignore.read_text()
+
+        # Verify index content
+        index = json.loads(index_path.read_text())
+        paths = {d["path"] for d in index["docs"]}
+        assert "docs/auth.md" in paths
+        assert "README.md" in paths
+
+    @pytest.mark.asyncio
+    async def test_agent_cli_query_works(self, project_dir: Path):
+        """After initial_build, `python -m tools.doc_index --query` works."""
+        import subprocess
+
+        service = DocIndexService(project_dir)
+        await service.initial_build()
+
+        # Simulate what an agent does: run the CLI tool
+        result = subprocess.run(
+            [sys.executable, "-m", "tools.doc_index", "--query", "authentication"],
+            capture_output=True,
+            text=True,
+            cwd=str(project_dir),
+            timeout=30,
+        )
+
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+
+        # Output should be JSON (piped/non-TTY)
+        output = result.stdout.strip()
+        assert output, "CLI produced no output"
+
+        data = json.loads(output)
+        assert len(data) > 0, "Query returned no results"
+
+        # Auth doc should appear in results
+        result_paths = [r["path"] for r in data]
+        assert "docs/auth.md" in result_paths, \
+            f"Expected docs/auth.md in results, got {result_paths}"
+
+    @pytest.mark.asyncio
+    async def test_agent_cli_context_works(self, project_dir: Path):
+        """After initial_build, `--context` finds docs for a code file."""
+        import subprocess
+
+        service = DocIndexService(project_dir)
+        await service.initial_build()
+
+        result = subprocess.run(
+            [sys.executable, "-m", "tools.doc_index", "--context", "src/auth.py"],
+            capture_output=True,
+            text=True,
+            cwd=str(project_dir),
+            timeout=30,
+        )
+
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+
+        output = result.stdout.strip()
+        assert output, "CLI produced no output"
+
+        data = json.loads(output)
+        assert len(data) > 0, "Context search returned no results"
+        assert any(r["path"] == "docs/auth.md" for r in data), \
+            f"Expected docs/auth.md for src/auth.py context, got {data}"
+
+    @pytest.mark.asyncio
+    async def test_agent_cli_discover_works(self, project_dir: Path):
+        """After initial_build, `--discover` returns project metadata."""
+        import subprocess
+
+        service = DocIndexService(project_dir)
+        await service.initial_build()
+
+        result = subprocess.run(
+            [sys.executable, "-m", "tools.doc_index", "--discover"],
+            capture_output=True,
+            text=True,
+            cwd=str(project_dir),
+            timeout=30,
+        )
+
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+
+        output = result.stdout.strip()
+        assert output, "CLI produced no output"
+
+        data = json.loads(output)
+        assert "count" in data
+        assert data["count"] >= 3
+
+    @pytest.mark.asyncio
+    async def test_rebuild_on_md_change(self, project_dir: Path):
+        """After adding a new .md file, rebuild picks it up."""
+        service = DocIndexService(project_dir)
+        await service.initial_build()
+
+        # Add a new doc
+        new_doc = project_dir / "docs" / "api.md"
+        new_doc.write_text(
+            "---\ntitle: API Reference\ntags: [api]\n---\n\n# API\n\nEndpoints.\n"
+        )
+
+        # Rebuild (simulates what the debounced rebuild does)
+        index = await asyncio.to_thread(build_project_index, project_dir)
+        assert index is not None
+
+        paths = {d["path"] for d in index["docs"]}
+        assert "docs/api.md" in paths, "New doc not picked up after rebuild"
+
+    @pytest.mark.asyncio
+    async def test_empty_project_still_sets_up_tooling(self, empty_project: Path):
+        """Project with no .md files still gets symlinks (ready for docs)."""
+        service = DocIndexService(empty_project)
+        await service.initial_build()
+
+        # Tooling should be ready
+        assert (empty_project / "tools" / "doc_index").exists()
+        assert (empty_project / "tools" / "doc-index").exists()
+
+        # But no index
+        assert not (empty_project / ".cade" / "doc-index.json").exists()
 
 
 # ---------------------------------------------------------------------------
