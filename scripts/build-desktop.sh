@@ -32,7 +32,7 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-if ! python3 -c "import pyinstaller" 2> /dev/null; then
+if ! python3 -c "import PyInstaller" 2> /dev/null; then
     echo "Error: PyInstaller is not installed. Run: pip install pyinstaller"
     exit 1
 fi
