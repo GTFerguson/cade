@@ -4,6 +4,8 @@ Systematically tests each layer to isolate where the prompt duplication is happe
 1. PTY spawn and output reading
 2. Output buffering and sending
 3. Shell initialization
+
+Tests that spawn real PTY processes have a 10-second timeout to prevent hanging.
 """
 
 from __future__ import annotations
@@ -61,15 +63,20 @@ class TestPTYOutputReading:
         pty = PTYManager()
         await pty.spawn("bash --norc --noprofile", temp_dir, TerminalSize(cols=80, rows=24))
 
-        # Read output chunks
+        # Read output chunks with timeout to prevent hanging
         chunks = []
-        start = asyncio.get_event_loop().time()
 
-        async for chunk in pty.read():
-            chunks.append(chunk)
-            # Stop after getting some chunks or 1.5 seconds
-            if len(chunks) >= 5 or asyncio.get_event_loop().time() - start > 1.5:
-                break
+        async def _collect():
+            start = asyncio.get_event_loop().time()
+            async for chunk in pty.read():
+                chunks.append(chunk)
+                if len(chunks) >= 5 or asyncio.get_event_loop().time() - start > 1.5:
+                    break
+
+        try:
+            await asyncio.wait_for(_collect(), timeout=5.0)
+        except asyncio.TimeoutError:
+            pass  # Expected if PTY read blocks after bash prompt
 
         await pty.close()
 
@@ -155,16 +162,21 @@ class TestShellInitialization:
     async def test_bash_with_norc_no_duplicates(self, temp_dir: Path):
         """Test bash with --norc to bypass .bashrc."""
         pty = PTYManager()
-        # Spawn bash without reading rc files
         await pty.spawn("bash --norc --noprofile", temp_dir, TerminalSize(cols=80, rows=24))
 
         outputs = []
-        start = asyncio.get_event_loop().time()
 
-        async for chunk in pty.read():
-            outputs.append(chunk)
-            if asyncio.get_event_loop().time() - start > 1.5:
-                break
+        async def _collect():
+            start = asyncio.get_event_loop().time()
+            async for chunk in pty.read():
+                outputs.append(chunk)
+                if asyncio.get_event_loop().time() - start > 1.5:
+                    break
+
+        try:
+            await asyncio.wait_for(_collect(), timeout=5.0)
+        except asyncio.TimeoutError:
+            pass
 
         await pty.close()
 
@@ -183,7 +195,6 @@ class TestShellInitialization:
     @pytest.mark.skipif(sys.platform == "win32", reason="Requires Unix PTY (pexpect)")
     async def test_empty_bashrc_no_duplicates(self, temp_dir: Path):
         """Test bash with a minimal empty .bashrc."""
-        # Create empty bashrc in temp dir
         bashrc = temp_dir / ".bashrc"
         bashrc.write_text("# Minimal bashrc\n")
 
@@ -191,12 +202,18 @@ class TestShellInitialization:
         await pty.spawn(f"bash --rcfile {bashrc}", temp_dir, TerminalSize(cols=80, rows=24))
 
         outputs = []
-        start = asyncio.get_event_loop().time()
 
-        async for chunk in pty.read():
-            outputs.append(chunk)
-            if asyncio.get_event_loop().time() - start > 1.5:
-                break
+        async def _collect():
+            start = asyncio.get_event_loop().time()
+            async for chunk in pty.read():
+                outputs.append(chunk)
+                if asyncio.get_event_loop().time() - start > 1.5:
+                    break
+
+        try:
+            await asyncio.wait_for(_collect(), timeout=5.0)
+        except asyncio.TimeoutError:
+            pass
 
         await pty.close()
 

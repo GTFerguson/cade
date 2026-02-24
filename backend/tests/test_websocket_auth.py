@@ -54,9 +54,9 @@ class TestWebSocketAuthentication:
         handler = ConnectionHandler(ws, config)
         await handler.handle()
 
-        # Should reject connection
+        # Handler accepts first so the close frame is transmitted properly
+        ws.accept.assert_called_once()
         ws.close.assert_called_once_with(code=1008, reason="Authentication failed")
-        ws.accept.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_reject_connection_when_auth_enabled_invalid_token(self):
@@ -71,9 +71,9 @@ class TestWebSocketAuthentication:
         handler = ConnectionHandler(ws, config)
         await handler.handle()
 
-        # Should reject connection
+        # Handler accepts first so the close frame is transmitted properly
+        ws.accept.assert_called_once()
         ws.close.assert_called_once_with(code=1008, reason="Authentication failed")
-        ws.accept.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_accept_connection_when_auth_enabled_valid_token(self):
@@ -138,8 +138,9 @@ class TestWebSocketAuthentication:
         handler = ConnectionHandler(ws, config)
         await handler.handle()
 
+        # Handler accepts first so the close frame is transmitted properly
+        ws.accept.assert_called_once()
         ws.close.assert_called_once_with(code=1008, reason="Authentication failed")
-        ws.accept.assert_not_called()
 
 
 class TestWebSocketAuthIntegration:
@@ -184,8 +185,9 @@ class TestWebSocketAuthIntegration:
         handler_invalid = ConnectionHandler(ws_invalid, config)
         await handler_invalid.handle()
 
+        # Handler accepts first so the close frame is transmitted properly
+        ws_invalid.accept.assert_called_once()
         ws_invalid.close.assert_called_once()
-        ws_invalid.accept.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_local_development_scenario(self):

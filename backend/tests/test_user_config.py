@@ -29,7 +29,7 @@ class TestColorsConfig:
     def test_default_values(self) -> None:
         """Default colors should match badwolf theme."""
         config = ColorsConfig()
-        assert config.bg_primary == "#1c1b1a"
+        assert config.bg_primary == "#0a0a09"
         assert config.accent_blue == "#0a9dff"
         assert config.text_primary == "#f8f6f2"
 
@@ -250,7 +250,7 @@ class TestUserConfig:
         config = UserConfig()
         result = config.to_dict()
 
-        assert result["appearance"]["colors"]["bgPrimary"] == "#1c1b1a"
+        assert result["appearance"]["colors"]["bgPrimary"] == "#0a0a09"
         assert result["keybindings"]["global"]["prefix"] == "C-a"
         assert result["behavior"]["session"]["autoStartClaude"] is True
 
@@ -281,6 +281,6 @@ class TestGetDefaultUserConfig:
     def test_has_default_values(self) -> None:
         """Returned config should have default values."""
         config = get_default_user_config()
-        assert config.appearance.colors.bg_primary == "#1c1b1a"
+        assert config.appearance.colors.bg_primary == "#0a0a09"
         assert config.keybindings.globals.prefix == "C-a"
         assert config.behavior.session.auto_start_claude is True

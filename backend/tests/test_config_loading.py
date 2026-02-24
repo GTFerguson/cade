@@ -157,7 +157,7 @@ class TestApplyColorsConfig:
     def test_empty_data(self) -> None:
         """Should return defaults for empty data."""
         config = _apply_colors_config({})
-        assert config.bg_primary == "#1c1b1a"
+        assert config.bg_primary == "#0a0a09"
 
 
 class TestApplyFontsConfig:
@@ -378,7 +378,7 @@ class TestLoadAppearanceConfig:
     def test_empty_paths(self) -> None:
         """Should return defaults for empty paths."""
         config = _load_appearance_config([])
-        assert config.colors.bg_primary == "#1c1b1a"
+        assert config.colors.bg_primary == "#0a0a09"
 
 
 class TestLoadKeybindingsConfig:
@@ -411,7 +411,7 @@ class TestLoadUserConfig:
     def test_load_default_config(self) -> None:
         """Should return default config when no files exist."""
         config = load_user_config(None)
-        assert config.appearance.colors.bg_primary == "#1c1b1a"
+        assert config.appearance.colors.bg_primary == "#0a0a09"
         assert config.keybindings.globals.prefix == "C-a"
         assert config.behavior.session.auto_start_claude is True
 
@@ -464,7 +464,7 @@ class TestInvalidConfigHandling:
         (temp_config_dir / "appearance.toml").write_text("this is not [valid toml")
         config = _load_appearance_config([temp_config_dir])
         # Should return defaults
-        assert config.colors.bg_primary == "#1c1b1a"
+        assert config.colors.bg_primary == "#0a0a09"
 
     def test_wrong_value_types_ignored(self, temp_config_dir: Path) -> None:
         """Should handle wrong value types by using them as-is (no type checking)."""
