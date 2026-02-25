@@ -1,222 +1,115 @@
 # CADE
 
-**Claude Agentic Development Environment** - An agent-first development environment with Claude Code in a terminal shell as its centerpiece.
+**Claude Agentic Development Environment**
 
-Available as both a **web application** and **native desktop application** (Windows, macOS, Linux).
+Vim and tmux proved something: keyboard-driven, distraction-free tools create flow states. CADE brings that philosophy to AI-assisted development — a workspace where Claude Code in a terminal is the centerpiece, not a sidebar.
 
-## Desktop Application
+This is not an IDE with AI bolted on. The terminal IS the IDE. Everything else — the file tree, the viewer, the tabs — exists to serve it.
 
-CADE is now available as a native desktop application built with Tauri:
+Available as a **web application** and **native desktop app** (Windows, macOS, Linux).
+
+## Philosophy: Power Tools for the AI Age
+
+Traditional IDEs treat AI as an assistant living in a chat panel. CADE inverts this: the AI agent is the primary worker, the human is the supervisor. The interface is built around that reality.
+
+**Agent-first, not agent-assisted.** The terminal gets 50% of the screen by default. The file tree and document viewer flank it. There are no wizards, no settings dialogs, no chrome between you and the work.
+
+**Terminal aesthetic, not web aesthetic.** Monospace typography throughout. Bracket notation (`[ LIKE THIS ]`) instead of rounded buttons. Full-pane screen replacements instead of modal dialogs. Zero `border-radius`, zero `box-shadow`. When in doubt, we ask: *"Would this feel at home in tmux?"*
+
+**Keyboard-first, mouse optional.** Vim navigation (`j`/`k`/`h`/`l`) works across every screen — file tree, viewer, theme selector, remote connection picker, splash screen. One set of keys, learned once, used everywhere.
+
+## Everything is Two Keystrokes Away
+
+The three-pane layout is not just a visual choice — it's an ergonomic one. Every context you need is always visible, and reachable with a single tmux-style prefix chord (`Ctrl+a`):
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+a` `h` | Focus file tree |
+| `Ctrl+a` `l` | Focus viewer |
+| `Ctrl+a` `s` | Toggle Claude / shell terminal |
+| `Ctrl+a` `f` / `d` | Next / previous tab |
+| `Ctrl+a` `1-9` | Jump to tab by number |
+| `Ctrl+a` `c` | New local project tab |
+| `Ctrl+a` `C` | New remote project tab |
+| `Ctrl+a` `v` | Toggle viewer pane |
+| `Ctrl+a` `t` | Theme selector |
+| `Ctrl+a` `?` | Help |
+| `Ctrl+g` | View latest plan *(1 keystroke)* |
+
+Hold the prefix key down to chain multiple shortcuts without re-pressing it. Every binding is configurable via `keybindings.toml`.
+
+## Features
+
+**Three-pane workspace** — File tree (20%), terminal (50%), document viewer (30%). Resizable with keyboard or mouse. Proportions persist across sessions.
+
+**Session persistence** — PTY processes survive browser refreshes and disconnections. Close your laptop, reopen — your Claude session is exactly where you left it, scrollback and all.
+
+**Multi-project tabs** — Each tab is an isolated environment with its own terminal session, file tree, and viewer. Switch with `Ctrl+a` `1-9`.
+
+**Dual terminal** — Every tab has two PTY sessions: one for Claude Code, one for a manual shell. Toggle with `Ctrl+a` `s`. No context switching, no new windows.
+
+**Remote deployment** — Run the backend on any server. Access from a browser with token auth, or from the desktop app via managed SSH tunnels. Same session from your desk, your couch, or your phone.
+
+**Mobile interface** — Touch toolbar with terminal keys (`esc`, `tab`, `^c`), swipe navigation, slideout panels. Connect to a running session from your phone to monitor Claude while you're away from your desk.
+
+**Plan viewer** — A Claude Code hook automatically displays plan files in the viewer as Claude writes them. `Ctrl+g` pulls up the latest plan instantly.
+
+**Neovim integration** — Embedded Neovim pane in the viewer for reviewing and editing files with your own vim config.
+
+**Markdown rendering** — LaTeX math (KaTeX), Mermaid diagrams, syntax highlighting, Obsidian-compatible `[[wiki-links]]` — all rendered in the viewer.
+
+**5 built-in themes** — True Black, Deep Contrast, Ember, Ink, Badwolf. All share the Badwolf accent palette. Live-preview selector at `Ctrl+a` `t`.
+
+**Vim navigation everywhere** — `j`/`k` to move, `l` to select, `h` to go back. Works in the file tree, the viewer, menus, and every TUI screen. Builds one set of muscle memory for the entire application.
+
+**WSL support** — Automatic WSL detection, path translation, and gateway resolution on Windows.
+
+## Quick Start
+
+### Desktop App
 
 ```bash
-# Setup prerequisites and dependencies
-make setup
-
-# Start desktop app in dev mode
-make dev-desktop
-
-# Build desktop installers
-make build-desktop
+make setup        # install prerequisites and dependencies
+make dev-desktop  # start in dev mode
+make build-desktop  # build installers
 ```
 
-See [SETUP.md](SETUP.md) for detailed setup instructions or [desktop/QUICKSTART.md](desktop/QUICKSTART.md) for desktop-specific documentation.
+See [SETUP.md](SETUP.md) for detailed instructions or [desktop/QUICKSTART.md](desktop/QUICKSTART.md) for desktop-specific docs.
 
-## Quick Start (Web Version)
-
-### Prerequisites
-
-- Python 3.11+
-- Node.js 18+
-- npm
-
-### Backend Setup
+### Web Version
 
 ```bash
-# Create and activate virtual environment
-python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-
-# macOS/Linux
-source .venv/bin/activate
-
-# Install dependencies
+# Backend
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# Or install as editable package
-pip install -e .
-```
+# Frontend
+cd frontend && npm install && npm run build && cd ..
 
-### Frontend Setup
-
-```bash
-cd frontend
-npm install
-npm run build
-cd ..
-```
-
-### Running
-
-```bash
-# Start the server (opens browser automatically)
+# Run
 python -m backend.main
-
-# Or with options
-python -m backend.main --port 8080 --dir /path/to/project --no-browser
 ```
 
-### Development Mode
+For development with hot reload, see [SETUP.md](SETUP.md).
 
-For frontend development with hot reload:
+## Tech Stack
 
-```bash
-# Terminal 1: Start backend
-python -m backend.main --no-browser
+| Layer | Technology |
+|-------|-----------|
+| Frontend | TypeScript, xterm.js (WebGL), Vite |
+| Backend | Python 3.11+, FastAPI, uvicorn |
+| Desktop | Tauri v2 (Rust) |
+| Markdown | mertex.md (marked + KaTeX + Mermaid + DOMPurify) |
 
-# Terminal 2: Start frontend dev server
-cd frontend
-npm run dev
-```
+## Documentation
 
-Then open http://localhost:5173 (Vite dev server proxies WebSocket to backend).
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CADE_PORT` | 3000 | Server port |
-| `CADE_HOST` | localhost | Server host |
-| `CADE_WORKING_DIR` | cwd | Working directory |
-| `CADE_SHELL_COMMAND` | claude | Shell command to run |
-| `CADE_AUTO_OPEN_BROWSER` | true | Open browser on start |
-| `CADE_DEBUG` | false | Enable debug mode |
-
-### CLI Arguments
-
-```
-python -m backend.main --help
-
-options:
-  -p, --port PORT       Server port (default: 3000)
-  -H, --host HOST       Server host (default: localhost)
-  -d, --dir DIR         Working directory (default: current)
-  -c, --command CMD     Shell command to run (default: claude)
-  --no-browser          Don't open browser automatically
-  --debug               Enable debug mode
-```
-
-## Project Structure
-
-```
-backend/
-├── main.py                # FastAPI app, CLI entry point
-├── config.py              # Configuration management
-├── protocol.py            # WebSocket message types
-├── auth.py                # Token auth + session cookies
-├── websocket.py           # WebSocket handler
-├── models.py              # Data models
-├── middleware.py           # CORS setup
-├── connection_registry.py # Multi-connection tracking
-├── cc_session_resolver.py # Claude Code session discovery
-├── files/                 # File operations
-│   ├── tree.py            # File tree building
-│   ├── watcher.py         # Filesystem watching
-│   ├── operations.py      # Read/write/create
-│   └── user_config.py     # User config files
-├── terminal/              # PTY management
-│   ├── pty.py, sessions.py, connections.py
-├── hooks/                 # Claude Code hook integration
-├── neovim/                # Neovim backend support
-├── wsl/                   # WSL path translation & health
-└── tests/
-
-frontend/src/
-├── main.ts                # App entry point
-├── config/                # Config, themes, user preferences
-├── platform/              # protocol.ts, websocket.ts, tauri-bridge.ts
-├── terminal/              # xterm.js terminal + session manager
-├── markdown/              # Markdown/code viewer + editor
-├── file-tree/             # File tree component
-├── tabs/                  # Tab management + project context
-├── remote/                # Remote connection profiles, SSH
-├── agents/                # Agent session management
-├── input/                 # Keybinding system
-├── ui/                    # Splash, layout, help, theme selector, mobile
-├── neovim/                # Neovim pane
-├── auth/                  # Token management
-└── right-pane/            # Right pane manager
-
-desktop/                   # Tauri 2.0 native wrapper (Windows, macOS, Linux)
-scripts/                   # Build, deploy, and dev scripts
-```
-
-## WebSocket Protocol
-
-The protocol is defined in `backend/protocol.py` (server) and `frontend/src/platform/protocol.ts` (client). All messages are JSON with a `type` field.
-
-### Terminal
-
-| Type | Direction | Payload | Description |
-|------|-----------|---------|-------------|
-| `input` | C→S | `{ data, sessionKey? }` | Terminal input |
-| `resize` | C→S | `{ cols, rows, sessionKey? }` | Terminal resize |
-| `output` | S→C | `{ data, sessionKey? }` | Terminal output |
-| `pty-exited` | S→C | `{ code, message, sessionKey? }` | PTY process exited |
-
-### Files
-
-| Type | Direction | Payload | Description |
-|------|-----------|---------|-------------|
-| `get-tree` | C→S | `{}` | Request file tree |
-| `get-file` | C→S | `{ path }` | Request file content |
-| `write-file` | C→S | `{ path, content }` | Write file |
-| `create-file` | C→S | `{ path, content? }` | Create new file |
-| `get-children` | C→S | `{ path, showIgnored? }` | Request directory children |
-| `browse-children` | C→S | `{ path }` | Browse absolute filesystem path |
-| `file-tree` | S→C | `{ data: FileNode[] }` | File tree response |
-| `file-children` | S→C | `{ path, children }` | Directory children response |
-| `file-content` | S→C | `{ path, content, fileType }` | File content |
-| `file-written` | S→C | `{ path }` | Write confirmation |
-| `file-created` | S→C | `{ path }` | Create confirmation |
-| `file-change` | S→C | `{ event, path }` | Filesystem change notification |
-| `view-file` | S→C | `{ path, content, fileType, isPlan? }` | External view request (e.g. plan overlay) |
-
-### Session
-
-| Type | Direction | Payload | Description |
-|------|-----------|---------|-------------|
-| `connected` | S→C | `{ workingDir }` | Connection established |
-| `set-project` | C→S | `{ path, sessionId? }` | Set project directory |
-| `save-session` | C→S | `{ state }` | Persist session state |
-| `session-restored` | S→C | `{ sessionId, scrollback }` | Session reattached after reconnect |
-| `startup-status` | S→C | `{ message }` | Startup progress indicator |
-| `get-latest-plan` | C→S | `{}` | Request most recent plan file |
-
-### Neovim
-
-| Type | Direction | Payload | Description |
-|------|-----------|---------|-------------|
-| `neovim-spawn` | C→S | `{ sessionId }` | Spawn Neovim instance |
-| `neovim-kill` | C→S | `{ sessionId }` | Terminate Neovim |
-| `neovim-input` | C→S | `{ data }` | Terminal input to Neovim |
-| `neovim-resize` | C→S | `{ cols, rows }` | Resize Neovim terminal |
-| `neovim-rpc` | C→S | `{ method, args, requestId }` | RPC command |
-| `neovim-ready` | S→C | `{ pid }` | Neovim running |
-| `neovim-output` | S→C | `{ data }` | Terminal output from Neovim |
-| `neovim-rpc-response` | S→C | `{ requestId, result?, error? }` | RPC response |
-| `neovim-exited` | S→C | `{ exitCode }` | Neovim exited |
-
-### Errors
-
-| Type | Direction | Payload | Description |
-|------|-----------|---------|-------------|
-| `error` | S→C | `{ code, message }` | Error response |
-
-Error codes: `pty-spawn-failed`, `pty-read-failed`, `pty-write-failed`, `file-not-found`, `file-read-failed`, `file-write-failed`, `file-create-failed`, `file-exists`, `invalid-path`, `invalid-message`, `pty-exited`, `internal-error`, `neovim-spawn-failed`, `neovim-not-found`, `neovim-rpc-failed`
+| Topic | Location |
+|-------|----------|
+| Setup and configuration | [SETUP.md](SETUP.md) |
+| Technical architecture | [docs/technical/](docs/technical/README.md) |
+| Design philosophy | [docs/technical/design/visual-design-philosophy.md](docs/technical/design/visual-design-philosophy.md) |
+| User guides | [docs/user/](docs/user/README.md) |
+| Roadmap | [docs/future/](docs/future/README.md) |
 
 ## License
 
