@@ -79,15 +79,11 @@ def ensure_setup() -> None:
         return
 
     rules_dir = Path.home() / ".claude" / "rules"
-    rule_dst = rules_dir / "doc-search.md"
+    rule_dst = rules_dir / "code-intel.md"
 
-    # Only install if no rule exists yet (don't overwrite existing symlinks)
+    # Only install if no rule exists yet
     if rule_dst.exists():
-        # Check if it's a broken symlink (cadence submodule not present on remote)
-        if rule_dst.is_symlink() and not rule_dst.resolve().exists():
-            rule_dst.unlink()
-        else:
-            return
+        return
 
     rules_dir.mkdir(parents=True, exist_ok=True)
     # Copy the file (not symlink — package path may change on upgrades)

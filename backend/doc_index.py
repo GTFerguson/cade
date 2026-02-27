@@ -95,15 +95,15 @@ def ensure_setup(project_dir: Path) -> None:
         bin_dst.symlink_to(bin_src)
         logger.info("Symlinked tools/doc-index -> %s", bin_src)
 
-    # Install doc-search rule to ~/.claude/rules/
+    # Install code-intel rule to ~/.claude/rules/
     rules_dir = Path.home() / ".claude" / "rules"
-    rule_src = _CADENCE_ROOT / "rules" / "doc-search.md"
-    rule_dst = rules_dir / "doc-search.md"
+    rule_src = _CADENCE_ROOT / "rules" / "code-intel.md"
+    rule_dst = rules_dir / "code-intel.md"
 
     if not rule_dst.exists() and rule_src.exists():
         rules_dir.mkdir(parents=True, exist_ok=True)
         rule_dst.symlink_to(rule_src)
-        logger.info("Installed doc-search.md rule to %s", rules_dir)
+        logger.info("Installed code-intel.md rule to %s", rules_dir)
 
     # Ensure .cade/ is in .gitignore
     gitignore = project_dir / ".gitignore"
