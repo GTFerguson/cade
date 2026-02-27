@@ -32,6 +32,69 @@ _CODE_EXTENSIONS = frozenset({
 })
 
 
+def _find_usage_rule() -> Path | None:
+    """Locate the nkrdn usage-rule.md from the installed package."""
+    try:
+        result = subprocess.run(
+            [_NKRDN_BIN, "-c",
+             "import nkrdn, os; print(os.path.dirname(nkrdn.__file__))"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except Exception:
+        # _NKRDN_BIN is the nkrdn CLI, not python — use python from same env
+        pass
+
+    # Find the python that nkrdn's venv uses
+    nkrdn_bin = Path(_NKRDN_BIN).resolve() if _NKRDN_BIN else None
+    if nkrdn_bin is None:
+        return None
+
+    python_bin = nkrdn_bin.parent / "python3"
+    if not python_bin.exists():
+        python_bin = nkrdn_bin.parent / "python"
+    if not python_bin.exists():
+        return None
+
+    try:
+        result = subprocess.run(
+            [str(python_bin), "-c",
+             "import nkrdn, os; print(os.path.dirname(nkrdn.__file__))"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            pkg_dir = Path(result.stdout.strip())
+            rule = pkg_dir / "usage-rule.md"
+            if rule.exists():
+                return rule
+    except Exception:
+        pass
+
+    return None
+
+
+def ensure_setup() -> None:
+    """Install nkrdn usage rule to ~/.claude/rules/. Idempotent."""
+    rule_src = _find_usage_rule()
+    if rule_src is None:
+        return
+
+    rules_dir = Path.home() / ".claude" / "rules"
+    rule_dst = rules_dir / "doc-search.md"
+
+    # Only install if no rule exists yet (don't overwrite existing symlinks)
+    if rule_dst.exists():
+        # Check if it's a broken symlink (cadence submodule not present on remote)
+        if rule_dst.is_symlink() and not rule_dst.resolve().exists():
+            rule_dst.unlink()
+        else:
+            return
+
+    rules_dir.mkdir(parents=True, exist_ok=True)
+    # Copy the file (not symlink — package path may change on upgrades)
+    shutil.copy2(rule_src, rule_dst)
+    logger.info("Installed nkrdn usage rule to %s", rule_dst)
+
+
 def has_code(project_dir: Path) -> bool:
     """Check if a project has source code worth indexing."""
     for ext in _CODE_EXTENSIONS:
@@ -95,6 +158,8 @@ class NkrdnService:
     async def initial_build(self) -> None:
         """Build knowledge graph on project open. Call as a background task."""
         try:
+            await asyncio.to_thread(ensure_setup)
+
             if not has_code(self._project_dir):
                 logger.debug("No source code to index in %s", self._project_dir)
                 return
