@@ -136,6 +136,18 @@ else
     echo -e "  ${YELLOW}⚠${NC} No requirements.txt found at $REQ_FILE"
 fi
 
+# Install nkrdn wheel if present
+NKRDN_WHEEL=$(ls "$INSTALL_DIR"/vendor/nkrdn-*.whl 2>/dev/null | head -1)
+if [ -n "$NKRDN_WHEEL" ]; then
+    echo "  Installing nkrdn..."
+    "$VENV_DIR/bin/python3" -m pip install -q --force-reinstall "$NKRDN_WHEEL"
+    if "$VENV_DIR/bin/nkrdn" stats --help >/dev/null 2>&1; then
+        echo -e "  ${GREEN}✓${NC} nkrdn installed"
+    else
+        echo -e "  ${YELLOW}⚠${NC} nkrdn wheel installed but CLI not working"
+    fi
+fi
+
 # ── Step 3: Claude Code CLI ────────────────────────────────────────────────
 
 echo -e "${CYAN}[3/8]${NC} Claude Code CLI..."
@@ -339,7 +351,7 @@ Environment=CADE_AUTO_OPEN_BROWSER=false
 Environment=CADE_SHELL_COMMAND=bash -l
 Environment=PYTHONPATH=${INSTALL_DIR}
 Environment=HOME=${USER_HOME}
-Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${USER_HOME}/.local/bin
+Environment=PATH=${VENV_DIR}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${USER_HOME}/.local/bin
 ExecStart=${VENV_DIR}/bin/python3 -m backend.main serve --no-browser
 Restart=on-failure
 RestartSec=5
