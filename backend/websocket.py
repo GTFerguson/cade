@@ -29,6 +29,7 @@ from backend.models import FileChangeEvent, TerminalSize
 if TYPE_CHECKING:
     from backend.config import Config
     from backend.doc_index import DocIndexService
+    from backend.nkrdn_service import NkrdnService
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ class ConnectionHandler:
         self._terminal_sizes: dict[str, TerminalSize] = {}
         self._user_config = None
         self._doc_index: "DocIndexService | None" = None
+        self._nkrdn: "NkrdnService | None" = None
 
     async def _send_status(self, message: str) -> None:
         """Send a startup status message."""
@@ -126,6 +128,13 @@ class ConnectionHandler:
                     self._doc_index.initial_build()
                 )
 
+            # Build knowledge graph in background on project open
+            nkrdn_task: asyncio.Task | None = None
+            if self._nkrdn is not None:
+                nkrdn_task = asyncio.create_task(
+                    self._nkrdn.initial_build()
+                )
+
             # Receive loop controls connection lifetime
             # PTY output and watch loops run as long-lived background tasks
             try:
@@ -140,11 +149,14 @@ class ConnectionHandler:
                     deferred_task.cancel()
                 if doc_index_task is not None:
                     doc_index_task.cancel()
+                if nkrdn_task is not None:
+                    nkrdn_task.cancel()
                 await asyncio.gather(
                     *self._output_tasks.values(),
                     watch_task,
                     *([] if deferred_task is None else [deferred_task]),
                     *([] if doc_index_task is None else [doc_index_task]),
+                    *([] if nkrdn_task is None else [nkrdn_task]),
                     return_exceptions=True,
                 )
 
@@ -273,6 +285,11 @@ class ConnectionHandler:
             self._doc_index = DocIndexService(self._working_dir)
             self._watcher.on_change(self._doc_index.on_file_change)
 
+        from backend.nkrdn_service import NKRDN_AVAILABLE, NkrdnService
+        if NKRDN_AVAILABLE:
+            self._nkrdn = NkrdnService(self._working_dir)
+            self._watcher.on_change(self._nkrdn.on_file_change)
+
     async def _cleanup(self) -> None:
         """Clean up resources."""
         self._closed = True
@@ -287,6 +304,10 @@ class ConnectionHandler:
         if self._doc_index is not None:
             self._doc_index.cancel()
             self._doc_index = None
+
+        if self._nkrdn is not None:
+            self._nkrdn.cancel()
+            self._nkrdn = None
 
         if self._watcher is not None:
             self._watcher.stop()
