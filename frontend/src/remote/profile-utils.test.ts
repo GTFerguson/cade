@@ -50,15 +50,15 @@ describe("buildSshTunnelProfile", () => {
     expect(profile.connectionType).toBe("ssh-tunnel");
   });
 
-  it("defaults both ports to 3000", () => {
+  it("defaults both ports to 3030", () => {
     const profile = buildSshTunnelProfile(baseInputs, stubGenerateId);
-    expect(profile.localPort).toBe(3000);
-    expect(profile.remotePort).toBe(3000);
+    expect(profile.localPort).toBe(3030);
+    expect(profile.remotePort).toBe(3030);
   });
 
   it("constructs URL from localPort", () => {
     const profile = buildSshTunnelProfile(baseInputs, stubGenerateId);
-    expect(profile.url).toBe("http://localhost:3000");
+    expect(profile.url).toBe("http://localhost:3030");
   });
 
   it("generates an ID when none provided", () => {
@@ -104,13 +104,13 @@ describe("buildTunnelArgs", () => {
     const profile: RemoteProfile = {
       id: "test",
       name: "glann",
-      url: "http://localhost:3000",
+      url: "http://localhost:3030",
       connectionType: "ssh-tunnel",
       sshHost: "3.254.73.120",
       sshUser: "ubuntu",
       sshKeyPath: "~/.ssh/id_ed25519",
-      localPort: 3000,
-      remotePort: 3000,
+      localPort: 3030,
+      remotePort: 3030,
     };
 
     const args = buildTunnelArgs(profile);
@@ -118,19 +118,19 @@ describe("buildTunnelArgs", () => {
     expect(args.sshHost).toBe("3.254.73.120");
     expect(args.sshUser).toBe("ubuntu");
     expect(args.sshKeyPath).toBe("~/.ssh/id_ed25519");
-    expect(args.localPort).toBe(3000);
-    expect(args.remotePort).toBe(3000);
+    expect(args.localPort).toBe(3030);
+    expect(args.remotePort).toBe(3030);
   });
 
   it("passes null for missing sshUser", () => {
     const profile: RemoteProfile = {
       id: "test",
       name: "test",
-      url: "http://localhost:3000",
+      url: "http://localhost:3030",
       connectionType: "ssh-tunnel",
       sshHost: "10.0.0.1",
-      localPort: 3000,
-      remotePort: 3000,
+      localPort: 3030,
+      remotePort: 3030,
     };
 
     const args = buildTunnelArgs(profile);
@@ -141,30 +141,30 @@ describe("buildTunnelArgs", () => {
     const profile: RemoteProfile = {
       id: "test",
       name: "test",
-      url: "http://localhost:3000",
+      url: "http://localhost:3030",
       connectionType: "ssh-tunnel",
       sshHost: "10.0.0.1",
       sshUser: "root",
-      localPort: 3000,
-      remotePort: 3000,
+      localPort: 3030,
+      remotePort: 3030,
     };
 
     const args = buildTunnelArgs(profile);
     expect(args.sshKeyPath).toBeNull();
   });
 
-  it("defaults ports to 3000 when missing from profile", () => {
+  it("defaults ports to 3030 when missing from profile", () => {
     const profile: RemoteProfile = {
       id: "test",
       name: "test",
-      url: "http://localhost:3000",
+      url: "http://localhost:3030",
       connectionType: "ssh-tunnel",
       sshHost: "10.0.0.1",
     };
 
     const args = buildTunnelArgs(profile);
-    expect(args.localPort).toBe(3000);
-    expect(args.remotePort).toBe(3000);
+    expect(args.localPort).toBe(3030);
+    expect(args.remotePort).toBe(3030);
   });
 
   it("round-trips: buildProfile → buildTunnelArgs preserves all SSH data", () => {
@@ -181,8 +181,8 @@ describe("buildTunnelArgs", () => {
     expect(args.sshHost).toBe(inputs.host);
     expect(args.sshUser).toBe(inputs.user);
     expect(args.sshKeyPath).toBe(inputs.keyPath);
-    expect(args.localPort).toBe(3000);
-    expect(args.remotePort).toBe(3000);
+    expect(args.localPort).toBe(3030);
+    expect(args.remotePort).toBe(3030);
   });
 });
 
@@ -373,13 +373,13 @@ describe("getProfileDisplayMeta", () => {
     const profile: RemoteProfile = {
       id: "1",
       name: "clann",
-      url: "http://localhost:3000",
+      url: "http://localhost:3030",
       connectionType: "ssh-tunnel",
       sshHost: "52.30.205.70",
       sshUser: "ubuntu",
       sshKeyPath: "~/.ssh/id_ed25519",
-      localPort: 3000,
-      remotePort: 3000,
+      localPort: 3030,
+      remotePort: 3030,
     };
 
     expect(getProfileDisplayMeta(profile)).toBe("ubuntu@52.30.205.70");
@@ -389,11 +389,11 @@ describe("getProfileDisplayMeta", () => {
     const profile: RemoteProfile = {
       id: "1",
       name: "test",
-      url: "http://localhost:3000",
+      url: "http://localhost:3030",
       connectionType: "ssh-tunnel",
       sshHost: "10.0.0.1",
-      localPort: 3000,
-      remotePort: 3000,
+      localPort: 3030,
+      remotePort: 3030,
     };
 
     expect(getProfileDisplayMeta(profile)).toBe("10.0.0.1");
