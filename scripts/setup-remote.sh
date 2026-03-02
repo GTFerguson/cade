@@ -15,7 +15,7 @@
 # Environment variables (all optional, with sensible defaults):
 #   CADE_INSTALL_DIR   Where CADE is installed (default: ~/cade)
 #   CADE_ROOT_PATH     URL prefix for nginx (default: /cade)
-#   CADE_PORT          Backend port (default: 3000)
+#   CADE_PORT          Backend port (default: 3030)
 #   CADE_WORKING_DIR   Terminal working directory (default: $HOME)
 #   CADE_SKIP_NGINX    Skip nginx configuration (default: unset)
 #   CADE_SKIP_CLAUDE   Skip Claude CLI installation (default: unset)
@@ -39,7 +39,7 @@ INSTALL_DIR="${CADE_INSTALL_DIR:-$HOME/cade}"
 INSTALL_DIR="${INSTALL_DIR/#\~/$HOME}"
 
 ROOT_PATH="${CADE_ROOT_PATH:-/cade}"
-PORT="${CADE_PORT:-3000}"
+PORT="${CADE_PORT:-3030}"
 WORKING_DIR="${CADE_WORKING_DIR:-$HOME}"
 WORKING_DIR="${WORKING_DIR/#\~/$HOME}"
 CURRENT_USER="$(whoami)"

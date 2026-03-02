@@ -11,7 +11,7 @@
 # Examples:
 #   ./scripts/deploy.sh <host>
 #   ./scripts/deploy.sh <host> --skip-build
-#   ./scripts/deploy.sh <host> --root-path /cade --port 3000
+#   ./scripts/deploy.sh <host> --root-path /cade --port 3030
 
 set -euo pipefail
 
@@ -29,7 +29,7 @@ NC='\033[0m'
 SSH_HOST=""
 INSTALL_DIR="~/cade"
 ROOT_PATH="/cade"
-PORT=3000
+PORT=3030
 WORKING_DIR="\$HOME"
 SKIP_BUILD=false
 SKIP_SETUP=false
@@ -45,7 +45,7 @@ usage() {
     echo "Options:"
     echo "  --install-dir DIR     Remote install directory (default: ~/cade)"
     echo "  --root-path PATH      URL prefix for nginx (default: /cade)"
-    echo "  --port PORT           Backend port (default: 3000)"
+    echo "  --port PORT           Backend port (default: 3030)"
     echo "  --working-dir DIR     CADE working directory on remote (default: \$HOME)"
     echo "  --skip-build          Don't rebuild frontend"
     echo "  --skip-setup          Just sync files + restart (don't re-run setup)"

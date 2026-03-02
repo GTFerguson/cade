@@ -90,7 +90,7 @@ ssh <host> "sudo systemctl restart cade"
 The deploy script configures the server with these defaults:
 - Install dir: `~/cade`
 - Root path: `/cade` (CADE_ROOT_PATH)
-- Port: `3000`
+- Port: `3030`
 - Auth token stored in `~/cade/.token`
 - Service: `systemd` (cade.service, auto-restart on failure, auto-start on boot)
 

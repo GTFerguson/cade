@@ -55,8 +55,8 @@ export function buildSshTunnelProfile(
   inputs: ProfileInputs,
   generateId: () => string
 ): RemoteProfile {
-  const localPort = 3000;
-  const remotePort = 3000;
+  const localPort = 3030;
+  const remotePort = 3030;
 
   const profile: RemoteProfile = {
     id: inputs.id || generateId(),
@@ -93,8 +93,8 @@ export interface TunnelArgs {
 export function buildTunnelArgs(profile: RemoteProfile): TunnelArgs {
   return {
     sshHost: profile.sshHost,
-    localPort: profile.localPort || 3000,
-    remotePort: profile.remotePort || 3000,
+    localPort: profile.localPort || 3030,
+    remotePort: profile.remotePort || 3030,
     sshUser: profile.sshUser || null,
     sshKeyPath: profile.sshKeyPath || null,
   };
