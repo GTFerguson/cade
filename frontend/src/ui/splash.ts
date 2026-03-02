@@ -274,6 +274,61 @@ export class Splash {
   }
 
   /**
+   * Switch to error mode: show an error message with action buttons.
+   * Used when a connection fails and the user needs to retry or close.
+   */
+  setErrorMode(message: string, options: SplashOption[]): void {
+    this.options = options;
+    this.optionEls = [];
+    this.authActive = false;
+    this.ready = true;
+
+    this.statusEl.style.display = "none";
+    this.element.querySelector(".splash-options")?.remove();
+    this.element.querySelector(".splash-help")?.remove();
+    this.element.querySelector(".splash-progress")?.remove();
+    this.element.querySelector(".splash-auth-content")?.remove();
+    this.element.querySelector(".splash-error-content")?.remove();
+
+    const container = document.createElement("div");
+    container.className = "splash-error-content";
+
+    const msgEl = document.createElement("div");
+    msgEl.className = "splash-error-message";
+    msgEl.textContent = message;
+    container.appendChild(msgEl);
+
+    const optionsContainer = document.createElement("div");
+    optionsContainer.className = "splash-options";
+
+    this.optionEls = options.map((opt) => {
+      const el = document.createElement("div");
+      el.className = "splash-option";
+      el.textContent = `[${opt.label}]`;
+      el.addEventListener("click", () => opt.action());
+      optionsContainer.appendChild(el);
+      return el;
+    });
+
+    container.appendChild(optionsContainer);
+    this.element.appendChild(container);
+
+    this.nav = new MenuNav({
+      getOptions: () => this.optionEls,
+      onSelect: (i) => this.options?.[i]?.action(),
+    });
+    this.nav.renderSelection();
+
+    const helpEl = document.createElement("div");
+    helpEl.className = "splash-help";
+    helpEl.innerHTML = renderHelpBar([
+      { key: "j/k", label: "navigate" },
+      { key: "l", label: "select" },
+    ]);
+    this.element.appendChild(helpEl);
+  }
+
+  /**
    * Transition from options mode to a progress bar.
    * Called when user has selected an action and we're waiting for shell readiness.
    */
