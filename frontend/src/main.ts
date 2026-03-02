@@ -347,6 +347,12 @@ class App {
       this.tabManager.setConnected(tab.id, false);
     });
 
+    tab.ws.on("connection-failed", () => {
+      if (!tab.remoteProfileId) return;
+      console.error(`[main] Connection failed for remote tab ${tab.id}`);
+      this.showConnectionFailedSplash(tab);
+    });
+
     // Progress bar: advance through checkpoints until shell is ready
     if (this.startSplash?.isVisible()) {
       // Step 2: WebSocket connecting
@@ -493,6 +499,49 @@ class App {
         this.showStartSplash();
       }
     });
+  }
+
+  /**
+   * Show an error splash when a remote connection fails entirely.
+   * Offers retry and close actions.
+   */
+  private showConnectionFailedSplash(tab: TabState): void {
+    if (!this.tabContentContainer) return;
+
+    // Cancel the loading splash timeout — we're taking over
+    if (this.splashTimeout != null) {
+      window.clearTimeout(this.splashTimeout);
+      this.splashTimeout = null;
+    }
+
+    if (!this.startSplash?.isVisible()) {
+      this.startSplash = new Splash(this.tabContentContainer);
+    }
+
+    const displayName = tab.name.split(":")[0]?.trim() ?? "Remote";
+
+    this.startSplash.setErrorMode(
+      `connection failed — ${displayName} unreachable`,
+      [
+        {
+          label: "retry",
+          action: () => {
+            this.startSplash?.setLoading();
+            this.startSplash?.setProgress(2, "connecting");
+            this.startSplashTimeout();
+            tab.ws.disconnect();
+            tab.ws.connect();
+          },
+        },
+        {
+          label: "close",
+          action: () => {
+            this.hideStartSplash();
+            this.tabManager.closeTab(tab.id);
+          },
+        },
+      ]
+    );
   }
 
   /**

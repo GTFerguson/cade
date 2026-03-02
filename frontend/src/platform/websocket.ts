@@ -52,6 +52,7 @@ interface WebSocketEvents {
   error: ErrorMessage;
   "auth-failed": { code: number };
   "connection-lost": void;
+  "connection-failed": void;
 }
 
 export class WebSocketClient {
@@ -69,6 +70,8 @@ export class WebSocketClient {
   private remoteAuthToken: string | null = null;
   private maxReconnectAttempts: number;
   private url: string;
+  private hasEverConnected = false;
+  private initialConnectTimer: number | null = null;
 
   constructor(url?: string, authToken?: string, maxReconnectAttempts?: number) {
     this.explicitUrl = url !== undefined;
@@ -154,8 +157,21 @@ export class WebSocketClient {
     this.state = "connecting";
     this.ws = new WebSocket(urlWithAuth);
 
+    // Abort hung connections to unreachable hosts (dead IPs, firewalled ports)
+    if (!this.hasEverConnected && this.explicitUrl) {
+      this.initialConnectTimer = window.setTimeout(() => {
+        this.initialConnectTimer = null;
+        if (this.state === "connecting" && this.ws) {
+          console.warn("Initial connection timed out after 10s");
+          this.ws.close();
+        }
+      }, 10_000);
+    }
+
     this.ws.onopen = () => {
+      this.clearInitialConnectTimer();
       this.state = "connected";
+      this.hasEverConnected = true;
       this.reconnectAttempts = 0;
       console.log("WebSocket connected");
 
@@ -172,6 +188,7 @@ export class WebSocketClient {
     };
 
     this.ws.onclose = (event) => {
+      this.clearInitialConnectTimer();
       this.state = "disconnected";
       this.ws = null;
       this.emit("disconnected", undefined);
@@ -210,6 +227,8 @@ export class WebSocketClient {
    * Disconnect from the server.
    */
   disconnect(): void {
+    this.clearInitialConnectTimer();
+
     if (this.urlPollTimer !== null) {
       window.clearInterval(this.urlPollTimer);
       this.urlPollTimer = null;
@@ -226,6 +245,7 @@ export class WebSocketClient {
     }
 
     this.state = "disconnected";
+    this.reconnectAttempts = 0;
   }
 
   /**
@@ -556,9 +576,23 @@ export class WebSocketClient {
   /**
    * Schedule a reconnection attempt.
    */
+  private clearInitialConnectTimer(): void {
+    if (this.initialConnectTimer !== null) {
+      window.clearTimeout(this.initialConnectTimer);
+      this.initialConnectTimer = null;
+    }
+  }
+
   private scheduleReconnect(): void {
     if (this.fatalError) {
       console.error("Not reconnecting: terminal failed to start");
+      return;
+    }
+
+    // Never managed to connect at all — surface the error immediately
+    if (!this.hasEverConnected && this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.warn("Connection failed: server unreachable");
+      this.emit("connection-failed", undefined);
       return;
     }
 

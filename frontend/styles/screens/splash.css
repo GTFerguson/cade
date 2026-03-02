@@ -194,6 +194,36 @@
   text-align: center;
 }
 
+/* ── Error Splash Variant ─────────────────────────── */
+
+.splash-error-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 400px;
+  max-width: 90vw;
+  margin-top: 32px;
+}
+
+.splash-error-message {
+  font-size: 12px;
+  color: var(--accent-red);
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+.splash-error-content .splash-options {
+  margin-top: 0;
+  width: 100%;
+  max-width: 300px;
+  gap: 8px;
+}
+
+.splash-error-content .splash-option {
+  text-align: center;
+}
+
 /* Improved logo rendering */
 .splash-logo {
   font-variant-ligatures: none;
