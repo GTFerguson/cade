@@ -224,7 +224,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     `;
   }
 
-  private render(): void {
+  private async render(): Promise<void> {
     if (this.currentPath === null) {
       this.renderEmpty();
       return;
@@ -262,7 +262,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
       const markdownContent = document.createElement("div");
       markdownContent.className = "markdown-body";
-      markdownContent.innerHTML = this.mertex.render(markdown);
+      markdownContent.innerHTML = await this.mertex.render(markdown);
       content.appendChild(markdownContent);
 
       attachWikiLinkHandlers(content, this.currentPath, (targetPath) => {
