@@ -11,6 +11,8 @@ export class ChatInput {
   private textarea: HTMLTextAreaElement;
   private disabled = false;
   private onSend: (text: string) => void;
+  private onCancel: (() => void) | null = null;
+  private onSlashInput: ((text: string) => void) | null = null;
 
   constructor(container: HTMLElement, onSend: (text: string) => void) {
     this.onSend = onSend;
@@ -29,7 +31,10 @@ export class ChatInput {
     this.textarea.rows = 1;
 
     this.textarea.addEventListener("keydown", (e) => this.handleKeydown(e));
-    this.textarea.addEventListener("input", () => this.autoResize());
+    this.textarea.addEventListener("input", () => {
+      this.autoResize();
+      this.onSlashInput?.(this.textarea.value);
+    });
 
     this.row.appendChild(prompt);
     this.row.appendChild(this.textarea);
@@ -40,6 +45,14 @@ export class ChatInput {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       this.send();
+      return;
+    }
+
+    if (e.key === "Escape" && this.disabled) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.onCancel?.();
+      return;
     }
   }
 
@@ -62,6 +75,19 @@ export class ChatInput {
       Math.min(this.textarea.scrollHeight, maxHeight) + "px";
   }
 
+  setOnCancel(cb: () => void): void {
+    this.onCancel = cb;
+  }
+
+  setOnSlashInput(cb: (text: string) => void): void {
+    this.onSlashInput = cb;
+  }
+
+  setValue(text: string): void {
+    this.textarea.value = text;
+    this.autoResize();
+  }
+
   setDisabled(disabled: boolean): void {
     this.disabled = disabled;
     this.textarea.disabled = disabled;
@@ -74,6 +100,10 @@ export class ChatInput {
 
   focus(): void {
     this.textarea.focus();
+  }
+
+  blur(): void {
+    this.textarea.blur();
   }
 
   dispose(): void {

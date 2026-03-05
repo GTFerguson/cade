@@ -458,6 +458,13 @@ export class WebSocketClient {
   }
 
   /**
+   * Cancel the in-progress chat stream.
+   */
+  sendChatCancel(): void {
+    this.send({ type: MessageType.CHAT_CANCEL } as any);
+  }
+
+  /**
    * Send a chat message to the active provider.
    */
   sendChatMessage(content: string, providerId?: string): void {

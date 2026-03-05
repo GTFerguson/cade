@@ -155,6 +155,20 @@ export class TerminalManager implements Component {
   }
 
   /**
+   * Toggle enhanced CC mode on/off at runtime.
+   */
+  toggleEnhanced(): void {
+    this.setEnhanced(!this.enhanced);
+  }
+
+  /**
+   * Blur the chat input so keystrokes don't get captured by it.
+   */
+  blurChat(): void {
+    this.chatPane?.blur();
+  }
+
+  /**
    * Get the chat pane instance (null if not yet created).
    */
   getChatPane(): ChatPane | null {

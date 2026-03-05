@@ -96,6 +96,7 @@ export interface MiscKeybindingsConfig {
   help: string;
   toggleTerminal: string;
   toggleViewer: string;
+  toggleEnhanced: string;
 
   cycleAgentNext: string;
   cycleAgentPrev: string;
@@ -233,6 +234,7 @@ export const defaultUserConfig: UserConfig = {
       help: "?",
       toggleTerminal: "s",
       toggleViewer: "v",
+      toggleEnhanced: "e",
 
       cycleAgentNext: "]",
       cycleAgentPrev: "[",

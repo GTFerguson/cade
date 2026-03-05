@@ -474,6 +474,51 @@
   margin-left: auto;
 }
 
+.chat-statusline .status-cost {
+  color: var(--accent-orange);
+}
+
+/* --- Cancelled indicator --- */
+
+.chat-cancelled {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
+  margin-top: 4px;
+}
+
+/* --- Slash command popup --- */
+
+.chat-slash-hints {
+  border-bottom: 1px solid var(--border-color);
+  padding: 4px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.chat-slash-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 16px;
+  cursor: pointer;
+}
+
+.chat-slash-row:hover {
+  background: var(--bg-hover);
+}
+
+.chat-slash-name {
+  color: var(--accent-blue);
+  font-weight: 600;
+  min-width: 120px;
+}
+
+.chat-slash-desc {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 /* --- Fullscreen diagram viewer overlay --- */
 
 .diagram-viewer-overlay {

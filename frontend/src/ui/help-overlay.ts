@@ -33,7 +33,7 @@ const MISC_LABELS: Record<string, string> = {
   cycleAgentNext: "next agent",
   cycleAgentPrev: "prev agent",
   toggleViewer: "toggle viewer",
-
+  toggleEnhanced: "enhanced mode",
 };
 
 // ─── Formatting Utilities ────────────────────────────────────────────
