@@ -380,6 +380,13 @@ export interface ChatMessageRequest extends BaseMessage {
 }
 
 /**
+ * Chat cancel (client -> server).
+ */
+export interface ChatCancelMessage extends BaseMessage {
+  type: "chat-cancel";
+}
+
+/**
  * Provider switch (client -> server).
  */
 export interface ProviderSwitchMessage extends BaseMessage {
@@ -392,13 +399,21 @@ export interface ProviderSwitchMessage extends BaseMessage {
  */
 export interface ChatStreamMessage extends BaseMessage {
   type: "chat-stream";
-  event: "text-delta" | "done" | "error" | "tool-use-start" | "tool-result" | "thinking-delta";
+  event: "text-delta" | "done" | "error" | "tool-use-start" | "tool-result" | "thinking-delta" | "system-info";
   content?: string;
   usage?: Record<string, number>;
   message?: string;
   toolId?: string;
   toolName?: string;
   status?: string;
+  cancelled?: boolean;
+  cost?: number;
+  // system-info fields
+  model?: string;
+  sessionId?: string;
+  tools?: string[];
+  slashCommands?: string[];
+  version?: string;
 }
 
 /**
@@ -434,6 +449,7 @@ export type ClientMessage =
   | SaveSessionMessage
   | SetProjectMessage
   | ChatMessageRequest
+  | ChatCancelMessage
   | ProviderSwitchMessage
   | NeovimSpawnMessage
   | NeovimKillMessage

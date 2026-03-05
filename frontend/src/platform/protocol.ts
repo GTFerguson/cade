@@ -22,6 +22,7 @@ export const MessageType = {
   INPUT: "input",
   RESIZE: "resize",
   CHAT_MESSAGE: "chat-message",
+  CHAT_CANCEL: "chat-cancel",
   PROVIDER_SWITCH: "provider-switch",
   GET_FILE: "get-file",
   GET_TREE: "get-tree",

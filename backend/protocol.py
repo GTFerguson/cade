@@ -25,6 +25,7 @@ class MessageType:
 
     # Chat - Client -> Server
     CHAT_MESSAGE = "chat-message"  # Send chat message: { type, content: str, providerId?: str }
+    CHAT_CANCEL = "chat-cancel"  # Cancel in-progress chat stream: { type }
     PROVIDER_SWITCH = "provider-switch"  # Switch provider: { type, providerId: str }
 
     # Server -> Client

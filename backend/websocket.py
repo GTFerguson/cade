@@ -25,7 +25,7 @@ from backend.protocol import ErrorCode, MessageType, SessionKey
 from backend.providers.config import get_providers_config
 from backend.providers.registry import ProviderRegistry
 from backend.providers.claude_code_provider import ClaudeCodeProvider
-from backend.providers.types import ChatDone, ChatError, TextDelta, ThinkingDelta, ToolResult, ToolUseStart
+from backend.providers.types import ChatDone, ChatError, SystemInfo, TextDelta, ThinkingDelta, ToolResult, ToolUseStart
 from backend.session import load_session, save_session
 from backend.terminal.pty import PTYManager
 from backend.terminal.sessions import PTYSession, TerminalState, get_registry
@@ -499,6 +499,8 @@ class ConnectionHandler:
                 await self._handle_get_latest_plan()
             elif msg_type == MessageType.CHAT_MESSAGE:
                 await self._handle_chat_message(data)
+            elif msg_type == MessageType.CHAT_CANCEL:
+                await self._handle_chat_cancel()
             elif msg_type == MessageType.PROVIDER_SWITCH:
                 await self._handle_provider_switch(data)
             elif msg_type == MessageType.NEOVIM_SPAWN:
@@ -753,6 +755,21 @@ class ConnectionHandler:
 
     # --- Chat handlers ---
 
+    async def _handle_chat_cancel(self) -> None:
+        """Cancel the in-progress chat stream."""
+        if self._chat_task is not None and not self._chat_task.done():
+            self._chat_task.cancel()
+            try:
+                await self._chat_task
+            except asyncio.CancelledError:
+                pass
+            self._chat_task = None
+            await self._send({
+                "type": MessageType.CHAT_STREAM,
+                "event": "done",
+                "cancelled": True,
+            })
+
     async def _handle_chat_message(self, data: dict) -> None:
         """Handle a chat message from the client."""
         content = data.get("content", "").strip()
@@ -818,7 +835,17 @@ class ConnectionHandler:
                 if self._closed:
                     break
 
-                if isinstance(event, TextDelta):
+                if isinstance(event, SystemInfo):
+                    await self._send({
+                        "type": MessageType.CHAT_STREAM,
+                        "event": "system-info",
+                        "model": event.model,
+                        "sessionId": event.session_id,
+                        "tools": event.tools,
+                        "slashCommands": event.slash_commands,
+                        "version": event.version,
+                    })
+                elif isinstance(event, TextDelta):
                     self._chat_session.append_response_chunk(event.content)
                     await self._send({
                         "type": MessageType.CHAT_STREAM,
@@ -851,6 +878,7 @@ class ConnectionHandler:
                         "type": MessageType.CHAT_STREAM,
                         "event": "done",
                         "usage": event.usage,
+                        "cost": event.cost,
                     })
                 elif isinstance(event, ChatError):
                     await self._send({

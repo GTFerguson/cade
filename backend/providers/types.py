@@ -43,6 +43,7 @@ class ChatDone(ChatEvent):
     """Stream completed successfully."""
 
     usage: dict = field(default_factory=dict)
+    cost: float = 0
 
 
 @dataclass
@@ -75,3 +76,14 @@ class ThinkingDelta(ChatEvent):
     """Incremental thinking/reasoning text from the model."""
 
     content: str
+
+
+@dataclass
+class SystemInfo(ChatEvent):
+    """System initialization info from Claude Code."""
+
+    model: str
+    session_id: str
+    tools: list[str]
+    slash_commands: list[str]
+    version: str

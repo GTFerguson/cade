@@ -309,6 +309,9 @@ export class ProjectContextImpl implements IProjectContext {
 
     if (pane === "terminal") {
       this.terminalManager?.focus();
+    } else {
+      // Blur chat input so keystrokes go to the newly focused pane
+      this.terminalManager?.blurChat();
     }
   }
 

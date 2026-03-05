@@ -211,6 +211,10 @@ class App {
         const activeTab = this.tabManager.getActiveTab();
         activeTab?.context?.cycleAgent("prev");
       },
+      toggleEnhanced: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        activeTab?.context?.getTerminalManager()?.toggleEnhanced();
+      },
       showThemeSelector: () => {
         this.themeSelector.toggle();
       },

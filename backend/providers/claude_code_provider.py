@@ -19,6 +19,7 @@ from backend.providers.types import (
     ChatEvent,
     ChatMessage,
     ProviderCapabilities,
+    SystemInfo,
     TextDelta,
     ThinkingDelta,
     ToolResult,
@@ -44,6 +45,7 @@ class ClaudeCodeProvider(BaseProvider):
         self._has_session = False
         self._working_dir: Path | None = None
         self._process: asyncio.subprocess.Process | None = None
+        self._streaming_partial = False
 
     @property
     def name(self) -> str:
@@ -105,6 +107,7 @@ class ClaudeCodeProvider(BaseProvider):
             "-p", prompt,
             "--output-format", "stream-json",
             "--verbose",
+            "--include-partial-messages",
         ]
 
         if self._has_session:
@@ -155,16 +158,14 @@ class ClaudeCodeProvider(BaseProvider):
     ) -> AsyncIterator[ChatEvent]:
         """Parse NDJSON stream from Claude Code subprocess stdout.
 
-        Claude Code stream-json emits these top-level event types:
-        - system: init info (session_id, tools, model)
-        - assistant: complete message with content blocks (text, tool_use, thinking)
-        - user: tool results returned to the model
-        - result: final summary (stop_reason, usage, cost)
-        - rate_limit_event: rate limit status
+        With --include-partial-messages, Claude Code emits stream_event entries
+        for incremental content (text deltas, thinking deltas, tool starts).
+        The full assistant/user/result messages still arrive at the end of each
+        turn — we skip re-emitting from those when partial streaming is active.
         """
         assert process.stdout is not None
 
-        usage: dict = {}
+        self._streaming_partial = False
 
         async for raw_line in process.stdout:
             line = raw_line.decode("utf-8", errors="replace").strip()
@@ -179,38 +180,73 @@ class ClaudeCodeProvider(BaseProvider):
 
             event_type = data.get("type", "")
 
-            # Capture session_id for --continue on subsequent calls
+            # Capture session_id for --resume on subsequent calls
             if not self._has_session:
                 sid = data.get("session_id")
                 if sid:
                     self._session_id = sid
                     self._has_session = True
 
-            if event_type == "assistant":
-                message = data.get("message", {})
-                content_blocks = message.get("content", [])
+            # --- Partial streaming events (from --include-partial-messages) ---
+            if event_type == "stream_event":
+                self._streaming_partial = True
+                stream_event = data.get("event", {})
+                se_type = stream_event.get("type", "")
 
-                for block in content_blocks:
-                    block_type = block.get("type", "")
-
-                    if block_type == "text":
-                        text = block.get("text", "")
+                if se_type == "content_block_delta":
+                    delta = stream_event.get("delta", {})
+                    delta_type = delta.get("type", "")
+                    if delta_type == "text_delta":
+                        text = delta.get("text", "")
                         if text:
                             yield TextDelta(content=text)
-
-                    elif block_type == "tool_use":
-                        tool_id = block.get("id", "")
-                        tool_name = block.get("name", "")
-                        yield ToolUseStart(tool_id=tool_id, tool_name=tool_name)
-
-                    elif block_type == "thinking":
-                        text = block.get("thinking", "")
+                    elif delta_type == "thinking_delta":
+                        text = delta.get("thinking", "")
                         if text:
                             yield ThinkingDelta(content=text)
 
+                elif se_type == "content_block_start":
+                    block = stream_event.get("content_block", {})
+                    if block.get("type") == "tool_use":
+                        yield ToolUseStart(
+                            tool_id=block.get("id", ""),
+                            tool_name=block.get("name", ""),
+                        )
+
+                continue
+
+            # --- System init event ---
+            if event_type == "system":
+                yield SystemInfo(
+                    model=data.get("model", self._model),
+                    session_id=self._session_id,
+                    tools=[t.get("name", "") if isinstance(t, dict) else str(t) for t in data.get("tools", [])],
+                    slash_commands=[c.get("name", c) if isinstance(c, dict) else str(c) for c in data.get("slash_commands", [])],
+                    version=data.get("claude_code_version", ""),
+                )
+                continue
+
+            # --- Full assistant message (skip content if we streamed partials) ---
+            if event_type == "assistant":
+                if not self._streaming_partial:
+                    message = data.get("message", {})
+                    for block in message.get("content", []):
+                        block_type = block.get("type", "")
+                        if block_type == "text":
+                            text = block.get("text", "")
+                            if text:
+                                yield TextDelta(content=text)
+                        elif block_type == "tool_use":
+                            yield ToolUseStart(
+                                tool_id=block.get("id", ""),
+                                tool_name=block.get("name", ""),
+                            )
+                        elif block_type == "thinking":
+                            text = block.get("thinking", "")
+                            if text:
+                                yield ThinkingDelta(content=text)
+
             elif event_type == "user":
-                # Tool results — the model executed a tool and got results.
-                # Emit ToolResult for each tool_result content block.
                 content_blocks = data.get("message", {}).get("content", [])
                 if not content_blocks:
                     content_blocks = data.get("content", [])
@@ -230,7 +266,7 @@ class ClaudeCodeProvider(BaseProvider):
                     "prompt_tokens": result_usage.get("input_tokens", 0),
                     "completion_tokens": result_usage.get("output_tokens", 0),
                 }
-                stop_reason = data.get("stop_reason", "")
+                cost = data.get("total_cost_usd", 0)
                 is_error = data.get("is_error", False)
                 if is_error:
                     yield ChatError(
@@ -238,13 +274,12 @@ class ClaudeCodeProvider(BaseProvider):
                         code="claude-code-error",
                     )
                 else:
-                    yield ChatDone(usage=usage)
+                    yield ChatDone(usage=usage, cost=cost)
+                # Reset for next turn in multi-turn conversations
+                self._streaming_partial = False
 
-        # Wait for process to exit
         await process.wait()
 
-        # If process exited with error and we never got a done event,
-        # check stderr
         if process.returncode and process.returncode != 0:
             stderr_data = b""
             if process.stderr:

@@ -54,6 +54,7 @@ export interface KeybindingCallbacks {
   scrollTerminalToBottom: () => void;
   cycleAgentNext: () => void;
   cycleAgentPrev: () => void;
+  toggleEnhanced: () => void;
   showThemeSelector: () => void;
   getFocusedPane: () => PaneType;
   getPaneHandler: (pane: PaneType) => PaneKeyHandler | null;
@@ -374,6 +375,12 @@ export class KeybindingManager implements Component {
       return;
     }
 
+    // Enhanced mode toggle: uses config misc.toggleEnhanced (default: e)
+    if (this.matchesBinding(e, config.misc.toggleEnhanced)) {
+      this.callbacks?.toggleEnhanced();
+      this.onPrefixShortcutUsed();
+      return;
+    }
 
     // Agent cycling: ] for next, [ for previous
     if (this.matchesBinding(e, config.misc.cycleAgentNext)) {

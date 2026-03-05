@@ -23,6 +23,22 @@ import type { WebSocketClient } from "../platform/websocket";
 import { ChatInput } from "./chat-input";
 import { DiagramViewer } from "./diagram-viewer";
 
+/** Descriptions for well-known Claude Code slash commands */
+const SLASH_DESCRIPTIONS: Record<string, string> = {
+  compact: "Compact conversation context",
+  cost: "Show token usage and cost",
+  context: "Show context window usage",
+  init: "Initialize project CLAUDE.md",
+  review: "Review code changes",
+  "pr-comments": "Address PR review comments",
+  "release-notes": "Generate release notes",
+  "security-review": "Security review of changes",
+  simplify: "Simplify and improve code",
+  debug: "Debug an issue",
+  batch: "Run batch operations",
+  insights: "Show session insights",
+};
+
 /** Same hash function mertex.md uses to generate mermaid placeholder IDs */
 function hashCode(str: string): string {
   if (!str) return "0";
@@ -99,6 +115,11 @@ export class ChatPane implements Component, PaneKeyHandler {
   private activeToolEls: Map<string, HTMLElement> = new Map();
   private thinkingEl: HTMLElement | null = null;
   private thinkingContentEl: HTMLElement | null = null;
+  private costEl: HTMLElement;
+  private totalCost = 0;
+  private systemInfo: { model?: string; slashCommands?: string[] } = {};
+  private slashHintEl: HTMLElement | null = null;
+  private isStreaming = false;
 
   private boundHandlers = {
     chatStream: (msg: ChatStreamMessage) => this.handleChatStream(msg),
@@ -129,6 +150,8 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.chatInput = new ChatInput(this.inputArea, (text) =>
       this.sendMessage(text),
     );
+    this.chatInput.setOnCancel(() => this.cancelStream());
+    this.chatInput.setOnSlashInput((text) => this.handleSlashInput(text));
 
     // Statusline
     this.statuslineEl = document.createElement("div");
@@ -148,9 +171,14 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.tokensEl.className = "status-tokens";
     this.tokensEl.textContent = "";
 
+    this.costEl = document.createElement("span");
+    this.costEl.className = "status-cost";
+    this.costEl.textContent = "";
+
     this.statuslineEl.appendChild(modeSpan);
     this.statuslineEl.appendChild(this.providerEl);
     this.statuslineEl.appendChild(this.tokensEl);
+    this.statuslineEl.appendChild(this.costEl);
 
     // Open fullscreen viewer when clicking a mermaid diagram
     this.messagesEl.addEventListener("click", (e) => {
@@ -188,7 +216,80 @@ export class ChatPane implements Component, PaneKeyHandler {
     }
   }
 
+  private updateCost(cost?: number): void {
+    if (cost == null || cost <= 0) return;
+    this.totalCost += cost;
+    this.costEl.textContent = `$${this.totalCost.toFixed(2)}`;
+  }
+
+  private handleSlashInput(text: string): void {
+    const commands = this.systemInfo.slashCommands;
+    if (!commands || commands.length === 0) {
+      this.hideSlashHints();
+      return;
+    }
+
+    if (text.startsWith("/") && !text.includes(" ")) {
+      const query = text.slice(1).toLowerCase();
+      const matches = commands.filter((c) => c.toLowerCase().startsWith(query));
+      if (matches.length > 0) {
+        this.showSlashHints(matches);
+        return;
+      }
+    }
+
+    this.hideSlashHints();
+  }
+
+  private showSlashHints(commands: string[]): void {
+    if (!this.slashHintEl) {
+      this.slashHintEl = document.createElement("div");
+      this.slashHintEl.className = "chat-slash-hints";
+      this.inputArea.insertBefore(this.slashHintEl, this.inputArea.firstChild);
+    }
+
+    this.slashHintEl.innerHTML = "";
+    for (const cmd of commands.slice(0, 8)) {
+      const row = document.createElement("div");
+      row.className = "chat-slash-row";
+
+      const name = document.createElement("span");
+      name.className = "chat-slash-name";
+      name.textContent = `/${cmd}`;
+
+      const desc = document.createElement("span");
+      desc.className = "chat-slash-desc";
+      desc.textContent = SLASH_DESCRIPTIONS[cmd] ?? "";
+
+      row.appendChild(name);
+      if (desc.textContent) row.appendChild(desc);
+
+      row.addEventListener("click", () => {
+        this.chatInput.setValue(`/${cmd}`);
+        this.hideSlashHints();
+        this.chatInput.focus();
+      });
+
+      this.slashHintEl.appendChild(row);
+    }
+    this.slashHintEl.style.display = "block";
+  }
+
+  private hideSlashHints(): void {
+    if (this.slashHintEl) {
+      this.slashHintEl.style.display = "none";
+    }
+  }
+
+  private cancelStream(): void {
+    if (this.isStreaming) {
+      this.ws.sendChatCancel();
+    }
+  }
+
   private sendMessage(text: string): void {
+    this.hideSlashHints();
+
     const userEl = document.createElement("div");
     userEl.className = "chat-message user";
 
@@ -202,10 +303,14 @@ export class ChatPane implements Component, PaneKeyHandler {
 
     this.ws.sendChatMessage(text);
     this.chatInput.setDisabled(true);
+    this.isStreaming = true;
   }
 
   private handleChatStream(msg: ChatStreamMessage): void {
     switch (msg.event) {
+      case "system-info":
+        this.handleSystemInfo(msg);
+        break;
       case "text-delta":
         this.handleTextDelta(msg.content ?? "");
         break;
@@ -219,11 +324,19 @@ export class ChatPane implements Component, PaneKeyHandler {
         this.handleToolResult(msg.toolId ?? "", msg.toolName ?? "", msg.status ?? "success");
         break;
       case "done":
-        this.handleDone(msg.usage);
+        this.handleDone(msg);
         break;
       case "error":
         this.handleError(msg.message ?? "Unknown error");
         break;
+    }
+  }
+
+  private handleSystemInfo(msg: ChatStreamMessage): void {
+    if (msg.model) this.systemInfo.model = msg.model;
+    if (msg.slashCommands) this.systemInfo.slashCommands = msg.slashCommands;
+    if (msg.model) {
+      this.providerEl.textContent = msg.model;
     }
   }
 
@@ -399,7 +512,19 @@ export class ChatPane implements Component, PaneKeyHandler {
     }
   }
 
-  private async handleDone(usage?: { prompt_tokens?: number; completion_tokens?: number }): Promise<void> {
+  private async handleDone(msg: ChatStreamMessage): Promise<void> {
+    this.isStreaming = false;
+
+    if (msg.cancelled) {
+      // Show cancelled indicator
+      this.ensureAssistantEl();
+      const cancelEl = document.createElement("div");
+      cancelEl.className = "chat-cancelled";
+      cancelEl.textContent = "(cancelled)";
+      const contentEl = this.currentAssistantEl!.querySelector(".chat-message-content");
+      if (contentEl) contentEl.appendChild(cancelEl);
+    }
+
     const targetEl = this.currentAssistantEl;
     const content = (this.streamRenderer as any)?.content as string | undefined;
     await this.streamRenderer?.finalize();
@@ -408,12 +533,19 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.activeToolEls.clear();
     this.currentAssistantEl = null;
     if (targetEl && content) await this.renderRemainingDiagrams(targetEl, content);
-    this.updateTokenCount(usage);
+
+    if (!msg.cancelled) {
+      this.updateTokenCount(msg.usage);
+      this.updateCost(msg.cost);
+    }
+
     this.chatInput.setDisabled(false);
     this.chatInput.focus();
   }
 
   private handleError(message: string): void {
+    this.isStreaming = false;
+
     const errorEl = document.createElement("div");
     errorEl.className = "chat-message error";
     errorEl.textContent = message;
@@ -522,6 +654,10 @@ export class ChatPane implements Component, PaneKeyHandler {
 
   focus(): void {
     this.chatInput.focus();
+  }
+
+  blur(): void {
+    this.chatInput.blur();
   }
 
   dispose(): void {
