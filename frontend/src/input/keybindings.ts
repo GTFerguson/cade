@@ -146,10 +146,10 @@ export class KeybindingManager implements Component {
       return;
     }
 
-    // Prefix key (always intercept, even in terminal)
+    // Prefix key (always intercept, even in terminal and chat input)
     if (this.isPrefixKey(e)) {
-      // Don't intercept in actual input elements
-      if (isInput) {
+      // Don't intercept in input elements, unless they opt in via data attribute
+      if (isInput && !target.dataset.kbPrefix) {
         return;
       }
       this.prefixKeyHeld = true;
@@ -173,7 +173,7 @@ export class KeybindingManager implements Component {
     }
 
     // Don't delegate to pane handlers when a full-screen overlay is open
-    if (document.querySelector(".remote-project-selector, .theme-selector-overlay, .help-overlay")) {
+    if (document.querySelector(".remote-project-selector, .theme-selector-overlay, .help-overlay, .diagram-viewer-overlay")) {
       return;
     }
 

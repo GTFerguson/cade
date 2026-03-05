@@ -21,6 +21,8 @@ export const MessageType = {
   // Client -> Server
   INPUT: "input",
   RESIZE: "resize",
+  CHAT_MESSAGE: "chat-message",
+  PROVIDER_SWITCH: "provider-switch",
   GET_FILE: "get-file",
   GET_TREE: "get-tree",
   WRITE_FILE: "write-file",
@@ -45,6 +47,11 @@ export const MessageType = {
   SESSION_RESTORED: "session-restored",
   STARTUP_STATUS: "startup-status",
   PTY_EXITED: "pty-exited",
+
+  // Chat - Server -> Client
+  CHAT_STREAM: "chat-stream",
+  CHAT_HISTORY: "chat-history",
+  PROVIDER_LIST: "provider-list",
 
   // Neovim - Client -> Server
   NEOVIM_SPAWN: "neovim-spawn",

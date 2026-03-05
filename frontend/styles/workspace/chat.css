@@ -1,0 +1,537 @@
+/* Chat pane — REPL-style LLM conversation UI */
+
+.chat-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* --- Scrollable message area --- */
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 0;
+  scroll-behavior: smooth;
+}
+
+/* --- Messages --- */
+
+.chat-message {
+  padding: 6px 16px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  word-wrap: break-word;
+}
+
+/* Turn separator: thin border above each user message (except the first) */
+.chat-message.user + .chat-message.user,
+.chat-message.assistant + .chat-message.user,
+.chat-message.error + .chat-message.user {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+}
+
+/* User: prompt-prefixed input — subdued since you already know what you asked */
+.chat-message.user .chat-message-text {
+  display: flex;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.chat-message.user .chat-message-text::before {
+  content: "\276F"; /* ❯ */
+  color: var(--accent-green);
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+/* Assistant: flowing output */
+.chat-message.assistant {
+  padding-left: 16px;
+}
+
+/* Error */
+.chat-message.error {
+  padding-left: 16px;
+  color: var(--accent-red);
+  font-size: 12px;
+}
+
+.chat-message.error::before {
+  content: "\2717 "; /* ✗ */
+  color: var(--accent-red);
+}
+
+/* System (conversation started, etc.) */
+.chat-message.system {
+  text-align: center;
+  padding: 6px 16px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
+}
+
+/* --- Markdown content in assistant messages --- */
+
+/* Assistant content — primary brightness, this is what you're reading */
+.chat-message-content {
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.chat-message-content p {
+  margin: 0 0 8px 0;
+}
+
+.chat-message-content p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-message-content strong {
+  color: var(--text-primary);
+}
+
+/* Inline code */
+.chat-message-content code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.chat-message-content code:not(pre code) {
+  background: var(--bg-tertiary);
+  color: var(--accent-orange);
+  padding: 1px 5px;
+}
+
+/* Code blocks */
+.chat-message-content pre {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 8px 0;
+  position: relative;
+}
+
+.chat-message-content pre code {
+  background: none;
+  color: var(--text-primary);
+  padding: 0;
+}
+
+/* Language tag on code blocks */
+.chat-code-lang {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 2px 8px;
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* Lists */
+.chat-message-content ul,
+.chat-message-content ol {
+  margin: 4px 0 8px 20px;
+}
+
+.chat-message-content li {
+  margin: 2px 0;
+}
+
+.chat-message-content li::marker {
+  color: var(--text-muted);
+}
+
+/* Blockquotes */
+.chat-message-content blockquote {
+  border-left: 3px solid var(--accent-blue);
+  margin: 8px 0;
+  padding: 4px 12px;
+  color: var(--text-secondary);
+}
+
+/* Tables */
+.chat-message-content table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+  font-size: 12px;
+}
+
+.chat-message-content th,
+.chat-message-content td {
+  border: 1px solid var(--border-color);
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.chat-message-content th {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.chat-message-content tr:nth-child(even) {
+  background: var(--bg-secondary);
+}
+
+/* --- KaTeX math rendering --- */
+
+/* Display math: clean inline flow, no box */
+.chat-message-content .katex-display-wrapper,
+.chat-message-content .katex-display {
+  margin: 4px 0;
+  padding: 0;
+  background: none;
+  border: none;
+  text-align: left;
+  overflow-x: auto;
+}
+
+/* Match chat text color */
+.chat-message-content .katex {
+  color: var(--text-primary);
+  font-size: 1em;
+}
+
+/* Legacy .math-block class (unused — kept for backward compat) */
+.chat-message-content .math-block {
+  margin: 4px 0;
+  padding: 0;
+  background: none;
+  border: none;
+  overflow-x: auto;
+  text-align: left;
+}
+
+/* --- Mermaid diagram blocks (rendered by mertex.md MermaidHandler) --- */
+
+.chat-message-content .mermaid-container {
+  margin: 10px 0;
+  padding: 16px 12px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  text-align: center;
+  position: relative;
+  overflow-x: auto;
+}
+
+.chat-message-content .mermaid-container::before {
+  content: "mermaid";
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 2px 8px;
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--bg-tertiary);
+  border-left: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.chat-message-content .mermaid-container svg {
+  max-width: 100%;
+  height: auto;
+  max-height: 400px;
+}
+
+/* Placeholder shown before mermaid renders */
+.chat-message-content .mermaid-placeholder {
+  margin: 10px 0;
+  padding: 24px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.chat-message-content .mermaid-placeholder::before {
+  content: "rendering diagram\2026";
+}
+
+/* --- Streaming cursor (managed by mertex.md IncrementalRenderer) --- */
+
+.chat-message-content .streaming-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  background: var(--accent-blue);
+  animation: chat-blink-cursor 1s step-end infinite;
+  vertical-align: text-bottom;
+  margin-left: 1px;
+}
+
+@keyframes chat-blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* --- Thinking block (collapsible) --- */
+
+.chat-thinking {
+  margin: 6px 0;
+}
+
+.chat-thinking-toggle {
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.chat-thinking-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.chat-thinking-toggle .chevron {
+  font-size: 9px;
+  transition: transform 0.1s;
+}
+
+.chat-thinking-toggle .chevron.open {
+  transform: rotate(90deg);
+}
+
+.chat-thinking-content {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+/* --- Tool use blocks (inline in assistant messages) --- */
+
+.chat-tool-use {
+  margin: 6px 0;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.chat-tool-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.chat-tool-icon {
+  font-size: 11px;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.chat-tool-icon.running {
+  color: var(--accent-cyan);
+  animation: tool-pulse 1.5s ease-in-out infinite;
+}
+
+.chat-tool-icon.success { color: var(--accent-green); }
+.chat-tool-icon.error { color: var(--accent-red); }
+
+@keyframes tool-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.chat-tool-name {
+  color: var(--accent-cyan);
+  font-weight: 600;
+}
+
+.chat-tool-target {
+  color: var(--text-muted);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-tool-status {
+  color: var(--text-muted);
+  font-style: italic;
+  flex-shrink: 0;
+}
+
+/* Text segments within assistant messages (wraps stream renderer output
+   so markdown doesn't interfere with interleaved tool/thinking blocks) */
+.chat-text-segment {
+  /* Transparent wrapper — inherits parent styles */
+}
+
+/* --- Input area: prompt-style --- */
+
+.chat-input-area {
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
+}
+
+.chat-input-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 10px 16px;
+  gap: 8px;
+}
+
+.chat-input-prompt {
+  color: var(--accent-green);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+  line-height: 18px;
+}
+
+.chat-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 0;
+  outline: none;
+  resize: none;
+  line-height: 18px;
+  height: 18px;
+  max-height: 54px; /* 3 lines × 18px */
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-tertiary) transparent;
+}
+
+.chat-input::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chat-input::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-input::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+}
+
+.chat-input::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+.chat-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.chat-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* --- Statusline (matches viewer-statusline) --- */
+
+.chat-statusline {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.chat-statusline .status-mode {
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+.chat-statusline .status-provider {
+  color: var(--accent-cyan);
+}
+
+.chat-statusline .status-tokens {
+  margin-left: auto;
+}
+
+/* --- Fullscreen diagram viewer overlay --- */
+
+.diagram-viewer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+
+.diagram-viewer-overlay.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.diagram-viewer-content {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+}
+
+.diagram-viewer-svg {
+  transform-origin: center center;
+  transition: transform 0.05s ease-out;
+  width: 80vw;
+  height: 80vh;
+}
+
+.diagram-viewer-svg svg {
+  width: 100%;
+  height: 100%;
+}
+
+.diagram-viewer-hint {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* Make mermaid containers clickable */
+.chat-message-content .mermaid-container {
+  cursor: pointer;
+}
+
+.chat-message-content .mermaid-container:hover {
+  border-color: var(--accent-blue);
+}

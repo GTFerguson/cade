@@ -7,6 +7,10 @@ watchfiles>=0.21.0
 # TOML parsing (Python 3.10 and earlier - tomllib built-in from 3.11)
 tomli>=2.0.0;python_version<"3.11"
 
+# LLM providers
+litellm>=1.40.0
+langchain-core>=0.2.0
+
 # Platform-specific PTY support
 pexpect>=4.9.0;sys_platform!='win32'
 pywinpty>=2.0.0;sys_platform=='win32'

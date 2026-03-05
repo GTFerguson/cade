@@ -5,11 +5,14 @@
  * switching between terminals with visual status indicators.
  */
 
+import { ChatPane } from "../chat/chat-pane";
 import { SessionKey, type SessionKeyValue, type AnySessionKey } from "../platform/protocol";
 import { Terminal, type CustomKeyHandler } from "./terminal";
 import type { Component, OutputMessage, SessionRestoredMessage } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 import type { AgentManager } from "../agents";
+
+export type TerminalMode = "terminal" | "chat";
 
 export class TerminalManager implements Component {
   private claudeTerminal: Terminal | null = null;
@@ -17,6 +20,10 @@ export class TerminalManager implements Component {
   private activeTerminal: SessionKeyValue = SessionKey.CLAUDE;
   private claudeContainer: HTMLElement;
   private manualContainer: HTMLElement;
+  private chatContainer: HTMLElement;
+  private chatPane: ChatPane | null = null;
+  private mode: TerminalMode = "terminal";
+  private enhanced = false;
   private statusIndicator: HTMLElement;
   private customKeyHandler: CustomKeyHandler | null = null;
   private agentManager: AgentManager | null = null;
@@ -42,6 +49,10 @@ export class TerminalManager implements Component {
     this.manualContainer.className = "terminal-container terminal-manual";
     this.manualContainer.style.display = "none";
 
+    this.chatContainer = document.createElement("div");
+    this.chatContainer.className = "terminal-container terminal-chat";
+    this.chatContainer.style.display = "none";
+
     // Create status indicator
     this.statusIndicator = document.createElement("div");
     this.statusIndicator.className = "terminal-status-indicator";
@@ -49,6 +60,7 @@ export class TerminalManager implements Component {
 
     this.container.appendChild(this.claudeContainer);
     this.container.appendChild(this.manualContainer);
+    this.container.appendChild(this.chatContainer);
     this.container.appendChild(this.statusIndicator);
   }
 
@@ -76,6 +88,77 @@ export class TerminalManager implements Component {
    */
   setAgentManager(manager: AgentManager): void {
     this.agentManager = manager;
+  }
+
+  /**
+   * Switch between terminal and chat modes.
+   */
+  setMode(mode: TerminalMode): void {
+    if (this.mode === mode) return;
+    this.mode = mode;
+
+    if (mode === "chat") {
+      this.claudeContainer.style.display = "none";
+      this.manualContainer.style.display = "none";
+      this.chatContainer.style.display = "block";
+
+      // Lazy-create the chat pane
+      if (!this.chatPane) {
+        this.chatPane = new ChatPane(this.chatContainer, this.ws);
+        this.chatPane.initialize();
+      }
+
+      this.chatPane.focus();
+    } else {
+      this.chatContainer.style.display = "none";
+      // Restore whichever terminal was active
+      if (this.activeTerminal === SessionKey.CLAUDE) {
+        this.claudeContainer.style.display = "block";
+        this.claudeTerminal?.fit();
+        this.claudeTerminal?.focus();
+      } else {
+        this.manualContainer.style.display = "block";
+        this.manualTerminal?.fit();
+        this.manualTerminal?.focus();
+      }
+    }
+
+    this.updateStatusIndicator();
+  }
+
+  /**
+   * Get the current mode.
+   */
+  getMode(): TerminalMode {
+    return this.mode;
+  }
+
+  /**
+   * Whether enhanced CC mode is active (Claude Code rendered in ChatPane).
+   */
+  isEnhanced(): boolean {
+    return this.enhanced;
+  }
+
+  /**
+   * Enable or disable enhanced CC mode. When enabled, switches to chat pane
+   * for markdown-rendered Claude Code output. When disabled, returns to raw PTY.
+   */
+  setEnhanced(enabled: boolean): void {
+    this.enhanced = enabled;
+    if (enabled && this.mode === "terminal") {
+      this.setMode("chat");
+    } else if (!enabled && this.mode === "chat") {
+      this.setMode("terminal");
+    }
+    this.updateStatusIndicator();
+  }
+
+  /**
+   * Get the chat pane instance (null if not yet created).
+   */
+  getChatPane(): ChatPane | null {
+    return this.chatPane;
   }
 
   /**
@@ -194,12 +277,29 @@ export class TerminalManager implements Component {
   }
 
   /**
-   * Toggle between claude and manual terminals.
+   * Toggle between claude/chat and manual terminals.
    */
   toggle(): void {
     // If an agent is focused, toggle its side instead
     if (this.agentManager?.getActiveAgentId() != null) {
       this.agentManager.toggleSide();
+      this.updateStatusIndicator();
+      return;
+    }
+
+    if (this.mode === "chat") {
+      // In chat mode: toggle between chat pane and manual shell
+      if (this.chatContainer.style.display !== "none") {
+        this.chatContainer.style.display = "none";
+        this.ensureManualTerminal();
+        this.manualContainer.style.display = "block";
+        this.manualTerminal?.fit();
+        this.manualTerminal?.focus();
+      } else {
+        this.manualContainer.style.display = "none";
+        this.chatContainer.style.display = "block";
+        this.chatPane?.focus();
+      }
       this.updateStatusIndicator();
       return;
     }
@@ -240,7 +340,10 @@ export class TerminalManager implements Component {
    * Show the primary terminal containers (called when switching away from an agent).
    */
   showPrimary(): void {
-    if (this.activeTerminal === SessionKey.CLAUDE) {
+    if (this.mode === "chat") {
+      this.chatContainer.style.display = "block";
+      this.chatPane?.focus();
+    } else if (this.activeTerminal === SessionKey.CLAUDE) {
       this.claudeContainer.style.display = "block";
       this.claudeTerminal?.fit();
       this.claudeTerminal?.focus();
@@ -258,6 +361,7 @@ export class TerminalManager implements Component {
   hidePrimary(): void {
     this.claudeContainer.style.display = "none";
     this.manualContainer.style.display = "none";
+    this.chatContainer.style.display = "none";
   }
 
   /**
@@ -321,9 +425,20 @@ export class TerminalManager implements Component {
       this.statusIndicator.appendChild(labelSpan);
       this.statusIndicator.appendChild(sideSpan);
     } else {
-      // No agents — original behavior
+      // No agents — show mode-appropriate labels
       this.statusIndicator.innerHTML = "";
-      if (this.activeTerminal === SessionKey.CLAUDE) {
+      if (this.mode === "chat") {
+        const isChatVisible = this.chatContainer.style.display !== "none";
+        if (isChatVisible) {
+          this.statusIndicator.textContent = this.enhanced ? "[claude code]" : "[chat]";
+          this.statusIndicator.classList.remove("shell");
+          this.statusIndicator.classList.add("claude");
+        } else {
+          this.statusIndicator.textContent = "[shell]";
+          this.statusIndicator.classList.remove("claude");
+          this.statusIndicator.classList.add("shell");
+        }
+      } else if (this.activeTerminal === SessionKey.CLAUDE) {
         this.statusIndicator.textContent = "[claude]";
         this.statusIndicator.classList.remove("shell");
         this.statusIndicator.classList.add("claude");
@@ -426,6 +541,11 @@ export class TerminalManager implements Component {
   focus(): void {
     if (this.agentManager?.getActiveAgentId() != null) {
       this.agentManager.focus();
+      return;
+    }
+
+    if (this.mode === "chat" && this.chatContainer.style.display !== "none") {
+      this.chatPane?.focus();
       return;
     }
 
@@ -563,6 +683,7 @@ export class TerminalManager implements Component {
 
     this.claudeTerminal?.dispose();
     this.manualTerminal?.dispose();
+    this.chatPane?.dispose();
     this.statusIndicator.remove();
   }
 }

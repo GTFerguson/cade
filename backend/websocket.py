@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.auth import extract_token_from_query, validate_token
+from backend.chat.session import ChatSession, get_chat_registry
 from backend.config import load_user_config
 from backend.terminal.connections import get_connection_manager
 from backend.connection_registry import get_connection_registry
@@ -21,6 +22,10 @@ from backend.files.tree import build_directory_children, build_file_tree_cached,
 from backend.files.watcher import FileWatcher
 from backend.neovim.manager import get_neovim_manager
 from backend.protocol import ErrorCode, MessageType, SessionKey
+from backend.providers.config import get_providers_config
+from backend.providers.registry import ProviderRegistry
+from backend.providers.claude_code_provider import ClaudeCodeProvider
+from backend.providers.types import ChatDone, ChatError, TextDelta, ThinkingDelta, ToolResult, ToolUseStart
 from backend.session import load_session, save_session
 from backend.terminal.pty import PTYManager
 from backend.terminal.sessions import PTYSession, TerminalState, get_registry
@@ -60,6 +65,9 @@ class ConnectionHandler:
         self._user_config = None
         self._doc_index: "DocIndexService | None" = None
         self._nkrdn: "NkrdnService | None" = None
+        self._chat_session: ChatSession | None = None
+        self._chat_task: asyncio.Task | None = None
+        self._provider_registry: ProviderRegistry | None = None
 
     async def _send_status(self, message: str) -> None:
         """Send a startup status message."""
@@ -220,9 +228,17 @@ class ConnectionHandler:
             self._project_set.set()
 
     async def _setup(self) -> None:
-        """Initialize PTY session and file watcher."""
+        """Initialize PTY session, file watcher, and provider registry."""
         # Load user config first so we can use network_timeout setting
         self._user_config = load_user_config(self._working_dir)
+
+        # Initialize provider registry from config
+        try:
+            providers_config = get_providers_config()
+            self._provider_registry = ProviderRegistry.from_config(providers_config)
+        except Exception as e:
+            logger.warning("Failed to initialize provider registry: %s", e)
+            self._provider_registry = ProviderRegistry()
 
         registry = get_registry()
 
@@ -295,6 +311,15 @@ class ConnectionHandler:
         self._closed = True
         get_connection_manager().unregister(self._ws)
         get_connection_registry().unregister(self._ws)
+
+        # Cancel in-progress chat stream
+        if self._chat_task is not None and not self._chat_task.done():
+            self._chat_task.cancel()
+            try:
+                await self._chat_task
+            except asyncio.CancelledError:
+                pass
+            self._chat_task = None
 
         # Clean up Neovim instance for this session
         if self._session_id is not None:
@@ -422,11 +447,32 @@ class ConnectionHandler:
             "wslHealthy": wsl_healthy,
         }
 
+        # Include provider information
+        if self._provider_registry is not None:
+            providers = self._provider_registry.list_providers()
+            if providers:
+                message["providers"] = providers
+                default = self._provider_registry.get_default()
+                if default:
+                    message["defaultProvider"] = default.name
+
         session = load_session(self._working_dir)
         if session is not None:
             message["session"] = session
 
         await self._send(message)
+
+        # Replay chat history on reconnect
+        if session_restored and self._session_id:
+            chat_session = get_chat_registry().get(self._session_id)
+            if chat_session is not None:
+                history = chat_session.get_history_for_replay()
+                if history:
+                    self._chat_session = chat_session
+                    await self._send({
+                        "type": MessageType.CHAT_HISTORY,
+                        "messages": history,
+                    })
 
     async def _receive_loop(self) -> None:
         """Receive and handle messages from the client."""
@@ -472,6 +518,10 @@ class ConnectionHandler:
                 await self._handle_browse_children(data)
             elif msg_type == MessageType.GET_LATEST_PLAN:
                 await self._handle_get_latest_plan()
+            elif msg_type == MessageType.CHAT_MESSAGE:
+                await self._handle_chat_message(data)
+            elif msg_type == MessageType.PROVIDER_SWITCH:
+                await self._handle_provider_switch(data)
             elif msg_type == MessageType.NEOVIM_SPAWN:
                 await self._handle_neovim_spawn(data)
             elif msg_type == MessageType.NEOVIM_KILL:
@@ -721,6 +771,147 @@ class ConnectionHandler:
             "fileType": file_type,
             "isPlan": True,
         })
+
+    # --- Chat handlers ---
+
+    async def _handle_chat_message(self, data: dict) -> None:
+        """Handle a chat message from the client."""
+        content = data.get("content", "").strip()
+        if not content:
+            return
+
+        provider_id = data.get("providerId")
+
+        # Get or create chat session
+        session_key = self._session_id or id(self)
+        chat_registry = get_chat_registry()
+        if self._chat_session is None:
+            self._chat_session = chat_registry.get_or_create(
+                str(session_key),
+                provider_name=provider_id or "",
+            )
+
+        # Cancel any in-progress stream
+        if self._chat_task is not None and not self._chat_task.done():
+            self._chat_task.cancel()
+            try:
+                await self._chat_task
+            except asyncio.CancelledError:
+                pass
+
+        # Resolve provider
+        provider = None
+        if self._provider_registry is not None:
+            if provider_id:
+                provider = self._provider_registry.get(provider_id)
+            if provider is None:
+                provider = self._provider_registry.get_default()
+
+        if provider is None:
+            await self._send({
+                "type": MessageType.CHAT_STREAM,
+                "event": "error",
+                "message": "No provider configured. Add providers to ~/.cade/providers.toml",
+            })
+            return
+
+        self._chat_session.add_user_message(content)
+
+        # Launch streaming task
+        self._chat_task = asyncio.create_task(
+            self._stream_chat_response(provider)
+        )
+
+    async def _stream_chat_response(self, provider) -> None:
+        """Stream a chat response from the provider to the client."""
+        if self._chat_session is None:
+            return
+
+        # Set working directory for providers that need it (e.g. ClaudeCodeProvider)
+        if isinstance(provider, ClaudeCodeProvider):
+            provider.set_working_dir(self._working_dir)
+
+        self._chat_session.start_response()
+
+        try:
+            messages = self._chat_session.get_messages()
+            async for event in provider.stream_chat(messages):
+                if self._closed:
+                    break
+
+                if isinstance(event, TextDelta):
+                    self._chat_session.append_response_chunk(event.content)
+                    await self._send({
+                        "type": MessageType.CHAT_STREAM,
+                        "event": "text-delta",
+                        "content": event.content,
+                    })
+                elif isinstance(event, ThinkingDelta):
+                    await self._send({
+                        "type": MessageType.CHAT_STREAM,
+                        "event": "thinking-delta",
+                        "content": event.content,
+                    })
+                elif isinstance(event, ToolUseStart):
+                    await self._send({
+                        "type": MessageType.CHAT_STREAM,
+                        "event": "tool-use-start",
+                        "toolId": event.tool_id,
+                        "toolName": event.tool_name,
+                    })
+                elif isinstance(event, ToolResult):
+                    await self._send({
+                        "type": MessageType.CHAT_STREAM,
+                        "event": "tool-result",
+                        "toolId": event.tool_id,
+                        "toolName": event.tool_name,
+                        "status": event.status,
+                    })
+                elif isinstance(event, ChatDone):
+                    await self._send({
+                        "type": MessageType.CHAT_STREAM,
+                        "event": "done",
+                        "usage": event.usage,
+                    })
+                elif isinstance(event, ChatError):
+                    await self._send({
+                        "type": MessageType.CHAT_STREAM,
+                        "event": "error",
+                        "message": event.message,
+                    })
+
+        except asyncio.CancelledError:
+            logger.debug("Chat stream cancelled")
+            # Terminate subprocess if running
+            if isinstance(provider, ClaudeCodeProvider):
+                await provider.cancel()
+        except Exception as e:
+            logger.exception("Chat stream error: %s", e)
+            await self._send({
+                "type": MessageType.CHAT_STREAM,
+                "event": "error",
+                "message": str(e),
+            })
+        finally:
+            self._chat_session.finish_response()
+
+    async def _handle_provider_switch(self, data: dict) -> None:
+        """Handle provider switch request."""
+        provider_id = data.get("providerId", "")
+        if not provider_id:
+            return
+
+        if self._provider_registry is not None:
+            provider = self._provider_registry.get(provider_id)
+            if provider is not None:
+                if self._chat_session is not None:
+                    self._chat_session.provider_name = provider_id
+                logger.info("Switched to provider: %s", provider_id)
+            else:
+                await self._send_error(
+                    ErrorCode.INTERNAL_ERROR,
+                    f"Unknown provider: {provider_id}",
+                )
 
     # --- Neovim handlers ---
 
