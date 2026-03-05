@@ -6,6 +6,8 @@ import { appendTokenToUrl } from "../auth/tokenManager";
 import { basePath, config, isRemoteBrowserAccess } from "../config/config";
 import { ErrorCode, MessageType, type AnySessionKey } from "./protocol";
 import type {
+  ChatHistoryMessage,
+  ChatStreamMessage,
   ClientMessage,
   ConnectedMessage,
   ErrorMessage,
@@ -19,6 +21,7 @@ import type {
   NeovimReadyMessage,
   NeovimRpcResponseMessage,
   OutputMessage,
+  ProviderListMessage,
   PtyExitedMessage,
   ServerMessage,
   SessionRestoredMessage,
@@ -49,6 +52,9 @@ interface WebSocketEvents {
   "neovim-output": NeovimOutputMessage;
   "neovim-rpc-response": NeovimRpcResponseMessage;
   "neovim-exited": NeovimExitedMessage;
+  "chat-stream": ChatStreamMessage;
+  "chat-history": ChatHistoryMessage;
+  "provider-list": ProviderListMessage;
   error: ErrorMessage;
   "auth-failed": { code: number };
   "connection-lost": void;
@@ -452,6 +458,30 @@ export class WebSocketClient {
   }
 
   /**
+   * Send a chat message to the active provider.
+   */
+  sendChatMessage(content: string, providerId?: string): void {
+    const msg: Record<string, any> = {
+      type: MessageType.CHAT_MESSAGE,
+      content,
+    };
+    if (providerId !== undefined) {
+      msg.providerId = providerId;
+    }
+    this.send(msg as any);
+  }
+
+  /**
+   * Switch the active chat provider.
+   */
+  switchProvider(providerId: string): void {
+    this.send({
+      type: MessageType.PROVIDER_SWITCH,
+      providerId,
+    } as any);
+  }
+
+  /**
    * Set project directory for this connection.
    * If not connected yet, the path is stored and sent on connect.
    */
@@ -566,6 +596,18 @@ export class WebSocketClient {
 
       case MessageType.NEOVIM_EXITED:
         this.emit("neovim-exited", message as NeovimExitedMessage);
+        break;
+
+      case MessageType.CHAT_STREAM:
+        this.emit("chat-stream", message as ChatStreamMessage);
+        break;
+
+      case MessageType.CHAT_HISTORY:
+        this.emit("chat-history", message as ChatHistoryMessage);
+        break;
+
+      case MessageType.PROVIDER_LIST:
+        this.emit("provider-list", message as ProviderListMessage);
         break;
 
       default:

@@ -227,6 +227,8 @@ export interface ConnectedMessage extends BaseMessage {
   sessionRestored?: boolean;
   idleSeconds?: number;
   wslHealthy?: boolean;
+  providers?: ProviderInfo[];
+  defaultProvider?: string;
 }
 
 /**
@@ -352,6 +354,70 @@ export interface NeovimExitedMessage extends BaseMessage {
   exitCode: number;
 }
 
+// --- Chat types ---
+
+/**
+ * Provider information returned by the backend.
+ */
+export interface ProviderInfo {
+  name: string;
+  model: string;
+  type: "api" | "cli" | "claude-code";
+  capabilities: {
+    streaming: boolean;
+    tool_use: boolean;
+    vision: boolean;
+  };
+}
+
+/**
+ * Chat message (client -> server).
+ */
+export interface ChatMessageRequest extends BaseMessage {
+  type: "chat-message";
+  content: string;
+  providerId?: string;
+}
+
+/**
+ * Provider switch (client -> server).
+ */
+export interface ProviderSwitchMessage extends BaseMessage {
+  type: "provider-switch";
+  providerId: string;
+}
+
+/**
+ * Chat stream event (server -> client).
+ */
+export interface ChatStreamMessage extends BaseMessage {
+  type: "chat-stream";
+  event: "text-delta" | "done" | "error" | "tool-use-start" | "tool-result" | "thinking-delta";
+  content?: string;
+  usage?: Record<string, number>;
+  message?: string;
+  toolId?: string;
+  toolName?: string;
+  status?: string;
+}
+
+/**
+ * Chat history replay (server -> client).
+ */
+export interface ChatHistoryMessage extends BaseMessage {
+  type: "chat-history";
+  messages: Array<{ role: string; content: string }>;
+}
+
+/**
+ * Provider list (server -> client).
+ */
+export interface ProviderListMessage extends BaseMessage {
+  type: "provider-list";
+  providers: ProviderInfo[];
+  default?: string;
+}
+
 /**
  * Union of all client -> server messages.
  */
@@ -367,6 +433,8 @@ export type ClientMessage =
   | CreateFileMessage
   | SaveSessionMessage
   | SetProjectMessage
+  | ChatMessageRequest
+  | ProviderSwitchMessage
   | NeovimSpawnMessage
   | NeovimKillMessage
   | NeovimInputMessage
@@ -391,6 +459,9 @@ export type ServerMessage =
   | SessionRestoredMessage
   | StartupStatusMessage
   | PtyExitedMessage
+  | ChatStreamMessage
+  | ChatHistoryMessage
+  | ProviderListMessage
   | NeovimReadyMessage
   | NeovimOutputMessage
   | NeovimRpcResponseMessage

@@ -86,6 +86,7 @@ See [[blocking-issues]] for critical issues that must be resolved before major p
 
 ### Integration & Architecture
 
+- [[multi-provider-architecture]] - Modular provider system: any API model as agent backbone (Bedrock, Vertex, Anthropic, OpenAI) alongside CC CLI
 - [[remote-deployment]] - Remote server deployment (Phases 1-3 complete, 4-5 planned)
 - [[neovim-integration]] - Neovim integration for collaborative editing workflows
 - [[state-management-refactor]] - Extract state logic into testable state machines

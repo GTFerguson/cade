@@ -49,6 +49,19 @@ export class ProjectContextImpl implements IProjectContext {
       if (this.splash?.isVisible()) {
         this.splash.setProgress(3, "starting shell");
       }
+
+      // Switch to appropriate mode based on default provider type
+      if (msg.providers && msg.defaultProvider) {
+        const defaultProv = msg.providers.find(
+          (p) => p.name === msg.defaultProvider,
+        );
+        if (defaultProv?.type === "claude-code") {
+          this.terminalManager?.setEnhanced(true);
+          this.terminalManager?.getChatPane()?.setModeLabel("CLAUDE CODE");
+        } else if (defaultProv?.type === "api") {
+          this.terminalManager?.setMode("chat");
+        }
+      }
     },
     fileTree: () => {
       if (this.pendingSession != null) {
@@ -155,12 +168,18 @@ export class ProjectContextImpl implements IProjectContext {
       this.splash = new Splash(terminalEl);
       this.splash.setLoading();
 
-      // Dismiss on first shell output
-      const onFirstOutput = () => {
-        this.ws.off("output", onFirstOutput);
+      // Dismiss on first shell output or first chat stream event
+      const dismissSplash = () => {
+        this.ws.off("output", dismissSplash);
+        this.ws.off("chat-stream", dismissSplash);
         this.splash?.setProgress(4, "ready");
         this.splash?.hide();
-        this.terminalManager?.focusAtBottom();
+
+        if (this.terminalManager?.getMode() === "chat") {
+          this.terminalManager?.getChatPane()?.focus();
+        } else {
+          this.terminalManager?.focusAtBottom();
+        }
 
         // PTY spawn on Windows can steal OS-level focus from the WebView2.
         // Reclaim it once the shell is ready.
@@ -170,7 +189,8 @@ export class ProjectContextImpl implements IProjectContext {
           }).catch(() => {});
         }
       };
-      this.ws.on("output", onFirstOutput);
+      this.ws.on("output", dismissSplash);
+      this.ws.on("chat-stream", dismissSplash);
     }
 
     // Sync focusedPane when user clicks on a pane (fixes desync where

@@ -1,7 +1,7 @@
 ---
 title: Visual Design Philosophy
 created: 2026-02-04
-updated: 2026-02-07
+updated: 2026-03-05
 status: complete
 tags: [design, ui, ux, philosophy]
 ---
@@ -171,7 +171,8 @@ frontend/styles/
 │   ├── file-tree.css     ← Tree hierarchy, chevrons, type colors
 │   ├── viewer.css        ← Code/markdown viewer, frontmatter, tables
 │   ├── editor.css        ← Milkdown overrides, cursor styling
-│   └── terminal.css      ← Terminal, neovim, agent multi-terminal
+│   ├── terminal.css      ← Terminal, neovim, agent multi-terminal
+│   └── chat.css          ← Chat pane, tool blocks, thinking blocks
 └── screens/
     ├── dialogs.css       ← File creation, auth token, settings
     ├── splash.css        ← Splash screen, scramble effect phases
@@ -201,33 +202,29 @@ Import order = cascade order. Add new component styles to the appropriate file; 
 
 Input fields should look like terminal prompts, not web forms.
 
-**Pattern:**
+**Form inputs** (dialogs, settings): Prompt label + underline field.
+
 ```
 name: ___________
 path: ___________
 ```
 
-**Implementation:**
 - Prompt label: `--accent-green`, inline with input
 - Input field: transparent background, bottom border only
 - No boxes, no rounded corners, no shadows
 - Arrow keys navigate between fields and option buttons
 
-**Example CSS:**
-```css
-.input-prompt {
-  color: var(--accent-green);
-  margin-right: 8px;
-}
+**Chat input** (chat pane): Flush line — no visible boundary at all.
 
-.input-field {
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--text-muted);
-  color: var(--text-primary);
-  outline: none;
-}
 ```
+❯ _
+```
+
+- No borders, no background change — the prompt IS the input
+- Textarea auto-grows from 1 line to 3 lines max, then scrolls
+- Prompt (`❯`) stays top-aligned as textarea grows (`align-items: flex-start`)
+- Thin styled scrollbar (`4px`, `--bg-tertiary` thumb, transparent track)
+- Matches the terminal's own input feel
 
 ## Component Standards
 
@@ -402,6 +399,51 @@ Markdown files render with mertex.md (marked + highlight.js). Embedded code bloc
 - No border-radius, no box-shadow on dropdown
 - Status label (CLAUDE/SHELL) top-right
 - xterm.js theme synced with CADE theme via `onThemeChange` listener
+
+### Chat Pane
+
+The chat pane renders LLM conversations with markdown output via mertex.md. Used in both API mode (LiteLLM providers) and enhanced CC mode (Claude Code subprocess with `--output-format stream-json`).
+
+**Text hierarchy — assistant output takes focus:**
+
+| Element | Color | Rationale |
+|---------|-------|-----------|
+| Assistant content | `--text-primary` | This is what you're reading |
+| User input (in history) | `--text-muted` | You already know what you asked |
+| User prompt prefix | `--accent-green` (`❯`) | Visual anchor |
+
+The user's own messages are deliberately de-emphasized. Focus belongs on the model's response.
+
+**Tool use blocks** — inline indicators within the assistant message flow:
+
+```
+✓ Edit  src/config.ts                      done
+▸ Bash  npm test                           running…
+✗ Bash  npm test                           failed
+```
+
+- Text icons only: `▸` (running), `✓` (success), `✗` (error) — no emoji, no CSS shapes
+- No left borders — differentiated by icon color alone (`--accent-cyan` running, `--accent-green` success, `--accent-red` error)
+- Running state: subtle opacity pulse animation (1.5s ease-in-out)
+- Tool name: `--accent-cyan`, 600 weight
+- Target/status: `--text-muted`, italic status
+
+**Thinking blocks** — collapsible, auto-collapsed when complete:
+
+- Chevron toggle: `▸`/`▾` to expand/collapse
+- No left border — just indentation and muted styling
+- Content: `--text-muted`, italic, 12px
+- Auto-collapses when text output begins (thinking is done)
+
+**Stream renderer lifecycle:** When tool calls or thinking blocks interrupt text, the current `StreamRenderer` is finalized before inserting the block. A new renderer is created for subsequent text, inside a `.chat-text-segment` wrapper to prevent markdown interference across boundaries.
+
+**Statusline:** Vim-style, bottom-pinned.
+- Mode: `CHAT` (API mode) or `CLAUDE CODE` (enhanced CC mode), `--accent-blue`
+- Provider: model name, `--accent-cyan`
+- Tokens: cumulative count, right-aligned
+
+CSS: `.chat-pane`, `.chat-message`, `.chat-tool-use`, `.chat-thinking` (`workspace/chat.css`)
+Files: `frontend/src/chat/chat-pane.ts`, `frontend/src/chat/chat-input.ts`
 
 ### File Creation Dialog
 
@@ -609,6 +651,20 @@ These visual patterns scream "web app" and clash with terminal aesthetics.
 
 **Instead:**
 Full-pane replacements with back navigation.
+
+### Don't: Equal-Weight Conversational Text
+
+**Bad:**
+- User input and assistant output at the same brightness
+- Decorative left borders on every inline block type
+
+**Instead:**
+- De-emphasize what the user already knows (their own input)
+- Emphasize what matters (the model's response)
+- Differentiate blocks by icon and color, not borders
+
+**Why:**
+Visual weight should match information value. In a conversation, the response matters more than the prompt.
 
 ### Don't: Emoji/Icon UI Elements
 

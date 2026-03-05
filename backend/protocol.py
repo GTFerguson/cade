@@ -23,6 +23,10 @@ class MessageType:
     GET_CHILDREN = "get-children"  # Request directory children: { type, path: str, showIgnored?: bool }
     BROWSE_CHILDREN = "browse-children"  # Browse absolute filesystem path: { type, path: str }
 
+    # Chat - Client -> Server
+    CHAT_MESSAGE = "chat-message"  # Send chat message: { type, content: str, providerId?: str }
+    PROVIDER_SWITCH = "provider-switch"  # Switch provider: { type, providerId: str }
+
     # Server -> Client
     OUTPUT = "output"  # Terminal output: { type, data: str, sessionKey?: str }
     FILE_TREE = "file-tree"  # File tree response: { type, data: FileNode[] }
@@ -37,6 +41,11 @@ class MessageType:
     SESSION_RESTORED = "session-restored"  # Session reattached: { type, sessionId: str, scrollback: str }
     STARTUP_STATUS = "startup-status"  # Startup progress: { type, message: str }
     PTY_EXITED = "pty-exited"  # PTY process exited: { type, code: str, message: str, sessionKey?: str }
+
+    # Chat - Server -> Client
+    CHAT_STREAM = "chat-stream"  # Streaming event: { type, event: str, content?: str, usage?: dict, message?: str }
+    CHAT_HISTORY = "chat-history"  # Chat history replay: { type, messages: list[dict] }
+    PROVIDER_LIST = "provider-list"  # Available providers: { type, providers: list, default?: str }
 
     # Neovim - Client -> Server
     NEOVIM_SPAWN = "neovim-spawn"  # Request Neovim instance: { type, sessionId }

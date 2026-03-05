@@ -17,6 +17,7 @@
 @import "./workspace/viewer.css";
 @import "./workspace/editor.css";
 @import "./workspace/terminal.css";
+@import "./workspace/chat.css";
 
 /* Full-pane screens & overlays */
 @import "./screens/dialogs.css";
