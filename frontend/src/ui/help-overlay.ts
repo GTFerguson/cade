@@ -32,6 +32,8 @@ const MISC_LABELS: Record<string, string> = {
   toggleTerminal: "toggle agent",
   cycleAgentNext: "next agent",
   cycleAgentPrev: "prev agent",
+  cycleModeNext: "next mode",
+  cycleModePrev: "prev mode",
   toggleViewer: "toggle viewer",
   toggleEnhanced: "enhanced mode",
 };

@@ -57,7 +57,8 @@ export class ProjectContextImpl implements IProjectContext {
         );
         if (defaultProv?.type === "claude-code") {
           this.terminalManager?.setEnhanced(true);
-          this.terminalManager?.getChatPane()?.setModeLabel("CLAUDE CODE");
+          const chatMode = msg.chatMode ?? "code";
+          this.terminalManager?.getChatPane()?.setMode(chatMode);
         } else if (defaultProv?.type === "api") {
           this.terminalManager?.setMode("chat");
         }

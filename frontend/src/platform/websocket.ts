@@ -7,6 +7,7 @@ import { basePath, config, isRemoteBrowserAccess } from "../config/config";
 import { ErrorCode, MessageType, type AnySessionKey } from "./protocol";
 import type {
   ChatHistoryMessage,
+  ChatModeChangeMessage,
   ChatStreamMessage,
   ClientMessage,
   ConnectedMessage,
@@ -54,6 +55,7 @@ interface WebSocketEvents {
   "neovim-exited": NeovimExitedMessage;
   "chat-stream": ChatStreamMessage;
   "chat-history": ChatHistoryMessage;
+  "chat-mode-change": ChatModeChangeMessage;
   "provider-list": ProviderListMessage;
   error: ErrorMessage;
   "auth-failed": { code: number };
@@ -611,6 +613,10 @@ export class WebSocketClient {
 
       case MessageType.CHAT_HISTORY:
         this.emit("chat-history", message as ChatHistoryMessage);
+        break;
+
+      case MessageType.CHAT_MODE_CHANGE:
+        this.emit("chat-mode-change", message as ChatModeChangeMessage);
         break;
 
       case MessageType.PROVIDER_LIST:

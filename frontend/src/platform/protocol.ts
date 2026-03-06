@@ -52,6 +52,7 @@ export const MessageType = {
   // Chat - Server -> Client
   CHAT_STREAM: "chat-stream",
   CHAT_HISTORY: "chat-history",
+  CHAT_MODE_CHANGE: "chat-mode-change",
   PROVIDER_LIST: "provider-list",
 
   // Neovim - Client -> Server
