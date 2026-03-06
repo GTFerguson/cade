@@ -46,6 +46,7 @@ class MessageType:
     # Chat - Server -> Client
     CHAT_STREAM = "chat-stream"  # Streaming event: { type, event: str, content?: str, usage?: dict, message?: str }
     CHAT_HISTORY = "chat-history"  # Chat history replay: { type, messages: list[dict] }
+    CHAT_MODE_CHANGE = "chat-mode-change"  # Mode switched: { type, mode: str }
     PROVIDER_LIST = "provider-list"  # Available providers: { type, providers: list, default?: str }
 
     # Neovim - Client -> Server

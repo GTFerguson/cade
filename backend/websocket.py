@@ -434,6 +434,8 @@ class ConnectionHandler:
                 default = self._provider_registry.get_default()
                 if default:
                     message["defaultProvider"] = default.name
+                    if isinstance(default, ClaudeCodeProvider):
+                        message["chatMode"] = default.mode
 
         session = load_session(self._working_dir)
         if session is not None:
@@ -770,10 +772,36 @@ class ConnectionHandler:
                 "cancelled": True,
             })
 
+    CADE_MODE_COMMANDS = {
+        "/plan": "architect",
+        "/architect": "architect",
+        "/code": "code",
+        "/review": "review",
+    }
+
+    async def _handle_mode_switch(self, mode: str) -> None:
+        """Switch the active Claude Code provider's mode and notify the client."""
+        provider = None
+        if self._provider_registry is not None:
+            provider = self._provider_registry.get_default()
+
+        if isinstance(provider, ClaudeCodeProvider):
+            provider.set_mode(mode)
+
+        await self._send({
+            "type": MessageType.CHAT_MODE_CHANGE,
+            "mode": mode,
+        })
+
     async def _handle_chat_message(self, data: dict) -> None:
         """Handle a chat message from the client."""
         content = data.get("content", "").strip()
         if not content:
+            return
+
+        # Intercept CADE-native mode commands before forwarding to provider
+        if content in self.CADE_MODE_COMMANDS:
+            await self._handle_mode_switch(self.CADE_MODE_COMMANDS[content])
             return
 
         provider_id = data.get("providerId")

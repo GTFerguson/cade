@@ -466,6 +466,10 @@
   font-weight: 600;
 }
 
+.chat-statusline .status-mode.architect { color: var(--accent-orange); }
+.chat-statusline .status-mode.code      { color: var(--accent-green); }
+.chat-statusline .status-mode.review    { color: var(--accent-blue); }
+
 .chat-statusline .status-provider {
   color: var(--accent-cyan);
 }

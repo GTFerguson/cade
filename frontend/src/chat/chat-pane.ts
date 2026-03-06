@@ -16,6 +16,7 @@ import mermaid from "mermaid";
 import type { PaneKeyHandler } from "../input/keybindings";
 import type {
   ChatHistoryMessage,
+  ChatModeChangeMessage,
   ChatStreamMessage,
   Component,
 } from "../types";
@@ -25,11 +26,13 @@ import { DiagramViewer } from "./diagram-viewer";
 
 /** Descriptions for well-known Claude Code slash commands */
 const SLASH_DESCRIPTIONS: Record<string, string> = {
+  plan: "Switch to Architect mode (read-only)",
+  code: "Switch to Code mode (full access)",
+  review: "Switch to Review mode (read-only)",
   compact: "Compact conversation context",
   cost: "Show token usage and cost",
   context: "Show context window usage",
   init: "Initialize project CLAUDE.md",
-  review: "Review code changes",
   "pr-comments": "Address PR review comments",
   "release-notes": "Generate release notes",
   "security-review": "Security review of changes",
@@ -126,6 +129,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   private boundHandlers = {
     chatStream: (msg: ChatStreamMessage) => this.handleChatStream(msg),
     chatHistory: (msg: ChatHistoryMessage) => this.handleChatHistory(msg),
+    chatModeChange: (msg: ChatModeChangeMessage) => this.handleModeChange(msg),
   };
 
   constructor(
@@ -199,6 +203,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   initialize(): void {
     this.ws.on("chat-stream", this.boundHandlers.chatStream);
     this.ws.on("chat-history", this.boundHandlers.chatHistory);
+    this.ws.on("chat-mode-change", this.boundHandlers.chatModeChange);
   }
 
   setProvider(name: string): void {
@@ -207,6 +212,18 @@ export class ChatPane implements Component, PaneKeyHandler {
 
   setModeLabel(label: string): void {
     this.modeEl.textContent = label;
+  }
+
+  private currentMode = "code";
+
+  getMode(): string {
+    return this.currentMode;
+  }
+
+  setMode(mode: string): void {
+    this.currentMode = mode;
+    this.modeEl.textContent = mode.toUpperCase();
+    this.modeEl.className = `status-mode ${mode}`;
   }
 
   private updateTokenCount(usage?: { prompt_tokens?: number; completion_tokens?: number }): void {
@@ -662,9 +679,14 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.chatInput.blur();
   }
 
+  private handleModeChange(msg: ChatModeChangeMessage): void {
+    this.setMode(msg.mode);
+  }
+
   dispose(): void {
     this.ws.off("chat-stream", this.boundHandlers.chatStream);
     this.ws.off("chat-history", this.boundHandlers.chatHistory);
+    this.ws.off("chat-mode-change", this.boundHandlers.chatModeChange);
     this.chatInput.dispose();
     this.diagramViewer?.dispose();
   }

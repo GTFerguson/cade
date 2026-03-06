@@ -229,6 +229,7 @@ export interface ConnectedMessage extends BaseMessage {
   wslHealthy?: boolean;
   providers?: ProviderInfo[];
   defaultProvider?: string;
+  chatMode?: string;
 }
 
 /**
@@ -425,6 +426,14 @@ export interface ChatHistoryMessage extends BaseMessage {
 }
 
 /**
+ * Chat mode change (server -> client).
+ */
+export interface ChatModeChangeMessage extends BaseMessage {
+  type: "chat-mode-change";
+  mode: string;
+}
+
+/**
  * Provider list (server -> client).
  */
 export interface ProviderListMessage extends BaseMessage {
@@ -477,6 +486,7 @@ export type ServerMessage =
   | PtyExitedMessage
   | ChatStreamMessage
   | ChatHistoryMessage
+  | ChatModeChangeMessage
   | ProviderListMessage
   | NeovimReadyMessage
   | NeovimOutputMessage

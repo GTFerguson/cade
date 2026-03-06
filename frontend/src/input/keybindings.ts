@@ -55,6 +55,8 @@ export interface KeybindingCallbacks {
   cycleAgentNext: () => void;
   cycleAgentPrev: () => void;
   toggleEnhanced: () => void;
+  cycleModeNext: () => void;
+  cycleModePrev: () => void;
   showThemeSelector: () => void;
   getFocusedPane: () => PaneType;
   getPaneHandler: (pane: PaneType) => PaneKeyHandler | null;
@@ -390,6 +392,18 @@ export class KeybindingManager implements Component {
     }
     if (this.matchesBinding(e, config.misc.cycleAgentPrev)) {
       this.callbacks?.cycleAgentPrev();
+      this.onPrefixShortcutUsed();
+      return;
+    }
+
+    // Mode cycling: prefix + m/M
+    if (this.matchesBinding(e, config.misc.cycleModeNext)) {
+      this.callbacks?.cycleModeNext();
+      this.onPrefixShortcutUsed();
+      return;
+    }
+    if (this.matchesBinding(e, config.misc.cycleModePrev)) {
+      this.callbacks?.cycleModePrev();
       this.onPrefixShortcutUsed();
       return;
     }

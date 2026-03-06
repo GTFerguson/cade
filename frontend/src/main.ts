@@ -215,6 +215,26 @@ class App {
         const activeTab = this.tabManager.getActiveTab();
         activeTab?.context?.getTerminalManager()?.toggleEnhanced();
       },
+      cycleModeNext: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        const chatPane = activeTab?.context?.getTerminalManager()?.getChatPane();
+        if (chatPane) {
+          const modes = ["architect", "code", "review"];
+          const current = chatPane.getMode();
+          const next = modes[(modes.indexOf(current) + 1) % modes.length]!;
+          activeTab?.ws.sendChatMessage(`/${next === "architect" ? "plan" : next}`);
+        }
+      },
+      cycleModePrev: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        const chatPane = activeTab?.context?.getTerminalManager()?.getChatPane();
+        if (chatPane) {
+          const modes = ["architect", "code", "review"];
+          const current = chatPane.getMode();
+          const prev = modes[(modes.indexOf(current) + modes.length - 1) % modes.length]!;
+          activeTab?.ws.sendChatMessage(`/${prev === "architect" ? "plan" : prev}`);
+        }
+      },
       showThemeSelector: () => {
         this.themeSelector.toggle();
       },

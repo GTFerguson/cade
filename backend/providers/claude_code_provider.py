@@ -29,6 +29,26 @@ from backend.providers.types import (
 
 logger = logging.getLogger(__name__)
 
+ARCHITECT_PROMPT = """You are in ARCHITECT mode (read-only).
+Explore, analyze, and create implementation plans.
+You can read files, search code, and browse the web.
+You cannot edit, write, or delete files.
+When your plan is ready, suggest switching to Code mode with /code."""
+
+CODE_PROMPT = """You are in CODE mode with full tool access.
+Implement changes as needed. If you need to step back and plan, suggest /plan."""
+
+REVIEW_PROMPT = """You are in REVIEW mode (read-only).
+Review code for bugs, security issues, and improvements.
+You can read files and search code but cannot make changes.
+Provide clear, actionable feedback."""
+
+MODE_PROMPTS = {
+    "architect": ARCHITECT_PROMPT,
+    "code": CODE_PROMPT,
+    "review": REVIEW_PROMPT,
+}
+
 
 class ClaudeCodeProvider(BaseProvider):
     """Provider that runs Claude Code as a subprocess with stream-json output.
@@ -48,6 +68,7 @@ class ClaudeCodeProvider(BaseProvider):
         self._process: asyncio.subprocess.Process | None = None
         self._streaming_partial = False
         self._pty_fd: int | None = None
+        self._mode = "code"
 
     @property
     def name(self) -> str:
@@ -60,6 +81,13 @@ class ClaudeCodeProvider(BaseProvider):
     @property
     def session_id(self) -> str:
         return self._session_id
+
+    @property
+    def mode(self) -> str:
+        return self._mode
+
+    def set_mode(self, mode: str) -> None:
+        self._mode = mode
 
     def set_working_dir(self, path: Path) -> None:
         self._working_dir = path
@@ -134,6 +162,13 @@ class ClaudeCodeProvider(BaseProvider):
         max_turns = self._config.extra.get("max_turns", "")
         if max_turns:
             cmd.extend(["--max-turns", str(max_turns)])
+
+        if self._mode in ("architect", "review"):
+            cmd.extend(["--permission-mode", "plan"])
+
+        system_prompt = MODE_PROMPTS.get(self._mode)
+        if system_prompt:
+            cmd.extend(["--append-system-prompt", system_prompt])
 
         cwd = str(self._working_dir) if self._working_dir else None
 
