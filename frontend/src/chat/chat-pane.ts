@@ -117,7 +117,9 @@ export class ChatPane implements Component, PaneKeyHandler {
   private thinkingContentEl: HTMLElement | null = null;
   private costEl: HTMLElement;
   private totalCost = 0;
-  private systemInfo: { model?: string; slashCommands?: string[] } = {};
+  private systemInfo: { model?: string; slashCommands?: string[] } = {
+    slashCommands: Object.keys(SLASH_DESCRIPTIONS),
+  };
   private slashHintEl: HTMLElement | null = null;
   private isStreaming = false;
 

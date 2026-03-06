@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import pty
 import shutil
 import uuid
 from collections.abc import AsyncIterator
@@ -46,6 +47,7 @@ class ClaudeCodeProvider(BaseProvider):
         self._working_dir: Path | None = None
         self._process: asyncio.subprocess.Process | None = None
         self._streaming_partial = False
+        self._pty_fd: int | None = None
 
     @property
     def name(self) -> str:
@@ -63,11 +65,18 @@ class ClaudeCodeProvider(BaseProvider):
         self._working_dir = path
 
     async def cancel(self) -> None:
-        """Terminate the running subprocess."""
+        """Terminate the running subprocess and close the PTY."""
+        # Close the PTY first so the reader loop exits
+        if self._pty_fd is not None:
+            try:
+                os.close(self._pty_fd)
+            except OSError:
+                pass
+            self._pty_fd = None
+
         if self._process is not None and self._process.returncode is None:
             try:
                 self._process.terminate()
-                # Give it a moment to exit gracefully
                 try:
                     await asyncio.wait_for(self._process.wait(), timeout=3.0)
                 except asyncio.TimeoutError:
@@ -81,7 +90,11 @@ class ClaudeCodeProvider(BaseProvider):
         messages: list[ChatMessage],
         system_prompt: str | None = None,
     ) -> AsyncIterator[ChatEvent]:
-        """Stream a chat response by spawning a Claude Code subprocess."""
+        """Stream a chat response by spawning a Claude Code subprocess.
+
+        Uses a PTY for stdout so Node.js flushes each NDJSON line immediately
+        instead of block-buffering to a pipe.
+        """
         claude_path = shutil.which("claude")
         if claude_path is None:
             yield ChatError(
@@ -90,8 +103,6 @@ class ClaudeCodeProvider(BaseProvider):
             )
             return
 
-        # The last user message is what we send; prior history is managed
-        # by Claude Code via --session-id --continue
         prompt = ""
         for msg in reversed(messages):
             if msg.role == "user":
@@ -126,19 +137,27 @@ class ClaudeCodeProvider(BaseProvider):
 
         cwd = str(self._working_dir) if self._working_dir else None
 
-        # Clear CLAUDECODE env var so the subprocess doesn't think it's nested
         env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+        env["TERM"] = "dumb"
+        env["NO_COLOR"] = "1"
 
+        master_fd = None
         try:
+            # PTY so Node.js line-buffers stdout instead of block-buffering
+            master_fd, slave_fd = pty.openpty()
+            self._pty_fd = master_fd
+
             self._process = await asyncio.create_subprocess_exec(
                 *cmd,
-                stdout=asyncio.subprocess.PIPE,
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=slave_fd,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=cwd,
                 env=env,
             )
+            os.close(slave_fd)
 
-            async for event in self._parse_stream(self._process):
+            async for event in self._parse_pty_stream(master_fd, self._process):
                 yield event
 
         except FileNotFoundError:
@@ -150,133 +169,77 @@ class ClaudeCodeProvider(BaseProvider):
             logger.exception("ClaudeCodeProvider error: %s", e)
             yield ChatError(message=str(e), code="subprocess-error")
         finally:
+            if master_fd is not None:
+                try:
+                    os.close(master_fd)
+                except OSError:
+                    pass
+            self._pty_fd = None
             self._process = None
 
-    async def _parse_stream(
+    async def _parse_pty_stream(
         self,
+        master_fd: int,
         process: asyncio.subprocess.Process,
     ) -> AsyncIterator[ChatEvent]:
-        """Parse NDJSON stream from Claude Code subprocess stdout.
+        """Read NDJSON lines from a PTY master fd and yield ChatEvents.
 
-        With --include-partial-messages, Claude Code emits stream_event entries
-        for incremental content (text deltas, thinking deltas, tool starts).
-        The full assistant/user/result messages still arrive at the end of each
-        turn — we skip re-emitting from those when partial streaming is active.
+        PTY forces Node.js to line-buffer stdout, giving us real-time streaming
+        instead of block-buffered output that only arrives at process exit.
+        Uses asyncio add_reader for non-blocking I/O on the fd.
         """
-        assert process.stdout is not None
+        loop = asyncio.get_running_loop()
+        buf = b""
+        queue: asyncio.Queue[bytes | None] = asyncio.Queue()
 
+        def _on_readable() -> None:
+            """Called by the event loop when the PTY master fd has data."""
+            try:
+                chunk = os.read(master_fd, 16384)
+                if chunk:
+                    queue.put_nowait(chunk)
+                else:
+                    queue.put_nowait(None)
+                    loop.remove_reader(master_fd)
+            except OSError:
+                queue.put_nowait(None)
+                try:
+                    loop.remove_reader(master_fd)
+                except Exception:
+                    pass
+
+        loop.add_reader(master_fd, _on_readable)
         self._streaming_partial = False
 
-        async for raw_line in process.stdout:
-            line = raw_line.decode("utf-8", errors="replace").strip()
-            if not line:
-                continue
+        try:
+            while True:
+                chunk = await queue.get()
+                if chunk is None:
+                    break
 
+                buf += chunk
+
+                while b"\n" in buf:
+                    raw_line, buf = buf.split(b"\n", 1)
+                    line = raw_line.replace(b"\r", b"").strip()
+                    if not line:
+                        continue
+
+                    line_str = line.decode("utf-8", errors="replace")
+
+                    try:
+                        data = json.loads(line_str)
+                    except json.JSONDecodeError:
+                        logger.debug("Non-JSON line from claude: %s", line_str[:200])
+                        continue
+
+                    async for event in self._process_json_event(data):
+                        yield event
+        finally:
             try:
-                data = json.loads(line)
-            except json.JSONDecodeError:
-                logger.debug("Non-JSON line from claude: %s", line[:200])
-                continue
-
-            event_type = data.get("type", "")
-
-            # Capture session_id for --resume on subsequent calls
-            if not self._has_session:
-                sid = data.get("session_id")
-                if sid:
-                    self._session_id = sid
-                    self._has_session = True
-
-            # --- Partial streaming events (from --include-partial-messages) ---
-            if event_type == "stream_event":
-                self._streaming_partial = True
-                stream_event = data.get("event", {})
-                se_type = stream_event.get("type", "")
-
-                if se_type == "content_block_delta":
-                    delta = stream_event.get("delta", {})
-                    delta_type = delta.get("type", "")
-                    if delta_type == "text_delta":
-                        text = delta.get("text", "")
-                        if text:
-                            yield TextDelta(content=text)
-                    elif delta_type == "thinking_delta":
-                        text = delta.get("thinking", "")
-                        if text:
-                            yield ThinkingDelta(content=text)
-
-                elif se_type == "content_block_start":
-                    block = stream_event.get("content_block", {})
-                    if block.get("type") == "tool_use":
-                        yield ToolUseStart(
-                            tool_id=block.get("id", ""),
-                            tool_name=block.get("name", ""),
-                        )
-
-                continue
-
-            # --- System init event ---
-            if event_type == "system":
-                yield SystemInfo(
-                    model=data.get("model", self._model),
-                    session_id=self._session_id,
-                    tools=[t.get("name", "") if isinstance(t, dict) else str(t) for t in data.get("tools", [])],
-                    slash_commands=[c.get("name", c) if isinstance(c, dict) else str(c) for c in data.get("slash_commands", [])],
-                    version=data.get("claude_code_version", ""),
-                )
-                continue
-
-            # --- Full assistant message (skip content if we streamed partials) ---
-            if event_type == "assistant":
-                if not self._streaming_partial:
-                    message = data.get("message", {})
-                    for block in message.get("content", []):
-                        block_type = block.get("type", "")
-                        if block_type == "text":
-                            text = block.get("text", "")
-                            if text:
-                                yield TextDelta(content=text)
-                        elif block_type == "tool_use":
-                            yield ToolUseStart(
-                                tool_id=block.get("id", ""),
-                                tool_name=block.get("name", ""),
-                            )
-                        elif block_type == "thinking":
-                            text = block.get("thinking", "")
-                            if text:
-                                yield ThinkingDelta(content=text)
-
-            elif event_type == "user":
-                content_blocks = data.get("message", {}).get("content", [])
-                if not content_blocks:
-                    content_blocks = data.get("content", [])
-                for block in content_blocks:
-                    if block.get("type") == "tool_result":
-                        tool_use_id = block.get("tool_use_id", "")
-                        is_error = block.get("is_error", False)
-                        yield ToolResult(
-                            tool_id=tool_use_id,
-                            tool_name="",
-                            status="error" if is_error else "success",
-                        )
-
-            elif event_type == "result":
-                result_usage = data.get("usage", {})
-                usage = {
-                    "prompt_tokens": result_usage.get("input_tokens", 0),
-                    "completion_tokens": result_usage.get("output_tokens", 0),
-                }
-                cost = data.get("total_cost_usd", 0)
-                is_error = data.get("is_error", False)
-                if is_error:
-                    yield ChatError(
-                        message=data.get("result", "Unknown error"),
-                        code="claude-code-error",
-                    )
-                else:
-                    yield ChatDone(usage=usage, cost=cost)
-                # Reset for next turn in multi-turn conversations
-                self._streaming_partial = False
+                loop.remove_reader(master_fd)
+            except Exception:
+                pass
 
         await process.wait()
 
@@ -290,6 +253,107 @@ class ClaudeCodeProvider(BaseProvider):
                     message=f"Claude Code exited with code {process.returncode}: {stderr_text[:500]}",
                     code="process-exit",
                 )
+
+    async def _process_json_event(self, data: dict) -> AsyncIterator[ChatEvent]:
+        """Process a single parsed JSON event from Claude Code stream-json output."""
+        event_type = data.get("type", "")
+
+        # Capture session_id for --resume on subsequent calls
+        if not self._has_session:
+            sid = data.get("session_id")
+            if sid:
+                self._session_id = sid
+                self._has_session = True
+
+        # --- Partial streaming events (from --include-partial-messages) ---
+        if event_type == "stream_event":
+            self._streaming_partial = True
+            stream_event = data.get("event", {})
+            se_type = stream_event.get("type", "")
+
+            if se_type == "content_block_delta":
+                delta = stream_event.get("delta", {})
+                delta_type = delta.get("type", "")
+                if delta_type == "text_delta":
+                    text = delta.get("text", "")
+                    if text:
+                        yield TextDelta(content=text)
+                elif delta_type == "thinking_delta":
+                    text = delta.get("thinking", "")
+                    if text:
+                        yield ThinkingDelta(content=text)
+
+            elif se_type == "content_block_start":
+                block = stream_event.get("content_block", {})
+                if block.get("type") == "tool_use":
+                    yield ToolUseStart(
+                        tool_id=block.get("id", ""),
+                        tool_name=block.get("name", ""),
+                    )
+
+            return
+
+        # --- System init event ---
+        if event_type == "system":
+            yield SystemInfo(
+                model=data.get("model", self._model),
+                session_id=self._session_id,
+                tools=[t.get("name", "") if isinstance(t, dict) else str(t) for t in data.get("tools", [])],
+                slash_commands=[c.get("name", c) if isinstance(c, dict) else str(c) for c in data.get("slash_commands", [])],
+                version=data.get("claude_code_version", ""),
+            )
+            return
+
+        # --- Full assistant message (skip content if we streamed partials) ---
+        if event_type == "assistant":
+            if not self._streaming_partial:
+                message = data.get("message", {})
+                for block in message.get("content", []):
+                    block_type = block.get("type", "")
+                    if block_type == "text":
+                        text = block.get("text", "")
+                        if text:
+                            yield TextDelta(content=text)
+                    elif block_type == "tool_use":
+                        yield ToolUseStart(
+                            tool_id=block.get("id", ""),
+                            tool_name=block.get("name", ""),
+                        )
+                    elif block_type == "thinking":
+                        text = block.get("thinking", "")
+                        if text:
+                            yield ThinkingDelta(content=text)
+
+        elif event_type == "user":
+            content_blocks = data.get("message", {}).get("content", [])
+            if not content_blocks:
+                content_blocks = data.get("content", [])
+            for block in content_blocks:
+                if block.get("type") == "tool_result":
+                    tool_use_id = block.get("tool_use_id", "")
+                    is_error = block.get("is_error", False)
+                    yield ToolResult(
+                        tool_id=tool_use_id,
+                        tool_name="",
+                        status="error" if is_error else "success",
+                    )
+
+        elif event_type == "result":
+            result_usage = data.get("usage", {})
+            usage = {
+                "prompt_tokens": result_usage.get("input_tokens", 0),
+                "completion_tokens": result_usage.get("output_tokens", 0),
+            }
+            cost = data.get("total_cost_usd", 0)
+            is_error = data.get("is_error", False)
+            if is_error:
+                yield ChatError(
+                    message=data.get("result", "Unknown error"),
+                    code="claude-code-error",
+                )
+            else:
+                yield ChatDone(usage=usage, cost=cost)
+            self._streaming_partial = False
 
     def get_capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(
