@@ -304,8 +304,15 @@ export class ProjectContextImpl implements IProjectContext {
 
   /**
    * Get the currently focused pane type.
+   * Returns "chat" instead of "terminal" when enhanced CC mode is active
+   * so keystrokes are delegated to the chat pane's handler.
    */
   getFocusedPane(): PaneType {
+    if (this.focusedPane === "terminal" &&
+        this.terminalManager?.isEnhanced() &&
+        this.terminalManager?.getMode() === "chat") {
+      return "chat";
+    }
     return this.focusedPane;
   }
 
@@ -313,10 +320,11 @@ export class ProjectContextImpl implements IProjectContext {
    * Focus a specific pane.
    */
   focusPane(pane: PaneType): void {
-    this.focusedPane = pane;
+    // "chat" is a derived pane type — store as "terminal" internally
+    this.focusedPane = pane === "chat" ? "terminal" : pane;
     this.updatePaneFocusVisual();
 
-    if (pane === "terminal") {
+    if (pane === "terminal" || pane === "chat") {
       this.terminalManager?.focus();
     } else {
       // Blur chat input so keystrokes go to the newly focused pane
@@ -360,6 +368,8 @@ export class ProjectContextImpl implements IProjectContext {
         return this.fileTree;
       case "viewer":
         return this.rightPane;
+      case "chat":
+        return this.terminalManager?.getChatPane() ?? null;
       default:
         return null;
     }
@@ -434,6 +444,63 @@ export class ProjectContextImpl implements IProjectContext {
    */
   getAgentManager(): AgentManager | null {
     return this.agentManager;
+  }
+
+  /**
+   * Handle keyboard-triggered agent approval (prefix+y).
+   * Context-dependent: approves an agent report if viewing that agent,
+   * otherwise approves the most recent pending spawn in the primary chat.
+   */
+  handleAgentApprove(): void {
+    // If viewing an agent in "review" state, approve its report
+    const activeState = this.agentManager?.getActiveAgentState();
+    const activeId = this.agentManager?.getActiveAgentId();
+    if (activeId && activeState === "review") {
+      this.ws.sendAgentApproveReport(activeId);
+      return;
+    }
+
+    const chatPane = this.terminalManager?.getChatPane();
+    if (!chatPane) return;
+
+    // Check for pending report review first
+    const reportAgentId = chatPane.getPendingReportAgentId();
+    if (reportAgentId) {
+      chatPane.approveReport(reportAgentId);
+      return;
+    }
+
+    // Otherwise, approve pending spawn
+    const spawnAgentId = chatPane.getPendingApprovalAgentId();
+    if (spawnAgentId) {
+      chatPane.approveSpawn(spawnAgentId);
+    }
+  }
+
+  /**
+   * Handle keyboard-triggered agent rejection (prefix+n).
+   */
+  handleAgentReject(): void {
+    const activeState = this.agentManager?.getActiveAgentState();
+    const activeId = this.agentManager?.getActiveAgentId();
+    if (activeId && activeState === "review") {
+      this.ws.sendAgentRejectReport(activeId);
+      return;
+    }
+
+    const chatPane = this.terminalManager?.getChatPane();
+    if (!chatPane) return;
+
+    const reportAgentId = chatPane.getPendingReportAgentId();
+    if (reportAgentId) {
+      chatPane.rejectReport(reportAgentId);
+      return;
+    }
+
+    const spawnAgentId = chatPane.getPendingApprovalAgentId();
+    if (spawnAgentId) {
+      chatPane.rejectSpawn(spawnAgentId);
+    }
   }
 
   /**

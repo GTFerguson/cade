@@ -48,10 +48,14 @@ export class ChatInput {
       return;
     }
 
-    if (e.key === "Escape" && this.disabled) {
+    if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
-      this.onCancel?.();
+      if (this.disabled) {
+        this.onCancel?.();
+      } else {
+        this.textarea.blur();
+      }
       return;
     }
   }
@@ -96,6 +100,10 @@ export class ChatInput {
     } else {
       this.textarea.placeholder = "Waiting for response...";
     }
+  }
+
+  isFocused(): boolean {
+    return document.activeElement === this.textarea;
   }
 
   focus(): void {

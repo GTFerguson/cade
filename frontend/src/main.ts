@@ -247,6 +247,14 @@ class App {
           activeTab?.ws.sendChatMessage(`/${cmd}`);
         }
       },
+      approveAgent: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        activeTab?.context?.handleAgentApprove();
+      },
+      rejectAgent: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        activeTab?.context?.handleAgentReject();
+      },
       showThemeSelector: () => {
         this.themeSelector.toggle();
       },

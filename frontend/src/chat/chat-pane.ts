@@ -794,6 +794,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   private handleReportReviewRequest(msg: ChatStreamMessage): void {
     const block = document.createElement("div");
     block.className = "chat-report-review";
+    if (msg.agentId) block.dataset["agentId"] = msg.agentId;
 
     const header = document.createElement("div");
     header.className = "chat-report-review-header";
@@ -849,6 +850,80 @@ export class ChatPane implements Component, PaneKeyHandler {
     return el;
   }
 
+  /**
+   * Find the first unresolved spawn approval block and return its target agent ID.
+   */
+  getPendingApprovalAgentId(): string | null {
+    const blocks = this.messagesEl.querySelectorAll(".chat-agent-approval");
+    for (const block of blocks) {
+      if (block.querySelector(".chat-agent-approval-actions")) {
+        return (block as HTMLElement).dataset["targetAgentId"] ?? null;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Find the first unresolved report review block and return its agent ID.
+   */
+  getPendingReportAgentId(): string | null {
+    const blocks = this.messagesEl.querySelectorAll(".chat-report-review");
+    for (const block of blocks) {
+      if (block.querySelector(".chat-agent-approval-actions")) {
+        return (block as HTMLElement).dataset["agentId"] ?? null;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Programmatically approve the first pending spawn approval block.
+   */
+  approveSpawn(agentId: string): void {
+    const block = this.messagesEl.querySelector(
+      `.chat-agent-approval[data-target-agent-id="${agentId}"]`
+    );
+    if (!block) return;
+    const btn = block.querySelector(".agent-approval-btn.approve") as HTMLElement | null;
+    btn?.click();
+  }
+
+  /**
+   * Programmatically reject the first pending spawn approval block.
+   */
+  rejectSpawn(agentId: string): void {
+    const block = this.messagesEl.querySelector(
+      `.chat-agent-approval[data-target-agent-id="${agentId}"]`
+    );
+    if (!block) return;
+    const btn = block.querySelector(".agent-approval-btn.reject") as HTMLElement | null;
+    btn?.click();
+  }
+
+  /**
+   * Programmatically approve a pending report review block.
+   */
+  approveReport(agentId: string): void {
+    const block = this.messagesEl.querySelector(
+      `.chat-report-review[data-agent-id="${agentId}"]`
+    );
+    if (!block) return;
+    const btn = block.querySelector(".agent-approval-btn.approve") as HTMLElement | null;
+    btn?.click();
+  }
+
+  /**
+   * Programmatically reject a pending report review block.
+   */
+  rejectReport(agentId: string): void {
+    const block = this.messagesEl.querySelector(
+      `.chat-report-review[data-agent-id="${agentId}"]`
+    );
+    if (!block) return;
+    const btn = block.querySelector(".agent-approval-btn.reject") as HTMLElement | null;
+    btn?.click();
+  }
+
   private scrollToBottom(): void {
     requestAnimationFrame(() => {
       this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
@@ -857,8 +932,42 @@ export class ChatPane implements Component, PaneKeyHandler {
 
   // --- PaneKeyHandler interface ---
 
-  handleKeydown(_e: KeyboardEvent): boolean {
-    return false;
+  private lastKeyTime = 0;
+  private lastKey = "";
+
+  handleKeydown(e: KeyboardEvent): boolean {
+    // Only handle keys when chat input is blurred (normal mode)
+    if (this.chatInput?.isFocused()) {
+      return false;
+    }
+
+    switch (e.key) {
+      case "i":
+        this.chatInput?.focus();
+        return true;
+      case "j":
+        this.messagesEl.scrollBy({ top: 60 });
+        return true;
+      case "k":
+        this.messagesEl.scrollBy({ top: -60 });
+        return true;
+      case "G":
+        this.scrollToBottom();
+        return true;
+      case "g": {
+        const now = Date.now();
+        if (this.lastKey === "g" && now - this.lastKeyTime < 500) {
+          this.messagesEl.scrollTop = 0;
+          this.lastKey = "";
+          return true;
+        }
+        this.lastKey = "g";
+        this.lastKeyTime = now;
+        return true;
+      }
+      default:
+        return false;
+    }
   }
 
   focus(): void {
