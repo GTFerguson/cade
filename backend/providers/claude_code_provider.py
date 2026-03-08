@@ -43,10 +43,16 @@ Review code for bugs, security issues, and improvements.
 You can read files and search code but cannot make changes.
 Provide clear, actionable feedback."""
 
+ORCHESTRATOR_PROMPT = """You are in ORCHESTRATOR mode.
+You can spawn and manage worker agents to parallelize tasks.
+Use the orchestrator MCP tools to create agents, monitor their progress,
+and collect their results. Coordinate multi-agent workflows."""
+
 MODE_PROMPTS = {
     "architect": ARCHITECT_PROMPT,
     "code": CODE_PROMPT,
     "review": REVIEW_PROMPT,
+    "orchestrator": ORCHESTRATOR_PROMPT,
 }
 
 
@@ -69,6 +75,7 @@ class ClaudeCodeProvider(BaseProvider):
         self._streaming_partial = False
         self._pty_fd: int | None = None
         self._mode = "code"
+        self._mcp_config_path: Path | None = None
 
     @property
     def name(self) -> str:
@@ -91,6 +98,9 @@ class ClaudeCodeProvider(BaseProvider):
 
     def set_working_dir(self, path: Path) -> None:
         self._working_dir = path
+
+    def set_mcp_config(self, path: Path) -> None:
+        self._mcp_config_path = path
 
     async def cancel(self) -> None:
         """Terminate the running subprocess and close the PTY."""
@@ -166,9 +176,18 @@ class ClaudeCodeProvider(BaseProvider):
         if self._mode in ("architect", "review"):
             cmd.extend(["--permission-mode", "plan"])
 
-        system_prompt = MODE_PROMPTS.get(self._mode)
-        if system_prompt:
-            cmd.extend(["--append-system-prompt", system_prompt])
+        # Orchestrator mode: inject prompt and pre-approve MCP tools
+        if self._mode == "orchestrator" and self._mcp_config_path:
+            from backend.orchestrator.prompts import ORCHESTRATOR_ARCHITECT_PROMPT
+            cmd.extend(["--append-system-prompt", ORCHESTRATOR_ARCHITECT_PROMPT])
+            cmd.extend(["--allowedTools", "mcp__cade-orchestrator__spawn_agent,mcp__cade-orchestrator__list_agents"])
+        else:
+            system_prompt = MODE_PROMPTS.get(self._mode)
+            if system_prompt:
+                cmd.extend(["--append-system-prompt", system_prompt])
+
+        if self._mcp_config_path and self._mcp_config_path.exists():
+            cmd.extend(["--mcp-config", str(self._mcp_config_path)])
 
         cwd = str(self._working_dir) if self._working_dir else None
 

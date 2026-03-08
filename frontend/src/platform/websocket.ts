@@ -6,6 +6,9 @@ import { appendTokenToUrl } from "../auth/tokenManager";
 import { basePath, config, isRemoteBrowserAccess } from "../config/config";
 import { ErrorCode, MessageType, type AnySessionKey } from "./protocol";
 import type {
+  AgentKilledMessage,
+  AgentSpawnedMessage,
+  AgentStateChangedMessage,
   ChatHistoryMessage,
   ChatModeChangeMessage,
   ChatStreamMessage,
@@ -57,6 +60,9 @@ interface WebSocketEvents {
   "chat-history": ChatHistoryMessage;
   "chat-mode-change": ChatModeChangeMessage;
   "provider-list": ProviderListMessage;
+  "agent-spawned": AgentSpawnedMessage;
+  "agent-killed": AgentKilledMessage;
+  "agent-state-changed": AgentStateChangedMessage;
   error: ErrorMessage;
   "auth-failed": { code: number };
   "connection-lost": void;
@@ -480,6 +486,22 @@ export class WebSocketClient {
     this.send(msg as any);
   }
 
+  sendAgentApprove(agentId: string): void {
+    this.send({ type: MessageType.AGENT_APPROVE, agentId } as any);
+  }
+
+  sendAgentReject(agentId: string): void {
+    this.send({ type: MessageType.AGENT_REJECT, agentId } as any);
+  }
+
+  sendAgentApproveReport(agentId: string): void {
+    this.send({ type: MessageType.AGENT_APPROVE_REPORT, agentId } as any);
+  }
+
+  sendAgentRejectReport(agentId: string): void {
+    this.send({ type: MessageType.AGENT_REJECT_REPORT, agentId } as any);
+  }
+
   /**
    * Switch the active chat provider.
    */
@@ -621,6 +643,18 @@ export class WebSocketClient {
 
       case MessageType.PROVIDER_LIST:
         this.emit("provider-list", message as ProviderListMessage);
+        break;
+
+      case MessageType.AGENT_SPAWNED:
+        this.emit("agent-spawned", message as AgentSpawnedMessage);
+        break;
+
+      case MessageType.AGENT_KILLED:
+        this.emit("agent-killed", message as AgentKilledMessage);
+        break;
+
+      case MessageType.AGENT_STATE_CHANGED:
+        this.emit("agent-state-changed", message as AgentStateChangedMessage);
         break;
 
       default:

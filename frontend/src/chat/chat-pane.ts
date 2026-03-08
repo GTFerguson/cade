@@ -102,6 +102,11 @@ if (typeof window !== "undefined") {
   });
 }
 
+export interface ChatPaneOptions {
+  autoSubscribe?: boolean;
+  readOnly?: boolean;
+}
+
 export class ChatPane implements Component, PaneKeyHandler {
   private messagesEl: HTMLElement;
   private inputArea: HTMLElement;
@@ -109,7 +114,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   private modeEl: HTMLElement;
   private providerEl: HTMLElement;
   private tokensEl: HTMLElement;
-  private chatInput: ChatInput;
+  private chatInput: ChatInput | null = null;
   private mertex: MertexMD;
   private streamRenderer: StreamRenderer | null = null;
   private currentAssistantEl: HTMLElement | null = null;
@@ -125,9 +130,15 @@ export class ChatPane implements Component, PaneKeyHandler {
   };
   private slashHintEl: HTMLElement | null = null;
   private isStreaming = false;
+  private readonly autoSubscribe: boolean;
+  private readonly readOnly: boolean;
 
   private boundHandlers = {
-    chatStream: (msg: ChatStreamMessage) => this.handleChatStream(msg),
+    chatStream: (msg: ChatStreamMessage) => {
+      // When auto-subscribed, ignore events meant for agents
+      if (msg.agentId) return;
+      this.handleChatStream(msg);
+    },
     chatHistory: (msg: ChatHistoryMessage) => this.handleChatHistory(msg),
     chatModeChange: (msg: ChatModeChangeMessage) => this.handleModeChange(msg),
   };
@@ -135,7 +146,10 @@ export class ChatPane implements Component, PaneKeyHandler {
   constructor(
     private container: HTMLElement,
     private ws: WebSocketClient,
+    options?: ChatPaneOptions,
   ) {
+    this.autoSubscribe = options?.autoSubscribe ?? true;
+    this.readOnly = options?.readOnly ?? false;
     this.mertex = new MertexMD({
       breaks: true,
       gfm: true,
@@ -153,12 +167,6 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.inputArea = document.createElement("div");
     this.inputArea.className = "chat-input-area";
 
-    this.chatInput = new ChatInput(this.inputArea, (text) =>
-      this.sendMessage(text),
-    );
-    this.chatInput.setOnCancel(() => this.cancelStream());
-    this.chatInput.setOnSlashInput((text) => this.handleSlashInput(text));
-
     // Statusline
     this.statuslineEl = document.createElement("div");
     this.statuslineEl.className = "chat-statusline";
@@ -166,8 +174,6 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.modeEl = document.createElement("span");
     this.modeEl.className = "status-mode";
     this.modeEl.textContent = "CHAT";
-
-    const modeSpan = this.modeEl;
 
     this.providerEl = document.createElement("span");
     this.providerEl.className = "status-provider";
@@ -181,10 +187,18 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.costEl.className = "status-cost";
     this.costEl.textContent = "";
 
-    this.statuslineEl.appendChild(modeSpan);
+    this.statuslineEl.appendChild(this.modeEl);
     this.statuslineEl.appendChild(this.providerEl);
     this.statuslineEl.appendChild(this.tokensEl);
     this.statuslineEl.appendChild(this.costEl);
+
+    if (!this.readOnly) {
+      this.chatInput = new ChatInput(this.inputArea, (text) =>
+        this.sendMessage(text),
+      );
+      this.chatInput.setOnCancel(() => this.cancelStream());
+      this.chatInput.setOnSlashInput((text) => this.handleSlashInput(text));
+    }
 
     // Open fullscreen viewer when clicking a mermaid diagram
     this.messagesEl.addEventListener("click", (e) => {
@@ -195,15 +209,26 @@ export class ChatPane implements Component, PaneKeyHandler {
     });
 
     pane.appendChild(this.messagesEl);
-    pane.appendChild(this.inputArea);
-    pane.appendChild(this.statuslineEl);
+    if (!this.readOnly) {
+      pane.appendChild(this.inputArea);
+      pane.appendChild(this.statuslineEl);
+    }
     this.container.appendChild(pane);
   }
 
   initialize(): void {
-    this.ws.on("chat-stream", this.boundHandlers.chatStream);
-    this.ws.on("chat-history", this.boundHandlers.chatHistory);
-    this.ws.on("chat-mode-change", this.boundHandlers.chatModeChange);
+    if (this.autoSubscribe) {
+      this.ws.on("chat-stream", this.boundHandlers.chatStream);
+      this.ws.on("chat-history", this.boundHandlers.chatHistory);
+      this.ws.on("chat-mode-change", this.boundHandlers.chatModeChange);
+    }
+  }
+
+  /**
+   * Feed a chat-stream message directly (used by AgentManager for per-agent routing).
+   */
+  feedChatStream(msg: ChatStreamMessage): void {
+    this.handleChatStream(msg);
   }
 
   setProvider(name: string): void {
@@ -242,6 +267,8 @@ export class ChatPane implements Component, PaneKeyHandler {
   }
 
   private handleSlashInput(text: string): void {
+    if (this.readOnly) return;
+
     const commands = this.systemInfo.slashCommands;
     if (!commands || commands.length === 0) {
       this.hideSlashHints();
@@ -284,9 +311,9 @@ export class ChatPane implements Component, PaneKeyHandler {
       if (desc.textContent) row.appendChild(desc);
 
       row.addEventListener("click", () => {
-        this.chatInput.setValue(`/${cmd}`);
+        this.chatInput?.setValue(`/${cmd}`);
         this.hideSlashHints();
-        this.chatInput.focus();
+        this.chatInput?.focus();
       });
 
       this.slashHintEl.appendChild(row);
@@ -321,7 +348,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.scrollToBottom();
 
     this.ws.sendChatMessage(text);
-    this.chatInput.setDisabled(true);
+    this.chatInput?.setDisabled(true);
     this.isStreaming = true;
   }
 
@@ -329,6 +356,9 @@ export class ChatPane implements Component, PaneKeyHandler {
     switch (msg.event) {
       case "system-info":
         this.handleSystemInfo(msg);
+        break;
+      case "user-message":
+        this.handleUserMessage(msg.content ?? "");
         break;
       case "text-delta":
         this.handleTextDelta(msg.content ?? "");
@@ -348,7 +378,29 @@ export class ChatPane implements Component, PaneKeyHandler {
       case "error":
         this.handleError(msg.message ?? "Unknown error");
         break;
+      case "agent-approval-request":
+        this.handleAgentApprovalRequest(msg);
+        break;
+      case "agent-approval-resolved":
+        this.handleAgentApprovalResolved(msg);
+        break;
+      case "report-review-request":
+        this.handleReportReviewRequest(msg);
+        break;
     }
+  }
+
+  private handleUserMessage(content: string): void {
+    const userEl = document.createElement("div");
+    userEl.className = "chat-message user";
+
+    const textEl = document.createElement("div");
+    textEl.className = "chat-message-text";
+    textEl.textContent = content;
+
+    userEl.appendChild(textEl);
+    this.messagesEl.appendChild(userEl);
+    this.scrollToBottom();
   }
 
   private handleSystemInfo(msg: ChatStreamMessage): void {
@@ -558,8 +610,8 @@ export class ChatPane implements Component, PaneKeyHandler {
       this.updateCost(msg.cost);
     }
 
-    this.chatInput.setDisabled(false);
-    this.chatInput.focus();
+    this.chatInput?.setDisabled(false);
+    this.chatInput?.focus();
   }
 
   private handleError(message: string): void {
@@ -579,8 +631,8 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.activeToolEls.clear();
     this.currentAssistantEl = null;
 
-    this.chatInput.setDisabled(false);
-    this.chatInput.focus();
+    this.chatInput?.setDisabled(false);
+    this.chatInput?.focus();
   }
 
   private async handleChatHistory(msg: ChatHistoryMessage): Promise<void> {
@@ -659,6 +711,144 @@ export class ChatPane implements Component, PaneKeyHandler {
     }
   }
 
+  // ── Inline approval / report review blocks ────────────────────
+
+  private handleAgentApprovalRequest(msg: ChatStreamMessage): void {
+    const targetId = msg.targetAgentId;
+    if (!targetId) return;
+
+    const block = document.createElement("div");
+    block.className = "chat-agent-approval";
+    block.dataset["targetAgentId"] = targetId;
+
+    const header = document.createElement("div");
+    header.className = "chat-agent-approval-header";
+    header.textContent = `Agent: ${msg.name ?? "unknown"}`;
+
+    const taskEl = document.createElement("div");
+    taskEl.className = "chat-agent-approval-task";
+    taskEl.textContent = msg.task ?? "";
+
+    const modeEl = document.createElement("div");
+    modeEl.className = "chat-agent-approval-mode";
+    modeEl.textContent = `mode: ${msg.mode ?? "code"}`;
+
+    const actions = document.createElement("div");
+    actions.className = "chat-agent-approval-actions";
+
+    const approveBtn = document.createElement("button");
+    approveBtn.className = "agent-approval-btn approve";
+    approveBtn.textContent = "Approve";
+    approveBtn.addEventListener("click", () => {
+      this.ws.sendAgentApprove(targetId);
+    });
+
+    const rejectBtn = document.createElement("button");
+    rejectBtn.className = "agent-approval-btn reject";
+    rejectBtn.textContent = "Reject";
+    rejectBtn.addEventListener("click", () => {
+      this.ws.sendAgentReject(targetId);
+    });
+
+    actions.appendChild(approveBtn);
+    actions.appendChild(rejectBtn);
+
+    block.appendChild(header);
+    block.appendChild(taskEl);
+    block.appendChild(modeEl);
+    block.appendChild(actions);
+
+    this.ensureAssistantEl();
+    if (this.streamRenderer) {
+      this.streamRenderer.finalize();
+      this.streamRenderer = null;
+    }
+
+    const contentEl = this.currentAssistantEl!.querySelector(".chat-message-content");
+    if (contentEl) {
+      contentEl.appendChild(block);
+    }
+    this.scrollToBottom();
+  }
+
+  private handleAgentApprovalResolved(msg: ChatStreamMessage): void {
+    const targetId = msg.targetAgentId;
+    if (!targetId) return;
+
+    const block = this.messagesEl.querySelector(
+      `.chat-agent-approval[data-target-agent-id="${targetId}"]`
+    );
+    if (!block) return;
+
+    const actions = block.querySelector(".chat-agent-approval-actions");
+    if (actions) {
+      const status = document.createElement("div");
+      status.className = "chat-agent-approval-status";
+      const approved = msg.resolution === "approved";
+      status.textContent = approved ? "Approved" : "Rejected";
+      status.classList.add(approved ? "approved" : "rejected");
+      actions.replaceWith(status);
+    }
+  }
+
+  private handleReportReviewRequest(msg: ChatStreamMessage): void {
+    const block = document.createElement("div");
+    block.className = "chat-report-review";
+
+    const header = document.createElement("div");
+    header.className = "chat-report-review-header";
+    header.textContent = "Agent Report";
+
+    const preview = document.createElement("div");
+    preview.className = "chat-report-review-preview";
+    preview.textContent = msg.report ?? "(no report)";
+
+    if (msg.cost != null && msg.cost > 0) {
+      const costEl = document.createElement("div");
+      costEl.className = "chat-report-review-cost";
+      costEl.textContent = `cost: $${msg.cost.toFixed(4)}`;
+      block.appendChild(costEl);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "chat-agent-approval-actions";
+
+    const agentId = msg.agentId;
+
+    const approveBtn = document.createElement("button");
+    approveBtn.className = "agent-approval-btn approve";
+    approveBtn.textContent = "Approve Report";
+    approveBtn.addEventListener("click", () => {
+      if (agentId) this.ws.sendAgentApproveReport(agentId);
+      actions.replaceWith(this.makeStatusEl("Approved", "approved"));
+    });
+
+    const rejectBtn = document.createElement("button");
+    rejectBtn.className = "agent-approval-btn reject";
+    rejectBtn.textContent = "Reject Report";
+    rejectBtn.addEventListener("click", () => {
+      if (agentId) this.ws.sendAgentRejectReport(agentId);
+      actions.replaceWith(this.makeStatusEl("Rejected", "rejected"));
+    });
+
+    actions.appendChild(approveBtn);
+    actions.appendChild(rejectBtn);
+
+    block.appendChild(header);
+    block.appendChild(preview);
+    block.appendChild(actions);
+
+    this.messagesEl.appendChild(block);
+    this.scrollToBottom();
+  }
+
+  private makeStatusEl(text: string, cls: string): HTMLElement {
+    const el = document.createElement("div");
+    el.className = `chat-agent-approval-status ${cls}`;
+    el.textContent = text;
+    return el;
+  }
+
   private scrollToBottom(): void {
     requestAnimationFrame(() => {
       this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
@@ -672,22 +862,29 @@ export class ChatPane implements Component, PaneKeyHandler {
   }
 
   focus(): void {
-    this.chatInput.focus();
+    this.chatInput?.focus();
   }
 
   blur(): void {
-    this.chatInput.blur();
+    this.chatInput?.blur();
   }
 
   private handleModeChange(msg: ChatModeChangeMessage): void {
     this.setMode(msg.mode);
+    // Mode commands (e.g. /orch) are intercepted server-side and never
+    // reach the CC subprocess, so no "done" event fires. Re-enable input.
+    this.isStreaming = false;
+    this.chatInput?.setDisabled(false);
+    this.chatInput?.focus();
   }
 
   dispose(): void {
-    this.ws.off("chat-stream", this.boundHandlers.chatStream);
-    this.ws.off("chat-history", this.boundHandlers.chatHistory);
-    this.ws.off("chat-mode-change", this.boundHandlers.chatModeChange);
-    this.chatInput.dispose();
+    if (this.autoSubscribe) {
+      this.ws.off("chat-stream", this.boundHandlers.chatStream);
+      this.ws.off("chat-history", this.boundHandlers.chatHistory);
+      this.ws.off("chat-mode-change", this.boundHandlers.chatModeChange);
+    }
+    this.chatInput?.dispose();
     this.diagramViewer?.dispose();
   }
 }

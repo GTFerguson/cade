@@ -8,7 +8,7 @@ tags: [index, user, guide]
 
 # User Guide
 
-CADE (Claude Agentic Development Environment) is an agent-first development environment with Claude Code in a terminal shell as its centerpiece. It provides a three-pane layout with file navigation, an integrated terminal, and a document viewer.
+CADE (Claude Agentic Development Environment) is an agent-first development environment built around Claude Code. The interface inherits its aesthetic and workflow philosophy from terminal tools (tmux, vim) while extending beyond terminal constraints with structured chat rendering, mode-based workflows, and multi-agent orchestration. It provides a three-pane layout with file navigation, a terminal or structured chat pane, and a document viewer.
 
 ## Access Methods
 
@@ -140,7 +140,40 @@ See [[configuration|Configuration Guide]] for details.
 
 ## Claude Code Integration
 
-CADE integrates with Claude Code through hooks that automatically display files in the viewer.
+CADE integrates with Claude Code in two ways:
+
+### Enhanced CC Mode
+
+The primary workflow runs Claude Code as a subprocess with structured output rendering in a ChatPane instead of a raw terminal. This provides:
+
+- **Markdown rendering** — responses rendered with syntax-highlighted code blocks, tables, and math via mertex.md
+- **Tool-use blocks** — inline indicators showing tool name and status (`▸` running, `✓` done, `✗` failed)
+- **Thinking blocks** — collapsible sections that auto-collapse when complete
+- **Streaming** — real-time token-by-token output
+- **Session continuity** — multi-turn conversations maintained via `--resume`
+
+### Mode Switching
+
+Switch Claude Code's behavior with slash commands:
+
+| Command | Mode | Description |
+|---------|------|-------------|
+| `/code` | Code | Full tool access — implement changes |
+| `/plan` | Architect | Read-only — explore, analyze, plan |
+| `/review` | Review | Read-only — review code for issues |
+| `/orch` | Orchestrator | Spawn and coordinate worker agents |
+
+The current mode is shown in the chat statusline.
+
+### Orchestrator Mode
+
+In orchestrator mode, Claude Code can spawn worker agents that run as independent subprocesses, each in their own tab. The workflow:
+
+1. Orchestrator proposes an agent — an inline approval block appears in chat
+2. You approve or reject the spawn
+3. On approval, the agent's tab opens and you can watch it work
+4. When the agent finishes, a report approval block appears in the agent's tab
+5. You approve or reject the report — the result returns to the orchestrator
 
 ### Plan Viewer Hook
 

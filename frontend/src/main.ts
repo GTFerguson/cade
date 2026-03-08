@@ -166,6 +166,7 @@ class App {
         const activeTab = this.tabManager.getActiveTab();
         const viewer = activeTab?.context?.getViewer();
         const layout = activeTab?.context?.getLayout();
+        const rightPane = activeTab?.context?.getRightPane();
 
         // If plan is active, close it first
         if (viewer?.isPlanActive()) {
@@ -177,13 +178,22 @@ class App {
           return;
         }
 
-        // Otherwise toggle viewer visibility
-        if (layout?.isViewerVisible()) {
-          layout.hideViewer();
-        } else {
+        if (!layout?.isViewerVisible()) {
+          // Hidden → show markdown
           layout?.showViewer();
-          // Reset right pane to markdown in case neovim was active
           activeTab?.context?.setRightPaneMode("markdown");
+          return;
+        }
+
+        const currentMode = rightPane?.getMode();
+        const hasAgents = activeTab?.context?.getAgentManager()?.hasAgents();
+
+        if (currentMode === "markdown" && hasAgents) {
+          // Markdown → agents (only when agents exist)
+          activeTab?.context?.setRightPaneMode("agents");
+        } else {
+          // Agents (or markdown with no agents) → hidden
+          layout?.hideViewer();
         }
       },
       viewLatestPlan: () => {
@@ -219,20 +229,22 @@ class App {
         const activeTab = this.tabManager.getActiveTab();
         const chatPane = activeTab?.context?.getTerminalManager()?.getChatPane();
         if (chatPane) {
-          const modes = ["architect", "code", "review"];
+          const modes = ["architect", "code", "review", "orchestrator"];
           const current = chatPane.getMode();
           const next = modes[(modes.indexOf(current) + 1) % modes.length]!;
-          activeTab?.ws.sendChatMessage(`/${next === "architect" ? "plan" : next}`);
+          const cmd = next === "architect" ? "plan" : next === "orchestrator" ? "orch" : next;
+          activeTab?.ws.sendChatMessage(`/${cmd}`);
         }
       },
       cycleModePrev: () => {
         const activeTab = this.tabManager.getActiveTab();
         const chatPane = activeTab?.context?.getTerminalManager()?.getChatPane();
         if (chatPane) {
-          const modes = ["architect", "code", "review"];
+          const modes = ["architect", "code", "review", "orchestrator"];
           const current = chatPane.getMode();
           const prev = modes[(modes.indexOf(current) + modes.length - 1) % modes.length]!;
-          activeTab?.ws.sendChatMessage(`/${prev === "architect" ? "plan" : prev}`);
+          const cmd = prev === "architect" ? "plan" : prev === "orchestrator" ? "orch" : prev;
+          activeTab?.ws.sendChatMessage(`/${cmd}`);
         }
       },
       showThemeSelector: () => {

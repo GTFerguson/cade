@@ -8,7 +8,7 @@ tags: [design, ui, ux, philosophy]
 
 # Visual Design Philosophy
 
-CADE's interface philosophy is rooted in terminal aesthetics and keyboard-first interaction. The UI feels like an extension of tmux/vim rather than a modern web application—intentional, minimal, and deeply respectful of keyboard-driven workflows.
+CADE's interface philosophy is rooted in terminal aesthetics and keyboard-first interaction. The UI inherits its design language from tmux and vim — monospace typography, bracket notation, screen-based navigation — while extending beyond raw terminal constraints with structured chat rendering, inline tool blocks, and multi-agent orchestration tabs. It should feel like a natural evolution of TUI tools, not a web app wearing a terminal skin.
 
 ## Core Principles
 
@@ -437,6 +437,10 @@ The user's own messages are deliberately de-emphasized. Focus belongs on the mod
 
 **Stream renderer lifecycle:** When tool calls or thinking blocks interrupt text, the current `StreamRenderer` is finalized before inserting the block. A new renderer is created for subsequent text, inside a `.chat-text-segment` wrapper to prevent markdown interference across boundaries.
 
+**Mode switching** — slash commands (`/code`, `/plan`, `/review`, `/orch`) change the CC subprocess's tool permissions and system prompt. The statusline reflects the active mode.
+
+**Agent approval blocks** — inline within the assistant message flow (same DOM parent as tool blocks). Rendered chronologically between the tool call that triggered the spawn and the synthesis text that follows.
+
 **Statusline:** Vim-style, bottom-pinned.
 - Mode: `CHAT` (API mode) or `CLAUDE CODE` (enhanced CC mode), `--accent-blue`
 - Provider: model name, `--accent-cyan`
@@ -775,4 +779,4 @@ Terminal aesthetics can conflict with accessibility:
 
 ---
 
-**Summary:** CADE's design is intentionally terminal-first. When in doubt, ask: "Would this feel at home in tmux?" If yes, proceed. If no, rethink.
+**Summary:** CADE's design is terminal-rooted but not terminal-bound. When in doubt, ask: "Does this feel like a natural evolution of tmux/vim, or does it feel like a web app?" The former is the target.

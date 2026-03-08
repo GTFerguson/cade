@@ -2,17 +2,16 @@
  * Agent overview pane for the right sidebar.
  *
  * Displays cards for each worker agent with state indicators,
- * mini-terminals showing recent output, and click-to-focus behavior.
+ * task description, text preview, and click-to-focus behavior.
  */
 
-import { Terminal } from "../terminal/terminal";
 import type { AgentManager, AgentInfo } from "./agent-manager";
 import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 
 export class AgentOverviewPane implements Component {
   private cards: Map<string, HTMLElement> = new Map();
-  private miniTerminals: Map<string, Terminal> = new Map();
+  private previews: Map<string, HTMLElement> = new Map();
   private activeAgentId: string | null = null;
   private onAgentSelectCallback: ((agentId: string) => void) | null = null;
 
@@ -25,18 +24,17 @@ export class AgentOverviewPane implements Component {
   initialize(): void {
     this.container.className = "agent-overview-pane";
     this.render();
+
+    // Subscribe to preview updates from AgentManager
+    this.agentManager.onPreviewUpdate((agentId, text, toolCount) => {
+      this.updatePreview(agentId, text, toolCount);
+    });
   }
 
-  /**
-   * Set callback for when an agent card is clicked.
-   */
   onAgentSelect(callback: (agentId: string) => void): void {
     this.onAgentSelectCallback = callback;
   }
 
-  /**
-   * Highlight the active agent card.
-   */
   setActiveAgent(agentId: string | null): void {
     this.activeAgentId = agentId;
     for (const [id, card] of this.cards.entries()) {
@@ -44,11 +42,9 @@ export class AgentOverviewPane implements Component {
     }
   }
 
-  /**
-   * Re-render all agent cards from current state.
-   */
   render(): void {
-    this.disposeCards();
+    this.cards.clear();
+    this.previews.clear();
     this.container.innerHTML = "";
 
     const agents = this.agentManager.getAgentList();
@@ -68,9 +64,6 @@ export class AgentOverviewPane implements Component {
     }
   }
 
-  /**
-   * Build a single agent card element.
-   */
   private buildCard(agent: AgentInfo): HTMLElement {
     const card = document.createElement("div");
     card.className = "agent-card";
@@ -87,35 +80,73 @@ export class AgentOverviewPane implements Component {
     labelEl.textContent = agent.label;
 
     const stateEl = document.createElement("span");
-    stateEl.className = `agent-card-state agent-state-${agent.state}`;
-    stateEl.textContent = agent.state;
+    stateEl.className = "agent-card-state-led";
+
+    const led = document.createElement("span");
+    led.className = `agent-led agent-led-${agent.state}`;
+
+    const stateText = document.createElement("span");
+    stateText.textContent = agent.state;
+
+    stateEl.appendChild(led);
+    stateEl.appendChild(stateText);
 
     header.appendChild(labelEl);
     header.appendChild(stateEl);
     card.appendChild(header);
 
-    // Mini-terminal container
-    const miniContainer = document.createElement("div");
-    miniContainer.className = "agent-card-mini-terminal";
-    card.appendChild(miniContainer);
+    // Task description
+    if (agent.task) {
+      const taskEl = document.createElement("div");
+      taskEl.className = "agent-card-task";
+      taskEl.textContent = agent.task.length > 80
+        ? agent.task.slice(0, 80) + "..."
+        : agent.task;
+      card.appendChild(taskEl);
+    }
 
-    const miniTerm = new Terminal(miniContainer, this.ws, {
-      sessionKey: agent.agentId,
-      subscribeToOutput: false,
-      hideCursor: true,
-      readOnly: true,
-      fontSize: 10,
-      rows: 6,
-      scrollback: 100,
-    });
-    miniTerm.initialize();
+    // Review-state report approval actions
+    if (agent.state === "review") {
+      const actions = document.createElement("div");
+      actions.className = "agent-card-actions";
 
-    this.miniTerminals.set(agent.agentId, miniTerm);
-    this.agentManager.registerMiniTerminal(agent.agentId, miniTerm);
+      const approveBtn = document.createElement("button");
+      approveBtn.className = "agent-approval-btn approve";
+      approveBtn.textContent = "Approve Report";
+      approveBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.ws.sendAgentApproveReport(agent.agentId);
+      });
 
-    // Click-to-focus (guard against kill button clicks if added later)
+      const rejectBtn = document.createElement("button");
+      rejectBtn.className = "agent-approval-btn reject";
+      rejectBtn.textContent = "Reject Report";
+      rejectBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.ws.sendAgentRejectReport(agent.agentId);
+      });
+
+      actions.appendChild(approveBtn);
+      actions.appendChild(rejectBtn);
+      card.appendChild(actions);
+    }
+
+    // Text preview
+    {
+      const previewEl = document.createElement("div");
+      previewEl.className = "agent-card-preview";
+      card.appendChild(previewEl);
+      this.previews.set(agent.agentId, previewEl);
+
+      const state = this.agentManager.getPreviewState(agent.agentId);
+      if (state) {
+        this.updatePreviewEl(previewEl, state.lastText, state.toolCount);
+      }
+    }
+
     card.addEventListener("click", (e) => {
-      if ((e.target as HTMLElement).closest(".agent-card-kill")) {
+      if ((e.target as HTMLElement).closest(".agent-card-kill") ||
+          (e.target as HTMLElement).closest(".agent-approval-btn")) {
         return;
       }
       this.onAgentSelectCallback?.(agent.agentId);
@@ -124,20 +155,29 @@ export class AgentOverviewPane implements Component {
     return card;
   }
 
-  /**
-   * Dispose all mini-terminals and cards.
-   */
-  private disposeCards(): void {
-    for (const [agentId, miniTerm] of this.miniTerminals.entries()) {
-      this.agentManager.unregisterMiniTerminal(agentId);
-      miniTerm.dispose();
+  private updatePreview(agentId: string, text: string, toolCount: number): void {
+    const previewEl = this.previews.get(agentId);
+    if (previewEl) {
+      this.updatePreviewEl(previewEl, text, toolCount);
     }
-    this.miniTerminals.clear();
-    this.cards.clear();
+  }
+
+  private updatePreviewEl(el: HTMLElement, text: string, toolCount: number): void {
+    // Show last ~100 chars of text + tool count
+    const lines: string[] = [];
+    if (toolCount > 0) {
+      lines.push(`${toolCount} tool${toolCount !== 1 ? "s" : ""} used`);
+    }
+    const snippet = text.slice(-100).trim();
+    if (snippet) {
+      lines.push(snippet);
+    }
+    el.textContent = lines.join("\n") || "waiting...";
   }
 
   dispose(): void {
-    this.disposeCards();
+    this.cards.clear();
+    this.previews.clear();
     this.container.innerHTML = "";
   }
 }

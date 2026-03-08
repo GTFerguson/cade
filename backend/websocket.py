@@ -112,6 +112,12 @@ class ConnectionHandler:
             await self._send_status("Connected")
             await self._send_connected()
 
+            # Register orchestrator broadcast so agent events reach this client
+            from backend.orchestrator.manager import get_orchestrator_manager
+            orchestrator = get_orchestrator_manager()
+            orchestrator.set_working_dir(self._working_dir)
+            orchestrator.register_broadcast(self._send)
+
             # Start output loop for claude terminal
             self._start_output_loop(SessionKey.CLAUDE)
             watch_task = asyncio.create_task(self._watch_loop())
@@ -294,6 +300,10 @@ class ConnectionHandler:
         self._closed = True
         get_connection_manager().unregister(self._ws)
         get_connection_registry().unregister(self._ws)
+
+        # Unregister orchestrator broadcast
+        from backend.orchestrator.manager import get_orchestrator_manager
+        get_orchestrator_manager().unregister_broadcast(self._send)
 
         # Cancel in-progress chat stream
         if self._chat_task is not None and not self._chat_task.done():
@@ -513,6 +523,14 @@ class ConnectionHandler:
                 await self._handle_neovim_input(data)
             elif msg_type == MessageType.NEOVIM_RESIZE:
                 await self._handle_neovim_resize(data)
+            elif msg_type == MessageType.AGENT_APPROVE:
+                await self._handle_agent_approve(data)
+            elif msg_type == MessageType.AGENT_REJECT:
+                await self._handle_agent_reject(data)
+            elif msg_type == MessageType.AGENT_APPROVE_REPORT:
+                await self._handle_agent_approve_report(data)
+            elif msg_type == MessageType.AGENT_REJECT_REPORT:
+                await self._handle_agent_reject_report(data)
             else:
                 raise ProtocolError.invalid_message(f"Unknown message type: {msg_type}")
 
@@ -772,11 +790,45 @@ class ConnectionHandler:
                 "cancelled": True,
             })
 
+    async def _handle_agent_approve(self, data: dict) -> None:
+        """Approve a pending agent to start execution."""
+        agent_id = data.get("agentId", "")
+        if not agent_id:
+            return
+        from backend.orchestrator.manager import get_orchestrator_manager
+        await get_orchestrator_manager().approve_agent(agent_id)
+
+    async def _handle_agent_reject(self, data: dict) -> None:
+        """Reject a pending agent."""
+        agent_id = data.get("agentId", "")
+        if not agent_id:
+            return
+        from backend.orchestrator.manager import get_orchestrator_manager
+        await get_orchestrator_manager().reject_agent(agent_id)
+
+    async def _handle_agent_approve_report(self, data: dict) -> None:
+        """Approve an agent's report."""
+        agent_id = data.get("agentId", "")
+        if not agent_id:
+            return
+        from backend.orchestrator.manager import get_orchestrator_manager
+        await get_orchestrator_manager().approve_report(agent_id)
+
+    async def _handle_agent_reject_report(self, data: dict) -> None:
+        """Reject an agent's report."""
+        agent_id = data.get("agentId", "")
+        if not agent_id:
+            return
+        from backend.orchestrator.manager import get_orchestrator_manager
+        await get_orchestrator_manager().reject_report(agent_id)
+
     CADE_MODE_COMMANDS = {
         "/plan": "architect",
         "/architect": "architect",
         "/code": "code",
         "/review": "review",
+        "/orch": "orchestrator",
+        "/orchestrator": "orchestrator",
     }
 
     async def _handle_mode_switch(self, mode: str) -> None:
@@ -786,7 +838,12 @@ class ConnectionHandler:
             provider = self._provider_registry.get_default()
 
         if isinstance(provider, ClaudeCodeProvider):
+            old_mode = provider.mode
             provider.set_mode(mode)
+            # Force a new CC session when entering/leaving orchestrator mode
+            # so MCP tools load fresh (resumed sessions remember stale MCP state)
+            if mode == "orchestrator" or old_mode == "orchestrator":
+                provider._has_session = False
 
         await self._send({
             "type": MessageType.CHAT_MODE_CHANGE,
@@ -851,9 +908,13 @@ class ConnectionHandler:
         if self._chat_session is None:
             return
 
-        # Set working directory for providers that need it (e.g. ClaudeCodeProvider)
+        # Set working directory and MCP config for ClaudeCodeProvider
         if isinstance(provider, ClaudeCodeProvider):
             provider.set_working_dir(self._working_dir)
+            if provider._mcp_config_path is None:
+                from backend.orchestrator.mcp_config import create_mcp_config
+                mcp_path = create_mcp_config(self._config.port)
+                provider.set_mcp_config(mcp_path)
 
         self._chat_session.start_response()
 

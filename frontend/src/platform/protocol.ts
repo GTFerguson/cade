@@ -55,6 +55,17 @@ export const MessageType = {
   CHAT_MODE_CHANGE: "chat-mode-change",
   PROVIDER_LIST: "provider-list",
 
+  // Orchestrator - Client -> Server
+  AGENT_APPROVE: "agent-approve",
+  AGENT_REJECT: "agent-reject",
+  AGENT_APPROVE_REPORT: "agent-approve-report",
+  AGENT_REJECT_REPORT: "agent-reject-report",
+
+  // Orchestrator - Server -> Client
+  AGENT_SPAWNED: "agent-spawned",
+  AGENT_KILLED: "agent-killed",
+  AGENT_STATE_CHANGED: "agent-state-changed",
+
   // Neovim - Client -> Server
   NEOVIM_SPAWN: "neovim-spawn",
   NEOVIM_KILL: "neovim-kill",
