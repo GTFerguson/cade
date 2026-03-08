@@ -103,6 +103,9 @@ export interface MiscKeybindingsConfig {
 
   cycleModeNext: string;
   cycleModePrev: string;
+
+  approveAgent: string;
+  rejectAgent: string;
 }
 
 /**
@@ -244,6 +247,9 @@ export const defaultUserConfig: UserConfig = {
 
       cycleModeNext: "m",
       cycleModePrev: "M",
+
+      approveAgent: "y",
+      rejectAgent: "n",
     },
     navigation: {
       scrollToTop: "g",

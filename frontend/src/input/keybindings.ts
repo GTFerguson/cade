@@ -13,7 +13,7 @@ import {
   type KeybindingsConfig,
 } from "../config/user-config";
 
-export type PaneType = "file-tree" | "terminal" | "viewer";
+export type PaneType = "file-tree" | "terminal" | "viewer" | "chat";
 
 /**
  * Determine whether a keydown event should be delegated to the focused pane's
@@ -25,6 +25,7 @@ export function shouldDelegateToPaneHandler(
   focusedPane: PaneType | undefined,
 ): boolean {
   if (focusedPane == null || focusedPane === "terminal") return false;
+  if (focusedPane === "chat") return true;
 
   const isXtermTextarea = target.classList.contains("xterm-helper-textarea");
 
@@ -57,6 +58,8 @@ export interface KeybindingCallbacks {
   toggleEnhanced: () => void;
   cycleModeNext: () => void;
   cycleModePrev: () => void;
+  approveAgent: () => void;
+  rejectAgent: () => void;
   showThemeSelector: () => void;
   getFocusedPane: () => PaneType;
   getPaneHandler: (pane: PaneType) => PaneKeyHandler | null;
@@ -404,6 +407,18 @@ export class KeybindingManager implements Component {
     }
     if (this.matchesBinding(e, config.misc.cycleModePrev)) {
       this.callbacks?.cycleModePrev();
+      this.onPrefixShortcutUsed();
+      return;
+    }
+
+    // Agent approval: prefix + y/n
+    if (this.matchesBinding(e, config.misc.approveAgent)) {
+      this.callbacks?.approveAgent();
+      this.onPrefixShortcutUsed();
+      return;
+    }
+    if (this.matchesBinding(e, config.misc.rejectAgent)) {
+      this.callbacks?.rejectAgent();
       this.onPrefixShortcutUsed();
       return;
     }

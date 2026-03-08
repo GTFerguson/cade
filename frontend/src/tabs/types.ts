@@ -70,6 +70,8 @@ export interface ProjectContext {
   switchToAgent(agentId: string | null): void;
   cycleAgent(direction: "next" | "prev"): void;
   getAgentManager(): AgentManager | null;
+  handleAgentApprove(): void;
+  handleAgentReject(): void;
 }
 
 /**

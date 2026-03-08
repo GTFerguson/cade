@@ -221,6 +221,11 @@ export class AgentManager implements Component {
     // No terminal key handler needed
   }
 
+  getActiveAgentState(): AgentState | null {
+    if (this.activeAgentId == null) return null;
+    return this.agents.get(this.activeAgentId)?.state ?? null;
+  }
+
   updateAgentState(agentId: string, state: AgentState): void {
     const entry = this.agents.get(agentId);
     if (entry) {
