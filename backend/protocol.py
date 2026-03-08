@@ -49,6 +49,17 @@ class MessageType:
     CHAT_MODE_CHANGE = "chat-mode-change"  # Mode switched: { type, mode: str }
     PROVIDER_LIST = "provider-list"  # Available providers: { type, providers: list, default?: str }
 
+    # Orchestrator - Client -> Server
+    AGENT_APPROVE = "agent-approve"  # Approve pending agent: { type, agentId }
+    AGENT_REJECT = "agent-reject"  # Reject pending agent: { type, agentId }
+    AGENT_APPROVE_REPORT = "agent-approve-report"  # Approve agent report: { type, agentId }
+    AGENT_REJECT_REPORT = "agent-reject-report"  # Reject agent report: { type, agentId }
+
+    # Orchestrator - Server -> Client
+    AGENT_SPAWNED = "agent-spawned"  # Agent created (pending approval): { type, agentId, name, task, mode }
+    AGENT_KILLED = "agent-killed"  # Agent terminated: { type, agentId }
+    AGENT_STATE_CHANGED = "agent-state-changed"  # Agent state update: { type, agentId, state }
+
     # Neovim - Client -> Server
     NEOVIM_SPAWN = "neovim-spawn"  # Request Neovim instance: { type, sessionId }
     NEOVIM_KILL = "neovim-kill"  # Terminate Neovim instance: { type, sessionId }

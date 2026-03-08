@@ -400,7 +400,7 @@ export interface ProviderSwitchMessage extends BaseMessage {
  */
 export interface ChatStreamMessage extends BaseMessage {
   type: "chat-stream";
-  event: "text-delta" | "done" | "error" | "tool-use-start" | "tool-result" | "thinking-delta" | "system-info";
+  event: "text-delta" | "done" | "error" | "tool-use-start" | "tool-result" | "thinking-delta" | "system-info" | "user-message" | "agent-approval-request" | "agent-approval-resolved" | "report-review-request";
   content?: string;
   usage?: Record<string, number>;
   message?: string;
@@ -409,12 +409,21 @@ export interface ChatStreamMessage extends BaseMessage {
   status?: string;
   cancelled?: boolean;
   cost?: number;
+  agentId?: string;
   // system-info fields
   model?: string;
   sessionId?: string;
   tools?: string[];
   slashCommands?: string[];
   version?: string;
+  // agent approval fields
+  targetAgentId?: string;
+  name?: string;
+  task?: string;
+  mode?: string;
+  resolution?: string;
+  // report review fields
+  report?: string;
 }
 
 /**
@@ -431,6 +440,34 @@ export interface ChatHistoryMessage extends BaseMessage {
 export interface ChatModeChangeMessage extends BaseMessage {
   type: "chat-mode-change";
   mode: string;
+}
+
+/**
+ * Agent spawned (server -> client).
+ */
+export interface AgentSpawnedMessage extends BaseMessage {
+  type: "agent-spawned";
+  agentId: string;
+  name: string;
+  task: string;
+  mode: string;
+}
+
+/**
+ * Agent killed (server -> client).
+ */
+export interface AgentKilledMessage extends BaseMessage {
+  type: "agent-killed";
+  agentId: string;
+}
+
+/**
+ * Agent state changed (server -> client).
+ */
+export interface AgentStateChangedMessage extends BaseMessage {
+  type: "agent-state-changed";
+  agentId: string;
+  state: string;
 }
 
 /**
@@ -491,7 +528,10 @@ export type ServerMessage =
   | NeovimReadyMessage
   | NeovimOutputMessage
   | NeovimRpcResponseMessage
-  | NeovimExitedMessage;
+  | NeovimExitedMessage
+  | AgentSpawnedMessage
+  | AgentKilledMessage
+  | AgentStateChangedMessage;
 
 /**
  * Event handler type.

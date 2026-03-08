@@ -8,7 +8,7 @@
 import { ChatPane } from "../chat/chat-pane";
 import { SessionKey, type SessionKeyValue, type AnySessionKey } from "../platform/protocol";
 import { Terminal, type CustomKeyHandler } from "./terminal";
-import type { Component, OutputMessage, SessionRestoredMessage } from "../types";
+import type { ChatStreamMessage, Component, OutputMessage, SessionRestoredMessage } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 import type { AgentManager } from "../agents";
 
@@ -27,7 +27,8 @@ export class TerminalManager implements Component {
   private statusIndicator: HTMLElement;
   private customKeyHandler: CustomKeyHandler | null = null;
   private agentManager: AgentManager | null = null;
-  private agentDropdown: HTMLElement | null = null;
+  private agentTabBar: HTMLElement;
+  private terminalContent: HTMLElement;
   private outputBuffer: Map<AnySessionKey, string[]> = new Map();
   private flushRafId: number | null = null;
   private flushTimeoutId: number | null = null;
@@ -35,12 +36,22 @@ export class TerminalManager implements Component {
   private boundHandlers = {
     output: (message: OutputMessage) => this.handleOutput(message),
     sessionRestored: (message: SessionRestoredMessage) => this.handleSessionRestored(message),
+    chatStream: (message: ChatStreamMessage) => this.handleAgentChatStream(message),
   };
 
   constructor(
     private container: HTMLElement,
     private ws: WebSocketClient
   ) {
+    // Agent tab bar (hidden until agents exist)
+    this.agentTabBar = document.createElement("div");
+    this.agentTabBar.className = "agent-tab-bar";
+    this.agentTabBar.style.display = "none";
+
+    // Wrapper for terminal content (flex-grow to fill remaining space)
+    this.terminalContent = document.createElement("div");
+    this.terminalContent.className = "terminal-content";
+
     // Create sub-containers for each terminal
     this.claudeContainer = document.createElement("div");
     this.claudeContainer.className = "terminal-container terminal-claude";
@@ -58,10 +69,13 @@ export class TerminalManager implements Component {
     this.statusIndicator.className = "terminal-status-indicator";
     this.updateStatusIndicator();
 
-    this.container.appendChild(this.claudeContainer);
-    this.container.appendChild(this.manualContainer);
-    this.container.appendChild(this.chatContainer);
-    this.container.appendChild(this.statusIndicator);
+    this.terminalContent.appendChild(this.claudeContainer);
+    this.terminalContent.appendChild(this.manualContainer);
+    this.terminalContent.appendChild(this.chatContainer);
+    this.terminalContent.appendChild(this.statusIndicator);
+
+    this.container.appendChild(this.agentTabBar);
+    this.container.appendChild(this.terminalContent);
   }
 
   /**
@@ -81,6 +95,9 @@ export class TerminalManager implements Component {
 
     // Subscribe to session-restored messages
     this.ws.on("session-restored", this.boundHandlers.sessionRestored);
+
+    // Route agent chat-stream events to AgentManager
+    this.ws.on("chat-stream", this.boundHandlers.chatStream);
   }
 
   /**
@@ -179,11 +196,6 @@ export class TerminalManager implements Component {
    * Handle output message and route to correct terminal.
    */
   private handleOutput(message: OutputMessage): void {
-    // Delegate agent output to AgentManager first
-    if (this.agentManager?.routeOutput(message)) {
-      return;
-    }
-
     const sessionKey = message.sessionKey ?? SessionKey.CLAUDE;
 
     // Append to buffer
@@ -252,11 +264,6 @@ export class TerminalManager implements Component {
    * Handle session restored message.
    */
   private handleSessionRestored(message: SessionRestoredMessage): void {
-    // Delegate agent scrollback to AgentManager first
-    if (this.agentManager?.routeSessionRestored(message)) {
-      return;
-    }
-
     const sessionKey = message.sessionKey ?? SessionKey.CLAUDE;
 
     if (sessionKey === SessionKey.CLAUDE) {
@@ -267,6 +274,16 @@ export class TerminalManager implements Component {
       this.ensureManualTerminal();
       this.manualTerminal?.reset();
       this.manualTerminal?.write(message.scrollback);
+    }
+  }
+
+  /**
+   * Route agent chat-stream events to AgentManager.
+   * Primary events (no agentId) are handled by ChatPane's own subscription.
+   */
+  private handleAgentChatStream(message: ChatStreamMessage): void {
+    if (message.agentId && this.agentManager) {
+      this.agentManager.routeChatStream(message);
     }
   }
 
@@ -379,65 +396,43 @@ export class TerminalManager implements Component {
   }
 
   /**
-   * Update the status indicator text.
-   */
-  /**
-   * Update status indicator text. Shows agent label when an agent is focused,
-   * with a dropdown for switching between agents.
+   * Update status indicator and agent tab bar.
    */
   updateStatusIndicator(): void {
+    // Rebuild the agent tab bar on every status update
+    this.renderAgentTabBar();
+
+    const hasAgents = this.agentManager?.hasAgents() ?? false;
     const activeAgentId = this.agentManager?.getActiveAgentId();
 
-    if (activeAgentId != null) {
-      // Agent is active — show its label
-      const agents = this.agentManager?.getAgentList() ?? [];
-      const activeAgent = agents.find((a) => a.agentId === activeAgentId);
-      const label = activeAgent?.label ?? activeAgentId.replace("agent-", "");
-      const side = this.agentManager?.getActiveSide() ?? "claude";
-
+    if (hasAgents) {
+      // Tab bar handles agent switching — status indicator shows side label only
       this.statusIndicator.innerHTML = "";
       this.statusIndicator.classList.remove("claude", "shell");
 
-      const labelSpan = document.createElement("span");
-      labelSpan.className = "terminal-status-label";
-      labelSpan.textContent = `[${label} ▾]`;
-      labelSpan.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.toggleAgentDropdown();
-      });
-
-      const sideSpan = document.createElement("span");
-      sideSpan.className = side === "claude" ? "terminal-status-claude" : "terminal-status-shell";
-      sideSpan.textContent = side === "claude" ? " / [claude]" : " / [shell]";
-
-      this.statusIndicator.appendChild(labelSpan);
-      this.statusIndicator.appendChild(sideSpan);
-      this.statusIndicator.classList.add(side === "claude" ? "claude" : "shell");
-    } else if (this.agentManager?.hasAgents()) {
-      // Primary is active but agents exist — show "main ▾"
-      this.statusIndicator.innerHTML = "";
-      this.statusIndicator.classList.remove("shell");
-      this.statusIndicator.classList.add("claude");
-
-      const labelSpan = document.createElement("span");
-      labelSpan.className = "terminal-status-label";
-      labelSpan.textContent = "[main ▾]";
-      labelSpan.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.toggleAgentDropdown();
-      });
-
-      const sideSpan = document.createElement("span");
-      if (this.activeTerminal === SessionKey.CLAUDE) {
-        sideSpan.className = "terminal-status-claude";
-        sideSpan.textContent = " / [claude]";
+      if (activeAgentId != null) {
+        const side = this.agentManager?.getActiveSide() ?? "claude";
+        this.statusIndicator.textContent = side === "claude" ? "[claude]" : "[shell]";
+        this.statusIndicator.classList.add(side === "claude" ? "claude" : "shell");
       } else {
-        sideSpan.className = "terminal-status-shell";
-        sideSpan.textContent = " / [shell]";
+        // On ORCH tab — show the standard mode label
+        if (this.mode === "chat") {
+          const isChatVisible = this.chatContainer.style.display !== "none";
+          if (isChatVisible) {
+            this.statusIndicator.textContent = this.enhanced ? "[claude code]" : "[chat]";
+            this.statusIndicator.classList.add("claude");
+          } else {
+            this.statusIndicator.textContent = "[shell]";
+            this.statusIndicator.classList.add("shell");
+          }
+        } else if (this.activeTerminal === SessionKey.CLAUDE) {
+          this.statusIndicator.textContent = "[claude]";
+          this.statusIndicator.classList.add("claude");
+        } else {
+          this.statusIndicator.textContent = "[shell]";
+          this.statusIndicator.classList.add("shell");
+        }
       }
-
-      this.statusIndicator.appendChild(labelSpan);
-      this.statusIndicator.appendChild(sideSpan);
     } else {
       // No agents — show mode-appropriate labels
       this.statusIndicator.innerHTML = "";
@@ -465,65 +460,49 @@ export class TerminalManager implements Component {
   }
 
   /**
-   * Toggle the agent dropdown in the status bar.
+   * Build/rebuild the agent tab bar. Called from updateStatusIndicator.
    */
-  private toggleAgentDropdown(): void {
-    if (this.agentDropdown) {
-      this.agentDropdown.remove();
-      this.agentDropdown = null;
-      return;
-    }
-
-    const dropdown = document.createElement("div");
-    dropdown.className = "terminal-agent-dropdown";
-
-    // Primary option
-    const primaryOption = document.createElement("div");
-    primaryOption.className = "terminal-agent-option";
-    if (this.agentManager?.getActiveAgentId() == null) {
-      primaryOption.classList.add("active");
-    }
-    primaryOption.textContent = "[main]";
-    primaryOption.addEventListener("click", () => {
-      this.agentManager?.switchToAgent(null);
-      this.hideAgentDropdown();
-    });
-    dropdown.appendChild(primaryOption);
-
-    // Agent options
+  private renderAgentTabBar(): void {
     const agents = this.agentManager?.getAgentList() ?? [];
-    for (const agent of agents) {
-      const option = document.createElement("div");
-      option.className = "terminal-agent-option";
-      if (agent.agentId === this.agentManager?.getActiveAgentId()) {
-        option.classList.add("active");
-      }
-      option.textContent = `[${agent.label}]`;
-      option.addEventListener("click", () => {
+    const hasAgents = agents.length > 0;
+
+    this.agentTabBar.style.display = hasAgents ? "" : "none";
+    if (!hasAgents) return;
+
+    this.agentTabBar.innerHTML = "";
+
+    const activeAgentId = this.agentManager?.getActiveAgentId() ?? null;
+
+    // ORCH tab — always first
+    const orchTab = document.createElement("span");
+    orchTab.className = "agent-tab agent-tab-orch";
+    if (activeAgentId == null) orchTab.classList.add("agent-tab-active");
+    orchTab.textContent = "ORCH";
+    orchTab.addEventListener("click", () => {
+      this.agentManager?.switchToAgent(null);
+    });
+    this.agentTabBar.appendChild(orchTab);
+
+    // Agent tabs — numbered 1, 2, 3...
+    agents.forEach((agent, index) => {
+      const tab = document.createElement("span");
+      tab.className = "agent-tab";
+      if (agent.agentId === activeAgentId) tab.classList.add("agent-tab-active");
+
+      const led = document.createElement("span");
+      led.className = `agent-led agent-led-${agent.state}`;
+
+      const label = document.createTextNode(`${index + 1}`);
+
+      tab.appendChild(led);
+      tab.appendChild(label);
+      tab.title = `${agent.label} (${agent.state})\n${agent.task?.slice(0, 100) ?? ""}`;
+      tab.addEventListener("click", () => {
         this.agentManager?.switchToAgent(agent.agentId);
-        this.hideAgentDropdown();
       });
-      dropdown.appendChild(option);
-    }
 
-    this.statusIndicator.appendChild(dropdown);
-    this.agentDropdown = dropdown;
-
-    // Close on outside click
-    const closeHandler = (e: MouseEvent) => {
-      if (!dropdown.contains(e.target as Node) && !this.statusIndicator.contains(e.target as Node)) {
-        this.hideAgentDropdown();
-        document.removeEventListener("click", closeHandler);
-      }
-    };
-    setTimeout(() => document.addEventListener("click", closeHandler), 0);
-  }
-
-  private hideAgentDropdown(): void {
-    if (this.agentDropdown) {
-      this.agentDropdown.remove();
-      this.agentDropdown = null;
-    }
+      this.agentTabBar.appendChild(tab);
+    });
   }
 
   /**
@@ -694,10 +673,12 @@ export class TerminalManager implements Component {
     // Unregister WebSocket handlers
     this.ws.off("output", this.boundHandlers.output);
     this.ws.off("session-restored", this.boundHandlers.sessionRestored);
+    this.ws.off("chat-stream", this.boundHandlers.chatStream);
 
     this.claudeTerminal?.dispose();
     this.manualTerminal?.dispose();
     this.chatPane?.dispose();
     this.statusIndicator.remove();
+    this.agentTabBar.remove();
   }
 }

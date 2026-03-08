@@ -12,7 +12,7 @@ Welcome to the CADE documentation. This is the main navigation hub for all proje
 
 ## What is CADE?
 
-**CADE** (Claude Agentic Development Environment) is an agent-first development environment with Claude Code in a terminal shell as its centerpiece. The interface provides a unified workspace where AI-assisted development is the primary workflow.
+**CADE** (Claude Agentic Development Environment) is an agent-first development environment built around Claude Code. The interface inherits its aesthetic and workflow philosophy from terminal tools (tmux, vim) while extending beyond terminal constraints with structured chat rendering, mode-based workflows, and multi-agent orchestration.
 
 ### Access Anywhere, Any Device
 

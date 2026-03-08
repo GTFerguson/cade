@@ -267,6 +267,12 @@ class LoginRequest(BaseModel):
     token: str
 
 
+class SpawnAgentRequest(BaseModel):
+    name: str
+    task: str
+    mode: str = "code"
+
+
 async def _send_to_connections(connections: list, message: dict) -> int:
     """Send a message to a list of WebSocket connections.
 
@@ -478,6 +484,109 @@ def create_app(config: Config | None = None) -> FastAPI:
         if not cfg.auth_enabled or validate_session_cookie(cade_session or "", cfg):
             return JSONResponse({"authenticated": True})
         return JSONResponse({"authenticated": False}, status_code=401)
+
+    # --- Orchestrator API ---
+
+    @app.post("/api/orchestrator/spawn")
+    async def orchestrator_spawn(body: SpawnAgentRequest) -> JSONResponse:
+        """Spawn an orchestrator agent."""
+        from backend.orchestrator.manager import get_orchestrator_manager
+        from backend.orchestrator.models import AgentSpec
+
+        manager = get_orchestrator_manager()
+        spec = AgentSpec(name=body.name, task=body.task, mode=body.mode)
+        record = await manager.spawn_agent(spec)
+        return JSONResponse({
+            "agent_id": record.agent_id,
+            "name": record.name,
+            "state": record.state.value,
+        })
+
+    @app.get("/api/orchestrator/status/{agent_id}")
+    async def orchestrator_status(agent_id: str) -> JSONResponse:
+        """Get agent status."""
+        from backend.orchestrator.manager import get_orchestrator_manager
+
+        manager = get_orchestrator_manager()
+        status = manager.get_status(agent_id)
+        if status is None:
+            return JSONResponse({"error": "Agent not found"}, status_code=404)
+        return JSONResponse(status)
+
+    @app.get("/api/orchestrator/report/{agent_id}")
+    async def orchestrator_report(agent_id: str) -> JSONResponse:
+        """Get agent report."""
+        from backend.orchestrator.manager import get_orchestrator_manager
+
+        manager = get_orchestrator_manager()
+        report = manager.get_report(agent_id)
+        if report is None:
+            return JSONResponse({"error": "Agent not found"}, status_code=404)
+        return JSONResponse(report)
+
+    @app.get("/api/orchestrator/agents")
+    async def orchestrator_list() -> JSONResponse:
+        """List all agents."""
+        from backend.orchestrator.manager import get_orchestrator_manager
+
+        manager = get_orchestrator_manager()
+        return JSONResponse(manager.list_agents())
+
+    @app.post("/api/orchestrator/approve/{agent_id}")
+    async def orchestrator_approve(agent_id: str) -> JSONResponse:
+        """Approve a pending agent to start execution."""
+        from backend.orchestrator.manager import get_orchestrator_manager
+
+        manager = get_orchestrator_manager()
+        ok = await manager.approve_agent(agent_id)
+        if not ok:
+            return JSONResponse({"error": "Agent not found or not pending"}, status_code=400)
+        return JSONResponse({"status": "approved"})
+
+    @app.post("/api/orchestrator/reject/{agent_id}")
+    async def orchestrator_reject(agent_id: str) -> JSONResponse:
+        """Reject a pending agent."""
+        from backend.orchestrator.manager import get_orchestrator_manager
+
+        manager = get_orchestrator_manager()
+        ok = await manager.reject_agent(agent_id)
+        if not ok:
+            return JSONResponse({"error": "Agent not found or not pending"}, status_code=400)
+        return JSONResponse({"status": "rejected"})
+
+    @app.post("/api/orchestrator/spawn-and-wait")
+    async def orchestrator_spawn_and_wait(body: SpawnAgentRequest) -> JSONResponse:
+        """Spawn an agent and block until its full lifecycle completes."""
+        from backend.orchestrator.manager import get_orchestrator_manager
+        from backend.orchestrator.models import AgentSpec
+
+        manager = get_orchestrator_manager()
+        spec = AgentSpec(name=body.name, task=body.task, mode=body.mode)
+        record = await manager.spawn_agent(spec)
+        result = await manager.await_completion(record.agent_id, timeout=3600.0)
+        return JSONResponse(result)
+
+    @app.post("/api/orchestrator/approve-report/{agent_id}")
+    async def orchestrator_approve_report(agent_id: str) -> JSONResponse:
+        """Approve an agent's report."""
+        from backend.orchestrator.manager import get_orchestrator_manager
+
+        manager = get_orchestrator_manager()
+        ok = await manager.approve_report(agent_id)
+        if not ok:
+            return JSONResponse({"error": "Agent not found or not in review"}, status_code=400)
+        return JSONResponse({"status": "approved"})
+
+    @app.post("/api/orchestrator/reject-report/{agent_id}")
+    async def orchestrator_reject_report(agent_id: str) -> JSONResponse:
+        """Reject an agent's report."""
+        from backend.orchestrator.manager import get_orchestrator_manager
+
+        manager = get_orchestrator_manager()
+        ok = await manager.reject_report(agent_id)
+        if not ok:
+            return JSONResponse({"error": "Agent not found or not in review"}, status_code=400)
+        return JSONResponse({"status": "rejected"})
 
     # --- Frontend serving ---
 

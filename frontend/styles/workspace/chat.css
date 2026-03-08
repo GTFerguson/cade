@@ -466,9 +466,10 @@
   font-weight: 600;
 }
 
-.chat-statusline .status-mode.architect { color: var(--accent-orange); }
-.chat-statusline .status-mode.code      { color: var(--accent-green); }
-.chat-statusline .status-mode.review    { color: var(--accent-blue); }
+.chat-statusline .status-mode.architect    { color: var(--accent-orange); }
+.chat-statusline .status-mode.code         { color: var(--accent-green); }
+.chat-statusline .status-mode.review       { color: var(--accent-blue); }
+.chat-statusline .status-mode.orchestrator { color: var(--accent-yellow); }
 
 .chat-statusline .status-provider {
   color: var(--accent-cyan);
@@ -583,4 +584,93 @@
 
 .chat-message-content .mermaid-container:hover {
   border-color: var(--accent-blue);
+}
+
+/* --- Inline agent approval block (in orchestrator ChatPane) --- */
+
+.chat-agent-approval {
+  margin: 12px 16px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+}
+
+.chat-agent-approval-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.chat-agent-approval-task {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 4px;
+}
+
+.chat-agent-approval-mode {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.chat-agent-approval-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-agent-approval-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 0;
+}
+
+.chat-agent-approval-status.approved {
+  color: var(--accent-green);
+}
+
+.chat-agent-approval-status.rejected {
+  color: var(--accent-red);
+}
+
+/* --- Report review block (in agent ChatPane) --- */
+
+.chat-report-review {
+  margin: 12px 16px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+}
+
+.chat-report-review-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.chat-report-review-preview {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 150px;
+  overflow-y: auto;
+  margin-bottom: 4px;
+  padding: 6px;
+  background: var(--bg-primary);
+}
+
+.chat-report-review-cost {
+  font-size: 10px;
+  color: var(--accent-orange);
+  margin-bottom: 8px;
 }

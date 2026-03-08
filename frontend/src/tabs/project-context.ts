@@ -5,7 +5,7 @@
  * for a single project tab.
  */
 
-import { AgentManager } from "../agents";
+import { AgentManager, type AgentState } from "../agents";
 import { FileTree } from "../file-tree";
 import type { PaneKeyHandler, PaneType } from "../input/keybindings";
 import { wrapIndex } from "../nav";
@@ -250,16 +250,24 @@ export class ProjectContextImpl implements IProjectContext {
     this.ws.on("auth-failed", this.boundHandlers.authFailed);
 
     // Agent lifecycle events
-    this.ws.on("agent-spawned" as any, (msg: any) => {
-      this.agentManager?.createAgent(msg.agentId, msg.label, msg.role ?? "worker");
+    this.ws.on("agent-spawned", (msg) => {
+      this.agentManager?.createAgent(msg.agentId, msg.name, "worker", msg.task);
+      // Auto-switch to the new agent tab (fires after user approved the spawn)
+      this.agentManager?.switchToAgent(msg.agentId);
       this.terminalManager?.updateStatusIndicator();
+      this.rightPane?.getAgentPane()?.render();
+      // Show agent overview in right pane
+      this.rightPane?.setMode("agents");
     });
-    this.ws.on("agent-killed" as any, (msg: any) => {
+    this.ws.on("agent-killed", (msg) => {
       this.agentManager?.destroyAgent(msg.agentId);
       this.terminalManager?.updateStatusIndicator();
+      this.rightPane?.getAgentPane()?.render();
     });
-    this.ws.on("agent-state-changed" as any, (msg: any) => {
-      this.agentManager?.updateAgentState(msg.agentId, msg.state);
+    this.ws.on("agent-state-changed", (msg) => {
+      this.agentManager?.updateAgentState(msg.agentId, msg.state as AgentState);
+      this.terminalManager?.updateStatusIndicator();
+      this.rightPane?.getAgentPane()?.render();
     });
 
     this.hide();

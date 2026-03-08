@@ -15,11 +15,11 @@ This section contains planned features, improvements, and the project roadmap.
 
 ## Vision
 
-CADE (Claude Agentic Development Environment) is an agent-first development environment with Claude Code in a terminal shell as its centerpiece. The interface provides a unified workspace where AI-assisted development is the primary workflow.
+CADE (Claude Agentic Development Environment) is an agent-first development environment built around Claude Code. The interface inherits its aesthetic and workflow philosophy from terminal tools (tmux, vim) while extending beyond terminal constraints with structured chat rendering, mode-based workflows, and multi-agent orchestration.
 
 ## Current Status
 
-Core MVP is functional with multi-project tabs, three-pane layout, session persistence, mobile interface, and remote deployment.
+Core platform is functional with multi-project tabs, three-pane layout, session persistence, mobile interface, remote deployment, enhanced CC mode with structured chat, mode switching (architect/code/review/orchestrator), and multi-agent orchestration.
 
 ## Recently Implemented
 
@@ -63,6 +63,38 @@ Implemented in [[../technical/core/frontend-architecture#Tab System|Frontend Arc
 - Session state persisted in `.cade/session.json`
 - Obsidian-style tab bar above terminal pane
 - Remote project tabs via SSH tunnel or direct connection
+
+### Enhanced Claude Code Mode ✓
+
+Structured chat interface that runs Claude Code as a subprocess with `--output-format stream-json`, rendering output in a rich ChatPane instead of a raw terminal.
+
+- Real-time streaming via PTY (bypasses Node.js block-buffering)
+- Markdown rendering with mertex.md (code blocks, KaTeX, tables)
+- Inline tool-use blocks with status indicators (`▸` running, `✓` done, `✗` failed)
+- Collapsible thinking blocks (auto-collapse when complete)
+- Session continuity via `--resume` across multi-turn conversations
+- Slash command support with autocomplete hints
+
+### Mode System ✓
+
+Roo-inspired mode switching via slash commands, each constraining Claude Code's tool access and system prompt.
+
+| Mode | Command | Access |
+|------|---------|--------|
+| Code | `/code` | Full tool access — implement changes |
+| Architect | `/plan` | Read-only — explore, analyze, create plans |
+| Review | `/review` | Read-only — review code for bugs and improvements |
+| Orchestrator | `/orch` | Multi-agent — spawn and coordinate worker agents |
+
+### Multi-Agent Orchestrator ✓
+
+Orchestrator mode enables spawning worker agents that run as independent Claude Code subprocesses, coordinated through MCP tools.
+
+- Two-gate approval flow: spawn approval (in orchestrator chat) → agent executes → report approval (in agent tab)
+- Each agent gets its own tab with full ChatPane output
+- MCP server provides `spawn_agent` and `list_agents` tools to the orchestrator CC instance
+- Blocking lifecycle: MCP tool blocks until agent report is approved/rejected, then returns the result
+- Agent overview pane with state indicators and management controls
 
 ## Planned Features
 
