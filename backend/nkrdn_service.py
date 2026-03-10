@@ -135,10 +135,6 @@ def _run_nkrdn_rebuild(project_dir: Path) -> subprocess.CompletedProcess:
         env=env,
     )
 
-    # Clean up staging dir after build
-    if staging_dir.exists():
-        shutil.rmtree(staging_dir, ignore_errors=True)
-
     return result
 
 
