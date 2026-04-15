@@ -62,79 +62,212 @@ export function parseYaml(yaml: string): Frontmatter {
   return result;
 }
 
+// ─── Rendering ──────────────────────────────────────────────────────────
+
+/** Match a whole-value wiki-link: the entire string is a single ``[[X]]``. */
+const WIKILINK_WHOLE_RE = /^\s*\[\[([^\]|#\n]+?)(?:\|([^\]\n]*))?\]\]\s*$/;
+
+/** URL pattern — plain http/https. Matches the full trimmed string. */
+const URL_RE = /^https?:\/\/\S+$/i;
+
+/** ISO-ish date pattern: ``YYYY-MM-DD`` optionally followed by time. */
+const DATE_RE = /^\d{4}-\d{2}-\d{2}(?:[T ][\d:]+.*)?$/;
+
 /**
- * Render frontmatter as a styled block.
+ * Render frontmatter as a typed inspector panel.
+ *
+ * Visual shape:
+ * - Red gutter rail on the left (single source of "this is metadata").
+ * - Two-column CSS grid: fixed-width label column, fluid value column.
+ * - No header row, no title, no count — the label column does the work.
+ *
+ * Each value is type-detected and rendered with its own vocabulary:
+ * - Whole ``[[X]]`` → ``.ir-relation`` (clickable wiki-link, → prefix).
+ * - URL → ``.ir-url`` with ↗ glyph, dotted underline.
+ * - Date → ``.ir-date`` (accent-yellow, tabular nums).
+ * - Number → ``.ir-number`` (accent-green, tabular nums).
+ * - Boolean → ``.ir-bool`` bracket-checkbox.
+ * - Comma-joined string → multiple ``.ir-enum`` spans with ``·`` separator
+ *   (except the ``title`` field, which always renders whole).
+ * - Plain string → ``.ir-scalar``.
+ * - Empty / null / [] → ``.ir-empty`` placeholder.
  */
 export function renderFrontmatter(frontmatter: Frontmatter): HTMLElement {
   const container = document.createElement("div");
   container.className = "frontmatter";
 
+  const rows = document.createElement("div");
+  rows.className = "frontmatter-rows";
+
   for (const [key, value] of Object.entries(frontmatter)) {
     const row = document.createElement("div");
     row.className = "frontmatter-row";
 
-    const keySpan = document.createElement("span");
-    keySpan.className = "frontmatter-key";
-    keySpan.textContent = key;
+    const label = document.createElement("div");
+    label.className = "frontmatter-label";
+    label.textContent = key;
 
-    const separator = document.createElement("span");
-    separator.className = "frontmatter-separator";
-    separator.textContent = ": ";
+    const valueEl = document.createElement("div");
+    valueEl.className = "frontmatter-value";
+    renderValue(valueEl, key, value);
 
-    const valueSpan = document.createElement("span");
-    valueSpan.className = "frontmatter-value";
-    valueSpan.appendChild(renderValueWithWikiLinks(formatFrontmatterValue(value)));
-
-    row.appendChild(keySpan);
-    row.appendChild(separator);
-    row.appendChild(valueSpan);
-    container.appendChild(row);
+    row.appendChild(label);
+    row.appendChild(valueEl);
+    rows.appendChild(row);
   }
 
+  container.appendChild(rows);
   return container;
 }
 
-/**
- * Format a frontmatter value for display.
- */
-export function formatFrontmatterValue(value: unknown): string {
+function renderValue(container: HTMLElement, key: string, value: unknown): void {
+  // Empty / null / empty array
+  if (
+    value == null ||
+    value === "" ||
+    (Array.isArray(value) && value.length === 0)
+  ) {
+    container.appendChild(makeEmpty());
+    return;
+  }
+
+  if (typeof value === "boolean") {
+    container.appendChild(makeBool(value));
+    return;
+  }
+
+  if (typeof value === "number") {
+    container.appendChild(makeNumber(value));
+    return;
+  }
+
   if (Array.isArray(value)) {
-    return value.join(", ");
+    for (const item of value) {
+      renderStringValue(container, key, String(item));
+    }
+    return;
   }
-  if (value === null || value === undefined) {
-    return "";
-  }
-  return String(value);
+
+  renderStringValue(container, key, String(value));
 }
 
-/**
- * Convert a string containing ``[[Page]]`` or ``[[Page|Display]]`` patterns
- * into a DocumentFragment of text nodes interleaved with ``<a class="wiki-link">``
- * anchors. The anchors carry the same shape (``data-path`` attribute) as the
- * marked extension's output, so {@link attachWikiLinkHandlers} picks them up
- * automatically when called on a parent container.
- */
-function renderValueWithWikiLinks(value: string): DocumentFragment {
-  const fragment = document.createDocumentFragment();
-  const re = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(value)) !== null) {
-    if (match.index > lastIndex) {
-      fragment.appendChild(document.createTextNode(value.slice(lastIndex, match.index)));
+function renderStringValue(container: HTMLElement, key: string, str: string): void {
+  // Whole-value wiki-link → relation pointer.
+  const whole = WIKILINK_WHOLE_RE.exec(str);
+  if (whole) {
+    container.appendChild(makeRelation(whole[1]!, whole[2]));
+    return;
+  }
+
+  // Title is always rendered whole — commas inside titles are real commas,
+  // not enum separators ("Aela, Goddess of Light" shouldn't split).
+  if (key.toLowerCase() === "title") {
+    container.appendChild(makeTitle(str));
+    return;
+  }
+
+  const trimmed = str.trim();
+
+  if (URL_RE.test(trimmed)) {
+    container.appendChild(makeUrl(trimmed));
+    return;
+  }
+
+  if (DATE_RE.test(trimmed)) {
+    container.appendChild(makeDate(trimmed));
+    return;
+  }
+
+  // Comma-joined enum list.
+  if (str.includes(", ")) {
+    for (const part of str.split(", ")) {
+      container.appendChild(makeEnum(part.trim()));
     }
-    const path = (match[1] ?? "").trim();
-    const display = (match[2] ?? match[1] ?? "").trim();
-    const link = document.createElement("a");
-    link.href = "#";
-    link.className = "wiki-link";
-    link.dataset["path"] = path;
-    link.textContent = display;
-    fragment.appendChild(link);
-    lastIndex = match.index + match[0].length;
+    return;
   }
-  if (lastIndex < value.length) {
-    fragment.appendChild(document.createTextNode(value.slice(lastIndex)));
-  }
-  return fragment;
+
+  container.appendChild(makeScalar(str));
+}
+
+function makeTitle(text: string): HTMLElement {
+  const el = document.createElement("span");
+  el.className = "ir-title";
+  el.textContent = text;
+  return el;
+}
+
+function makeScalar(text: string): HTMLElement {
+  const el = document.createElement("span");
+  el.className = "ir-scalar";
+  el.textContent = text;
+  return el;
+}
+
+function makeEnum(text: string): HTMLElement {
+  const el = document.createElement("span");
+  el.className = "ir-enum";
+  el.textContent = text;
+  return el;
+}
+
+function makeRelation(target: string, alias: string | undefined): HTMLElement {
+  // ``ir-relation`` carries the → prefix + purple/cyan hover;
+  // ``wiki-link`` + ``data-path`` hook into the existing
+  // attachWikiLinkHandlers so clicks navigate via the same plumbing
+  // the body content uses.
+  const link = document.createElement("a");
+  link.href = "#";
+  link.className = "wiki-link ir-relation";
+  link.dataset["path"] = target.trim();
+
+  const display = (alias ?? basename(target)).trim();
+  const inner = document.createElement("span");
+  inner.className = "target";
+  inner.textContent = display;
+  link.appendChild(inner);
+  return link;
+}
+
+function makeUrl(url: string): HTMLElement {
+  const link = document.createElement("a");
+  link.className = "ir-url";
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  // Trim protocol for display — trailing slashes kept so users see real url.
+  link.textContent = url.replace(/^https?:\/\//i, "");
+  return link;
+}
+
+function makeNumber(value: number): HTMLElement {
+  const el = document.createElement("span");
+  el.className = "ir-number";
+  el.textContent = String(value);
+  return el;
+}
+
+function makeDate(text: string): HTMLElement {
+  const el = document.createElement("span");
+  el.className = "ir-date";
+  el.textContent = text;
+  return el;
+}
+
+function makeBool(value: boolean): HTMLElement {
+  const el = document.createElement("span");
+  el.className = `ir-bool ir-bool--${value ? "true" : "false"}`;
+  el.textContent = value ? "true" : "false";
+  return el;
+}
+
+function makeEmpty(): HTMLElement {
+  const el = document.createElement("span");
+  el.className = "ir-empty";
+  el.textContent = "— unset —";
+  return el;
+}
+
+function basename(path: string): string {
+  const last = path.split("/").pop() ?? path;
+  return last.replace(/\.md$/i, "");
 }

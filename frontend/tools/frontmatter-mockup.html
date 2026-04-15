@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CADE Frontmatter — Visual Overhaul</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ── CADE Design System ──────────────────────────────────────────────── */
+  :root {
+    --bg-primary: #0a0a09;
+    --bg-secondary: #111110;
+    --bg-tertiary: #1a1918;
+    --bg-hover: #222120;
+    --bg-selected: #222120;
+    --border-color: #2a2827;
+    --text-primary: #f8f6f2;
+    --text-secondary: #c4b9ad;
+    --text-muted: #5e5955;
+    --text-faint: #3a3632;
+    --accent-red: #ff2c4b;
+    --accent-green: #aeee00;
+    --accent-blue: #0a9dff;
+    --accent-orange: #ffa724;
+    --accent-yellow: #fade3e;
+    --accent-cyan: #8cffba;
+    --accent-purple: #ff9eb8;
+    --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas", monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    background: #050505;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.5;
+    letter-spacing: 0.4px;
+  }
+
+  body {
+    min-height: 100vh;
+    padding: 56px 32px 96px;
+    background:
+      radial-gradient(circle at 20% 10%, rgba(255, 44, 75, 0.05), transparent 40%),
+      radial-gradient(circle at 80% 60%, rgba(10, 157, 255, 0.04), transparent 50%),
+      #050505;
+  }
+
+  .shell {
+    max-width: 1160px;
+    margin: 0 auto;
+  }
+
+  /* ── Page masthead ────────────────────────────────────────────────────── */
+  .masthead {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: baseline;
+    gap: 20px;
+    padding-bottom: 20px;
+    margin-bottom: 56px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .masthead::before,
+  .masthead::after {
+    content: "";
+    display: none;
+  }
+  .masthead-tag {
+    color: var(--accent-red);
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .masthead-title {
+    color: var(--text-primary);
+    font-size: 22px;
+    letter-spacing: 1.5px;
+    font-weight: 500;
+  }
+  .masthead-title .dim {
+    color: var(--text-muted);
+  }
+  .masthead-meta {
+    color: var(--text-muted);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* ── Section scaffolding ──────────────────────────────────────────────── */
+  .section {
+    margin-bottom: 80px;
+  }
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 4px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .section-header h2 {
+    color: var(--accent-red);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    font-weight: 600;
+  }
+  .section-header .counter {
+    color: var(--text-faint);
+    font-size: 10px;
+    letter-spacing: 2px;
+  }
+  .section-desc {
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.9;
+    max-width: 720px;
+    margin: 16px 0 32px;
+  }
+  .section-desc em {
+    color: var(--accent-orange);
+    font-style: normal;
+  }
+
+  /* ── Comparison grid ──────────────────────────────────────────────────── */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    align-items: start;
+  }
+
+  .pane {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+  }
+  .pane-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .pane-label .tag {
+    color: var(--accent-red);
+    font-weight: 600;
+  }
+  .pane-label.proposed .tag {
+    color: var(--accent-green);
+  }
+  .pane-label .filename {
+    margin-left: auto;
+    color: var(--text-faint);
+    font-size: 9px;
+  }
+  .pane-body {
+    padding: 20px 24px 24px;
+  }
+
+  /* ── Legacy frontmatter (the "before") ─────────────────────────────── */
+  .legacy-fm {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    padding: 12px 16px;
+    font-size: 12px;
+  }
+  .legacy-row { padding: 2px 0; }
+  .legacy-key { color: var(--accent-blue); }
+  .legacy-sep { color: var(--text-muted); }
+  .legacy-val { color: var(--text-secondary); }
+
+  /* ── Proposed frontmatter — "Inspector" ───────────────────────────── */
+
+  /* Container — no heavy border. Integrates into the viewer flow with
+     a thin red gutter rail on the left (the one decoration that ties
+     the panel to CADE's section-header vocabulary) and a subtle rule
+     on the bottom separating it from the markdown body. */
+  .inspector {
+    --row-pad-y: 3px;
+    --label-col: 96px;
+
+    position: relative;
+    padding: 14px 4px 16px 18px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  /* Left gutter rail. This is the only chrome — no header row, no
+     title, no count. The label column does the rest. */
+  .inspector::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 12px;
+    bottom: 12px;
+    width: 2px;
+    background: var(--accent-red);
+    opacity: 0.85;
+  }
+
+  /* The rows form a two-column grid: label column fixed width, value
+     column fluid. This is the key move — every value lines up regardless
+     of label length, and there's no table-like border noise. */
+  .inspector-rows {
+    display: grid;
+    grid-template-columns: var(--label-col) 1fr;
+    gap: 2px 18px;
+  }
+
+  .ir-label {
+    color: var(--text-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.8px;
+    padding: var(--row-pad-y) 0;
+    align-self: start;
+    position: relative;
+  }
+  /* Subtle hover band — hovering the label highlights the whole row */
+  .inspector-rows:hover .ir-label { color: var(--text-faint); }
+  .inspector-rows .ir-row:hover .ir-label,
+  .inspector-rows .ir-row:hover + * > .ir-label {
+    color: var(--accent-orange);
+  }
+
+  .ir-value {
+    padding: var(--row-pad-y) 0;
+    color: var(--text-primary);
+    font-size: 12.5px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    align-items: center;
+    min-width: 0;
+  }
+
+  /* Scalar value — plain text */
+  .ir-scalar {
+    color: var(--text-primary);
+  }
+
+  /* Title row gets a little more presence */
+  .ir-title {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.6px;
+  }
+
+  /* Enum / select value — plain text. Label column already carries the
+     "this is a category" signal, so the value itself doesn't need chip
+     chrome. Multi-value enums use a muted ``·`` separator between
+     adjacent values instead of stacking chips. */
+  .ir-enum {
+    color: var(--text-primary);
+  }
+  .ir-enum + .ir-enum::before {
+    content: "·";
+    color: var(--text-faint);
+    padding: 0 8px 0 2px;
+  }
+
+  /* Relation — "→ Target", arrow is muted, target is a clickable link
+     with a purple underline on hover. Clicking emits the same
+     wiki-link event as body links. */
+  .ir-relation {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--accent-purple);
+    cursor: pointer;
+    transition: color 0.1s;
+    position: relative;
+  }
+  .ir-relation::before {
+    content: "→";
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .ir-relation:hover {
+    color: var(--accent-cyan);
+  }
+  .ir-relation:hover::before {
+    color: var(--accent-cyan);
+  }
+  .ir-relation .target {
+    border-bottom: 1px solid transparent;
+    padding-bottom: 1px;
+  }
+  .ir-relation:hover .target {
+    border-bottom-color: currentColor;
+  }
+
+  /* Unresolved relation — still rendered, but greyed out with an
+     explicit [?] marker so the user can tell it isn't clickable. */
+  .ir-relation--unresolved {
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
+  .ir-relation--unresolved::before { content: "→"; }
+  .ir-relation--unresolved::after {
+    content: "[?]";
+    color: var(--accent-orange);
+    font-size: 10px;
+    margin-left: 4px;
+    letter-spacing: 1px;
+  }
+
+  /* URL — underlined muted text, small "extern" icon */
+  .ir-url {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--border-color);
+    padding-bottom: 1px;
+  }
+  .ir-url::after {
+    content: "↗";
+    color: var(--text-faint);
+    font-size: 11px;
+  }
+  .ir-url:hover {
+    color: var(--accent-blue);
+    border-bottom-color: var(--accent-blue);
+  }
+
+  /* Number — right-aligned monospace figure, accent colour */
+  .ir-number {
+    font-variant-numeric: tabular-nums;
+    color: var(--accent-green);
+  }
+  .ir-number .unit {
+    color: var(--text-muted);
+    font-size: 10px;
+    margin-left: 3px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* Date */
+  .ir-date {
+    color: var(--accent-yellow);
+    font-variant-numeric: tabular-nums;
+  }
+  .ir-date .rel {
+    color: var(--text-faint);
+    font-size: 10px;
+    margin-left: 6px;
+    letter-spacing: 1px;
+    text-transform: lowercase;
+  }
+
+  /* Empty/null */
+  .ir-empty {
+    color: var(--text-faint);
+    font-style: italic;
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+
+  /* Checkbox (frontmatter booleans) */
+  .ir-bool {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .ir-bool::before {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 1px solid var(--border-color);
+    text-align: center;
+    line-height: 10px;
+    font-size: 11px;
+  }
+  .ir-bool--true  { color: var(--accent-green); }
+  .ir-bool--true::before  { content: "x"; color: var(--accent-green); border-color: var(--accent-green); }
+  .ir-bool--false { color: var(--text-muted); }
+  .ir-bool--false::before { content: " "; }
+
+  /* Row wrapper to allow hover styling across both cols */
+  .ir-row { display: contents; }
+
+  /* ── "In Context" section — viewer pane mockup ───────────────────── */
+  .viewer-frame {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    height: 640px;
+    display: flex;
+    flex-direction: column;
+  }
+  .viewer-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 14px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .viewer-header .path {
+    color: var(--text-muted);
+  }
+  .viewer-header .path .file {
+    color: var(--text-primary);
+  }
+  .viewer-header .actions {
+    margin-left: auto;
+    display: flex;
+    gap: 12px;
+    color: var(--text-faint);
+    font-size: 10px;
+  }
+  .viewer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+  }
+  .viewer-body-content {
+    padding: 0 24px 24px;
+    max-width: 780px;
+  }
+  .viewer-body-content h1 {
+    font-size: 20px;
+    color: var(--text-primary);
+    font-weight: 500;
+    letter-spacing: 1px;
+    margin: 22px 0 14px;
+  }
+  .viewer-body-content h2 {
+    font-size: 14px;
+    color: var(--accent-red);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin: 24px 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .viewer-body-content h3 {
+    font-size: 12px;
+    color: var(--accent-orange);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin: 18px 0 8px;
+  }
+  .viewer-body-content p {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin-bottom: 10px;
+  }
+  .viewer-body-content .wiki-link {
+    color: var(--accent-purple);
+    text-decoration: none;
+    border-bottom: 1px dotted currentColor;
+  }
+  .viewer-body-content .wiki-link:hover {
+    color: var(--accent-cyan);
+    border-bottom-style: solid;
+  }
+  .viewer-statusline {
+    display: flex;
+    padding: 3px 12px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+  }
+  .viewer-statusline .mode {
+    color: var(--bg-primary);
+    background: var(--accent-green);
+    padding: 0 6px;
+    font-weight: 700;
+    margin-right: 10px;
+  }
+  .viewer-statusline .right {
+    margin-left: auto;
+    color: var(--text-faint);
+  }
+
+  /* ── Vocabulary grid ─────────────────────────────────────────────── */
+  .vocab-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+  .vocab-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    padding: 14px 18px 18px;
+  }
+  .vocab-card h4 {
+    color: var(--accent-red);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+  .vocab-card .note {
+    color: var(--text-faint);
+    font-size: 10px;
+    margin-top: 12px;
+    letter-spacing: 0.5px;
+    line-height: 1.6;
+  }
+  .vocab-demo {
+    display: grid;
+    grid-template-columns: 96px 1fr;
+    gap: 2px 18px;
+    font-size: 12px;
+    padding: 6px 0 4px;
+  }
+
+  /* ── Key legend ──────────────────────────────────────────────────── */
+  .keybar {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    padding-top: 32px;
+    margin-top: 56px;
+    border-top: 1px solid var(--border-color);
+    color: var(--text-faint);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .keybar .k {
+    color: var(--accent-green);
+    margin-right: 4px;
+  }
+
+  /* ── Fine details ─────────────────────────────────────────────────── */
+  ::selection {
+    background: color-mix(in srgb, var(--accent-red) 60%, transparent);
+    color: var(--text-primary);
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ── Masthead ────────────────────────────────────────────────────── -->
+  <header class="masthead">
+    <div class="masthead-tag">CADE · MOCKUP</div>
+    <div class="masthead-title">FRONTMATTER <span class="dim">· visual overhaul</span></div>
+    <div class="masthead-meta">rev 01 · 2026-04-15</div>
+  </header>
+
+  <!-- ── Before / After ─────────────────────────────────────────────── -->
+  <section class="section">
+    <div class="section-header">
+      <h2>Before &middot; After</h2>
+      <span class="counter">§01</span>
+    </div>
+    <p class="section-desc">
+      The current frontmatter renderer is a straight port from the initial
+      viewer spike — monospace <em>key: value</em> rows in a tinted box, no
+      type awareness. The proposed replacement treats frontmatter as a typed
+      inspector: enum values render as bracket chips with an accent rail,
+      relations render as <em>→ Target</em> pointers wired into the existing
+      wiki-link click handler, and numeric / URL / date / boolean values each
+      get their own vocabulary. Data is Aela, Goddess of Light from the
+      Padarax vault.
+    </p>
+
+    <div class="compare-grid">
+
+      <!-- BEFORE -->
+      <div class="pane">
+        <div class="pane-label">
+          <span class="tag">[ BEFORE ]</span>
+          <span>current implementation</span>
+          <span class="filename">frontmatter.ts · viewer.css</span>
+        </div>
+        <div class="pane-body">
+          <div class="legacy-fm">
+            <div class="legacy-row"><span class="legacy-key">title</span><span class="legacy-sep">: </span><span class="legacy-val">Aela, Goddess of Light</span></div>
+            <div class="legacy-row"><span class="legacy-key">Type</span><span class="legacy-sep">: </span><span class="legacy-val">Major</span></div>
+            <div class="legacy-row"><span class="legacy-key">Pantheon</span><span class="legacy-sep">: </span><span class="legacy-val">[[vault/Pantheons/Pantheons/Essentian|Essentian]]</span></div>
+            <div class="legacy-row"><span class="legacy-key">Domain</span><span class="legacy-sep">: </span><span class="legacy-val">Light</span></div>
+            <div class="legacy-row"><span class="legacy-key">Alignment</span><span class="legacy-sep">: </span><span class="legacy-val">Lawful, Good</span></div>
+          </div>
+          <div style="margin-top: 18px; padding: 10px 12px; border-left: 2px solid var(--border-color); font-size: 10px; line-height: 1.7; color: var(--text-muted);">
+            Flat list. Enum values are comma-joined into a single string.
+            Wiki-link syntax leaks through as raw <code style="color: var(--accent-orange);">[[...]]</code>.
+            No visual grouping, no type awareness, no interaction.
+          </div>
+        </div>
+      </div>
+
+      <!-- AFTER -->
+      <div class="pane">
+        <div class="pane-label proposed">
+          <span class="tag">[ AFTER ]</span>
+          <span>typed inspector</span>
+          <span class="filename">proposed</span>
+        </div>
+        <div class="pane-body">
+          <div class="inspector">
+            <div class="inspector-rows">
+              <div class="ir-row">
+                <div class="ir-label">Title</div>
+                <div class="ir-value"><span class="ir-title">Aela, Goddess of Light</span></div>
+              </div>
+              <div class="ir-row">
+                <div class="ir-label">Type</div>
+                <div class="ir-value"><span class="ir-enum">Major</span></div>
+              </div>
+              <div class="ir-row">
+                <div class="ir-label">Pantheon</div>
+                <div class="ir-value"><span class="ir-relation"><span class="target">Essentian</span></span></div>
+              </div>
+              <div class="ir-row">
+                <div class="ir-label">Domain</div>
+                <div class="ir-value"><span class="ir-enum">Light</span></div>
+              </div>
+              <div class="ir-row">
+                <div class="ir-label">Alignment</div>
+                <div class="ir-value">
+                  <span class="ir-enum">Lawful</span>
+                  <span class="ir-enum">Good</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top: 18px; padding: 10px 12px; border-left: 2px solid var(--accent-green); font-size: 10px; line-height: 1.7; color: var(--text-muted);">
+            Red gutter rail is the only decoration. Label column carries
+            the field name; enum values sit as plain text with a muted
+            <em>·</em> between multi-values. Relations stay as
+            <em>→ clickable pointers</em> since they're genuinely a
+            different primitive.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── Vocabulary ──────────────────────────────────────────────────── -->
+  <section class="section">
+    <div class="section-header">
+      <h2>Value vocabulary</h2>
+      <span class="counter">§02</span>
+    </div>
+    <p class="section-desc">
+      One primitive per YAML shape the exporter emits. Each has a distinct
+      visual signature so the viewer can disambiguate at a glance — scalar
+      vs enum vs relation vs link vs number vs boolean vs empty.
+    </p>
+
+    <div class="vocab-grid">
+
+      <div class="vocab-card">
+        <h4>◇ Scalar string</h4>
+        <div class="vocab-demo">
+          <div class="ir-label">Title</div>
+          <div class="ir-value"><span class="ir-title">Aela, Goddess of Light</span></div>
+          <div class="ir-label">Epithet</div>
+          <div class="ir-value"><span class="ir-scalar">The All-Sight</span></div>
+        </div>
+        <div class="note">Plain primary-colour text. Title rows get a
+        slight size bump; other scalars sit at 12.5px.</div>
+      </div>
+
+      <div class="vocab-card">
+        <h4>◇ Enum / select</h4>
+        <div class="vocab-demo">
+          <div class="ir-label">Type</div>
+          <div class="ir-value"><span class="ir-enum">Major</span></div>
+          <div class="ir-label">Domain</div>
+          <div class="ir-value"><span class="ir-enum">Light</span></div>
+          <div class="ir-label">Alignment</div>
+          <div class="ir-value">
+            <span class="ir-enum">Lawful</span>
+            <span class="ir-enum">Good</span>
+          </div>
+          <div class="ir-label">Tags</div>
+          <div class="ir-value">
+            <span class="ir-enum">Mythic</span>
+            <span class="ir-enum">Ascended</span>
+            <span class="ir-enum">Shardborn</span>
+          </div>
+        </div>
+        <div class="note">Plain text. The label column already carries
+        the "this is a category" signal, so the value doesn't need chip
+        chrome. Multi-values separate with a muted <em>·</em>.</div>
+      </div>
+
+      <div class="vocab-card">
+        <h4>◇ Relation (wiki-link)</h4>
+        <div class="vocab-demo">
+          <div class="ir-label">Pantheon</div>
+          <div class="ir-value"><span class="ir-relation"><span class="target">Essentian</span></span></div>
+          <div class="ir-label">Allies</div>
+          <div class="ir-value">
+            <span class="ir-relation"><span class="target">Sylvanus</span></span>
+            <span class="ir-relation"><span class="target">Kolrum</span></span>
+          </div>
+          <div class="ir-label">Nemesis</div>
+          <div class="ir-value"><span class="ir-relation ir-relation--unresolved"><span class="target">Konosh</span></span></div>
+        </div>
+        <div class="note"><em>→ target</em>. Renders through the existing
+        <code style="color: var(--accent-orange);">a.wiki-link</code> so
+        <code style="color: var(--accent-orange);">attachWikiLinkHandlers</code>
+        wires the click. Unresolved targets grey out with a [?] marker.</div>
+      </div>
+
+      <div class="vocab-card">
+        <h4>◇ URL</h4>
+        <div class="vocab-demo">
+          <div class="ir-label">Source</div>
+          <div class="ir-value"><a class="ir-url" href="#">anyflip.com/jhhvh/dvcc</a></div>
+          <div class="ir-label">Wiki</div>
+          <div class="ir-value"><a class="ir-url" href="#">forgottenrealms.fandom.com</a></div>
+        </div>
+        <div class="note">Dotted underline + trailing <em>↗</em>. Hover
+        promotes to solid border in accent-blue.</div>
+      </div>
+
+      <div class="vocab-card">
+        <h4>◇ Number</h4>
+        <div class="vocab-demo">
+          <div class="ir-label">Word count</div>
+          <div class="ir-value"><span class="ir-number">853<span class="unit">words</span></span></div>
+          <div class="ir-label">Level</div>
+          <div class="ir-value"><span class="ir-number">24</span></div>
+          <div class="ir-label">Armour</div>
+          <div class="ir-value"><span class="ir-number">18<span class="unit">AC</span></span></div>
+        </div>
+        <div class="note">Tabular-nums for alignment, accent-green for
+        numeric signal, muted unit suffix in the style of htop / btop.</div>
+      </div>
+
+      <div class="vocab-card">
+        <h4>◇ Date</h4>
+        <div class="vocab-demo">
+          <div class="ir-label">Created</div>
+          <div class="ir-value"><span class="ir-date">2023-06-22<span class="rel">~ 22 months ago</span></span></div>
+          <div class="ir-label">Modified</div>
+          <div class="ir-value"><span class="ir-date">2026-04-15<span class="rel">today</span></span></div>
+        </div>
+        <div class="note">ISO primary, relative muted suffix. Accent-yellow
+        reads as "temporal signal" against the rest of the vocabulary.</div>
+      </div>
+
+      <div class="vocab-card">
+        <h4>◇ Boolean</h4>
+        <div class="vocab-demo">
+          <div class="ir-label">Canonical</div>
+          <div class="ir-value"><span class="ir-bool ir-bool--true">true</span></div>
+          <div class="ir-label">Draft</div>
+          <div class="ir-value"><span class="ir-bool ir-bool--false">false</span></div>
+        </div>
+        <div class="note">Bracket-checkbox borrowed from the checklist
+        component — same visual language as task items.</div>
+      </div>
+
+      <div class="vocab-card">
+        <h4>◇ Empty / null</h4>
+        <div class="vocab-demo">
+          <div class="ir-label">Patron</div>
+          <div class="ir-value"><span class="ir-empty">— unset —</span></div>
+          <div class="ir-label">Artifacts</div>
+          <div class="ir-value"><span class="ir-empty">— none —</span></div>
+        </div>
+        <div class="note">Explicit placeholder rather than omitted row, so
+        the user knows the field exists and is editable once the editor
+        lands.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── In context ──────────────────────────────────────────────────── -->
+  <section class="section">
+    <div class="section-header">
+      <h2>In the viewer pane</h2>
+      <span class="counter">§03</span>
+    </div>
+    <p class="section-desc">
+      How the inspector sits above markdown body content in the right-pane
+      viewer. The red gutter rail aligns with CADE's dashboard section
+      markers; the bottom rule separates metadata from the body without
+      introducing a heavy box-border that would break the TUI flow.
+    </p>
+
+    <div class="viewer-frame">
+      <div class="viewer-header">
+        <span class="path">vault/Pantheons/Deities/<span class="file">Aela, Goddess of Light.md</span></span>
+        <span class="actions">
+          <span>[ ^g ] plan</span>
+          <span>[ ^w ] close</span>
+        </span>
+      </div>
+      <div class="viewer-body">
+        <div class="viewer-body-content">
+
+          <!-- Inspector -->
+          <div class="inspector">
+            <div class="inspector-rows">
+              <div class="ir-row">
+                <div class="ir-label">Title</div>
+                <div class="ir-value"><span class="ir-title">Aela, Goddess of Light</span></div>
+              </div>
+              <div class="ir-row">
+                <div class="ir-label">Type</div>
+                <div class="ir-value"><span class="ir-enum">Major</span></div>
+              </div>
+              <div class="ir-row">
+                <div class="ir-label">Pantheon</div>
+                <div class="ir-value"><span class="ir-relation"><span class="target">Essentian</span></span></div>
+              </div>
+              <div class="ir-row">
+                <div class="ir-label">Domain</div>
+                <div class="ir-value"><span class="ir-enum">Light</span></div>
+              </div>
+              <div class="ir-row">
+                <div class="ir-label">Alignment</div>
+                <div class="ir-value">
+                  <span class="ir-enum">Lawful</span>
+                  <span class="ir-enum">Good</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <h1>🔆 Aela, Goddess of Light</h1>
+          <p>
+            Aela is revered as a figure of divine radiance and benevolence.
+            Her existence and tales of her power have shaped the beliefs and
+            traditions of many cultures across <a class="wiki-link" href="#">Padarax</a>.
+            She is depicted as a beacon of hope, wisdom, and protection, with
+            the ability to banish darkness and guide lost souls.
+          </p>
+          <p>
+            Much of her origins were lost to time, but it is said she once
+            walked the lands as a mortal. A great sorceress who banished
+            <a class="wiki-link" href="#">Konosh, the Hunger</a> from the mortal
+            plane.
+          </p>
+
+          <h3>Physical Description</h3>
+          <p>
+            She is described as a figure of unparalleled beauty and radiance.
+            Possessing an ethereal presence that captivates those who behold
+            her. With golden hair that cascades down in soft waves,
+            reminiscent of rays of sunlight.
+          </p>
+
+          <h2>The DM's Knowledge</h2>
+          <p>
+            When the <a class="wiki-link" href="#">Ancorani</a> arrived on Padarax,
+            their superior technology and mastery of arcane arts made them
+            appear godlike. Her own physical form was damaged during the
+            <a class="wiki-link" href="#">Shardfall</a>, forcing her to upload her
+            consciousness into the <a class="wiki-link" href="#">Aurospire</a>.
+          </p>
+        </div>
+      </div>
+      <div class="viewer-statusline">
+        <span class="mode">VIEW</span>
+        <span>md · 41 lines · frontmatter 5</span>
+        <span class="right">25% · 100%</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Interaction notes ───────────────────────────────────────────── -->
+  <section class="section">
+    <div class="section-header">
+      <h2>Interaction notes</h2>
+      <span class="counter">§04</span>
+    </div>
+
+    <div class="compare-grid">
+      <div class="pane">
+        <div class="pane-label">
+          <span class="tag">[ READ MODE ]</span>
+          <span>today — just renders</span>
+        </div>
+        <div class="pane-body" style="font-size: 11px; line-height: 1.9; color: var(--text-secondary);">
+          <strong style="color: var(--text-primary);">Click a relation</strong> — fires the
+          existing <code style="color: var(--accent-orange);">link-click</code>
+          event, same as body wiki-links. No new plumbing; the inspector just
+          emits <code style="color: var(--accent-orange);">a.wiki-link[data-path]</code>
+          anchors that <code style="color: var(--accent-orange);">attachWikiLinkHandlers</code>
+          picks up.<br><br>
+          <strong style="color: var(--text-primary);">Click a chip</strong> — emits a
+          <code style="color: var(--accent-orange);">filter-by</code> event that
+          the enclosing dashboard / search can consume. Optional; falls
+          back to inert if no handler is attached.<br><br>
+          <strong style="color: var(--text-primary);">Click a URL</strong> — opens
+          externally, identical to the body handling.
+        </div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-label proposed">
+          <span class="tag">[ EDIT MODE ]</span>
+          <span>future — typed editing</span>
+        </div>
+        <div class="pane-body" style="font-size: 11px; line-height: 1.9; color: var(--text-secondary);">
+          <strong style="color: var(--text-primary);">Enter / i on a row</strong> — row
+          becomes editable; cursor drops into the appropriate input widget
+          (bracket field / dropdown / link autocomplete / date picker).<br><br>
+          <strong style="color: var(--text-primary);">Typed field schemas</strong> —
+          when <code style="color: var(--accent-orange);">dashboard.yml</code> declares
+          <code style="color: var(--accent-orange);">Pantheon → vault/Pantheons/Pantheons/</code>,
+          the relation picker autocompletes from just that folder. This is
+          where the design pays off: the same visual shape in read mode and
+          edit mode, with the type system constraining the input.<br><br>
+          <strong style="color: var(--text-primary);">Esc / &lt;CR&gt;</strong> — commit
+          the row back to the .md file, re-render through the same
+          renderer. No mode flicker.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Key legend ──────────────────────────────────────────────────── -->
+  <div class="keybar">
+    <span><span class="k">j</span>k</span>
+    <span><span class="k">h</span>l · navigate</span>
+    <span><span class="k">i</span> · edit field</span>
+    <span><span class="k">Enter</span> · follow relation</span>
+    <span><span class="k">Esc</span> · back</span>
+  </div>
+
+</div>
+</body>
+</html>
