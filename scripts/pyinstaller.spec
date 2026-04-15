@@ -6,6 +6,8 @@ import os
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
 # Get project root and paths
 project_root = Path(os.path.abspath(SPECPATH)).parent
 backend_dir = project_root / 'backend'
@@ -55,6 +57,17 @@ if sys.platform == 'win32':
 datas = []
 if frontend_dist.exists():
     datas.append((str(frontend_dist), 'frontend/dist'))
+
+# Bundle data files for packages that ship JSON/config alongside their Python.
+# litellm needs model_prices_and_context_window_backup.json or it crashes on import.
+datas += collect_data_files('litellm')
+hiddenimports += collect_submodules('litellm')
+
+# tiktoken's encodings are loaded via entry points, which PyInstaller doesn't
+# discover automatically. Without these, litellm crashes with "Unknown encoding cl100k_base".
+hiddenimports += collect_submodules('tiktoken_ext')
+datas += collect_data_files('tiktoken_ext')
+datas += collect_data_files('tiktoken')
 
 # Bundle Neovim portable (downloaded by build script)
 nvim_dist = project_root / 'dist' / 'nvim'
