@@ -2,15 +2,37 @@
 
 Allows a project to ship a small YAML file that configures how CADE
 behaves when the project is opened. URL query params on the CADE
-frontend override any value in launch.yml, so launch.yml is the
-"sensible default" and URL params are the "one-off override."
+frontend override any *frontend* value in launch.yml, so launch.yml
+is the sensible default and URL params are the one-off override.
 
-Supported keys (all optional):
+Supported top-level keys (all optional):
 
     enhanced: bool    — toggle enhanced-mode ChatPane on connect
-    spawn: string     — shell command to run in the terminal pane after connect
+    spawn: string     — shell command to run in the manual terminal
     view: string      — dashboard view id to preselect on open
     hide_tree: bool   — collapse the file tree on startup
+    provider: map     — register a project-local chat provider (see below)
+
+The ``provider`` block defines a chat provider that CADE registers on
+connect and sets as the default for the session. Supports any provider
+type the registry handles; the typical case is a ``subprocess`` provider
+that wraps a CLI tool. Example:
+
+.. code-block:: yaml
+
+    provider:
+      name: padarax
+      type: subprocess
+      command:
+        - ./scripts/play.sh
+        - --command
+        - "{message}"
+        - --load
+        - "{state}"
+        - --save
+        - "{state}"
+      state_file: .cade/padarax-session.json
+      cwd: .
 
 Missing file is not an error — returns an empty dict.
 """
@@ -25,14 +47,18 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-_KNOWN_KEYS = frozenset({"enhanced", "spawn", "view", "hide_tree"})
+# Keys we surface to the frontend via the launchPreset WebSocket field.
+# provider is NOT in this set because it's consumed entirely on the backend
+# (registered in the handler's provider registry) and the frontend never
+# needs to see the full config.
+_FRONTEND_KEYS = frozenset({"enhanced", "spawn", "view", "hide_tree"})
 
 
 def load_launch_preset(project_dir: Path) -> dict[str, Any]:
-    """Read .cade/launch.yml and return known fields as a dict.
+    """Read .cade/launch.yml and return the raw parsed dict.
 
     Silent degradation: a missing file, malformed YAML, or a non-mapping
-    top-level all return {}. Unknown keys are dropped with a debug log.
+    top-level all return {}.
     """
     preset_path = project_dir / ".cade" / "launch.yml"
     if not preset_path.exists():
@@ -49,6 +75,15 @@ def load_launch_preset(project_dir: Path) -> dict[str, Any]:
         logger.warning("%s is not a YAML mapping — ignoring", preset_path)
         return {}
 
+    return raw
+
+
+def extract_frontend_preset(raw: dict[str, Any]) -> dict[str, Any]:
+    """Filter the raw preset to only the keys the frontend needs.
+
+    Coerces types and drops unknowns. Returns {} if no frontend-visible
+    fields are set.
+    """
     preset: dict[str, Any] = {}
     if raw.get("enhanced") is True:
         preset["enhanced"] = True
@@ -62,9 +97,41 @@ def load_launch_preset(project_dir: Path) -> dict[str, Any]:
             preset["view"] = value
     if raw.get("hide_tree") is True:
         preset["hide_tree"] = True
-
-    unknown = set(raw.keys()) - _KNOWN_KEYS
-    if unknown:
-        logger.debug("%s: ignoring unknown keys %s", preset_path, sorted(unknown))
-
     return preset
+
+
+def extract_provider_config(raw: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract and validate the ``provider:`` block from a parsed launch.yml.
+
+    Returns a dict with keys suitable for constructing a ``ProviderConfig``
+    (``name``, ``type``, ``model``, ``region``, ``api_key``, ``extra``),
+    or ``None`` if the block is missing or malformed.
+    """
+    provider_raw = raw.get("provider")
+    if provider_raw is None:
+        return None
+    if not isinstance(provider_raw, dict):
+        logger.warning("launch.yml: 'provider' must be a mapping — ignoring")
+        return None
+
+    name = provider_raw.get("name")
+    ptype = provider_raw.get("type")
+    if not isinstance(name, str) or not name.strip():
+        logger.warning("launch.yml: 'provider.name' is required and must be a non-empty string")
+        return None
+    if not isinstance(ptype, str) or not ptype.strip():
+        logger.warning("launch.yml: 'provider.type' is required and must be a non-empty string")
+        return None
+
+    # Split into known ProviderConfig fields vs extra kwargs.
+    known_top_keys = {"name", "type", "model", "region", "api_key"}
+    result = {
+        "name": name.strip(),
+        "type": ptype.strip(),
+        "model": str(provider_raw.get("model", "")),
+        "region": str(provider_raw.get("region", "")),
+        "api_key": str(provider_raw.get("api_key", "")),
+    }
+    extra = {k: v for k, v in provider_raw.items() if k not in known_top_keys}
+    result["extra"] = extra
+    return result

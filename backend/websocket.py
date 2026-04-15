@@ -14,7 +14,13 @@ from fastapi import WebSocket, WebSocketDisconnect
 from backend.auth import extract_token_from_query, validate_token
 from backend.chat.session import ChatSession, get_chat_registry
 from backend.config import load_user_config
-from backend.launch_preset import load_launch_preset
+from backend.launch_preset import (
+    extract_frontend_preset,
+    extract_provider_config,
+    load_launch_preset,
+)
+from backend.providers.config import ProviderConfig
+from backend.providers.subprocess_provider import SubprocessProvider
 from backend.terminal.connections import get_connection_manager
 from backend.connection_registry import get_connection_registry
 from backend.errors import CADEError, ProtocolError
@@ -244,13 +250,39 @@ class ConnectionHandler:
         # Load user config first so we can use network_timeout setting
         self._user_config = load_user_config(self._working_dir)
 
-        # Initialize provider registry from config
+        # Initialize provider registry from global config (~/.cade/providers.toml)
         try:
             providers_config = get_providers_config()
             self._provider_registry = ProviderRegistry.from_config(providers_config)
         except Exception as e:
             logger.warning("Failed to initialize provider registry: %s", e)
             self._provider_registry = ProviderRegistry()
+
+        # Load project-local launch.yml and register any provider it declares.
+        # The project-local provider is set as the session default (beats the
+        # global ~/.cade/providers.toml default), so opening a project with a
+        # launch.yml provider gets you that provider in ChatPane automatically.
+        self._launch_yaml: dict = load_launch_preset(self._working_dir)
+        provider_config_dict = extract_provider_config(self._launch_yaml)
+        if provider_config_dict is not None:
+            try:
+                pc = ProviderConfig(**provider_config_dict)
+                if pc.type == "subprocess":
+                    provider = SubprocessProvider(pc, working_dir=self._working_dir)
+                    self._provider_registry.register(pc.name, provider)
+                    self._provider_registry._default = pc.name  # type: ignore[attr-defined]
+                    logger.info(
+                        "Registered project-local provider '%s' (type=%s) from %s",
+                        pc.name, pc.type, self._working_dir / ".cade" / "launch.yml",
+                    )
+                else:
+                    logger.warning(
+                        "launch.yml provider type '%s' not supported yet "
+                        "(only 'subprocess' for now); ignoring",
+                        pc.type,
+                    )
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Failed to register project-local provider: %s", e)
 
         registry = get_registry()
 
@@ -478,11 +510,12 @@ class ConnectionHandler:
             "wslHealthy": wsl_healthy,
         }
 
-        # Project-local launch preset from .cade/launch.yml. Frontend merges
-        # with URL query params (URL wins on conflict).
-        launch_preset = load_launch_preset(self._working_dir)
-        if launch_preset:
-            message["launchPreset"] = launch_preset
+        # Frontend-visible subset of the project-local launch preset.
+        # (The provider block was consumed in _setup and registered on the
+        # handler's provider registry — the frontend doesn't need to see it.)
+        frontend_preset = extract_frontend_preset(self._launch_yaml)
+        if frontend_preset:
+            message["launchPreset"] = frontend_preset
 
         # Include provider information
         if self._provider_registry is not None:

@@ -8,6 +8,7 @@ from backend.providers.api_provider import APIProvider
 from backend.providers.base import BaseProvider
 from backend.providers.claude_code_provider import ClaudeCodeProvider
 from backend.providers.config import ProvidersConfig
+from backend.providers.subprocess_provider import SubprocessProvider
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,12 @@ class ProviderRegistry:
         result = []
         for name, provider in self._providers.items():
             caps = provider.get_capabilities()
-            provider_type = "claude-code" if isinstance(provider, ClaudeCodeProvider) else "api"
+            if isinstance(provider, ClaudeCodeProvider):
+                provider_type = "claude-code"
+            elif isinstance(provider, SubprocessProvider):
+                provider_type = "subprocess"
+            else:
+                provider_type = "api"
             result.append({
                 "name": name,
                 "model": provider.model,
