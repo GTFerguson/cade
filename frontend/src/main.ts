@@ -14,6 +14,8 @@ import { MobileUI } from "./ui/mobile";
 import { ProjectContextImpl, TabBar, TabManager } from "./tabs";
 import { hasConnectedProfileTab } from "./tabs/tab-manager";
 import type { TabState } from "./tabs";
+import type { LaunchPreset } from "./types";
+import { SessionKey } from "./platform/protocol";
 import { pickProjectFolder, getUserHomePath } from "./platform/tauri-bridge";
 import { setUserConfig, getUserConfig, matchesKeybinding } from "./config/user-config";
 import { applySavedTheme, onThemeChange, getSavedThemeId, themes } from "./config/themes";
@@ -37,14 +39,88 @@ class App {
   private startSplash: Splash | null = null;
   private splashTimeout: number | null = null;
   private resumeInProgress = false;
+  private launchOverrides: LaunchPreset;
 
   constructor() {
     this.tabManager = new TabManager();
     this.defaultProjectPath = this.getDefaultProjectPath();
+    this.launchOverrides = App.parseLaunchOverrides();
     this.keybindingManager = new KeybindingManager();
     this.helpOverlay = new HelpOverlay();
     this.themeSelector = new ThemeSelector();
     this.profileManager = new RemoteProfileManager();
+  }
+
+  /**
+   * Parse launch-preset overrides from the URL query string.
+   * Supported params: ?enhanced=1, ?spawn=<cmd>, ?view=<id>, ?hide-tree=1.
+   * Any value here overrides the matching field in the backend's
+   * .cade/launch.yml preset (URL wins on conflict).
+   */
+  private static parseLaunchOverrides(): LaunchPreset {
+    const params = new URLSearchParams(window.location.search);
+    const out: LaunchPreset = {};
+
+    const enhanced = params.get("enhanced");
+    if (enhanced !== null) {
+      out.enhanced = enhanced === "1" || enhanced === "true";
+    }
+
+    const spawn = params.get("spawn");
+    if (spawn) {
+      out.spawn = spawn;
+    }
+
+    const view = params.get("view");
+    if (view) {
+      out.view = view;
+    }
+
+    const hideTree = params.get("hide-tree") ?? params.get("hide_tree");
+    if (hideTree !== null) {
+      out.hide_tree = hideTree === "1" || hideTree === "true";
+    }
+
+    return out;
+  }
+
+  /**
+   * Merge backend launch preset with URL overrides (URL wins) and apply.
+   * Called once from the `connected` handler for each tab.
+   */
+  private applyLaunchPreset(tab: TabState, merged: LaunchPreset): void {
+    const tm = tab.context?.getTerminalManager();
+    if (tm == null) {
+      console.warn("[launch] no terminal manager available, skipping preset");
+      return;
+    }
+
+    if (merged.enhanced === true) {
+      console.log("[launch] enabling enhanced mode");
+      tm.setEnhanced(true);
+    }
+
+    if (merged.spawn) {
+      console.log(`[launch] spawning in manual terminal: ${merged.spawn}`);
+      // Switch to the manual (raw xterm shell) terminal so the spawn
+      // command lands in a real bash shell, not Claude Code's chat
+      // handler. switchTo creates the manual terminal on first use.
+      tm.switchTo(SessionKey.MANUAL);
+      // Give the PTY a beat to reach a shell prompt before writing input.
+      // 500ms is conservative; local PTY start is usually <100ms.
+      const cmd = merged.spawn;
+      setTimeout(() => {
+        tm.sendInput(cmd + "\n");
+      }, 500);
+    }
+
+    if (merged.view) {
+      console.log(`[launch] view preselect '${merged.view}' — not yet implemented`);
+    }
+
+    if (merged.hide_tree === true) {
+      console.log("[launch] hide_tree — not yet implemented (toggleFileTree not built)");
+    }
   }
 
   /**
@@ -328,6 +404,14 @@ class App {
         setUserConfig(message.config);
         applySavedTheme();
         console.log("[main] Applied user config from server");
+      }
+      // Merge backend .cade/launch.yml preset with URL overrides (URL wins)
+      // and apply: enhanced-mode toggle, spawn command in the manual terminal,
+      // future view/hide_tree fields.
+      const backendPreset = message.launchPreset ?? {};
+      const merged: LaunchPreset = { ...backendPreset, ...this.launchOverrides };
+      if (Object.keys(merged).length > 0) {
+        this.applyLaunchPreset(tab, merged);
       }
     });
 

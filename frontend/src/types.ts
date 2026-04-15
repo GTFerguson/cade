@@ -217,6 +217,18 @@ export interface ErrorMessage extends BaseMessage {
 }
 
 /**
+ * Project-local launch preset sent by the backend on connect.
+ * Loaded from .cade/launch.yml in the project root. URL query params
+ * on the frontend override any field here (URL wins on conflict).
+ */
+export interface LaunchPreset {
+  enhanced?: boolean;   // toggle enhanced-mode ChatPane on connect
+  spawn?: string;       // shell command to run in the manual terminal
+  view?: string;        // dashboard view id to preselect (not yet implemented)
+  hide_tree?: boolean;  // collapse file tree (not yet implemented)
+}
+
+/**
  * Connected message (server -> client).
  */
 export interface ConnectedMessage extends BaseMessage {
@@ -230,6 +242,7 @@ export interface ConnectedMessage extends BaseMessage {
   providers?: ProviderInfo[];
   defaultProvider?: string;
   chatMode?: string;
+  launchPreset?: LaunchPreset;
 }
 
 /**

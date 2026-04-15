@@ -14,6 +14,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from backend.auth import extract_token_from_query, validate_token
 from backend.chat.session import ChatSession, get_chat_registry
 from backend.config import load_user_config
+from backend.launch_preset import load_launch_preset
 from backend.terminal.connections import get_connection_manager
 from backend.connection_registry import get_connection_registry
 from backend.errors import CADEError, ProtocolError
@@ -476,6 +477,12 @@ class ConnectionHandler:
             "idleSeconds": idle_seconds,
             "wslHealthy": wsl_healthy,
         }
+
+        # Project-local launch preset from .cade/launch.yml. Frontend merges
+        # with URL query params (URL wins on conflict).
+        launch_preset = load_launch_preset(self._working_dir)
+        if launch_preset:
+            message["launchPreset"] = launch_preset
 
         # Include provider information
         if self._provider_registry is not None:
