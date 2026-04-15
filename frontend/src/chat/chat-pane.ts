@@ -14,6 +14,7 @@ import renderMathInElement from "katex/contrib/auto-render";
 import "katex/dist/katex.min.css";
 import mermaid from "mermaid";
 import type { PaneKeyHandler } from "../input/keybindings";
+import { MessageType } from "../platform/protocol";
 import type {
   ChatHistoryMessage,
   ChatModeChangeMessage,
@@ -367,10 +368,10 @@ export class ChatPane implements Component, PaneKeyHandler {
         this.handleThinkingDelta(msg.content ?? "");
         break;
       case "tool-use-start":
-        this.handleToolUseStart(msg.toolId ?? "", msg.toolName ?? "");
+        this.handleToolUseStart(msg.toolId ?? "", msg.toolName ?? "", msg.toolInput);
         break;
       case "tool-result":
-        this.handleToolResult(msg.toolId ?? "", msg.toolName ?? "", msg.status ?? "success");
+        this.handleToolResult(msg.toolId ?? "", msg.toolName ?? "", msg.status ?? "success", msg.content);
         break;
       case "done":
         this.handleDone(msg);
@@ -386,6 +387,12 @@ export class ChatPane implements Component, PaneKeyHandler {
         break;
       case "report-review-request":
         this.handleReportReviewRequest(msg);
+        break;
+      case "permission-request":
+        this.handlePermissionRequest(msg);
+        break;
+      case "permission-resolved":
+        this.handlePermissionResolved(msg);
         break;
     }
   }
@@ -499,7 +506,11 @@ export class ChatPane implements Component, PaneKeyHandler {
     }
   }
 
-  private handleToolUseStart(toolId: string, toolName: string): void {
+  private handleToolUseStart(
+    toolId: string,
+    toolName: string,
+    toolInput?: Record<string, unknown>,
+  ): void {
     this.ensureAssistantEl();
 
     // Finalize any in-progress text stream before inserting tool block
@@ -510,7 +521,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.finalizeThinking();
 
     const toolEl = document.createElement("div");
-    toolEl.className = "chat-tool-use";
+    toolEl.className = "chat-tool-use chat-tool-use--running";
 
     const header = document.createElement("div");
     header.className = "chat-tool-header";
@@ -523,13 +534,25 @@ export class ChatPane implements Component, PaneKeyHandler {
     name.className = "chat-tool-name";
     name.textContent = toolName;
 
+    // Show key input context (file path, pattern, command)
+    const inputSummary = this.summarizeToolInput(toolName, toolInput);
+    if (inputSummary) {
+      const inputEl = document.createElement("span");
+      inputEl.className = "chat-tool-input";
+      inputEl.textContent = inputSummary;
+      header.appendChild(icon);
+      header.appendChild(name);
+      header.appendChild(inputEl);
+    } else {
+      header.appendChild(icon);
+      header.appendChild(name);
+    }
+
     const status = document.createElement("span");
     status.className = "chat-tool-status";
     status.textContent = "running\u2026";
-
-    header.appendChild(icon);
-    header.appendChild(name);
     header.appendChild(status);
+
     toolEl.appendChild(header);
 
     const contentEl = this.currentAssistantEl!.querySelector(".chat-message-content");
@@ -541,9 +564,19 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.scrollToBottom();
   }
 
-  private handleToolResult(toolId: string, _toolName: string, status: string): void {
+  private handleToolResult(
+    toolId: string,
+    _toolName: string,
+    status: string,
+    content?: string,
+  ): void {
     const toolEl = this.activeToolEls.get(toolId);
     if (!toolEl) return;
+
+    toolEl.classList.remove("chat-tool-use--running");
+    toolEl.classList.add(
+      status === "error" ? "chat-tool-use--error" : "chat-tool-use--success",
+    );
 
     const icon = toolEl.querySelector(".chat-tool-icon");
     const statusEl = toolEl.querySelector(".chat-tool-status");
@@ -563,8 +596,101 @@ export class ChatPane implements Component, PaneKeyHandler {
       statusEl.textContent = status === "error" ? "failed" : "done";
     }
 
+    // Add collapsible result content body
+    if (content && content.trim()) {
+      const lines = content.split("\n");
+      const lineCount = lines.length;
+
+      // Update status with line/match count
+      if (statusEl && status !== "error") {
+        if (lineCount > 1) {
+          statusEl.textContent = `${lineCount} lines`;
+        }
+      }
+
+      // Create collapsible body
+      const body = document.createElement("div");
+      body.className = "chat-tool-body";
+
+      const pre = document.createElement("div");
+      pre.className = status === "error"
+        ? "chat-tool-content chat-tool-content--error"
+        : "chat-tool-content";
+
+      // Show truncated preview (first 20 lines)
+      const maxPreview = 20;
+      const previewLines = lines.slice(0, maxPreview);
+      pre.textContent = previewLines.join("\n");
+      body.appendChild(pre);
+
+      if (lineCount > maxPreview) {
+        const more = document.createElement("div");
+        more.className = "chat-tool-more";
+        more.textContent = `\u2193 ${lineCount - maxPreview} more lines`;
+        more.addEventListener("click", (e) => {
+          e.stopPropagation();
+          pre.textContent = content;
+          more.remove();
+        });
+        body.appendChild(more);
+      }
+
+      toolEl.appendChild(body);
+
+      // Add chevron for collapse toggle
+      const header = toolEl.querySelector(".chat-tool-header");
+      const chevron = document.createElement("span");
+      chevron.className = "chat-tool-chevron";
+      chevron.textContent = "\u203A"; // ›
+      header?.appendChild(chevron);
+
+      // Toggle body on header click
+      header?.addEventListener("click", () => {
+        toolEl.classList.toggle("chat-tool-use--expanded");
+      });
+    }
+
     this.activeToolEls.delete(toolId);
     this.scrollToBottom();
+  }
+
+  /**
+   * Extract the most useful context from tool input for display.
+   */
+  private summarizeToolInput(
+    toolName: string,
+    input?: Record<string, unknown>,
+  ): string {
+    if (!input) return "";
+
+    switch (toolName) {
+      case "Read":
+        return String(input.file_path ?? "");
+      case "Write":
+        return String(input.file_path ?? "");
+      case "Edit":
+        return String(input.file_path ?? "");
+      case "Glob":
+        return String(input.pattern ?? "");
+      case "Grep":
+        return `${input.pattern ?? ""}${input.path ? " in " + input.path : ""}`;
+      case "Bash":
+        return String(input.command ?? input.description ?? "");
+      case "Agent":
+        return String(input.description ?? input.prompt ?? "").slice(0, 60);
+      case "WebSearch":
+      case "WebFetch":
+        return String(input.query ?? input.url ?? "");
+      default: {
+        // Generic: show first string-valued field
+        for (const val of Object.values(input)) {
+          if (typeof val === "string" && val.length > 0 && val.length < 200) {
+            return val;
+          }
+        }
+        return "";
+      }
+    }
   }
 
   /**
@@ -841,6 +967,150 @@ export class ChatPane implements Component, PaneKeyHandler {
 
     this.messagesEl.appendChild(block);
     this.scrollToBottom();
+  }
+
+  private handlePermissionRequest(msg: ChatStreamMessage): void {
+    this.ensureAssistantEl();
+
+    if (this.streamRenderer) {
+      this.streamRenderer.finalize();
+      this.streamRenderer = null;
+    }
+    this.finalizeThinking();
+
+    const block = document.createElement("div");
+    block.className = "chat-tool-use chat-tool-use--approval";
+    if (msg.requestId) block.dataset["requestId"] = msg.requestId;
+
+    // Header
+    const header = document.createElement("div");
+    header.className = "chat-tool-header";
+
+    const icon = document.createElement("span");
+    icon.className = "chat-tool-icon chat-tool-icon--approval";
+    icon.textContent = "\u26A1"; // ⚡
+
+    const name = document.createElement("span");
+    name.className = "chat-tool-name";
+    name.textContent = msg.toolName ?? "Tool";
+
+    header.appendChild(icon);
+    header.appendChild(name);
+
+    const inputSummary = this.summarizeToolInput(
+      msg.toolName ?? "",
+      msg.toolInput,
+    );
+    if (inputSummary) {
+      const inputEl = document.createElement("span");
+      inputEl.className = "chat-tool-input";
+      inputEl.textContent = inputSummary;
+      header.appendChild(inputEl);
+    }
+
+    block.appendChild(header);
+
+    // Approval body
+    const approval = document.createElement("div");
+    approval.className = "chat-tool-approval";
+
+    if (msg.description) {
+      const desc = document.createElement("div");
+      desc.className = "chat-tool-approval-desc";
+      desc.textContent = msg.description;
+      approval.appendChild(desc);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "chat-tool-approval-actions";
+
+    const requestId = msg.requestId;
+
+    const allowBtn = document.createElement("button");
+    allowBtn.className = "chat-tool-approval-btn chat-tool-approval-btn--approve";
+    allowBtn.textContent = "Allow";
+    allowBtn.addEventListener("click", () => {
+      if (requestId) {
+        this.ws.send({
+          type: MessageType.PERMISSION_APPROVE,
+          requestId,
+        } as any);
+      }
+      block.classList.remove("chat-tool-use--approval");
+      block.classList.add("chat-tool-use--running");
+      icon.className = "chat-tool-icon running";
+      icon.textContent = "\u25B8"; // ▸
+      approval.remove();
+      const status = document.createElement("span");
+      status.className = "chat-tool-status";
+      status.textContent = "running\u2026";
+      header.appendChild(status);
+    });
+
+    const denyBtn = document.createElement("button");
+    denyBtn.className = "chat-tool-approval-btn chat-tool-approval-btn--deny";
+    denyBtn.textContent = "Deny";
+    denyBtn.addEventListener("click", () => {
+      if (requestId) {
+        this.ws.send({
+          type: MessageType.PERMISSION_DENY,
+          requestId,
+        } as any);
+      }
+      block.classList.remove("chat-tool-use--approval");
+      icon.textContent = "\u2013"; // –
+      icon.className = "chat-tool-icon";
+      icon.style.color = "var(--text-muted)";
+      approval.innerHTML = "";
+      const denied = document.createElement("div");
+      denied.className = "chat-tool-approval-resolved";
+      denied.textContent = "denied";
+      denied.style.color = "var(--text-muted)";
+      approval.appendChild(denied);
+    });
+
+    const hint = document.createElement("span");
+    hint.className = "chat-tool-approval-hint";
+    hint.textContent = "y / n";
+
+    actions.appendChild(allowBtn);
+    actions.appendChild(denyBtn);
+    actions.appendChild(hint);
+    approval.appendChild(actions);
+    block.appendChild(approval);
+
+    const contentEl = this.currentAssistantEl?.querySelector(".chat-message-content");
+    if (contentEl) {
+      contentEl.appendChild(block);
+    } else {
+      this.messagesEl.appendChild(block);
+    }
+    this.scrollToBottom();
+  }
+
+  private handlePermissionResolved(msg: ChatStreamMessage): void {
+    if (!msg.requestId) return;
+    const block = this.messagesEl.querySelector(
+      `[data-request-id="${msg.requestId}"]`,
+    ) as HTMLElement | null;
+    if (!block) return;
+
+    block.classList.remove("chat-tool-use--approval", "chat-tool-use--running");
+    const icon = block.querySelector(".chat-tool-icon");
+
+    if (msg.decision === "allow") {
+      block.classList.add("chat-tool-use--success");
+      if (icon) {
+        icon.className = "chat-tool-icon success";
+        icon.textContent = "\u2713"; // ✓
+      }
+    } else {
+      if (icon) {
+        icon.textContent = "\u2013"; // –
+        icon.className = "chat-tool-icon";
+        (icon as HTMLElement).style.color = "var(--text-muted)";
+      }
+    }
   }
 
   private makeStatusEl(text: string, cls: string): HTMLElement {

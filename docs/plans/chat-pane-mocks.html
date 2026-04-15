@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CADE Chat Pane — Design Mocks</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<style>
+  /* ── CADE Design Tokens (True Black theme) ────────────────────── */
+  :root {
+    --bg-primary: #0a0a09;
+    --bg-secondary: #111110;
+    --bg-tertiary: #1a1918;
+    --bg-hover: #222120;
+    --bg-selected: #222120;
+    --text-primary: #f8f6f2;
+    --text-secondary: #c4b9ad;
+    --text-muted: #5e5955;
+    --accent-blue: #0a9dff;
+    --accent-green: #aeee00;
+    --accent-orange: #ffa724;
+    --accent-yellow: #fade3e;
+    --accent-purple: #ff9eb8;
+    --accent-red: #ff2c4b;
+    --accent-cyan: #8cffba;
+    --border-color: #2a2827;
+    --border-focus: #aeee00;
+    --font-mono: "JetBrains Mono", "Fira Code", Consolas, "Courier New", monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #050504;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 32px;
+    min-height: 100vh;
+  }
+
+  /* ── Page layout ──────────────────────────────────────────────── */
+  .page-header {
+    text-align: center;
+    margin-bottom: 48px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .page-header h1 {
+    color: var(--accent-red);
+    font-size: 14px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .page-header p {
+    color: var(--text-muted);
+    font-size: 12px;
+  }
+
+  .mock-section {
+    margin-bottom: 64px;
+  }
+  .mock-label {
+    color: var(--accent-red);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 16px;
+    padding: 4px 12px;
+    background: var(--bg-secondary);
+    border-left: 3px solid var(--accent-red);
+  }
+  .mock-desc {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-bottom: 20px;
+    padding-left: 15px;
+    line-height: 1.7;
+  }
+
+  /* ── Shared: Chat pane container ──────────────────────────────── */
+  .chat-mock {
+    width: 520px;
+    height: 680px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin: 0 auto;
+  }
+
+  /* ── Shared: Chat header (matches viewer-header) ──────────────── */
+  .mock-header {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 12px;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .mock-header .provider-badge {
+    position: absolute;
+    right: 12px;
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  /* ── Shared: Statusline (matches viewer-statusline) ───────────── */
+  .mock-statusline {
+    display: flex;
+    align-items: center;
+    padding: 4px 12px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    gap: 12px;
+  }
+  .mock-statusline .status-mode {
+    color: var(--accent-blue);
+    font-weight: 600;
+  }
+  .mock-statusline .status-provider {
+    color: var(--accent-cyan);
+  }
+  .mock-statusline .status-right {
+    margin-left: auto;
+    display: flex;
+    gap: 12px;
+  }
+  .mock-statusline .status-tokens {
+    color: var(--text-muted);
+  }
+
+  /* ── Shared: Messages area ────────────────────────────────────── */
+  .mock-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 0;
+  }
+  .mock-messages::-webkit-scrollbar { width: 5px; }
+  .mock-messages::-webkit-scrollbar-track { background: var(--bg-primary); }
+  .mock-messages::-webkit-scrollbar-thumb { background: var(--border-color); }
+
+  /* ── Shared: Input area ───────────────────────────────────────── */
+  .mock-input-area {
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-primary);
+    flex-shrink: 0;
+  }
+
+  /*
+   * ═══════════════════════════════════════════════════════════════
+   *  MOCK A — "Ledger"
+   *  Full-width messages, left-border role indicators, role gutter
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  .mock-a .msg {
+    padding: 10px 16px 10px 16px;
+    border-left: 3px solid transparent;
+    position: relative;
+  }
+  .mock-a .msg + .msg {
+    margin-top: 2px;
+  }
+
+  .mock-a .msg-role {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mock-a .msg-role .timestamp {
+    font-weight: 400;
+    color: var(--text-muted);
+    font-size: 10px;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .mock-a .msg.user {
+    border-left-color: var(--accent-green);
+    background: var(--bg-secondary);
+  }
+  .mock-a .msg.user .msg-role { color: var(--accent-green); }
+
+  .mock-a .msg.assistant {
+    border-left-color: var(--accent-blue);
+    background: transparent;
+  }
+  .mock-a .msg.assistant .msg-role { color: var(--accent-blue); }
+
+  .mock-a .msg.system {
+    border-left-color: transparent;
+    background: transparent;
+    text-align: center;
+    padding: 6px 16px;
+  }
+  .mock-a .msg.system .msg-content {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-style: italic;
+  }
+
+  .mock-a .msg.error {
+    border-left-color: var(--accent-red);
+    background: rgba(255, 44, 75, 0.05);
+  }
+  .mock-a .msg.error .msg-role { color: var(--accent-red); }
+  .mock-a .msg.error .msg-content { color: var(--accent-red); }
+
+  .mock-a .msg-content {
+    color: var(--text-primary);
+    line-height: 1.6;
+  }
+  .mock-a .msg-content p { margin: 0 0 8px 0; }
+  .mock-a .msg-content p:last-child { margin-bottom: 0; }
+
+  /* Input: prompt-style */
+  .mock-a .input-row {
+    display: flex;
+    align-items: flex-end;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .mock-a .input-prompt {
+    color: var(--accent-green);
+    font-size: 14px;
+    line-height: 1.4;
+    flex-shrink: 0;
+    padding-bottom: 1px;
+  }
+  .mock-a .input-field {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 4px 0;
+    outline: none;
+    resize: none;
+    line-height: 1.4;
+  }
+  .mock-a .input-field::placeholder { color: var(--text-muted); }
+
+  /*
+   * ═══════════════════════════════════════════════════════════════
+   *  MOCK B — "Terminal"
+   *  REPL-style: user input with prompt, assistant output flows
+   *  below. Tighter, more conversational, raw terminal feel.
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  .mock-b .msg {
+    padding: 6px 16px;
+  }
+  .mock-b .msg + .msg.user {
+    margin-top: 12px;
+    border-top: 1px solid var(--border-color);
+    padding-top: 12px;
+  }
+
+  .mock-b .msg.user .msg-content {
+    color: var(--accent-green);
+    display: flex;
+    gap: 8px;
+  }
+  .mock-b .msg.user .msg-content::before {
+    content: "❯";
+    color: var(--accent-green);
+    flex-shrink: 0;
+    font-weight: 600;
+  }
+  .mock-b .msg.user .msg-text {
+    color: var(--text-primary);
+  }
+
+  .mock-b .msg.assistant {
+    padding-left: 16px;
+  }
+  .mock-b .msg.assistant .msg-content {
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+  .mock-b .msg.assistant .msg-content p { margin: 0 0 8px 0; }
+  .mock-b .msg.assistant .msg-content p:last-child { margin-bottom: 0; }
+
+  .mock-b .msg.error .msg-content {
+    color: var(--accent-red);
+    font-size: 12px;
+  }
+  .mock-b .msg.error .msg-content::before {
+    content: "✗ ";
+    color: var(--accent-red);
+  }
+
+  /* Input: inline prompt */
+  .mock-b .input-row {
+    display: flex;
+    align-items: flex-end;
+    padding: 10px 16px 12px;
+    gap: 8px;
+  }
+  .mock-b .input-prompt {
+    color: var(--accent-green);
+    font-weight: 600;
+    flex-shrink: 0;
+    line-height: 1.4;
+  }
+  .mock-b .input-field {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 0;
+    outline: none;
+    line-height: 1.4;
+  }
+  .mock-b .input-field::placeholder { color: var(--text-muted); }
+
+  /*
+   * ═══════════════════════════════════════════════════════════════
+   *  Shared rich content styles (code, math, diagrams)
+   * ═══════════════════════════════════════════════════════════════
+   */
+
+  .msg-content code:not(pre code) {
+    background: var(--bg-tertiary);
+    color: var(--accent-orange);
+    padding: 1px 5px;
+    font-size: 12px;
+  }
+
+  .msg-content pre {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    padding: 10px 12px;
+    overflow-x: auto;
+    margin: 8px 0;
+    font-size: 12px;
+    line-height: 1.5;
+    position: relative;
+  }
+  .msg-content pre code {
+    background: none;
+    color: var(--text-primary);
+    padding: 0;
+    font-size: 12px;
+  }
+  .msg-content pre .lang-tag {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding: 2px 8px;
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: var(--bg-secondary);
+    border-left: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  /* Syntax highlighting */
+  .tok-kw { color: var(--accent-red); }
+  .tok-fn { color: var(--accent-blue); }
+  .tok-str { color: var(--accent-green); }
+  .tok-num { color: var(--accent-orange); }
+  .tok-cm { color: var(--text-muted); font-style: italic; }
+  .tok-op { color: var(--text-secondary); }
+  .tok-var { color: var(--accent-cyan); }
+  .tok-type { color: var(--accent-yellow); }
+  .tok-dec { color: var(--accent-purple); }
+
+  /* KaTeX blocks */
+  .math-block {
+    margin: 10px 0;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-left: 2px solid var(--accent-purple);
+    overflow-x: auto;
+    text-align: center;
+  }
+  .math-inline {
+    padding: 0 2px;
+  }
+
+  /* Mermaid diagrams */
+  .mermaid-block {
+    margin: 10px 0;
+    padding: 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    text-align: center;
+    position: relative;
+  }
+  .mermaid-block .diagram-label {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding: 2px 8px;
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: var(--bg-tertiary);
+    border-left: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  /* SVG-simulated mermaid (for the mock) */
+  .mermaid-mock {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px;
+  }
+  .mermaid-mock .merm-node {
+    padding: 6px 20px;
+    border: 1px solid var(--accent-blue);
+    color: var(--accent-blue);
+    font-size: 11px;
+    min-width: 120px;
+    text-align: center;
+  }
+  .mermaid-mock .merm-node.highlight {
+    border-color: var(--accent-green);
+    color: var(--accent-green);
+    background: rgba(174, 238, 0, 0.05);
+  }
+  .mermaid-mock .merm-node.warn {
+    border-color: var(--accent-orange);
+    color: var(--accent-orange);
+  }
+  .mermaid-mock .merm-arrow {
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.2;
+  }
+  .mermaid-mock .merm-row {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+
+  /* Blockquote */
+  .msg-content blockquote {
+    border-left: 3px solid var(--accent-blue);
+    margin: 8px 0;
+    padding: 4px 12px;
+    color: var(--text-secondary);
+  }
+
+  /* Lists */
+  .msg-content ul, .msg-content ol {
+    margin: 4px 0 8px 20px;
+  }
+  .msg-content li {
+    margin: 2px 0;
+  }
+  .msg-content li::marker {
+    color: var(--text-muted);
+  }
+
+  /* Tables */
+  .msg-content table {
+    border-collapse: collapse;
+    margin: 8px 0;
+    width: 100%;
+    font-size: 12px;
+  }
+  .msg-content th, .msg-content td {
+    border: 1px solid var(--border-color);
+    padding: 4px 8px;
+    text-align: left;
+  }
+  .msg-content th {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .msg-content tr:nth-child(even) {
+    background: var(--bg-secondary);
+  }
+
+  /* Streaming cursor */
+  .streaming-cursor {
+    display: inline-block;
+    width: 7px;
+    height: 14px;
+    background: var(--accent-blue);
+    animation: blink-cursor 1s step-end infinite;
+    vertical-align: text-bottom;
+    margin-left: 1px;
+  }
+  @keyframes blink-cursor {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  /* Thinking block (collapsible) */
+  .thinking-block {
+    margin: 6px 0;
+    border-left: 2px solid var(--text-muted);
+    padding-left: 12px;
+  }
+  .thinking-toggle {
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+  }
+  .thinking-toggle:hover { color: var(--text-secondary); }
+  .thinking-toggle .chevron {
+    font-size: 9px;
+    transition: transform 0.1s;
+  }
+  .thinking-toggle .chevron.open { transform: rotate(90deg); }
+  .thinking-content {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.5;
+    margin-top: 4px;
+    font-style: italic;
+  }
+
+  /* ── Comparison layout ────────────────────────────────────────── */
+  .mocks-row {
+    display: flex;
+    gap: 32px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .annotation {
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    max-width: 520px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .annotation strong { color: var(--text-primary); }
+  .annotation .tag {
+    display: inline-block;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  .annotation .tag.pro { color: var(--accent-green); background: rgba(174, 238, 0, 0.1); }
+  .annotation .tag.con { color: var(--accent-red); background: rgba(255, 44, 75, 0.1); }
+  .annotation .tag.note { color: var(--accent-blue); background: rgba(10, 157, 255, 0.1); }
+
+  /* ── Detail section ───────────────────────────────────────────── */
+  .detail-section {
+    max-width: 600px;
+    margin: 0 auto 48px;
+  }
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .detail-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    padding: 12px;
+  }
+  .detail-card h4 {
+    font-size: 10px;
+    color: var(--accent-orange);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .detail-card p {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+  .color-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .color-swatch {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+  }
+
+  /* ── Divider ──────────────────────────────────────────────────── */
+  .section-divider {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 48px 0;
+  }
+
+  /* KaTeX overrides for dark theme */
+  .katex { color: var(--text-primary); }
+  .katex .mord, .katex .mbin, .katex .mrel,
+  .katex .mopen, .katex .mclose, .katex .mpunct,
+  .katex .mop { color: var(--text-primary); }
+</style>
+</head>
+<body>
+
+<!-- ================================================================
+     PAGE HEADER
+     ================================================================ -->
+<div class="page-header">
+  <h1>[ Chat Pane Mocks ]</h1>
+  <p>Two approaches to the chat UI — both built on existing CADE design tokens</p>
+</div>
+
+<!-- ================================================================
+     MOCK A — "Ledger"
+     ================================================================ -->
+<div class="mock-section">
+  <div class="mock-label">Mock A — Ledger</div>
+  <div class="mock-desc">
+    Full-width messages with colored left-border role indicators. Closest to the<br>
+    existing viewer/blockquote patterns. Explicit role labels. Clear visual hierarchy.
+  </div>
+
+  <div class="chat-mock mock-a">
+    <!-- Header -->
+    <div class="mock-header">
+      Chat
+      <span class="provider-badge">claude-sonnet</span>
+    </div>
+
+    <!-- Messages -->
+    <div class="mock-messages">
+
+      <!-- System message -->
+      <div class="msg system">
+        <div class="msg-content">— conversation started —</div>
+      </div>
+
+      <!-- User message -->
+      <div class="msg user">
+        <div class="msg-role">you <span class="timestamp">2:14 pm</span></div>
+        <div class="msg-content">
+          <p>Explain the quadratic formula and show me the math. Include a code example and a flowchart.</p>
+        </div>
+      </div>
+
+      <!-- Assistant message with rich content -->
+      <div class="msg assistant">
+        <div class="msg-role">claude-sonnet <span class="timestamp">2:14 pm</span></div>
+        <div class="msg-content">
+
+          <!-- Thinking block -->
+          <div class="thinking-block">
+            <div class="thinking-toggle">
+              <span class="chevron open">▶</span> thinking (1.2s)
+            </div>
+            <div class="thinking-content">
+              The user wants the quadratic formula with math rendering, a code implementation, and a mermaid flowchart. I'll structure this with KaTeX for the formula, a Python implementation, and a decision flowchart for solving...
+            </div>
+          </div>
+
+          <p>The <strong>quadratic formula</strong> solves any equation of the form <code>ax² + bx + c = 0</code>:</p>
+
+          <!-- KaTeX block -->
+          <div class="math-block">
+            <span class="katex" style="font-size: 18px;">
+              <span class="katex-html">
+                <span style="color: var(--text-primary); font-family: KaTeX_Math, serif; font-style: italic;">x</span>
+                <span style="color: var(--text-secondary);"> = </span>
+                <span style="display: inline-block; vertical-align: middle;">
+                  <span style="display: block; text-align: center; border-bottom: 1px solid var(--text-secondary); padding: 0 4px 3px; color: var(--text-primary); font-family: KaTeX_Math, serif;">
+                    <span style="font-style: italic;">−b</span>
+                    <span style="color: var(--text-secondary);"> ± </span>
+                    <span style="color: var(--accent-purple);">√</span><span style="border-top: 1px solid var(--text-secondary); padding: 0 3px; font-style: italic;">b² − 4ac</span>
+                  </span>
+                  <span style="display: block; text-align: center; padding: 3px 4px 0; color: var(--text-primary); font-family: KaTeX_Math, serif; font-style: italic;">2a</span>
+                </span>
+              </span>
+            </span>
+          </div>
+
+          <p>Where the <strong>discriminant</strong> <code>Δ = b² − 4ac</code> determines the nature of the roots:</p>
+
+          <table>
+            <thead>
+              <tr><th>Discriminant</th><th>Roots</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="math-inline" style="font-family: KaTeX_Math, serif; font-style: italic;">Δ</span> &gt; 0</td><td>Two distinct real roots</td></tr>
+              <tr><td><span class="math-inline" style="font-family: KaTeX_Math, serif; font-style: italic;">Δ</span> = 0</td><td>One repeated real root</td></tr>
+              <tr><td><span class="math-inline" style="font-family: KaTeX_Math, serif; font-style: italic;">Δ</span> &lt; 0</td><td>Two complex conjugate roots</td></tr>
+            </tbody>
+          </table>
+
+          <p>Python implementation:</p>
+
+          <pre><span class="lang-tag">python</span><code><span class="tok-kw">import</span> cmath
+
+<span class="tok-kw">def</span> <span class="tok-fn">quadratic</span>(a: <span class="tok-type">float</span>, b: <span class="tok-type">float</span>, c: <span class="tok-type">float</span>) -> <span class="tok-type">tuple</span>:
+    <span class="tok-cm">"""Solve ax² + bx + c = 0."""</span>
+    <span class="tok-var">discriminant</span> <span class="tok-op">=</span> b<span class="tok-op">**</span><span class="tok-num">2</span> <span class="tok-op">-</span> <span class="tok-num">4</span><span class="tok-op">*</span>a<span class="tok-op">*</span>c
+    <span class="tok-var">sqrt_d</span> <span class="tok-op">=</span> cmath.sqrt(<span class="tok-var">discriminant</span>)
+    <span class="tok-var">x1</span> <span class="tok-op">=</span> (<span class="tok-op">-</span>b <span class="tok-op">+</span> <span class="tok-var">sqrt_d</span>) <span class="tok-op">/</span> (<span class="tok-num">2</span> <span class="tok-op">*</span> a)
+    <span class="tok-var">x2</span> <span class="tok-op">=</span> (<span class="tok-op">-</span>b <span class="tok-op">-</span> <span class="tok-var">sqrt_d</span>) <span class="tok-op">/</span> (<span class="tok-num">2</span> <span class="tok-op">*</span> a)
+    <span class="tok-kw">return</span> <span class="tok-var">x1</span>, <span class="tok-var">x2</span></code></pre>
+
+          <p>Decision flowchart for solving:</p>
+
+          <!-- Mermaid diagram mock -->
+          <div class="mermaid-block">
+            <span class="diagram-label">mermaid</span>
+            <div class="mermaid-mock">
+              <div class="merm-node">Compute Δ = b² − 4ac</div>
+              <div class="merm-arrow">│</div>
+              <div class="merm-row">
+                <div>
+                  <div class="merm-arrow" style="text-align:center">Δ &gt; 0</div>
+                  <div class="merm-node highlight">Two real roots</div>
+                </div>
+                <div>
+                  <div class="merm-arrow" style="text-align:center">Δ = 0</div>
+                  <div class="merm-node warn">One repeated root</div>
+                </div>
+                <div>
+                  <div class="merm-arrow" style="text-align:center">Δ &lt; 0</div>
+                  <div class="merm-node">Two complex roots</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Second exchange - shorter -->
+      <div class="msg user">
+        <div class="msg-role">you <span class="timestamp">2:15 pm</span></div>
+        <div class="msg-content">
+          <p>What about <code>a = 0</code>?</p>
+        </div>
+      </div>
+
+      <!-- Streaming assistant response -->
+      <div class="msg assistant">
+        <div class="msg-role">claude-sonnet <span class="timestamp">2:15 pm</span></div>
+        <div class="msg-content">
+          <p>When <code>a = 0</code>, the equation degenerates to a <strong>linear</strong> equation <code>bx + c = 0</code>, which has the single solution:</p>
+          <div class="math-block">
+            <span style="font-family: KaTeX_Math, serif; font-style: italic; font-size: 16px; color: var(--text-primary);">
+              x = −c / b
+            </span>
+          </div>
+          <p>You should guard against this in your implementation<span class="streaming-cursor"></span></p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Input -->
+    <div class="mock-input-area">
+      <div class="input-row">
+        <span class="input-prompt">❯</span>
+        <input type="text" class="input-field" placeholder="Send a message..." disabled>
+      </div>
+    </div>
+
+    <!-- Statusline -->
+    <div class="mock-statusline">
+      <span class="status-mode">CHAT</span>
+      <span class="status-provider">claude-sonnet</span>
+      <span class="status-right">
+        <span class="status-tokens">1,247 tokens</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="annotation">
+    <span class="tag pro">PRO</span> Clear role attribution — you always know who said what<br>
+    <span class="tag pro">PRO</span> Left-border pattern is already established (blockquotes, file tree)<br>
+    <span class="tag pro">PRO</span> Graceful scaling — long messages, tables, diagrams all have room<br>
+    <span class="tag pro">PRO</span> Thinking blocks collapse naturally<br>
+    <span class="tag con">CON</span> Role labels add vertical space on every message<br>
+    <span class="tag note">NOTE</span> Timestamps optional — could show on hover only
+  </div>
+</div>
+
+<hr class="section-divider">
+
+<!-- ================================================================
+     MOCK B — "Terminal"
+     ================================================================ -->
+<div class="mock-section">
+  <div class="mock-label">Mock B — Terminal</div>
+  <div class="mock-desc">
+    REPL-style interaction. User input shown with a prompt character, assistant<br>
+    output flows below. Tighter vertical rhythm — feels like a terminal session.
+  </div>
+
+  <div class="chat-mock mock-b">
+    <!-- Header -->
+    <div class="mock-header">
+      Chat
+      <span class="provider-badge">claude-sonnet</span>
+    </div>
+
+    <!-- Messages -->
+    <div class="mock-messages">
+
+      <!-- Exchange 1 -->
+      <div class="msg user">
+        <div class="msg-content">
+          <span class="msg-text">Explain the quadratic formula and show me the math. Include a code example and a flowchart.</span>
+        </div>
+      </div>
+
+      <div class="msg assistant">
+        <div class="msg-content">
+          <!-- Thinking -->
+          <div class="thinking-block">
+            <div class="thinking-toggle">
+              <span class="chevron open">▶</span> thinking (1.2s)
+            </div>
+            <div class="thinking-content">
+              The user wants the quadratic formula with math rendering, a code implementation, and a mermaid flowchart...
+            </div>
+          </div>
+
+          <p>The <strong>quadratic formula</strong> solves any equation of the form <code>ax² + bx + c = 0</code>:</p>
+
+          <div class="math-block">
+            <span class="katex" style="font-size: 18px;">
+              <span class="katex-html">
+                <span style="color: var(--text-primary); font-family: KaTeX_Math, serif; font-style: italic;">x</span>
+                <span style="color: var(--text-secondary);"> = </span>
+                <span style="display: inline-block; vertical-align: middle;">
+                  <span style="display: block; text-align: center; border-bottom: 1px solid var(--text-secondary); padding: 0 4px 3px; color: var(--text-primary); font-family: KaTeX_Math, serif;">
+                    <span style="font-style: italic;">−b</span>
+                    <span style="color: var(--text-secondary);"> ± </span>
+                    <span style="color: var(--accent-purple);">√</span><span style="border-top: 1px solid var(--text-secondary); padding: 0 3px; font-style: italic;">b² − 4ac</span>
+                  </span>
+                  <span style="display: block; text-align: center; padding: 3px 4px 0; color: var(--text-primary); font-family: KaTeX_Math, serif; font-style: italic;">2a</span>
+                </span>
+              </span>
+            </span>
+          </div>
+
+          <p>The <strong>discriminant</strong> <code>Δ = b² − 4ac</code> determines root type:</p>
+
+          <ul>
+            <li><code>Δ &gt; 0</code> → two distinct real roots</li>
+            <li><code>Δ = 0</code> → one repeated root</li>
+            <li><code>Δ &lt; 0</code> → two complex conjugate roots</li>
+          </ul>
+
+          <pre><span class="lang-tag">python</span><code><span class="tok-kw">import</span> cmath
+
+<span class="tok-kw">def</span> <span class="tok-fn">quadratic</span>(a: <span class="tok-type">float</span>, b: <span class="tok-type">float</span>, c: <span class="tok-type">float</span>) -> <span class="tok-type">tuple</span>:
+    <span class="tok-cm">"""Solve ax² + bx + c = 0."""</span>
+    <span class="tok-var">discriminant</span> <span class="tok-op">=</span> b<span class="tok-op">**</span><span class="tok-num">2</span> <span class="tok-op">-</span> <span class="tok-num">4</span><span class="tok-op">*</span>a<span class="tok-op">*</span>c
+    <span class="tok-var">sqrt_d</span> <span class="tok-op">=</span> cmath.sqrt(<span class="tok-var">discriminant</span>)
+    <span class="tok-var">x1</span> <span class="tok-op">=</span> (<span class="tok-op">-</span>b <span class="tok-op">+</span> <span class="tok-var">sqrt_d</span>) <span class="tok-op">/</span> (<span class="tok-num">2</span> <span class="tok-op">*</span> a)
+    <span class="tok-var">x2</span> <span class="tok-op">=</span> (<span class="tok-op">-</span>b <span class="tok-op">-</span> <span class="tok-var">sqrt_d</span>) <span class="tok-op">/</span> (<span class="tok-num">2</span> <span class="tok-op">*</span> a)
+    <span class="tok-kw">return</span> <span class="tok-var">x1</span>, <span class="tok-var">x2</span></code></pre>
+
+          <p>Decision flowchart:</p>
+
+          <div class="mermaid-block">
+            <span class="diagram-label">mermaid</span>
+            <div class="mermaid-mock">
+              <div class="merm-node">Compute Δ = b² − 4ac</div>
+              <div class="merm-arrow">│</div>
+              <div class="merm-row">
+                <div>
+                  <div class="merm-arrow" style="text-align:center">Δ &gt; 0</div>
+                  <div class="merm-node highlight">Two real roots</div>
+                </div>
+                <div>
+                  <div class="merm-arrow" style="text-align:center">Δ = 0</div>
+                  <div class="merm-node warn">One repeated root</div>
+                </div>
+                <div>
+                  <div class="merm-arrow" style="text-align:center">Δ &lt; 0</div>
+                  <div class="merm-node">Two complex roots</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Exchange 2 -->
+      <div class="msg user">
+        <div class="msg-content">
+          <span class="msg-text">What about <code style="color:var(--accent-orange);background:var(--bg-tertiary);padding:1px 5px">a = 0</code>?</span>
+        </div>
+      </div>
+
+      <div class="msg assistant">
+        <div class="msg-content">
+          <p>When <code>a = 0</code>, the equation degenerates to a <strong>linear</strong> equation <code>bx + c = 0</code> with solution <span style="font-family: KaTeX_Math, serif; font-style: italic;">x = −c / b</span>. Guard against this<span class="streaming-cursor"></span></p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Input -->
+    <div class="mock-input-area">
+      <div class="input-row">
+        <span class="input-prompt">❯</span>
+        <input type="text" class="input-field" placeholder="Send a message..." disabled>
+      </div>
+    </div>
+
+    <!-- Statusline -->
+    <div class="mock-statusline">
+      <span class="status-mode">CHAT</span>
+      <span class="status-provider">claude-sonnet</span>
+      <span class="status-right">
+        <span class="status-tokens">1,247 tokens</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="annotation">
+    <span class="tag pro">PRO</span> Tightest vertical density — more content visible<br>
+    <span class="tag pro">PRO</span> Feels native to the terminal environment<br>
+    <span class="tag pro">PRO</span> <code>❯</code> prompt unambiguously marks user turns<br>
+    <span class="tag con">CON</span> No explicit assistant label — relies on context<br>
+    <span class="tag con">CON</span> Harder to scan long conversations for specific turns<br>
+    <span class="tag note">NOTE</span> Turn separators (thin border) help with scannability
+  </div>
+</div>
+
+<hr class="section-divider">
+
+<!-- ================================================================
+     DESIGN NOTES
+     ================================================================ -->
+<div class="detail-section">
+  <div class="mock-label">Design Decisions</div>
+
+  <div class="detail-grid">
+    <div class="detail-card">
+      <h4>Input Style</h4>
+      <p>Terminal prompt (<code>❯</code> + underline field) instead of boxed textarea. Matches auth input and file tree search patterns already in CADE.</p>
+    </div>
+    <div class="detail-card">
+      <h4>No Bubbles</h4>
+      <p>Bubbles with border-radius violate the zero-radius terminal aesthetic. Full-width messages with left-border indicators instead.</p>
+    </div>
+    <div class="detail-card">
+      <h4>Statusline</h4>
+      <p>Vim-style statusline at bottom shows mode, provider, and token count. Matches the existing viewer statusline pattern exactly.</p>
+    </div>
+    <div class="detail-card">
+      <h4>Math Blocks</h4>
+      <p>KaTeX renders with a purple left-border indicator (distinguishing from blue blockquotes). Centered alignment for display math.</p>
+    </div>
+    <div class="detail-card">
+      <h4>Mermaid Blocks</h4>
+      <p>Bordered container with a <code>mermaid</code> language tag (same pattern as code blocks). Dark background preserves the theme.</p>
+    </div>
+    <div class="detail-card">
+      <h4>Streaming</h4>
+      <p>Block cursor (<span style="display:inline-block;width:7px;height:12px;background:var(--accent-blue);vertical-align:text-bottom"></span>) in accent-blue. Blinks at 1Hz. Disappears when response completes.</p>
+    </div>
+    <div class="detail-card">
+      <h4>Thinking</h4>
+      <p>Collapsible block with muted left-border. Shows duration. Collapsed by default after completion, open during streaming.</p>
+    </div>
+    <div class="detail-card">
+      <h4>Role Colors</h4>
+      <div class="color-row"><span class="color-swatch" style="background:var(--accent-green)"></span> You (user) — green (matches edit mode)</div>
+      <div class="color-row"><span class="color-swatch" style="background:var(--accent-blue)"></span> Assistant — blue (matches Claude indicator)</div>
+      <div class="color-row"><span class="color-swatch" style="background:var(--text-muted)"></span> System — muted (informational)</div>
+      <div class="color-row"><span class="color-swatch" style="background:var(--accent-red)"></span> Error — red (matches error states)</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -73,6 +73,20 @@ class MessageType:
     NEOVIM_RPC_RESPONSE = "neovim-rpc-response"  # RPC response: { type, requestId, result?, error? }
     NEOVIM_EXITED = "neovim-exited"  # Neovim exited: { type, exitCode: int }
 
+    # Permissions - Client -> Server
+    PERMISSION_APPROVE = "permission-approve"  # Approve tool use: { type, requestId }
+    PERMISSION_DENY = "permission-deny"  # Deny tool use: { type, requestId }
+
+    # Dashboard - Client -> Server
+    DASHBOARD_GET_CONFIG = "dashboard-get-config"  # Request dashboard config: { type }
+    DASHBOARD_GET_DATA = "dashboard-get-data"  # Request data: { type, sourceId?: str }
+    DASHBOARD_ACTION = "dashboard-action"  # User interaction: { type, action, source, entityId, patch }
+
+    # Dashboard - Server -> Client
+    DASHBOARD_CONFIG = "dashboard-config"  # Config payload: { type, config: dict }
+    DASHBOARD_DATA = "dashboard-data"  # Data payload: { type, sources: dict[str, list] }
+    DASHBOARD_CLEARED = "dashboard-cleared"  # Config removed: { type }
+
 
 class SessionKey:
     """Session key constants for dual-terminal support."""

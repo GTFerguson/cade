@@ -1,3 +1,11 @@
+---
+title: Terminal UI Issues
+created: 2026-01-16
+updated: 2026-03-24
+status: active
+tags: [terminal, ui, issues]
+---
+
 # Terminal UI Issues
 
 Issues with terminal display and interaction that need investigation and fixing.

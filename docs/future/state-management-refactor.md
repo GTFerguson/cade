@@ -1,9 +1,13 @@
 ---
-title: Frontend State Management Refactor
 created: 2026-01-18
-updated: 2026-01-18
 status: planned
-tags: [refactor, frontend, state-management, testing]
+tags:
+- refactor
+- frontend
+- state-management
+- testing
+title: Frontend State Management Refactor
+updated: 2026-01-18
 ---
 
 # Frontend State Management Refactor

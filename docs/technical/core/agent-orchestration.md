@@ -1,30 +1,28 @@
 ---
 title: Agent Lifecycle & Orchestration
 created: 2026-01-31
-updated: 2026-01-31
-status: planned
+updated: 2026-03-24
+status: implemented
 tags: [agents, orchestration, lifecycle, architecture]
 ---
 
 # Agent Lifecycle & Orchestration
 
-Multi-agent coordination system enabling multiple Claude Code instances to work together within a project.
+Multi-agent coordination system enabling multiple Claude Code instances to work together within a project. Shipped as orchestrator mode (`/orch`) with two-gate approval flow, MCP-based agent spawning, and per-agent tabs.
 
-## Current Limitations
+## What Was Built
 
-**Current behavior:**
-- Each Claude Code instance runs in its own project tab
-- Instances are fully isolated with no awareness of each other
-- No visibility into whether an agent is actively running, blocked, or waiting for user input
-- Single agent per project limitation
+- Orchestrator mode via `/orch` slash command
+- Two-gate approval flow: spawn approval (in orchestrator chat) → agent executes → report approval (in agent tab)
+- Each worker agent gets its own tab with full ChatPane output
+- MCP server provides `spawn_agent` and `list_agents` tools to the orchestrator CC instance
+- Blocking lifecycle: MCP tool blocks until agent report is approved/rejected, then returns the result
+- Agent overview pane with state indicators and management controls
 
-## Vision
+## Original Design
 
-Enable sophisticated multi-agent workflows where:
-- Multiple Claude instances collaborate on a single project
-- An orchestrator agent can delegate tasks and monitor progress
-- UI provides clear visual feedback on agent states
-- Agents remain isolated at the terminal level while sharing project context
+> [!NOTE]
+> The sections below capture the original design thinking. Some details were implemented differently — the description above reflects what was actually shipped.
 
 ## Core Components
 

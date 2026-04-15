@@ -1,0 +1,588 @@
+/* Dashboard rendering styles
+ *
+ * Design bible: zero border-radius, zero box-shadow, monospace,
+ * bracket notation headers, TUI aesthetic.
+ * Colour-rich like the rest of CADE — accents on data, not just chrome.
+ */
+
+/* Right pane mode (compact) */
+.right-pane-dashboard {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+/* Full-width tab mode */
+.dashboard-full-container {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ═══ Header ═══ */
+.dashboard-header {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent-red);
+  padding: 12px 16px 4px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.dashboard-subtitle {
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 8px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: lowercase;
+}
+
+/* ═══ View tabs ═══ */
+.dashboard-view-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 16px 0;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-color);
+  gap: 0;
+}
+
+.dashboard-view-tab {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  padding: 6px 0;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: color 0.1s;
+  position: relative;
+  white-space: nowrap;
+}
+
+.dashboard-view-tab + .dashboard-view-tab {
+  margin-left: 24px;
+}
+
+.dashboard-view-tab:hover {
+  color: var(--text-secondary);
+}
+
+.dashboard-view-tab--active {
+  color: var(--text-primary);
+}
+
+.dashboard-view-tab--active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--text-primary);
+}
+
+/* ═══ Content area ═══ */
+.dashboard-view-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.dashboard-view-content::-webkit-scrollbar { width: 6px; }
+.dashboard-view-content::-webkit-scrollbar-track { background: transparent; }
+.dashboard-view-content::-webkit-scrollbar-thumb { background: var(--border-color); }
+
+/* ═══ Panel layouts ═══ */
+.dashboard-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.dashboard-layout-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.dashboard-layout-grid-3col {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+/* ═══ Panel container ═══ */
+.dashboard-panel {
+  background: transparent;
+  overflow: hidden;
+}
+
+.dashboard-panel--full-width {
+  grid-column: 1 / -1;
+}
+
+.dashboard-panel-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--accent-red);
+  padding: 0 0 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.dashboard-panel-body {
+  padding: 0;
+}
+
+/* ═══ Empty / error states ═══ */
+.dashboard-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.dashboard-component-missing,
+.dashboard-component-error {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 8px;
+  font-style: italic;
+}
+
+.dashboard-component-error {
+  color: var(--accent-red);
+}
+
+/* ═══════════════════════════════════════════════
+   Component: Cards
+   ═══════════════════════════════════════════════ */
+.dash-cards {
+  display: grid;
+  gap: 4px;
+}
+
+.dash-cards--grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.dash-cards--list {
+  grid-template-columns: 1fr;
+}
+
+.dash-card {
+  background: var(--bg-secondary);
+  padding: 10px 12px;
+  cursor: default;
+  transition: background 0.1s;
+  border-left: 2px solid transparent;
+}
+
+.dash-card:hover {
+  background: var(--bg-tertiary, #1a1918);
+  border-left-color: var(--accent-blue);
+}
+
+.dash-card-field {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.dash-card-field:first-child {
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.dash-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* ═══════════════════════════════════════════════
+   Component: Badge
+   ═══════════════════════════════════════════════ */
+.dash-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 6px;
+  background: transparent;
+  color: var(--accent-cyan);
+  border: 1px solid color-mix(in srgb, var(--accent-cyan) 40%, transparent);
+}
+
+.dash-badge--status {
+  color: var(--accent-cyan);
+  border-color: color-mix(in srgb, var(--accent-cyan) 40%, transparent);
+}
+
+.dash-badge--priority-1,
+.dash-badge--priority-critical {
+  color: var(--accent-red);
+  border-color: color-mix(in srgb, var(--accent-red) 40%, transparent);
+}
+
+.dash-badge--priority-2,
+.dash-badge--priority-high {
+  color: var(--accent-orange);
+  border-color: color-mix(in srgb, var(--accent-orange) 40%, transparent);
+}
+
+/* ═══════════════════════════════════════════════
+   Component: Checklist
+   ═══════════════════════════════════════════════ */
+.dash-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.dash-checklist-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--bg-secondary);
+}
+
+.dash-checklist-item:last-child {
+  border-bottom: none;
+}
+
+.dash-checklist-item input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--text-muted);
+  background: transparent;
+  flex-shrink: 0;
+  cursor: pointer;
+  position: relative;
+  top: 2px;
+  transition: all 0.1s;
+}
+
+.dash-checklist-item input[type="checkbox"]:hover {
+  border-color: var(--accent-green);
+}
+
+.dash-checklist-item input[type="checkbox"]:checked {
+  border-color: var(--accent-green);
+  background: var(--accent-green);
+}
+
+.dash-checklist-item input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  width: 3px;
+  height: 6px;
+  border: solid var(--bg-primary);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+.dash-checklist-item--done .dash-checklist-item,
+.dash-checklist-item--done {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.dash-checklist-priority {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+.dash-checklist-deadline {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--accent-orange);
+  white-space: nowrap;
+}
+
+.dash-checklist-link {
+  color: var(--text-primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.dash-checklist-link:hover {
+  color: var(--accent-green);
+  text-decoration: underline;
+}
+
+/* ═══════════════════════════════════════════════
+   Component: Timeline
+   ═══════════════════════════════════════════════ */
+.dash-timeline {
+  padding-left: 16px;
+  border-left: 1px solid var(--border-color);
+}
+
+.dash-timeline-entry {
+  position: relative;
+  padding: 4px 0 4px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.dash-timeline-entry::before {
+  content: "";
+  position: absolute;
+  left: -19px;
+  top: 10px;
+  width: 5px;
+  height: 5px;
+  background: var(--accent-blue);
+}
+
+.dash-timeline-entry:hover::before {
+  background: var(--accent-green);
+}
+
+.dash-timeline-date {
+  font-size: 11px;
+  color: var(--accent-orange);
+  margin-bottom: 1px;
+}
+
+.dash-timeline-text {
+  color: var(--text-primary);
+}
+
+.dash-timeline-heading {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  padding: 12px 0 4px;
+}
+
+/* ═══════════════════════════════════════════════
+   Component: Kanban
+   ═══════════════════════════════════════════════ */
+.dash-kanban {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  min-height: 80px;
+}
+
+.dash-kanban-column {
+  flex: 1;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dash-kanban-column-header {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+  padding: 6px 8px 8px;
+  border-top: 2px solid var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+}
+
+.dash-kanban-count {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.dash-kanban-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-height: 28px;
+  transition: background 0.1s;
+}
+
+.dash-kanban-cards.drag-over {
+  background: var(--bg-secondary);
+  outline: 1px dashed var(--accent-blue);
+  outline-offset: -1px;
+}
+
+.dash-kanban-card {
+  background: var(--bg-secondary);
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: grab;
+  transition: background 0.1s, border-left-color 0.1s;
+  border-left: 2px solid transparent;
+}
+
+.dash-kanban-card:hover {
+  background: var(--bg-tertiary, #1a1918);
+  border-left-color: var(--accent-blue);
+}
+
+.dash-kanban-card.dragging {
+  opacity: 0.3;
+}
+
+/* ═══════════════════════════════════════════════
+   Component: Key-Value
+   ═══════════════════════════════════════════════ */
+.dash-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dash-kv-row {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--bg-secondary);
+}
+
+.dash-kv-label {
+  color: var(--text-secondary);
+}
+
+.dash-kv-value {
+  color: var(--accent-green);
+  font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════
+   Component: Table
+   ═══════════════════════════════════════════════ */
+.dash-table-wrapper {
+  overflow-x: auto;
+}
+
+.dash-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.dash-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 8px 12px 8px 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.dash-table th:hover {
+  color: var(--text-primary);
+}
+
+.dash-sort-indicator {
+  margin-left: 4px;
+  font-size: 9px;
+}
+
+.dash-table td {
+  padding: 6px 12px 6px 0;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--bg-secondary);
+}
+
+.dash-table tr:hover td {
+  background: var(--bg-secondary);
+}
+
+.dash-table-filters {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.dash-table-search {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 4px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  width: 240px;
+  outline: none;
+}
+
+.dash-table-search::placeholder {
+  color: var(--text-muted);
+}
+
+.dash-table-search:focus {
+  border-bottom-color: var(--accent-green);
+}
+
+/* ═══════════════════════════════════════════════
+   Notifications
+   ═══════════════════════════════════════════════ */
+.dash-notification {
+  position: fixed;
+  bottom: 32px;
+  right: 20px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-left: 2px solid var(--accent-blue);
+  color: var(--text-primary);
+  z-index: 1000;
+  transition: opacity 0.3s;
+}
+
+.dash-notification--success { border-left-color: var(--accent-green); }
+.dash-notification--warning { border-left-color: var(--accent-orange); }
+.dash-notification--error { border-left-color: var(--accent-red); }
+
+/* ═══════════════════════════════════════════════
+   Agent pushed panels
+   ═══════════════════════════════════════════════ */
+.dashboard-agent-panels {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}

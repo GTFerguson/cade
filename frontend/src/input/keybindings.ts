@@ -49,6 +49,7 @@ export interface KeybindingCallbacks {
   showHelp: () => void;
   toggleTerminal: () => void;
   toggleViewerCycle: () => void;
+  toggleDashboard: () => void;
 
   viewLatestPlan: () => void;
   scrollTerminalToTop: () => void;
@@ -171,6 +172,56 @@ export class KeybindingManager implements Component {
       this.handlePrefixShortcut(e);
       e.stopPropagation();
       return;
+    }
+
+    // Alt shortcuts: tab management + dashboard (no prefix needed)
+    if (e.altKey && !e.ctrlKey && !e.metaKey) {
+      const key = e.key.toLowerCase();
+
+      // Alt+1-9: jump to tab by number
+      if (/^[1-9]$/.test(e.key)) {
+        e.preventDefault();
+        this.callbacks?.goToTab(parseInt(e.key, 10) - 1);
+        return;
+      }
+      if (e.key === "0") {
+        e.preventDefault();
+        this.callbacks?.goToTab(9);
+        return;
+      }
+
+      // Alt+d/f: previous/next tab
+      if (key === "d") {
+        e.preventDefault();
+        this.callbacks?.previousTab();
+        return;
+      }
+      if (key === "f") {
+        e.preventDefault();
+        this.callbacks?.nextTab();
+        return;
+      }
+
+      // Alt+t: new tab
+      if (key === "t") {
+        e.preventDefault();
+        this.callbacks?.createTab();
+        return;
+      }
+
+      // Alt+w: close tab
+      if (key === "w") {
+        e.preventDefault();
+        this.callbacks?.closeTab();
+        return;
+      }
+
+      // Alt+q: toggle dashboard
+      if (key === "q") {
+        e.preventDefault();
+        this.callbacks?.toggleDashboard();
+        return;
+      }
     }
 
     // For non-prefix mode, don't intercept input elements

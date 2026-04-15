@@ -78,6 +78,24 @@ export const MessageType = {
   NEOVIM_OUTPUT: "neovim-output",
   NEOVIM_RPC_RESPONSE: "neovim-rpc-response",
   NEOVIM_EXITED: "neovim-exited",
+
+  // Permissions - Client -> Server
+  PERMISSION_APPROVE: "permission-approve",
+  PERMISSION_DENY: "permission-deny",
+
+  // Dashboard - Client -> Server
+  DASHBOARD_GET_CONFIG: "dashboard-get-config",
+  DASHBOARD_GET_DATA: "dashboard-get-data",
+  DASHBOARD_ACTION: "dashboard-action",
+
+  // Dashboard - Server -> Client
+  DASHBOARD_CONFIG: "dashboard-config",
+  DASHBOARD_DATA: "dashboard-data",
+  DASHBOARD_CLEARED: "dashboard-cleared",
+  DASHBOARD_PUSH_PANEL: "dashboard-push-panel",
+
+  // UI - Server -> Client
+  NOTIFICATION: "notification",
 } as const;
 
 export type MessageTypeValue = (typeof MessageType)[keyof typeof MessageType];

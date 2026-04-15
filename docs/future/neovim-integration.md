@@ -280,7 +280,7 @@ Optional companion Neovim plugin for enhanced integration:
 ## Resolved Design Decisions
 
 > [!NOTE]
-> Detailed rationale for each decision is in `plans/neovim-integration-design.md`.
+> Detailed rationale for each decision is captured in the sections below.
 
 ### 1. Instance Management
 
@@ -346,12 +346,8 @@ Optional companion Neovim plugin for enhanced integration:
 - Neovim plugin (optional)
 - Performance optimization
 
-## Design Documents
-
-- **Technical design:** `plans/neovim-integration-design.md` — Component interfaces, WebSocket protocol, implementation phases, parallel workstream boundaries
-
 ## See Also
 
-- [[agent-orchestration|Agent Lifecycle & Orchestration]] - Hooks system that feeds observation layer
+- [[../technical/core/agent-orchestration|Agent Orchestration]] - Hooks system that feeds observation layer
 - [[../technical/core/frontend-architecture|Frontend Architecture]]
 - [[mobile-interface|Mobile Interface]] - How Neovim pane works on mobile

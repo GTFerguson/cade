@@ -119,8 +119,16 @@ class App {
       // Splash is hidden by first shell output, not by tab creation
     });
 
-    // Always show splash on startup - user chooses to resume or start fresh
-    this.showStartSplash();
+    // Check for ?project= URL param to skip splash (used in demo/testing)
+    const urlParams = new URLSearchParams(window.location.search);
+    const autoProject = urlParams.get("project");
+    if (autoProject) {
+      const tab = this.tabManager.createTab(autoProject);
+      this.tabManager.switchTab(tab.id);
+    } else {
+      // Always show splash on startup - user chooses to resume or start fresh
+      this.showStartSplash();
+    }
 
     this.initMobileUIIfNeeded();
 
@@ -187,14 +195,22 @@ class App {
 
         const currentMode = rightPane?.getMode();
         const hasAgents = activeTab?.context?.getAgentManager()?.hasAgents();
+        const hasDashboard = rightPane?.getDashboardPane()?.hasConfig();
 
-        if (currentMode === "markdown" && hasAgents) {
-          // Markdown → agents (only when agents exist)
+        if (currentMode === "markdown" && hasDashboard) {
+          // Markdown → dashboard (when config exists)
+          activeTab?.context?.setRightPaneMode("dashboard");
+        } else if ((currentMode === "markdown" || currentMode === "dashboard") && hasAgents) {
+          // Markdown/dashboard → agents (when agents exist)
           activeTab?.context?.setRightPaneMode("agents");
         } else {
-          // Agents (or markdown with no agents) → hidden
+          // Last mode → hidden
           layout?.hideViewer();
         }
+      },
+      toggleDashboard: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        activeTab?.context?.toggleViewMode();
       },
       viewLatestPlan: () => {
         const activeTab = this.tabManager.getActiveTab();

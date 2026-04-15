@@ -31,6 +31,7 @@ INSTALL_DIR="~/cade"
 ROOT_PATH="/cade"
 PORT=3030
 WORKING_DIR="\$HOME"
+NKRDN_PROJECT=""
 SKIP_BUILD=false
 SKIP_SETUP=false
 SKIP_NGINX=false
@@ -50,6 +51,7 @@ usage() {
     echo "  --skip-build          Don't rebuild frontend"
     echo "  --skip-setup          Just sync files + restart (don't re-run setup)"
     echo "  --skip-nginx          Pass CADE_SKIP_NGINX to setup-remote.sh"
+    echo "  --nkrdn-project DIR   Path to nkrdn project (builds + deploys wheel)"
     echo "  --skip-claude         Pass CADE_SKIP_CLAUDE to setup-remote.sh"
     echo "  --skip-firewall       Pass CADE_SKIP_FIREWALL to setup-remote.sh"
     echo "  -h, --help            Show this help message"
@@ -69,6 +71,7 @@ while [ $# -gt 0 ]; do
         --root-path)     ROOT_PATH="$2"; shift 2 ;;
         --port)          PORT="$2"; shift 2 ;;
         --working-dir)   WORKING_DIR="$2"; shift 2 ;;
+        --nkrdn-project) NKRDN_PROJECT="$2"; shift 2 ;;
         --skip-build)    SKIP_BUILD=true; shift ;;
         --skip-setup)    SKIP_SETUP=true; shift ;;
         --skip-nginx)    SKIP_NGINX=true; shift ;;
@@ -84,6 +87,14 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Auto-detect nkrdn project if not specified (sibling directory)
+if [ -z "$NKRDN_PROJECT" ]; then
+    CANDIDATE="$(cd "$PROJECT_ROOT/.." && pwd)/nkrdn"
+    if [ -f "$CANDIDATE/pyproject.toml" ]; then
+        NKRDN_PROJECT="$CANDIDATE"
+    fi
+fi
+
 echo -e "${BOLD}══════════════════════════════════════${NC}"
 echo -e "${BOLD}  CADE Deploy → ${CYAN}${SSH_HOST}${NC}"
 echo -e "${BOLD}══════════════════════════════════════${NC}"
@@ -92,6 +103,9 @@ echo "  Install dir:  $INSTALL_DIR"
 echo "  Root path:    $ROOT_PATH"
 echo "  Port:         $PORT"
 echo "  Working dir:  $WORKING_DIR"
+if [ -n "$NKRDN_PROJECT" ]; then
+    echo "  nkrdn:        $NKRDN_PROJECT"
+fi
 echo ""
 
 # ── Step 1: Build frontend ─────────────────────────────────────────────────
@@ -99,7 +113,7 @@ echo ""
 if [ "$SKIP_BUILD" = true ]; then
     echo -e "${YELLOW}⤳${NC} Skipping frontend build (--skip-build)"
 else
-    echo -e "${CYAN}[1/4]${NC} Building frontend..."
+    echo -e "${CYAN}[1/5]${NC} Building frontend..."
 
     # Detect environment: WSL bash sees /mnt/c, Git Bash (MINGW) does not.
     # Under WSL, npm resolves to a broken shim via a stray node_modules in
@@ -146,12 +160,37 @@ else
 fi
 echo ""
 
+# ── Step 1b: Build nkrdn wheel ────────────────────────────────────────────
+
+NKRDN_WHEEL=""
+if [ -n "$NKRDN_PROJECT" ]; then
+    if [ "$SKIP_BUILD" = true ]; then
+        # Use existing wheel if available
+        NKRDN_WHEEL=$(ls "$NKRDN_PROJECT"/build/nkrdn-*.whl 2>/dev/null | head -1)
+        if [ -n "$NKRDN_WHEEL" ]; then
+            echo -e "${YELLOW}⤳${NC} Using existing nkrdn wheel (--skip-build)"
+        else
+            echo -e "${YELLOW}⤳${NC} No nkrdn wheel found, skipping"
+        fi
+    else
+        echo -e "${CYAN}[1b/5]${NC} Building nkrdn wheel..."
+        (cd "$NKRDN_PROJECT" && hatch build -t wheel 2>&1 | tail -1)
+        NKRDN_WHEEL=$(ls "$NKRDN_PROJECT"/build/nkrdn-*.whl 2>/dev/null | head -1)
+        if [ -n "$NKRDN_WHEEL" ]; then
+            echo -e "${GREEN}✓${NC} Built $(basename "$NKRDN_WHEEL")"
+        else
+            echo -e "${YELLOW}⚠${NC} nkrdn wheel build failed, continuing without it"
+        fi
+    fi
+    echo ""
+fi
+
 # ── Step 2: Sync files to remote ───────────────────────────────────────────
 
-echo -e "${CYAN}[2/4]${NC} Syncing files to ${SSH_HOST}:${INSTALL_DIR}..."
+echo -e "${CYAN}[2/5]${NC} Syncing files to ${SSH_HOST}:${INSTALL_DIR}..."
 
 # Ensure remote directories exist
-ssh "$SSH_HOST" "mkdir -p ${INSTALL_DIR}/scripts ${INSTALL_DIR}/frontend"
+ssh "$SSH_HOST" "mkdir -p ${INSTALL_DIR}/scripts ${INSTALL_DIR}/frontend ${INSTALL_DIR}/vendor"
 
 if command -v rsync >/dev/null 2>&1; then
     # rsync: fast incremental sync with deletes
@@ -173,6 +212,10 @@ if command -v rsync >/dev/null 2>&1; then
     rsync -az \
         "$PROJECT_ROOT/scripts/setup-remote.sh" \
         "${SSH_HOST}:${INSTALL_DIR}/scripts/setup-remote.sh"
+
+    if [ -n "$NKRDN_WHEEL" ]; then
+        rsync -az "$NKRDN_WHEEL" "${SSH_HOST}:${INSTALL_DIR}/vendor/"
+    fi
 else
     # scp fallback for Windows/Git Bash where rsync isn't available.
     # Clean remote first to approximate rsync --delete behavior.
@@ -187,6 +230,10 @@ else
 
     # scp copies __pycache__ too — clean it on remote
     ssh "$SSH_HOST" "find ${INSTALL_DIR}/backend -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true"
+
+    if [ -n "$NKRDN_WHEEL" ]; then
+        scp -q "$NKRDN_WHEEL" "${SSH_HOST}:${INSTALL_DIR}/vendor/"
+    fi
 fi
 
 # Fix Windows CRLF line endings if the file was written on Windows
@@ -202,7 +249,7 @@ if [ "$SKIP_SETUP" = true ]; then
     ssh "$SSH_HOST" "sudo systemctl restart cade 2>/dev/null || true"
     echo -e "${GREEN}✓${NC} Restart requested"
 else
-    echo -e "${CYAN}[3/4]${NC} Running setup on remote..."
+    echo -e "${CYAN}[3/5]${NC} Running setup on remote..."
 
     # Build env var exports for setup-remote.sh
     SETUP_ENV="CADE_INSTALL_DIR=${INSTALL_DIR}"
@@ -228,7 +275,7 @@ echo ""
 
 # ── Step 4: Verify ─────────────────────────────────────────────────────────
 
-echo -e "${CYAN}[4/4]${NC} Verifying deployment..."
+echo -e "${CYAN}[4/5]${NC} Verifying deployment..."
 
 # Read the auth token from the remote
 TOKEN=$(ssh "$SSH_HOST" "cat ${INSTALL_DIR}/.token 2>/dev/null || echo 'unknown'")
@@ -241,6 +288,18 @@ if [ "$HEALTH" = "200" ] || [ "$HEALTH" = "307" ]; then
 else
     echo -e "${YELLOW}⚠${NC} Health check returned: ${HEALTH}"
     echo "  Check logs: ssh ${SSH_HOST} \"journalctl -u cade -n 50 --no-pager\""
+fi
+
+# ── Step 5: Verify nkrdn ──────────────────────────────────────────────────
+
+if [ -n "$NKRDN_WHEEL" ]; then
+    echo -e "${CYAN}[5/5]${NC} Verifying nkrdn..."
+    if ssh "$SSH_HOST" "${INSTALL_DIR}/venv/bin/nkrdn stats --help >/dev/null 2>&1"; then
+        echo -e "${GREEN}✓${NC} nkrdn available on remote"
+    else
+        echo -e "${YELLOW}⚠${NC} nkrdn not working on remote"
+    fi
+    echo ""
 fi
 
 # ── Summary ─────────────────────────────────────────────────────────────────

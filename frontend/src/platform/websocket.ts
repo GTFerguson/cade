@@ -14,6 +14,9 @@ import type {
   ChatStreamMessage,
   ClientMessage,
   ConnectedMessage,
+  DashboardClearedMessage,
+  DashboardConfigMessage,
+  DashboardDataMessage,
   ErrorMessage,
   EventHandler,
   FileChangeMessage,
@@ -63,6 +66,11 @@ interface WebSocketEvents {
   "agent-spawned": AgentSpawnedMessage;
   "agent-killed": AgentKilledMessage;
   "agent-state-changed": AgentStateChangedMessage;
+  "dashboard-config": DashboardConfigMessage;
+  "dashboard-data": DashboardDataMessage;
+  "dashboard-cleared": DashboardClearedMessage;
+  "dashboard-push-panel": { type: string; panel: { id: string; title: string; component: string }; data: Record<string, unknown>[] };
+  "notification": { type: string; message: string; style: string };
   error: ErrorMessage;
   "auth-failed": { code: number };
   "connection-lost": void;
@@ -655,6 +663,26 @@ export class WebSocketClient {
 
       case MessageType.AGENT_STATE_CHANGED:
         this.emit("agent-state-changed", message as AgentStateChangedMessage);
+        break;
+
+      case MessageType.DASHBOARD_CONFIG:
+        this.emit("dashboard-config", message as DashboardConfigMessage);
+        break;
+
+      case MessageType.DASHBOARD_DATA:
+        this.emit("dashboard-data", message as DashboardDataMessage);
+        break;
+
+      case MessageType.DASHBOARD_CLEARED:
+        this.emit("dashboard-cleared", message as DashboardClearedMessage);
+        break;
+
+      case MessageType.DASHBOARD_PUSH_PANEL:
+        this.emit("dashboard-push-panel", message as any);
+        break;
+
+      case MessageType.NOTIFICATION:
+        this.emit("notification", message as any);
         break;
 
       default:

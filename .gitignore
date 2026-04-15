@@ -32,7 +32,7 @@ mockups/
 .claude/settings.local.json
 
 # Working plans (short-term)
-plans/
+# plans/ moved to docs/plans/ — tracked in git now
 
 # Build artifacts
 frontend/dist/
@@ -45,3 +45,7 @@ build/
 desktop/src-tauri/target/
 desktop/src-tauri/Cargo.lock
 desktop/src-tauri/resources/cade-backend*
+
+# Local tooling state
+.nkrdn/
+.playwright-mcp/

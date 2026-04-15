@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CADE — Enhanced Mode Tool Blocks</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
+/* ═══════════════════════════════════════════════
+   CADE Theme Tokens
+   ═══════════════════════════════════════════════ */
+:root {
+  --bg-root: #0a0a09;
+  --bg-primary: #0a0a09;
+  --bg-secondary: #111110;
+  --bg-tertiary: #1a1918;
+  --bg-hover: #222120;
+
+  --text-primary: #f8f6f2;
+  --text-secondary: #c4b9ad;
+  --text-muted: #5e5955;
+  --text-faint: #3d3a37;
+
+  --accent-blue: #0a9dff;
+  --accent-green: #aeee00;
+  --accent-orange: #ffa724;
+  --accent-yellow: #fade3e;
+  --accent-red: #ff2c4b;
+  --accent-cyan: #8cffba;
+  --accent-purple: #ff9eb8;
+
+  --border-color: #2a2827;
+  --border-subtle: #1f1e1d;
+
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg-root);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 32px;
+  min-height: 100vh;
+}
+
+.mockup-title {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+}
+
+.mockup-section {
+  margin-bottom: 48px;
+}
+
+.mockup-label {
+  color: var(--text-faint);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 12px;
+  padding-left: 2px;
+}
+
+/* Chat message container (simulates ChatPane) */
+.chat-container {
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ═══════════════════════════════════════════════
+   TOOL BLOCK — Core Structure
+   ═══════════════════════════════════════════════ */
+.tool-block {
+  border-left: 2px solid var(--border-color);
+  margin: 2px 0;
+  transition: border-color 0.2s;
+}
+
+.tool-block--success { border-left-color: color-mix(in srgb, var(--accent-green) 40%, transparent); }
+.tool-block--error   { border-left-color: color-mix(in srgb, var(--accent-red) 50%, transparent); }
+.tool-block--running { border-left-color: color-mix(in srgb, var(--accent-blue) 40%, transparent); }
+.tool-block--approval {
+  border-left-color: var(--accent-orange);
+  border-left-width: 2px;
+}
+
+/* ─── Header ─── */
+.tool-header {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 3px 0 3px 10px;
+  cursor: pointer;
+  user-select: none;
+  min-height: 24px;
+}
+
+.tool-header:hover {
+  background: var(--bg-secondary);
+}
+
+.tool-icon {
+  width: 16px;
+  font-size: 11px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.tool-icon--running { color: var(--accent-blue); }
+.tool-icon--success { color: var(--accent-green); }
+.tool-icon--error   { color: var(--accent-red); }
+.tool-icon--approval { color: var(--accent-orange); }
+
+/* Spinner animation for running state */
+@keyframes tool-spin {
+  0% { opacity: 1; }
+  50% { opacity: 0.3; }
+  100% { opacity: 1; }
+}
+.tool-icon--running {
+  animation: tool-spin 1.5s ease-in-out infinite;
+}
+
+.tool-name {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.tool-input {
+  color: var(--text-secondary);
+  font-size: 12px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-input .tool-input-key {
+  color: var(--text-muted);
+}
+
+.tool-status {
+  color: var(--text-faint);
+  font-size: 11px;
+  margin-left: auto;
+  padding-right: 8px;
+  flex-shrink: 0;
+}
+
+.tool-status--error {
+  color: color-mix(in srgb, var(--accent-red) 60%, var(--text-muted));
+}
+
+.tool-chevron {
+  color: var(--text-faint);
+  font-size: 10px;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.tool-block.expanded .tool-chevron {
+  transform: rotate(90deg);
+}
+
+/* ─── Body (collapsible content) ─── */
+.tool-body {
+  display: none;
+  padding: 0 0 4px 28px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.tool-block.expanded .tool-body {
+  display: block;
+}
+
+/* Scrollbar in tool body */
+.tool-body::-webkit-scrollbar { width: 4px; }
+.tool-body::-webkit-scrollbar-track { background: transparent; }
+.tool-body::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
+
+/* Code content */
+.tool-content-code {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre;
+  tab-size: 2;
+}
+
+.tool-content-code .line-num {
+  color: var(--text-faint);
+  display: inline-block;
+  width: 32px;
+  text-align: right;
+  margin-right: 12px;
+  user-select: none;
+}
+
+/* Truncation indicator */
+.tool-content-more {
+  color: var(--text-faint);
+  font-size: 11px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+.tool-content-more:hover {
+  color: var(--text-muted);
+}
+
+/* Search results */
+.tool-content-matches {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 2px 0;
+}
+
+.tool-match-file {
+  color: var(--accent-blue);
+}
+
+.tool-match-line {
+  color: var(--text-faint);
+}
+
+.tool-match-text {
+  color: var(--text-secondary);
+}
+
+.tool-match-highlight {
+  color: var(--accent-yellow);
+  background: color-mix(in srgb, var(--accent-yellow) 10%, transparent);
+  border-radius: 1px;
+}
+
+/* Command output */
+.tool-content-output {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ═══════════════════════════════════════════════
+   PERMISSION PROMPT
+   ═══════════════════════════════════════════════ */
+.tool-approval {
+  padding: 8px 10px 8px 28px;
+}
+
+.tool-approval-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.tool-approval-desc code {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-size: 12px;
+}
+
+.tool-approval-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tool-approval-btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: transparent;
+}
+
+.tool-approval-btn--approve {
+  color: var(--accent-green);
+  border-color: color-mix(in srgb, var(--accent-green) 30%, var(--border-color));
+}
+.tool-approval-btn--approve:hover {
+  background: color-mix(in srgb, var(--accent-green) 8%, transparent);
+  border-color: var(--accent-green);
+}
+
+.tool-approval-btn--deny {
+  color: var(--text-muted);
+  border-color: var(--border-color);
+}
+.tool-approval-btn--deny:hover {
+  color: var(--accent-red);
+  border-color: color-mix(in srgb, var(--accent-red) 30%, var(--border-color));
+  background: color-mix(in srgb, var(--accent-red) 5%, transparent);
+}
+
+.tool-approval-hint {
+  color: var(--text-faint);
+  font-size: 10px;
+  margin-left: 4px;
+}
+
+/* Approved/denied resolved state */
+.tool-approval-resolved {
+  font-size: 11px;
+  padding: 4px 0 4px 28px;
+}
+.tool-approval-resolved--approved { color: var(--accent-green); }
+.tool-approval-resolved--denied { color: var(--text-muted); }
+
+/* Pulsing border for awaiting approval */
+@keyframes approval-pulse {
+  0%, 100% { border-left-color: var(--accent-orange); }
+  50% { border-left-color: color-mix(in srgb, var(--accent-orange) 30%, transparent); }
+}
+.tool-block--approval {
+  animation: approval-pulse 2s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════
+   ASSISTANT TEXT (context around tool blocks)
+   ═══════════════════════════════════════════════ */
+.chat-text {
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.65;
+  padding: 2px 0;
+}
+
+.chat-text code {
+  background: var(--bg-tertiary);
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-size: 12px;
+}
+
+/* Syntax highlighting (minimal) */
+.syn-keyword { color: var(--accent-purple); }
+.syn-string { color: var(--accent-green); }
+.syn-comment { color: var(--text-faint); font-style: italic; }
+.syn-function { color: var(--accent-blue); }
+.syn-type { color: var(--accent-yellow); }
+.syn-number { color: var(--accent-orange); }
+
+/* ═══════════════════════════════════════════════
+   INTERACTIVE BEHAVIORS
+   ═══════════════════════════════════════════════ */
+</style>
+</head>
+<body>
+
+<div class="mockup-section">
+  <div class="mockup-title">CADE Enhanced Mode — Tool Block Mockups</div>
+</div>
+
+<!-- ═══════════════ RUNNING STATE ═══════════════ -->
+<div class="mockup-section">
+  <div class="mockup-label">Running</div>
+  <div class="chat-container">
+    <div class="chat-text">Let me check the project structure.</div>
+
+    <div class="tool-block tool-block--running">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--running">▸</span>
+        <span class="tool-name">Glob</span>
+        <span class="tool-input">src/**/*.ts</span>
+        <span class="tool-status">running…</span>
+      </div>
+    </div>
+
+    <div class="tool-block tool-block--running">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--running">▸</span>
+        <span class="tool-name">Read</span>
+        <span class="tool-input">frontend/src/chat/chat-pane.ts</span>
+        <span class="tool-status">running…</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ COMPLETED — COLLAPSED ═══════════════ -->
+<div class="mockup-section">
+  <div class="mockup-label">Completed — Collapsed (default)</div>
+  <div class="chat-container">
+
+    <div class="tool-block tool-block--success" onclick="this.classList.toggle('expanded')">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--success">✓</span>
+        <span class="tool-name">Read</span>
+        <span class="tool-input">backend/providers/types.py</span>
+        <span class="tool-status">90 lines</span>
+        <span class="tool-chevron">›</span>
+      </div>
+      <div class="tool-body">
+        <div class="tool-content-code"><span class="line-num">1</span><span class="syn-string">"""Chat event and message types."""</span>
+<span class="line-num">2</span>
+<span class="line-num">3</span><span class="syn-keyword">from</span> __future__ <span class="syn-keyword">import</span> annotations
+<span class="line-num">4</span><span class="syn-keyword">from</span> dataclasses <span class="syn-keyword">import</span> dataclass, field
+<span class="line-num">5</span>
+<span class="line-num">6</span><span class="syn-keyword">@dataclass</span>
+<span class="line-num">7</span><span class="syn-keyword">class</span> <span class="syn-type">ChatEvent</span>:
+<span class="line-num">8</span>    <span class="syn-string">"""Base class for chat streaming events."""</span>
+<span class="line-num">9</span>    <span class="syn-keyword">pass</span>
+<span class="line-num">10</span>
+<span class="line-num">11</span><span class="syn-keyword">@dataclass</span>
+<span class="line-num">12</span><span class="syn-keyword">class</span> <span class="syn-type">ToolUseStart</span>(<span class="syn-type">ChatEvent</span>):
+<span class="line-num">13</span>    tool_id: <span class="syn-type">str</span>
+<span class="line-num">14</span>    tool_name: <span class="syn-type">str</span></div>
+        <div class="tool-content-more">↓ 76 more lines</div>
+      </div>
+    </div>
+
+    <div class="tool-block tool-block--success" onclick="this.classList.toggle('expanded')">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--success">✓</span>
+        <span class="tool-name">Glob</span>
+        <span class="tool-input">frontend/src/**/*.ts</span>
+        <span class="tool-status">23 files</span>
+        <span class="tool-chevron">›</span>
+      </div>
+      <div class="tool-body">
+        <div class="tool-content-code">frontend/src/main.ts
+frontend/src/types.ts
+frontend/src/chat/chat-pane.ts
+frontend/src/chat/chat-input.ts
+frontend/src/chat/diagram-viewer.ts
+frontend/src/dashboard/dashboard-pane.ts
+frontend/src/dashboard/types.ts
+frontend/src/dashboard/registry.ts</div>
+        <div class="tool-content-more">↓ 15 more files</div>
+      </div>
+    </div>
+
+    <div class="tool-block tool-block--success" onclick="this.classList.toggle('expanded')">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--success">✓</span>
+        <span class="tool-name">Grep</span>
+        <span class="tool-input">ToolUseStart <span class="tool-input-key">in</span> backend/</span>
+        <span class="tool-status">4 matches</span>
+        <span class="tool-chevron">›</span>
+      </div>
+      <div class="tool-body">
+        <div class="tool-content-matches"><span class="tool-match-file">providers/types.py</span><span class="tool-match-line">:58</span>  <span class="tool-match-text"><span class="syn-keyword">class</span> <span class="tool-match-highlight">ToolUseStart</span>(ChatEvent):</span>
+<span class="tool-match-file">providers/claude_code_provider.py</span><span class="tool-match-line">:27</span>  <span class="tool-match-text">    <span class="tool-match-highlight">ToolUseStart</span>,</span>
+<span class="tool-match-file">providers/claude_code_provider.py</span><span class="tool-match-line">:343</span>  <span class="tool-match-text">    yield <span class="tool-match-highlight">ToolUseStart</span>(</span>
+<span class="tool-match-file">providers/claude_code_provider.py</span><span class="tool-match-line">:372</span>  <span class="tool-match-text">    yield <span class="tool-match-highlight">ToolUseStart</span>(</span></div>
+      </div>
+    </div>
+
+    <div class="tool-block tool-block--success" onclick="this.classList.toggle('expanded')">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--success">✓</span>
+        <span class="tool-name">Bash</span>
+        <span class="tool-input">git log --oneline -5</span>
+        <span class="tool-status">done</span>
+        <span class="tool-chevron">›</span>
+      </div>
+      <div class="tool-body">
+        <div class="tool-content-output">27bc574 feat: Add config-driven dashboard framework (Phase 1)
+836d58e chore: doc spring cleaning
+aa68961 chore: remove cadence submodule
+e9a3527 chore: update cadence submodule
+d3217e8 fix: preserve nkrdn staging DB</div>
+      </div>
+    </div>
+
+    <div class="chat-text">The <code>ToolUseStart</code> dataclass needs a <code>tool_input</code> field added.</div>
+  </div>
+</div>
+
+<!-- ═══════════════ EXPANDED ═══════════════ -->
+<div class="mockup-section">
+  <div class="mockup-label">Completed — Expanded (clicked)</div>
+  <div class="chat-container">
+
+    <div class="tool-block tool-block--success expanded">
+      <div class="tool-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="tool-icon tool-icon--success">✓</span>
+        <span class="tool-name">Read</span>
+        <span class="tool-input">frontend/src/chat/chat-pane.ts <span class="tool-input-key">lines 502-568</span></span>
+        <span class="tool-status">67 lines</span>
+        <span class="tool-chevron">›</span>
+      </div>
+      <div class="tool-body">
+        <div class="tool-content-code"><span class="line-num">502</span>  <span class="syn-function">handleToolUseStart</span>(toolId: <span class="syn-type">string</span>, toolName: <span class="syn-type">string</span>): <span class="syn-type">void</span> {
+<span class="line-num">503</span>    <span class="syn-keyword">const</span> el = document.<span class="syn-function">createElement</span>(<span class="syn-string">"div"</span>);
+<span class="line-num">504</span>    el.className = <span class="syn-string">"chat-tool-use"</span>;
+<span class="line-num">505</span>
+<span class="line-num">506</span>    <span class="syn-keyword">const</span> header = document.<span class="syn-function">createElement</span>(<span class="syn-string">"div"</span>);
+<span class="line-num">507</span>    header.className = <span class="syn-string">"chat-tool-header"</span>;
+<span class="line-num">508</span>
+<span class="line-num">509</span>    <span class="syn-keyword">const</span> icon = document.<span class="syn-function">createElement</span>(<span class="syn-string">"span"</span>);
+<span class="line-num">510</span>    icon.className = <span class="syn-string">"chat-tool-icon running"</span>;
+<span class="line-num">511</span>    icon.textContent = <span class="syn-string">"▸"</span>;
+<span class="line-num">512</span>
+<span class="line-num">513</span>    <span class="syn-keyword">const</span> name = document.<span class="syn-function">createElement</span>(<span class="syn-string">"span"</span>);
+<span class="line-num">514</span>    name.className = <span class="syn-string">"chat-tool-name"</span>;
+<span class="line-num">515</span>    name.textContent = toolName;</div>
+        <div class="tool-content-more">↓ 53 more lines</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ ERROR STATE ═══════════════ -->
+<div class="mockup-section">
+  <div class="mockup-label">Error</div>
+  <div class="chat-container">
+
+    <div class="tool-block tool-block--error expanded">
+      <div class="tool-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <span class="tool-icon tool-icon--error">✗</span>
+        <span class="tool-name">Bash</span>
+        <span class="tool-input">npm run build</span>
+        <span class="tool-status tool-status--error">exit 1</span>
+        <span class="tool-chevron">›</span>
+      </div>
+      <div class="tool-body">
+        <div class="tool-content-output" style="color: color-mix(in srgb, var(--accent-red) 70%, var(--text-secondary))">src/dashboard/types.ts(12,3): error TS2304: Cannot find name 'EntityConfig'.
+src/dashboard/registry.ts(8,1): error TS2305: Module '"./components"' has no exported member 'CardsComponent'.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ PERMISSION PROMPT ═══════════════ -->
+<div class="mockup-section">
+  <div class="mockup-label">Permission Prompt — Awaiting Approval</div>
+  <div class="chat-container">
+    <div class="chat-text">I need to install the dependency and run the build.</div>
+
+    <div class="tool-block tool-block--approval">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--approval">⚡</span>
+        <span class="tool-name">Bash</span>
+        <span class="tool-input">pip install pyyaml>=6.0</span>
+      </div>
+      <div class="tool-approval">
+        <div class="tool-approval-desc">Run shell command in <code>/home/gary/projects/cade</code></div>
+        <div class="tool-approval-actions">
+          <button class="tool-approval-btn tool-approval-btn--approve" onclick="approveDemo(this)">Allow</button>
+          <button class="tool-approval-btn tool-approval-btn--deny" onclick="denyDemo(this)">Deny</button>
+          <span class="tool-approval-hint">y / n</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tool-block tool-block--approval">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--approval">⚡</span>
+        <span class="tool-name">Edit</span>
+        <span class="tool-input">backend/providers/types.py</span>
+      </div>
+      <div class="tool-approval">
+        <div class="tool-approval-desc">Edit file — add <code>tool_input</code> field to <code>ToolUseStart</code> dataclass</div>
+        <div class="tool-approval-actions">
+          <button class="tool-approval-btn tool-approval-btn--approve" onclick="approveDemo(this)">Allow</button>
+          <button class="tool-approval-btn tool-approval-btn--deny" onclick="denyDemo(this)">Deny</button>
+          <span class="tool-approval-hint">y / n</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ PERMISSION RESOLVED ═══════════════ -->
+<div class="mockup-section">
+  <div class="mockup-label">Permission — Resolved</div>
+  <div class="chat-container">
+
+    <div class="tool-block tool-block--success" onclick="this.classList.toggle('expanded')">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--success">✓</span>
+        <span class="tool-name">Bash</span>
+        <span class="tool-input">pip install pyyaml>=6.0</span>
+        <span class="tool-status">done</span>
+        <span class="tool-chevron">›</span>
+      </div>
+      <div class="tool-body">
+        <div class="tool-content-output">Requirement already satisfied: pyyaml>=6.0 in ./.venv/lib/python3.12/site-packages (6.0.2)</div>
+      </div>
+    </div>
+
+    <div class="tool-block tool-block--success">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--success">✓</span>
+        <span class="tool-name">Edit</span>
+        <span class="tool-input">backend/providers/types.py</span>
+        <span class="tool-status">done</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ WRITE TOOL (shows diff) ═══════════════ -->
+<div class="mockup-section">
+  <div class="mockup-label">Write / Edit — Shows Diff Preview</div>
+  <div class="chat-container">
+
+    <div class="tool-block tool-block--success expanded" onclick="this.classList.toggle('expanded')">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--success">✓</span>
+        <span class="tool-name">Edit</span>
+        <span class="tool-input">backend/providers/types.py</span>
+        <span class="tool-status">done</span>
+        <span class="tool-chevron">›</span>
+      </div>
+      <div class="tool-body">
+        <div class="tool-content-code"><span style="color: var(--accent-red)">- class ToolUseStart(ChatEvent):</span>
+<span style="color: var(--accent-red)">-     tool_id: str</span>
+<span style="color: var(--accent-red)">-     tool_name: str</span>
+<span style="color: var(--accent-green)">+ class ToolUseStart(ChatEvent):</span>
+<span style="color: var(--accent-green)">+     tool_id: str</span>
+<span style="color: var(--accent-green)">+     tool_name: str</span>
+<span style="color: var(--accent-green)">+     tool_input: dict = field(default_factory=dict)</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ FULL CONVERSATION FLOW ═══════════════ -->
+<div class="mockup-section">
+  <div class="mockup-label">Full Conversation Flow</div>
+  <div class="chat-container">
+    <div class="chat-text">I'll look at the current implementation and fix the tool input handling.</div>
+
+    <div class="tool-block tool-block--success" onclick="this.classList.toggle('expanded')">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--success">✓</span>
+        <span class="tool-name">Read</span>
+        <span class="tool-input">backend/providers/types.py</span>
+        <span class="tool-status">90 lines</span>
+        <span class="tool-chevron">›</span>
+      </div>
+      <div class="tool-body">
+        <div class="tool-content-code"><span class="line-num">58</span><span class="syn-keyword">@dataclass</span>
+<span class="line-num">59</span><span class="syn-keyword">class</span> <span class="syn-type">ToolUseStart</span>(<span class="syn-type">ChatEvent</span>):
+<span class="line-num">60</span>    tool_id: <span class="syn-type">str</span>
+<span class="line-num">61</span>    tool_name: <span class="syn-type">str</span></div>
+      </div>
+    </div>
+
+    <div class="tool-block tool-block--success" onclick="this.classList.toggle('expanded')">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--success">✓</span>
+        <span class="tool-name">Grep</span>
+        <span class="tool-input">ToolUseStart <span class="tool-input-key">in</span> backend/providers/</span>
+        <span class="tool-status">4 matches</span>
+        <span class="tool-chevron">›</span>
+      </div>
+      <div class="tool-body">
+        <div class="tool-content-matches"><span class="tool-match-file">types.py</span><span class="tool-match-line">:58</span>  <span class="syn-keyword">class</span> <span class="tool-match-highlight">ToolUseStart</span>(ChatEvent):
+<span class="tool-match-file">claude_code_provider.py</span><span class="tool-match-line">:343</span>  yield <span class="tool-match-highlight">ToolUseStart</span>(tool_id=...)</div>
+      </div>
+    </div>
+
+    <div class="chat-text">The <code>ToolUseStart</code> type needs a <code>tool_input</code> field. Let me update it.</div>
+
+    <div class="tool-block tool-block--success">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--success">✓</span>
+        <span class="tool-name">Edit</span>
+        <span class="tool-input">backend/providers/types.py</span>
+        <span class="tool-status">done</span>
+      </div>
+    </div>
+
+    <div class="tool-block tool-block--success">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--success">✓</span>
+        <span class="tool-name">Edit</span>
+        <span class="tool-input">backend/providers/claude_code_provider.py</span>
+        <span class="tool-status">done</span>
+      </div>
+    </div>
+
+    <div class="tool-block tool-block--running">
+      <div class="tool-header">
+        <span class="tool-icon tool-icon--running">▸</span>
+        <span class="tool-name">Bash</span>
+        <span class="tool-input">python3 -c "from backend.providers.types import ToolUseStart; print('ok')"</span>
+        <span class="tool-status">running…</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// Toggle expand/collapse on click
+document.querySelectorAll('.tool-header').forEach(header => {
+  header.addEventListener('click', (e) => {
+    // Don't toggle if there's no body
+    const block = header.parentElement;
+    if (block.querySelector('.tool-body')) {
+      block.classList.toggle('expanded');
+    }
+  });
+});
+
+// Demo approval interactions
+function approveDemo(btn) {
+  const block = btn.closest('.tool-block');
+  block.classList.remove('tool-block--approval');
+  block.classList.add('tool-block--running');
+  block.style.animation = 'none';
+  const icon = block.querySelector('.tool-icon');
+  icon.textContent = '▸';
+  icon.className = 'tool-icon tool-icon--running';
+  const approval = block.querySelector('.tool-approval');
+  approval.innerHTML = '';
+
+  setTimeout(() => {
+    block.classList.remove('tool-block--running');
+    block.classList.add('tool-block--success');
+    icon.textContent = '✓';
+    icon.className = 'tool-icon tool-icon--success';
+    const status = document.createElement('span');
+    status.className = 'tool-status';
+    status.textContent = 'done';
+    block.querySelector('.tool-header').appendChild(status);
+  }, 1500);
+}
+
+function denyDemo(btn) {
+  const block = btn.closest('.tool-block');
+  block.classList.remove('tool-block--approval');
+  block.style.animation = 'none';
+  block.style.borderLeftColor = 'var(--border-color)';
+  const icon = block.querySelector('.tool-icon');
+  icon.textContent = '–';
+  icon.className = 'tool-icon';
+  icon.style.color = 'var(--text-muted)';
+  const approval = block.querySelector('.tool-approval');
+  approval.innerHTML = '<div class="tool-approval-resolved tool-approval-resolved--denied">denied</div>';
+}
+</script>
+
+</body>
+</html>

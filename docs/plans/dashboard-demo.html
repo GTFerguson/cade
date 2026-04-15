@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CADE — Dashboard Demo</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
+:root {
+  --bg: #0a0a09;
+  --bg-s: #111110;
+  --bg-t: #1a1918;
+  --bg-h: #222120;
+  --tx: #f8f6f2;
+  --tx-s: #c4b9ad;
+  --tx-m: #5e5955;
+  --tx-f: #3d3a37;
+  --red: #ff2c4b;
+  --green: #aeee00;
+  --blue: #0a9dff;
+  --orange: #ffa724;
+  --yellow: #fade3e;
+  --cyan: #8cffba;
+  --purple: #ff9eb8;
+  --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--tx);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0.3px;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* ═══ SHELL ═══ */
+.shell {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ═══ HEADER ═══ */
+.dash-head {
+  padding: 12px 16px 0;
+  flex-shrink: 0;
+}
+
+.dash-title {
+  font-size: 16px;
+  color: var(--red);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-align: center;
+  margin-bottom: 2px;
+}
+
+.dash-sub {
+  font-size: 11px;
+  color: var(--tx-m);
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+/* ═══ VIEW TABS ═══ */
+.view-tabs {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px 0;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--tx-f);
+  gap: 0;
+}
+
+.view-tab {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--tx-m);
+  background: none;
+  border: none;
+  padding: 6px 0;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: color 0.1s;
+  position: relative;
+}
+
+.view-tab:hover { color: var(--tx-s); }
+
+.view-tab.active {
+  color: var(--tx);
+}
+
+.view-tab.active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--tx);
+}
+
+.tab-pipe {
+  color: var(--tx-f);
+  padding: 0 12px;
+  font-size: 12px;
+  user-select: none;
+}
+
+/* ═══ SEPARATOR ═══ */
+.rule {
+  height: 1px;
+  background: var(--tx-f);
+  margin: 8px 16px;
+  flex-shrink: 0;
+}
+
+/* ═══ CONTENT ═══ */
+.view-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 16px 8px;
+}
+
+.view-content::-webkit-scrollbar { width: 6px; }
+.view-content::-webkit-scrollbar-track { background: transparent; }
+.view-content::-webkit-scrollbar-thumb { background: var(--tx-f); }
+
+.view { display: none; }
+.view.active { display: block; }
+
+/* ═══ PANEL ═══ */
+.panel-title {
+  font-size: 11px;
+  color: var(--tx-m);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  padding: 10px 0 6px;
+}
+
+/* ═══ OVERVIEW GRID ═══ */
+.overview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 24px;
+}
+
+.overview-left { grid-row: 1 / 3; }
+
+/* ═══ KANBAN ═══ */
+.kanban {
+  display: flex;
+  gap: 2px;
+}
+
+.kanban-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.kanban-col-head {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--tx-m);
+  padding: 4px 6px 6px;
+  border-top: 2px solid var(--tx-f);
+  display: flex;
+  justify-content: space-between;
+}
+
+.kanban-col[data-status="researching"] .kanban-col-head { border-top-color: var(--blue); }
+.kanban-col[data-status="drafting"] .kanban-col-head { border-top-color: var(--orange); }
+.kanban-col[data-status="submitted"] .kanban-col-head { border-top-color: var(--yellow); }
+.kanban-col[data-status="shortlisted"] .kanban-col-head { border-top-color: var(--cyan); }
+.kanban-col[data-status="won"] .kanban-col-head { border-top-color: var(--green); }
+
+.kanban-count {
+  color: var(--tx-f);
+  font-weight: 400;
+}
+
+.kanban-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kanban-card {
+  font-size: 11px;
+  color: var(--tx-s);
+  padding: 5px 6px;
+  background: var(--bg-t);
+  cursor: default;
+  transition: background 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kanban-card:hover {
+  background: var(--bg-h);
+  color: var(--tx);
+}
+
+.kanban-card[draggable="true"] { cursor: grab; }
+.kanban-card.dragging { opacity: 0.3; }
+
+.kanban-cards.drag-over {
+  background: var(--bg-s);
+  outline: 1px dashed var(--tx-f);
+  outline-offset: -1px;
+  min-height: 28px;
+}
+
+/* ═══ CHECKLIST ═══ */
+.checklist-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--tx-s);
+  border-bottom: 1px solid var(--bg-t);
+}
+
+.checklist-item:last-child { border-bottom: none; }
+
+.check-pip {
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  position: relative;
+  top: 1px;
+}
+
+.check-pip.critical { background: var(--red); }
+.check-pip.high { background: var(--orange); }
+.check-pip.medium { background: var(--blue); }
+.check-pip.low { background: var(--tx-m); }
+
+.check-box {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--tx-f);
+  background: transparent;
+  flex-shrink: 0;
+  cursor: pointer;
+  position: relative;
+  top: 2px;
+  transition: border-color 0.1s;
+}
+
+.check-box:hover { border-color: var(--tx-m); }
+
+.check-box:checked {
+  border-color: var(--green);
+  background: var(--green);
+}
+
+.check-box:checked::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  width: 3px;
+  height: 6px;
+  border: solid var(--bg);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+.checklist-item.done .check-text {
+  color: var(--tx-f);
+  text-decoration: line-through;
+}
+
+.check-text { flex: 1; }
+
+.check-deadline {
+  font-size: 10px;
+  color: var(--tx-f);
+  flex-shrink: 0;
+}
+
+/* ═══ PRODUCT CARDS ═══ */
+.products {
+  display: flex;
+  gap: 2px;
+}
+
+.product-card {
+  flex: 1;
+  background: var(--bg-t);
+  padding: 8px 10px;
+}
+
+.product-name {
+  font-size: 12px;
+  color: var(--tx);
+  font-weight: 500;
+}
+
+.product-meta {
+  font-size: 10px;
+  color: var(--tx-m);
+  margin-top: 2px;
+}
+
+.product-tag {
+  color: var(--cyan);
+}
+
+/* ═══ TIMELINE ═══ */
+.timeline {
+  padding-left: 2px;
+}
+
+.tl-month {
+  font-size: 10px;
+  color: var(--tx-f);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  padding: 12px 0 4px;
+}
+
+.tl-month:first-child { padding-top: 4px; }
+
+.tl-entry {
+  display: flex;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 12px;
+  border-left: 1px solid var(--tx-f);
+  padding-left: 12px;
+  margin-left: 4px;
+  position: relative;
+}
+
+.tl-entry::before {
+  content: "";
+  position: absolute;
+  left: -3px;
+  top: 9px;
+  width: 5px;
+  height: 5px;
+  background: var(--tx-f);
+}
+
+.tl-entry:hover::before { background: var(--tx-m); }
+
+.tl-date {
+  color: var(--tx-m);
+  width: 52px;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.tl-what {
+  color: var(--tx-s);
+  flex: 1;
+}
+
+.tl-product {
+  color: var(--blue);
+  font-size: 11px;
+  flex-shrink: 0;
+  width: 100px;
+}
+
+.tl-type {
+  font-size: 10px;
+  flex-shrink: 0;
+  width: 72px;
+  text-align: right;
+}
+
+.tl-type.deadline { color: var(--red); }
+.tl-type.event { color: var(--orange); }
+.tl-type.milestone { color: var(--cyan); }
+.tl-type.networking { color: var(--purple); }
+
+/* ═══ TABLE ═══ */
+.table-controls {
+  display: flex;
+  gap: 12px;
+  padding: 4px 0 8px;
+  align-items: center;
+}
+
+.table-search {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--tx-f);
+  color: var(--tx);
+  padding: 2px 0;
+  width: 200px;
+  outline: none;
+}
+
+.table-search::placeholder { color: var(--tx-f); }
+.table-search:focus { border-bottom-color: var(--green); }
+
+.table-filter {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid var(--tx-f);
+  color: var(--tx-m);
+  padding: 2px 6px;
+  cursor: pointer;
+  appearance: none;
+}
+
+.table-filter:focus { border-color: var(--tx-m); outline: none; }
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.data-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--tx-m);
+  padding: 6px 8px 6px 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--tx-f);
+}
+
+.data-table th:hover { color: var(--tx-s); }
+.data-table th .sort { font-size: 9px; margin-left: 4px; }
+
+.data-table td {
+  padding: 5px 8px 5px 0;
+  color: var(--tx-s);
+  border-bottom: 1px solid var(--bg-t);
+}
+
+.data-table tr:hover td {
+  background: var(--bg-s);
+  color: var(--tx);
+}
+
+.data-table .status {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.data-table .status.researching { color: var(--blue); }
+.data-table .status.drafting { color: var(--orange); }
+.data-table .status.submitted { color: var(--yellow); }
+.data-table .status.shortlisted { color: var(--cyan); }
+.data-table .status.won { color: var(--green); }
+
+.data-table .tags {
+  display: flex;
+  gap: 4px;
+}
+
+.data-table .tag {
+  font-size: 10px;
+  color: var(--tx-m);
+  padding: 0 5px;
+  border: 1px solid var(--tx-f);
+}
+
+.data-table .tag:first-child { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 30%, transparent); }
+.data-table tr:nth-child(odd) .tag:first-child { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 30%, transparent); }
+
+.data-table .prize { color: var(--green); font-size: 11px; }
+
+/* ═══ HELP BAR ═══ */
+.help-bar {
+  flex-shrink: 0;
+  padding: 6px 16px;
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+  color: var(--tx-f);
+  border-top: 1px solid var(--bg-t);
+}
+
+.help-key {
+  color: var(--green);
+}
+
+/* ═══ ANIMATIONS ═══ */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.view.active { animation: fade-in 0.15s ease-out; }
+
+.kanban-card { animation: fade-in 0.12s ease-out backwards; }
+.kanban-col:nth-child(1) .kanban-card { animation-delay: 0.02s; }
+.kanban-col:nth-child(2) .kanban-card { animation-delay: 0.04s; }
+.kanban-col:nth-child(3) .kanban-card { animation-delay: 0.06s; }
+.kanban-col:nth-child(4) .kanban-card { animation-delay: 0.08s; }
+.kanban-col:nth-child(5) .kanban-card { animation-delay: 0.10s; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <div class="dash-head">
+    <div class="dash-title">[ business manager ]</div>
+    <div class="dash-sub">cognetic ltd</div>
+  </div>
+
+  <div class="view-tabs">
+    <button class="view-tab active" onclick="showView('overview')">overview</button>
+    <span class="tab-pipe">|</span>
+    <button class="view-tab" onclick="showView('timeline')">timeline</button>
+    <span class="tab-pipe">|</span>
+    <button class="view-tab" onclick="showView('applications')">applications</button>
+  </div>
+
+  <div class="rule"></div>
+
+  <div class="view-content">
+
+    <!-- ═══ OVERVIEW ═══ -->
+    <div class="view active" id="view-overview">
+      <div class="overview-grid">
+        <div class="overview-left">
+          <div class="panel-title">funding pipeline</div>
+          <div class="kanban">
+            <div class="kanban-col" data-status="researching">
+              <div class="kanban-col-head"><span>research</span><span class="kanban-count">2</span></div>
+              <div class="kanban-cards">
+                <div class="kanban-card" draggable="true">Innovate UK Smart</div>
+                <div class="kanban-card" draggable="true">R&amp;D Tax Credits</div>
+              </div>
+            </div>
+            <div class="kanban-col" data-status="drafting">
+              <div class="kanban-col-head"><span>drafting</span><span class="kanban-count">2</span></div>
+              <div class="kanban-cards">
+                <div class="kanban-card" draggable="true">Seedcorn Phase 1</div>
+                <div class="kanban-card" draggable="true">Geovation Accel.</div>
+              </div>
+            </div>
+            <div class="kanban-col" data-status="submitted">
+              <div class="kanban-col-head"><span>submitted</span><span class="kanban-count">1</span></div>
+              <div class="kanban-cards">
+                <div class="kanban-card" draggable="true">Cloud Credits</div>
+              </div>
+            </div>
+            <div class="kanban-col" data-status="shortlisted">
+              <div class="kanban-col-head"><span>shortlist</span><span class="kanban-count">1</span></div>
+              <div class="kanban-cards">
+                <div class="kanban-card" draggable="true">ActiveLab</div>
+              </div>
+            </div>
+            <div class="kanban-col" data-status="won">
+              <div class="kanban-col-head"><span>won</span><span class="kanban-count">0</span></div>
+              <div class="kanban-cards"></div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="panel-title">priority actions</div>
+          <div class="checklist">
+            <div class="checklist-item"><span class="check-pip critical"></span><input type="checkbox" class="check-box" onchange="toggleCheck(this)"><span class="check-text">Amend company articles (Article 18c — IVA clause)</span></div>
+            <div class="checklist-item"><span class="check-pip critical"></span><input type="checkbox" class="check-box" onchange="toggleCheck(this)"><span class="check-text">Seedcorn application — finalise Phase 1 draft</span><span class="check-deadline">24 Apr</span></div>
+            <div class="checklist-item"><span class="check-pip critical"></span><input type="checkbox" class="check-box" onchange="toggleCheck(this)"><span class="check-text">Azure migration — free trial expires ~24 Apr</span><span class="check-deadline">~24 Apr</span></div>
+            <div class="checklist-item"><span class="check-pip high"></span><input type="checkbox" class="check-box" onchange="toggleCheck(this)"><span class="check-text">Apply for Azure/AWS/GCP startup credits</span></div>
+            <div class="checklist-item"><span class="check-pip high"></span><input type="checkbox" class="check-box" onchange="toggleCheck(this)"><span class="check-text">Geovation Spring Showcase — attend, network</span><span class="check-deadline">25 Mar</span></div>
+            <div class="checklist-item done"><span class="check-pip high"></span><input type="checkbox" class="check-box" checked onchange="toggleCheck(this)"><span class="check-text">Register for UK Business Tech Awards research</span></div>
+            <div class="checklist-item"><span class="check-pip medium"></span><input type="checkbox" class="check-box" onchange="toggleCheck(this)"><span class="check-text">Submit R&D tax credit claim (year end)</span></div>
+            <div class="checklist-item"><span class="check-pip medium"></span><input type="checkbox" class="check-box" onchange="toggleCheck(this)"><span class="check-text">Set up domain email for investor comms</span></div>
+            <div class="checklist-item"><span class="check-pip medium"></span><input type="checkbox" class="check-box" onchange="toggleCheck(this)"><span class="check-text">Book British Library BIPC advisory session</span></div>
+            <div class="checklist-item"><span class="check-pip low"></span><input type="checkbox" class="check-box" onchange="toggleCheck(this)"><span class="check-text">Research NatWest Accelerator (Autumn cohort)</span></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="panel-title">product portfolio</div>
+          <div class="products">
+            <div class="product-card">
+              <div class="product-name">Dream Decks</div>
+              <div class="product-meta"><span class="product-tag">active</span> · p1 · revenue</div>
+            </div>
+            <div class="product-card">
+              <div class="product-name">House Finder</div>
+              <div class="product-meta"><span class="product-tag">dev</span> · p2 · pre-rev</div>
+            </div>
+            <div class="product-card">
+              <div class="product-name">Tensyl</div>
+              <div class="product-meta"><span class="product-tag">dev</span> · p3 · pre-rev</div>
+            </div>
+            <div class="product-card">
+              <div class="product-name">SkillCracked</div>
+              <div class="product-meta"><span class="product-tag">early</span> · p4 · pre-rev</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ TIMELINE ═══ -->
+    <div class="view" id="view-timeline">
+      <div class="panel-title">all events</div>
+      <div class="timeline">
+        <div class="tl-month">march 2026</div>
+        <div class="tl-entry"><span class="tl-date">25 Mar</span><span class="tl-what">Geovation Spring Showcase</span><span class="tl-product">House Finder</span><span class="tl-type networking">network</span></div>
+        <div class="tl-entry"><span class="tl-date">29 Mar</span><span class="tl-what">UCL Hatchery — Application Deadline</span><span class="tl-product">—</span><span class="tl-type deadline">deadline</span></div>
+
+        <div class="tl-month">april 2026</div>
+        <div class="tl-entry"><span class="tl-date">~24 Apr</span><span class="tl-what">Azure free trial expires — migrate infrastructure</span><span class="tl-product">House Finder</span><span class="tl-type deadline">deadline</span></div>
+        <div class="tl-entry"><span class="tl-date">24 Apr</span><span class="tl-what">InterTradeIreland Seedcorn Phase 1 (€130K prize)</span><span class="tl-product">Tensyl</span><span class="tl-type deadline">deadline</span></div>
+        <div class="tl-entry"><span class="tl-date">30 Apr</span><span class="tl-what">CDFI / Start Up Loan application window</span><span class="tl-product">All</span><span class="tl-type deadline">deadline</span></div>
+
+        <div class="tl-month">may 2026</div>
+        <div class="tl-entry"><span class="tl-date">15 May</span><span class="tl-what">Seedcorn Phase 1 — shortlist announcement</span><span class="tl-product">Tensyl</span><span class="tl-type milestone">milestone</span></div>
+        <div class="tl-entry"><span class="tl-date">22 May</span><span class="tl-what">Innovate UK Smart Grants — Round 48</span><span class="tl-product">House Finder</span><span class="tl-type deadline">deadline</span></div>
+        <div class="tl-entry"><span class="tl-date">28 May</span><span class="tl-what">Pitch masterclass (Seedcorn finalists)</span><span class="tl-product">Tensyl</span><span class="tl-type event">event</span></div>
+
+        <div class="tl-month">june 2026</div>
+        <div class="tl-entry"><span class="tl-date">5 Jun</span><span class="tl-what">TechCrunch Early Stage — applications open</span><span class="tl-product">Tensyl</span><span class="tl-type event">event</span></div>
+        <div class="tl-entry"><span class="tl-date">12 Jun</span><span class="tl-what">R&D tax credit submission deadline</span><span class="tl-product">All</span><span class="tl-type deadline">deadline</span></div>
+        <div class="tl-entry"><span class="tl-date">20 Jun</span><span class="tl-what">London Tech Week — networking events</span><span class="tl-product">All</span><span class="tl-type networking">network</span></div>
+
+        <div class="tl-month">july 2026</div>
+        <div class="tl-entry"><span class="tl-date">10 Jul</span><span class="tl-what">Seedcorn Phase 1 — winners announced</span><span class="tl-product">Tensyl</span><span class="tl-type milestone">milestone</span></div>
+        <div class="tl-entry"><span class="tl-date">15 Jul</span><span class="tl-what">Web Summit PITCH — early application deadline</span><span class="tl-product">Tensyl</span><span class="tl-type deadline">deadline</span></div>
+
+        <div class="tl-month">august 2026</div>
+        <div class="tl-entry"><span class="tl-date">~Aug</span><span class="tl-what">Geovation Accelerator — next cohort applications</span><span class="tl-product">House Finder</span><span class="tl-type deadline">deadline</span></div>
+      </div>
+    </div>
+
+    <!-- ═══ APPLICATIONS ═══ -->
+    <div class="view" id="view-applications">
+      <div class="panel-title">funding applications</div>
+      <div class="table-controls">
+        <input class="table-search" type="text" placeholder="search:" oninput="filterTable(this.value)">
+        <select class="table-filter" onchange="filterStatus(this.value)">
+          <option value="">all statuses</option>
+          <option value="researching">researching</option>
+          <option value="drafting">drafting</option>
+          <option value="submitted">submitted</option>
+          <option value="shortlisted">shortlisted</option>
+        </select>
+      </div>
+      <table class="data-table" id="app-table">
+        <thead>
+          <tr>
+            <th onclick="sortTable(0)">application <span class="sort">▾</span></th>
+            <th onclick="sortTable(1)">status</th>
+            <th onclick="sortTable(2)">product</th>
+            <th onclick="sortTable(3)">prize</th>
+            <th>tags</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>InterTradeIreland Seedcorn</td><td><span class="status drafting">drafting</span></td><td>Tensyl</td><td class="prize">€130,000</td><td><div class="tags"><span class="tag">competition</span><span class="tag">equity-free</span></div></td></tr>
+          <tr><td>Geovation Accelerator</td><td><span class="status drafting">drafting</span></td><td>House Finder</td><td class="prize">£20,000</td><td><div class="tags"><span class="tag">accelerator</span><span class="tag">equity-free</span></div></td></tr>
+          <tr><td>Azure / AWS / GCP Credits</td><td><span class="status submitted">submitted</span></td><td>All</td><td class="prize">~£10,000</td><td><div class="tags"><span class="tag">cloud</span><span class="tag">non-cash</span></div></td></tr>
+          <tr><td>Innovate UK Smart Grants</td><td><span class="status researching">researching</span></td><td>House Finder</td><td class="prize">£25-500K</td><td><div class="tags"><span class="tag">grant</span></div></td></tr>
+          <tr><td>R&D Tax Credits</td><td><span class="status researching">researching</span></td><td>All</td><td class="prize">~£3,000</td><td><div class="tags"><span class="tag">tax</span></div></td></tr>
+          <tr><td>ukactive ActiveLab</td><td><span class="status shortlisted">shortlisted</span></td><td>Tensyl</td><td class="prize">£10,000</td><td><div class="tags"><span class="tag">accelerator</span><span class="tag">fitness</span></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="help-bar">
+    <div><span class="help-key">j/k</span> navigate</div>
+    <div><span class="help-key">space</span> select</div>
+    <div><span class="help-key">alt+q</span> workspace</div>
+    <div><span class="help-key">alt+1-9</span> tabs</div>
+  </div>
+</div>
+
+<script>
+function showView(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('view-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function toggleCheck(cb) {
+  const item = cb.closest('.checklist-item');
+  item.classList.toggle('done', cb.checked);
+}
+
+function filterTable(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#app-table tbody tr').forEach(row => {
+    row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function filterStatus(status) {
+  document.querySelectorAll('#app-table tbody tr').forEach(row => {
+    if (!status) { row.style.display = ''; return; }
+    const s = row.querySelector('.status');
+    row.style.display = s?.classList.contains(status) ? '' : 'none';
+  });
+}
+
+let sortCol = 0, sortAsc = true;
+function sortTable(col) {
+  if (sortCol === col) sortAsc = !sortAsc;
+  else { sortCol = col; sortAsc = true; }
+  const tbody = document.querySelector('#app-table tbody');
+  const rows = [...tbody.querySelectorAll('tr')];
+  rows.sort((a, b) => {
+    const va = a.cells[col].textContent.trim();
+    const vb = b.cells[col].textContent.trim();
+    return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+  });
+  rows.forEach(r => tbody.appendChild(r));
+  document.querySelectorAll('#app-table th .sort').forEach(s => s.textContent = '');
+  document.querySelectorAll('#app-table th')[col].querySelector('.sort').textContent = sortAsc ? '▴' : '▾';
+}
+
+// Kanban drag and drop
+let dragCard = null;
+
+document.querySelectorAll('.kanban-card').forEach(card => {
+  card.addEventListener('dragstart', e => {
+    dragCard = card;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  card.addEventListener('dragend', () => {
+    card.classList.remove('dragging');
+    document.querySelectorAll('.kanban-cards').forEach(c => c.classList.remove('drag-over'));
+    dragCard = null;
+    updateKanbanCounts();
+  });
+});
+
+document.querySelectorAll('.kanban-cards').forEach(container => {
+  container.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    container.classList.add('drag-over');
+  });
+  container.addEventListener('dragleave', () => {
+    container.classList.remove('drag-over');
+  });
+  container.addEventListener('drop', e => {
+    e.preventDefault();
+    container.classList.remove('drag-over');
+    if (dragCard) {
+      container.appendChild(dragCard);
+      updateKanbanCounts();
+    }
+  });
+});
+
+function updateKanbanCounts() {
+  document.querySelectorAll('.kanban-col').forEach(col => {
+    const count = col.querySelectorAll('.kanban-card').length;
+    col.querySelector('.kanban-count').textContent = count;
+  });
+}
+
+// Keyboard nav
+document.addEventListener('keydown', e => {
+  if (e.altKey && e.key === 'q') { e.preventDefault(); }
+  if (e.key === '1' && !e.altKey) showView('overview');
+  if (e.key === '2' && !e.altKey) showView('timeline');
+  if (e.key === '3' && !e.altKey) showView('applications');
+});
+</script>
+
+</body>
+</html>

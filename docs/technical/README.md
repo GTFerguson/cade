@@ -1,7 +1,7 @@
 ---
 title: Technical Documentation
 created: 2026-01-16
-updated: 2026-02-04
+updated: 2026-03-24
 status: active
 tags: [index, technical]
 ---
@@ -18,12 +18,13 @@ Architecture and essential developer documentation.
 
 - [[core/development-setup|Development Setup]] - Running CADE for development
 - [[core/frontend-architecture|Frontend Architecture]] - Component architecture and mobile support
+- [[core/agent-orchestration|Agent Orchestration]] - Multi-agent coordination, MCP tools, two-gate approval flow
 
 ### Reference
 
 API documentation and specifications.
 
-*No documents yet.*
+- [[reference/websocket-protocol|WebSocket Protocol]] - WebSocket message types and communication protocol
 
 ### Design
 

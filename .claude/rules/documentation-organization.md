@@ -58,7 +58,7 @@ The root `docs/README.md` serves as the **main entry point** for all documentati
 - Overview of documentation structure
 - Quick navigation for different audiences (users vs developers)
 
-### `plans/` - Active Development
+### `docs/plans/` - Active Development
 
 For **active planning** and development tasks.
 
@@ -69,7 +69,7 @@ For **active planning** and development tasks.
 - Sprint-level task planning
 
 **Lifecycle:**
-1. Create plan in `plans/` during development
+1. Create plan in `docs/plans/` during development
 2. When complete -> integrate into `docs/technical/`
 3. If large/deferred -> move to `docs/future/`
 4. Delete completed/obsolete plans
@@ -94,9 +94,9 @@ For **active planning** and development tasks.
 **Example prompt:**
 > "I've completed [feature/fix]. Would you like me to update the relevant documentation in `docs/technical/` to reflect these changes?"
 
-### `plans/` Directory - No Approval Needed
+### `docs/plans/` Directory - No Approval Needed
 
-The `plans/` directory is for quick, working documents during active development:
+The `docs/plans/` directory is for quick, working documents during active development:
 - Create, modify, or delete freely
 - Use for scratch planning and work-in-progress
 - Reorganize as needed during development
@@ -114,8 +114,8 @@ Each document should focus on ONE system or area:
 ### 2. Document Lifecycle
 
 ```
-                   plans/                      docs/future/
-                (active dev)                  (deferred)
+                docs/plans/                     docs/future/
+                (active dev)                    (deferred)
                      |                            |
                      | complete                   | large feature
                      v                            | deferred
@@ -180,7 +180,7 @@ Each document should have:
 
 ### Regular Reviews
 
-- Check `plans/` for completed items -> move or delete
+- Check `docs/plans/` for completed items -> move or delete
 - Check `blocking-issues.md` for resolved issues -> remove
 - Update cross-references when files move
 
@@ -188,7 +188,7 @@ Each document should have:
 
 Ask:
 1. Is this implemented? -> `docs/technical/`
-2. Is this active development? -> `plans/`
+2. Is this active development? -> `docs/plans/`
 3. Is this future work? -> `docs/future/`
 4. Does a relevant doc already exist? -> Add to it
 5. Does this belong with other similar issues? -> Group appropriately

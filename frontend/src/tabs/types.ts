@@ -67,6 +67,9 @@ export interface ProjectContext {
   toggleTerminal(): void;
 
   setRightPaneMode(mode: RightPaneMode): void;
+  toggleViewMode(): void;
+  getViewMode(): import("./project-context").TabViewMode;
+  hasDashboard(): boolean;
   switchToAgent(agentId: string | null): void;
   cycleAgent(direction: "next" | "prev"): void;
   getAgentManager(): AgentManager | null;

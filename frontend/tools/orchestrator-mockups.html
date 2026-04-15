@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CADE Orchestrator — Focused &amp; Overview</title>
+<style>
+  /* ── CADE Design System ─────────────────────────────────────── */
+  :root {
+    --bg-primary: #0a0a09;
+    --bg-secondary: #111110;
+    --bg-tertiary: #1a1918;
+    --bg-hover: #222120;
+    --bg-selected: #222120;
+    --border-color: #2a2827;
+    --text-primary: #f8f6f2;
+    --text-secondary: #c4b9ad;
+    --text-muted: #5e5955;
+    --accent-red: #ff2c4b;
+    --accent-green: #aeee00;
+    --accent-blue: #0a9dff;
+    --accent-orange: #ffa724;
+    --accent-yellow: #fade3e;
+    --accent-cyan: #8cffba;
+    --accent-purple: #ff9eb8;
+    --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas", monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #050505;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.5;
+    letter-spacing: 0.5px;
+    padding: 24px 32px;
+  }
+
+  /* ── Page Layout ────────────────────────────────────────────── */
+  .page-title {
+    color: var(--accent-red);
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+    text-align: center;
+  }
+  .page-subtitle {
+    color: var(--text-muted);
+    font-size: 11px;
+    text-align: center;
+    margin-bottom: 40px;
+    letter-spacing: 1px;
+  }
+  .section {
+    margin-bottom: 56px;
+  }
+  .section-title {
+    color: var(--accent-red);
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .section-desc {
+    color: var(--text-muted);
+    font-size: 11px;
+    margin-bottom: 20px;
+    line-height: 1.8;
+  }
+  .section-desc em {
+    color: var(--text-secondary);
+    font-style: normal;
+  }
+  hr.divider {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 56px 0;
+  }
+  .annotation {
+    color: var(--text-muted);
+    font-size: 10px;
+    line-height: 1.9;
+    margin-top: 12px;
+    padding: 8px 12px;
+    border-left: 2px solid var(--border-color);
+  }
+  .annotation em {
+    color: var(--text-secondary);
+    font-style: normal;
+  }
+  .key {
+    color: var(--accent-green);
+    font-size: 10px;
+  }
+
+  /* ── Shared Components ──────────────────────────────────────── */
+  .frame {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+  }
+  .frame-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .state-badge {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 1px 6px;
+    display: inline-block;
+  }
+  .state-pending  { color: var(--text-muted); background: rgba(133,127,120,0.1); }
+  .state-starting { color: var(--accent-yellow); background: rgba(250,222,62,0.1); }
+  .state-busy     { color: var(--accent-blue); background: rgba(10,157,255,0.1); }
+  .state-done     { color: var(--accent-green); background: rgba(174,238,0,0.1); }
+  .state-error    { color: var(--accent-red); background: rgba(255,44,75,0.1); }
+
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .pulse { animation: pulse 1.5s ease-in-out infinite; }
+
+  .terminal-text {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    white-space: pre;
+    padding: 8px 12px;
+  }
+  .terminal-text .dim { color: var(--text-muted); }
+  .terminal-text .tool { color: var(--accent-yellow); }
+  .terminal-text .ok { color: var(--accent-green); }
+  .terminal-text .err { color: var(--accent-red); }
+  .terminal-text .info { color: var(--accent-blue); }
+  .terminal-text .cyan { color: var(--accent-cyan); }
+  .terminal-text .bright { color: var(--text-primary); }
+
+  .statusline {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-secondary);
+    padding: 4px 12px;
+    font-size: 11px;
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+  }
+  .statusline .mode { font-weight: 600; }
+  .statusline .right { margin-left: auto; color: var(--text-muted); font-size: 10px; }
+
+  /* ── Tab bar ────────────────────────────────────────────────── */
+  .tab-bar {
+    display: flex;
+    align-items: stretch;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    height: 32px;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .tab {
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-color);
+    border-right: 1px solid var(--border-color);
+  }
+  .tab:hover { color: var(--text-secondary); }
+  .tab.active {
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    border-bottom-color: transparent;
+  }
+
+  /* ── 3-Pane Workspace ───────────────────────────────────────── */
+  .workspace {
+    display: flex;
+    height: 520px;
+  }
+  .resize-handle {
+    width: 4px;
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+  }
+
+  /* left pane: file tree */
+  .left-pane {
+    width: 200px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-primary);
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .tree-header {
+    padding: 8px 12px;
+    font-size: 11px;
+    color: var(--accent-red);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+  }
+  .tree-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+  .tree-item {
+    padding: 2px 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tree-item .chevron { color: var(--text-muted); margin-right: 4px; }
+  .tree-item .dir { color: var(--text-secondary); }
+  .tree-item .file-ts { color: var(--accent-blue); }
+  .tree-item .file-py { color: var(--accent-blue); }
+  .tree-item .file-md { color: var(--accent-green); }
+  .tree-item .file-json { color: var(--accent-yellow); }
+  .tree-item .file-css { color: var(--accent-purple); }
+  .tree-indent { display: inline-block; }
+
+  /* center pane */
+  .center-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  /* right pane */
+  .right-pane {
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-primary);
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  /* ── Chat pane (orchestrator chat in center) ────────────────── */
+  .chat-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+  }
+  .chat-msg {
+    margin-bottom: 16px;
+  }
+  .chat-msg.user .chat-content {
+    color: var(--text-muted);
+  }
+  .chat-msg.user .chat-prompt {
+    color: var(--accent-green);
+    font-weight: 600;
+    margin-right: 8px;
+  }
+  .chat-msg.assistant .chat-content {
+    color: var(--text-primary);
+    line-height: 1.6;
+  }
+  .chat-tool {
+    font-size: 12px;
+    margin: 4px 0;
+  }
+  .chat-tool .tool-icon { margin-right: 4px; }
+  .chat-tool .tool-name { color: var(--accent-cyan); font-weight: 600; }
+  .chat-tool .tool-target { color: var(--text-muted); font-style: italic; margin-left: 4px; }
+  .chat-input-area {
+    padding: 8px 16px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .chat-input-prompt {
+    color: var(--accent-green);
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .chat-input-field {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    outline: none;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════ */
+  /*  SEQUENTIAL MODE — Agent tabs, one at a time                  */
+  /* ═══════════════════════════════════════════════════════════════ */
+
+  .agent-tab-bar {
+    display: flex;
+    align-items: stretch;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    height: 26px;
+    font-size: 11px;
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+  .agent-tab-bar::-webkit-scrollbar { display: none; }
+
+  .agent-tab-bar .orch-label {
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    color: var(--accent-orange);
+    font-size: 10px;
+    letter-spacing: 1px;
+    border-right: 1px solid var(--border-color);
+    flex-shrink: 0;
+  }
+
+  .agent-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-right: 1px solid var(--border-color);
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-size: 11px;
+  }
+  .agent-tab:hover { color: var(--text-secondary); }
+  .agent-tab.active {
+    color: var(--text-primary);
+    background: var(--bg-primary);
+  }
+  .agent-tab .at-idx {
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+  .agent-tab .at-dot {
+    width: 6px;
+    height: 6px;
+    flex-shrink: 0;
+    border-radius: 50%;
+  }
+
+  .agent-info-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    font-size: 10px;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+  }
+  .agent-info-bar .aib-task {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-secondary);
+  }
+
+  .agent-terminal-area {
+    flex: 1;
+    overflow-y: auto;
+    background: var(--bg-primary);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════ */
+  /*  PARALLEL MODE — Orchestrator center, agents right            */
+  /* ═══════════════════════════════════════════════════════════════ */
+
+  .agents-pane-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 11px;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .agents-pane-header .aph-title {
+    color: var(--accent-red);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 11px;
+  }
+  .agents-pane-header .aph-count {
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+  .agents-pane-header .aph-right {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+
+  .agent-tile-stack {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .agent-tile {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    border-bottom: 1px solid var(--border-color);
+    position: relative;
+  }
+  .agent-tile:last-child { border-bottom: none; }
+  .agent-tile.focused {
+    outline: 1px solid var(--accent-blue);
+    outline-offset: -1px;
+    z-index: 1;
+  }
+  .agent-tile.collapsed {
+    flex: 0 0 26px;
+    min-height: 26px;
+  }
+  .agent-tile.collapsed .tile-body { display: none; }
+
+  .tile-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    background: var(--bg-secondary);
+    font-size: 11px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .tile-header:hover { background: var(--bg-hover); }
+  .tile-chevron {
+    color: var(--text-muted);
+    font-size: 10px;
+    width: 10px;
+    text-align: center;
+  }
+  .tile-name {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 11px;
+  }
+  .tile-task {
+    color: var(--text-muted);
+    font-size: 10px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tile-meta {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 10px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .tile-body {
+    flex: 1;
+    overflow-y: auto;
+    background: var(--bg-primary);
+  }
+
+  /* agent tile progress indicator */
+  .tile-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 1px;
+    transition: width 0.3s ease;
+  }
+
+  /* right-pane statusline */
+  .agents-statusline {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 3px 12px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    font-size: 10px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .agents-statusline .as-val { color: var(--text-secondary); }
+
+  /* right-pane mode tabs (viewer / agents toggle) */
+  .right-mode-toggle {
+    display: flex;
+    align-items: stretch;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    height: 24px;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .right-mode-tab {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-right: 1px solid var(--border-color);
+    letter-spacing: 1px;
+  }
+  .right-mode-tab:hover { color: var(--text-secondary); }
+  .right-mode-tab.active {
+    color: var(--text-primary);
+    background: var(--bg-primary);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════ */
+  /*  Variant labels                                                */
+  /* ═══════════════════════════════════════════════════════════════ */
+  .variant-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    margin-top: 24px;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-title">[ CADE ORCHESTRATOR ]</div>
+<div class="page-subtitle">refined mockups &mdash; focused &amp; overview modes</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  MODE 1: SEQUENTIAL — Agent tabs, one at a time               -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="section">
+  <div class="section-title">Focused Mode &mdash; Agent Tabs</div>
+  <div class="section-desc">
+    One agent at a time. A sub-tab-bar appears below the main tabs with each agent as a tab.
+    State shown by LED color. Click or <span class="key">prefix 1-9</span> to switch.
+    The center pane shows the selected agent's full terminal. Right pane stays as the normal viewer.
+    Orchestrator chat is accessible as its own tab.
+  </div>
+
+  <!-- Variant A: Agent selected, full terminal -->
+  <div class="variant-label">agent terminal focused</div>
+  <div class="frame">
+    <div class="tab-bar">
+      <div class="tab active">my-project</div>
+    </div>
+    <div class="workspace">
+
+      <!-- Left: file tree (unchanged) -->
+      <div class="left-pane">
+        <div class="tree-header">[ FILES ]</div>
+        <div class="tree-body">
+          <div class="tree-item"><span class="chevron">▾</span> <span class="dir">backend/</span></div>
+          <div class="tree-item"><span class="tree-indent" style="width:20px"></span><span class="chevron">▾</span> <span class="dir">providers/</span></div>
+          <div class="tree-item"><span class="tree-indent" style="width:40px"></span><span class="file-py">base.py</span></div>
+          <div class="tree-item"><span class="tree-indent" style="width:40px"></span><span class="file-py">claude_code.py</span></div>
+          <div class="tree-item"><span class="tree-indent" style="width:40px"></span><span class="file-py">types.py</span></div>
+          <div class="tree-item"><span class="tree-indent" style="width:20px"></span><span class="file-py">auth.py</span></div>
+          <div class="tree-item"><span class="tree-indent" style="width:20px"></span><span class="file-py">main.py</span></div>
+          <div class="tree-item"><span class="tree-indent" style="width:20px"></span><span class="file-py">websocket.py</span></div>
+          <div class="tree-item"><span class="chevron">▸</span> <span class="dir">frontend/</span></div>
+          <div class="tree-item"><span class="chevron">▸</span> <span class="dir">test/</span></div>
+          <div class="tree-item"><span class="file-md">README.md</span></div>
+          <div class="tree-item"><span class="file-json">package.json</span></div>
+        </div>
+      </div>
+
+      <div class="resize-handle"></div>
+
+      <!-- Center: agent tab bar + selected agent terminal -->
+      <div class="center-pane">
+        <div class="agent-tab-bar">
+          <div class="orch-label">ORCH</div>
+          <div class="agent-tab active">
+            <span class="at-idx">1</span>
+            <span class="at-dot" style="background:var(--accent-blue)"></span>
+            test-writer
+          </div>
+          <div class="agent-tab">
+            <span class="at-idx">2</span>
+            <span class="at-dot" style="background:var(--accent-green)"></span>
+            refactorer
+          </div>
+          <div class="agent-tab">
+            <span class="at-idx">3</span>
+            <span class="at-dot" style="background:var(--accent-yellow)"></span>
+            docs-writer
+          </div>
+          <div class="agent-tab">
+            <span class="at-idx">4</span>
+            <span class="at-dot" style="background:var(--text-muted)"></span>
+            reviewer
+          </div>
+        </div>
+
+        <div class="agent-info-bar">
+          <span class="state-badge state-busy">busy</span>
+          <span class="aib-task">Write unit tests for the auth module endpoints</span>
+          <span>$0.031</span>
+        </div>
+
+        <div class="agent-terminal-area">
+          <div class="terminal-text"><span class="dim">[sonnet] Session: a1b2c3d4...</span>
+
+<span class="bright">I'll write comprehensive unit tests for the auth
+module. Let me start by reading the existing code.</span>
+
+<span class="tool">▸ Read</span> backend/auth.py <span class="ok">✓</span>
+<span class="tool">▸ Read</span> test/test_auth.py <span class="ok">✓</span>
+
+<span class="bright">The auth module has login, logout, and token refresh
+endpoints. The existing tests only cover the happy
+path. I'll add error cases and edge cases.</span>
+
+<span class="tool">▸ Write</span> test/unit/test_auth.py <span class="ok">✓</span>
+
+<span class="bright">Running the tests to verify:</span>
+
+<span class="tool">▸ Bash</span> pytest test/unit/test_auth.py -v <span class="info pulse">running...</span></div>
+        </div>
+
+        <div class="statusline">
+          <span class="mode" style="color:var(--accent-orange)">ARCHITECT</span>
+          <span style="color:var(--accent-cyan)">test-writer</span>
+          <span style="color:var(--text-muted)">sonnet</span>
+          <span class="right"><span class="key">prefix [/]</span> cycle agent  <span class="key">prefix k</span> kill</span>
+        </div>
+      </div>
+
+      <div class="resize-handle"></div>
+
+      <!-- Right: viewer (unchanged, normal CADE) -->
+      <div class="right-pane">
+        <div style="padding:8px 12px; background:var(--bg-secondary); border-bottom:1px solid var(--border-color); text-align:center; font-size:12px; color:var(--text-primary)">[ TEST_AUTH.PY ]</div>
+        <div style="flex:1; overflow-y:auto; padding:0">
+          <div class="terminal-text" style="font-size:12px; color:var(--text-muted); line-height:1.6"><span style="color:var(--text-muted); user-select:none">  1  </span><span style="color:var(--accent-blue)">import</span> pytest
+<span style="color:var(--text-muted); user-select:none">  2  </span><span style="color:var(--accent-blue)">from</span> backend.auth <span style="color:var(--accent-blue)">import</span> login
+<span style="color:var(--text-muted); user-select:none">  3  </span>
+<span style="color:var(--text-muted); user-select:none">  4  </span>
+<span style="color:var(--text-muted); user-select:none">  5  </span><span style="color:var(--accent-blue)">class</span> <span style="color:var(--accent-yellow)">TestLogin</span>:
+<span style="color:var(--text-muted); user-select:none">  6  </span>    <span style="color:var(--accent-blue)">def</span> <span style="color:var(--accent-cyan)">test_valid_creds</span>(self):
+<span style="color:var(--text-muted); user-select:none">  7  </span>        result = login(<span style="color:var(--accent-green)">"user"</span>, <span style="color:var(--accent-green)">"pass"</span>)
+<span style="color:var(--text-muted); user-select:none">  8  </span>        <span style="color:var(--accent-blue)">assert</span> result.token
+<span style="color:var(--text-muted); user-select:none">  9  </span>
+<span style="color:var(--text-muted); user-select:none"> 10  </span>    <span style="color:var(--accent-blue)">def</span> <span style="color:var(--accent-cyan)">test_invalid_creds</span>(self):
+<span style="color:var(--text-muted); user-select:none"> 11  </span>        <span style="color:var(--accent-blue)">with</span> pytest.raises(AuthError):
+<span style="color:var(--text-muted); user-select:none"> 12  </span>            login(<span style="color:var(--accent-green)">"bad"</span>, <span style="color:var(--accent-green)">"creds"</span>)
+<span style="color:var(--text-muted); user-select:none"> 13  </span>
+<span style="color:var(--text-muted); user-select:none"> 14  </span>    <span style="color:var(--accent-blue)">def</span> <span style="color:var(--accent-cyan)">test_empty_password</span>(self):
+<span style="color:var(--text-muted); user-select:none"> 15  </span>        <span style="color:var(--accent-blue)">with</span> pytest.raises(ValueError):
+<span style="color:var(--text-muted); user-select:none"> 16  </span>            login(<span style="color:var(--accent-green)">"user"</span>, <span style="color:var(--accent-green)">""</span>)</div>
+        </div>
+        <div class="statusline">
+          <span class="mode" style="color:var(--accent-blue)">VIEW</span>
+          <span style="color:var(--text-muted)">test/unit/test_auth.py</span>
+          <span class="right">python  16 ln</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Variant B: Orchestrator chat selected -->
+  <div class="variant-label">orchestrator chat focused (click ORCH tab)</div>
+  <div class="frame">
+    <div class="tab-bar">
+      <div class="tab active">my-project</div>
+    </div>
+    <div class="workspace" style="height:420px">
+
+      <div class="left-pane">
+        <div class="tree-header">[ FILES ]</div>
+        <div class="tree-body">
+          <div class="tree-item"><span class="chevron">▾</span> <span class="dir">backend/</span></div>
+          <div class="tree-item"><span class="tree-indent" style="width:20px"></span><span class="file-py">auth.py</span></div>
+          <div class="tree-item"><span class="tree-indent" style="width:20px"></span><span class="file-py">main.py</span></div>
+          <div class="tree-item"><span class="chevron">▸</span> <span class="dir">frontend/</span></div>
+          <div class="tree-item"><span class="chevron">▸</span> <span class="dir">test/</span></div>
+          <div class="tree-item"><span class="file-md">README.md</span></div>
+        </div>
+      </div>
+
+      <div class="resize-handle"></div>
+
+      <div class="center-pane">
+        <div class="agent-tab-bar">
+          <div class="orch-label" style="background:var(--bg-primary); color:var(--accent-orange)">ORCH</div>
+          <div class="agent-tab">
+            <span class="at-idx">1</span>
+            <span class="at-dot" style="background:var(--accent-blue)"></span>
+            test-writer
+          </div>
+          <div class="agent-tab">
+            <span class="at-idx">2</span>
+            <span class="at-dot" style="background:var(--accent-green)"></span>
+            refactorer
+          </div>
+          <div class="agent-tab">
+            <span class="at-idx">3</span>
+            <span class="at-dot" style="background:var(--accent-yellow)"></span>
+            docs-writer
+          </div>
+          <div class="agent-tab">
+            <span class="at-idx">4</span>
+            <span class="at-dot" style="background:var(--text-muted)"></span>
+            reviewer
+          </div>
+        </div>
+
+        <div class="chat-area">
+          <div class="chat-msg user">
+            <span class="chat-prompt">&#10095;</span><span class="chat-content">Refactor the auth module and add tests. Update docs when done.</span>
+          </div>
+
+          <div class="chat-msg assistant">
+            <div class="chat-content">I'll break this into parallel tasks:
+
+1. <span style="color:var(--accent-cyan)">refactorer</span> — Extract validation logic into a separate module
+2. <span style="color:var(--accent-cyan)">test-writer</span> — Write comprehensive unit tests
+3. <span style="color:var(--accent-cyan)">docs-writer</span> — Update API documentation
+4. <span style="color:var(--accent-cyan)">reviewer</span> — Security review (after others complete)
+
+Spawning agents now.</div>
+            <div class="chat-tool"><span class="tool-icon" style="color:var(--accent-cyan)">▸</span> <span class="tool-name">spawn_agent</span> <span class="tool-target">refactorer</span> <span class="ok">✓</span></div>
+            <div class="chat-tool"><span class="tool-icon" style="color:var(--accent-cyan)">▸</span> <span class="tool-name">spawn_agent</span> <span class="tool-target">test-writer</span> <span class="ok">✓</span></div>
+            <div class="chat-tool"><span class="tool-icon" style="color:var(--accent-cyan)">▸</span> <span class="tool-name">spawn_agent</span> <span class="tool-target">docs-writer</span> <span class="ok">✓</span></div>
+
+            <div class="chat-content" style="margin-top:8px">Three agents spawned. The refactorer has already completed — let me check the report.</div>
+
+            <div class="chat-tool"><span class="tool-icon" style="color:var(--accent-cyan)">▸</span> <span class="tool-name">get_agent_report</span> <span class="tool-target">refactorer</span> <span class="ok">✓</span></div>
+
+            <div class="chat-content" style="margin-top:8px">The refactorer extracted validation into <span style="color:var(--accent-blue)">backend/validate.py</span> and updated 3 files. All tests pass. Now spawning the security reviewer.</div>
+
+            <div class="chat-tool"><span class="tool-icon" style="color:var(--accent-cyan)">▸</span> <span class="tool-name">spawn_agent</span> <span class="tool-target">reviewer</span> <span class="ok">✓</span></div>
+          </div>
+        </div>
+
+        <div class="chat-input-area">
+          <span class="chat-input-prompt">&#10095;</span>
+          <input class="chat-input-field" placeholder="message orchestrator..." disabled>
+        </div>
+
+        <div class="statusline">
+          <span class="mode" style="color:var(--accent-orange)">ARCHITECT</span>
+          <span style="color:var(--accent-cyan)">orchestrator</span>
+          <span class="right"><span class="key">prefix 1-4</span> jump to agent</span>
+        </div>
+      </div>
+
+      <div class="resize-handle"></div>
+
+      <div class="right-pane" style="width:280px">
+        <div style="padding:6px 12px; background:var(--bg-secondary); border-bottom:1px solid var(--border-color); text-align:center; font-size:12px; color:var(--text-primary)">[ VALIDATE.PY ]</div>
+        <div style="flex:1; background:var(--bg-primary); overflow-y:auto">
+          <div class="terminal-text" style="font-size:11px; color:var(--text-muted); line-height:1.6"><span style="user-select:none">  1  </span><span style="color:var(--accent-green)">"""Validation utilities."""</span>
+<span style="user-select:none">  2  </span>
+<span style="user-select:none">  3  </span><span style="color:var(--accent-blue)">def</span> <span style="color:var(--accent-cyan)">validate_email</span>(email):
+<span style="user-select:none">  4  </span>    <span style="color:var(--text-muted)">...</span></div>
+        </div>
+        <div class="statusline">
+          <span class="mode" style="color:var(--accent-blue)">VIEW</span>
+          <span class="right">python  4 ln</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation">
+    <em>How it works:</em> The <span style="color:var(--accent-orange)">ORCH</span> tab shows the orchestrator's chat (planning, spawning, collecting reports).
+    Numbered tabs <span class="key">1-4</span> are individual agent terminals. Dot colors:
+    <span style="color:var(--accent-blue)">&#9679;</span> busy
+    <span style="color:var(--accent-green)">&#9679;</span> done
+    <span style="color:var(--accent-yellow)">&#9679;</span> starting
+    <span style="color:var(--text-muted)">&#9679;</span> pending.
+    The right pane stays as the normal viewer &mdash; agents' file edits auto-display here.
+    Agent tabs appear only while orchestrating; disappear when all agents are killed/done + dismissed.
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  MODE 2: PARALLEL — Orchestrator center, agents right         -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="section">
+  <div class="section-title">Overview Mode &mdash; Orchestrator + Agent Tiles</div>
+  <div class="section-desc">
+    All agents visible at once. Center pane is the orchestrator chat.
+    Right pane switches from viewer to agent tiles &mdash; all agents streaming simultaneously.
+    Toggle with <span class="key">prefix v</span> (same as viewer toggle). Tiles auto-collapse when done.
+  </div>
+
+  <!-- Variant A: All agents running -->
+  <div class="variant-label">all agents streaming</div>
+  <div class="frame">
+    <div class="tab-bar">
+      <div class="tab active">my-project</div>
+    </div>
+    <div class="workspace">
+
+      <div class="left-pane">
+        <div class="tree-header">[ FILES ]</div>
+        <div class="tree-body">
+          <div class="tree-item"><span class="chevron">▾</span> <span class="dir">backend/</span></div>
+          <div class="tree-item"><span class="tree-indent" style="width:20px"></span><span class="chevron">▸</span> <span class="dir">providers/</span></div>
+          <div class="tree-item"><span class="tree-indent" style="width:20px"></span><span class="file-py">auth.py</span></div>
+          <div class="tree-item"><span class="tree-indent" style="width:20px"></span><span class="file-py">main.py</span></div>
+          <div class="tree-item"><span class="tree-indent" style="width:20px"></span><span class="file-py">validate.py</span></div>
+          <div class="tree-item"><span class="chevron">▸</span> <span class="dir">frontend/</span></div>
+          <div class="tree-item"><span class="chevron">▸</span> <span class="dir">test/</span></div>
+          <div class="tree-item"><span class="file-md">README.md</span></div>
+        </div>
+      </div>
+
+      <div class="resize-handle"></div>
+
+      <!-- Center: orchestrator chat -->
+      <div class="center-pane">
+        <div class="chat-area">
+          <div class="chat-msg user">
+            <span class="chat-prompt">&#10095;</span><span class="chat-content">Refactor the auth module, add tests, and update docs.</span>
+          </div>
+
+          <div class="chat-msg assistant">
+            <div class="chat-content">I'll plan the work and spawn agents for parallel execution.
+
+<span style="color:var(--text-muted)">Plan:</span>
+ 1. Extract validation logic <span style="color:var(--text-muted)">(refactorer)</span>
+ 2. Write unit tests <span style="color:var(--text-muted)">(test-writer)</span>
+ 3. Update API docs <span style="color:var(--text-muted)">(docs-writer)</span>
+ 4. Security review <span style="color:var(--text-muted)">(reviewer, after 1-3)</span>
+
+Spawning the first three in parallel:</div>
+            <div class="chat-tool"><span class="tool-icon" style="color:var(--accent-cyan)">▸</span> <span class="tool-name">spawn_agent</span> <span class="tool-target">refactorer — "Extract validation..."</span> <span class="ok">✓</span></div>
+            <div class="chat-tool"><span class="tool-icon" style="color:var(--accent-cyan)">▸</span> <span class="tool-name">spawn_agent</span> <span class="tool-target">test-writer — "Write unit tests..."</span> <span class="ok">✓</span></div>
+            <div class="chat-tool"><span class="tool-icon" style="color:var(--accent-cyan)">▸</span> <span class="tool-name">spawn_agent</span> <span class="tool-target">docs-writer — "Update API docs..."</span> <span class="ok">✓</span></div>
+            <div class="chat-content" style="margin-top:8px">All three agents are running. I'll monitor their progress and spawn the reviewer once they complete.</div>
+            <div class="chat-tool"><span class="tool-icon" style="color:var(--accent-blue)">▸</span> <span class="tool-name">get_agent_status</span> <span class="tool-target">refactorer</span> <span class="info pulse">checking...</span></div>
+          </div>
+        </div>
+
+        <div class="chat-input-area">
+          <span class="chat-input-prompt">&#10095;</span>
+          <input class="chat-input-field" placeholder="message orchestrator..." disabled>
+        </div>
+
+        <div class="statusline">
+          <span class="mode" style="color:var(--accent-orange)">ARCHITECT</span>
+          <span style="color:var(--accent-cyan)">orchestrator</span>
+          <span style="color:var(--text-muted)">sonnet</span>
+          <span class="right"><span class="key">prefix v</span> toggle viewer</span>
+        </div>
+      </div>
+
+      <div class="resize-handle"></div>
+
+      <!-- Right: agent tiles (replaces viewer) -->
+      <div class="right-pane" style="width:340px">
+        <div class="right-mode-toggle">
+          <div class="right-mode-tab">VIEWER</div>
+          <div class="right-mode-tab active">AGENTS</div>
+        </div>
+
+        <div class="agent-tile-stack">
+          <!-- Agent 1: busy -->
+          <div class="agent-tile focused">
+            <div class="tile-header">
+              <span class="tile-chevron">▾</span>
+              <span class="tile-name">test-writer</span>
+              <span class="state-badge state-busy pulse">busy</span>
+              <span class="tile-meta">$0.031</span>
+            </div>
+            <div class="tile-body">
+              <div class="terminal-text" style="font-size:10px; padding:4px 8px"><span class="dim">[sonnet] a1b2c3...</span>
+
+<span class="tool">▸ Read</span> backend/auth.py <span class="ok">✓</span>
+<span class="tool">▸ Write</span> test/test_auth.py <span class="ok">✓</span>
+<span class="tool">▸ Bash</span> pytest -v <span class="info pulse">running...</span></div>
+            </div>
+          </div>
+
+          <!-- Agent 2: done, collapsed -->
+          <div class="agent-tile collapsed">
+            <div class="tile-header">
+              <span class="tile-chevron">▸</span>
+              <span class="tile-name" style="color:var(--text-muted)">refactorer</span>
+              <span class="state-badge state-done">done</span>
+              <span class="tile-meta">
+                <span style="color:var(--accent-green)">✓ 3 files</span>
+                <span>$0.028</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Agent 3: starting -->
+          <div class="agent-tile">
+            <div class="tile-header">
+              <span class="tile-chevron">▾</span>
+              <span class="tile-name">docs-writer</span>
+              <span class="state-badge state-starting">starting</span>
+              <span class="tile-meta">$0.002</span>
+            </div>
+            <div class="tile-body">
+              <div class="terminal-text" style="font-size:10px; padding:4px 8px"><span class="dim">[sonnet] e5f6g7...</span>
+<span class="bright">Updating API docs...</span>
+
+<span class="tool">▸ Read</span> docs/api.md <span class="ok">✓</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="agents-statusline">
+          <span><span class="as-val" style="color:var(--accent-blue)">1</span> busy</span>
+          <span><span class="as-val" style="color:var(--accent-green)">1</span> done</span>
+          <span><span class="as-val" style="color:var(--accent-yellow)">1</span> starting</span>
+          <span style="margin-left:auto"><span class="as-val">$0.061</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Variant B: Mixed states, one expanded -->
+  <div class="variant-label">agent tile expanded (enter to zoom)</div>
+  <div class="frame">
+    <div class="tab-bar">
+      <div class="tab active">my-project</div>
+    </div>
+    <div class="workspace" style="height:480px">
+
+      <div class="left-pane">
+        <div class="tree-header">[ FILES ]</div>
+        <div class="tree-body">
+          <div class="tree-item"><span class="chevron">▾</span> <span class="dir">backend/</span></div>
+          <div class="tree-item"><span class="tree-indent" style="width:20px"></span><span class="file-py">auth.py</span></div>
+          <div class="tree-item"><span class="tree-indent" style="width:20px"></span><span class="file-py">validate.py</span></div>
+          <div class="tree-item"><span class="chevron">▸</span> <span class="dir">test/</span></div>
+          <div class="tree-item"><span class="chevron">▸</span> <span class="dir">docs/</span></div>
+        </div>
+      </div>
+
+      <div class="resize-handle"></div>
+
+      <div class="center-pane">
+        <div class="chat-area">
+          <div class="chat-msg assistant">
+            <div class="chat-content">All agents have completed. Let me collect reports.
+</div>
+            <div class="chat-tool"><span class="tool-icon" style="color:var(--accent-cyan)">▸</span> <span class="tool-name">get_agent_report</span> <span class="tool-target">test-writer</span> <span class="ok">✓</span></div>
+            <div class="chat-tool"><span class="tool-icon" style="color:var(--accent-cyan)">▸</span> <span class="tool-name">get_agent_report</span> <span class="tool-target">docs-writer</span> <span class="ok">✓</span></div>
+            <div class="chat-tool"><span class="tool-icon" style="color:var(--accent-cyan)">▸</span> <span class="tool-name">get_agent_report</span> <span class="tool-target">reviewer</span> <span class="ok">✓</span></div>
+
+            <div class="chat-content" style="margin-top:8px"><span style="color:var(--accent-green)">All 4 agents completed successfully.</span>
+
+<span style="color:var(--text-muted)">Summary:</span>
+ <span style="color:var(--accent-green)">✓</span> refactorer — Extracted validation into validate.py
+ <span style="color:var(--accent-green)">✓</span> test-writer — Added 12 tests, all passing
+ <span style="color:var(--accent-green)">✓</span> docs-writer — Updated API docs for 3 endpoints
+ <span style="color:var(--accent-green)">✓</span> reviewer — No security issues found
+
+Total cost: $0.142 across 4 agents.</div>
+          </div>
+        </div>
+
+        <div class="chat-input-area">
+          <span class="chat-input-prompt">&#10095;</span>
+          <input class="chat-input-field" placeholder="" disabled>
+        </div>
+
+        <div class="statusline">
+          <span class="mode" style="color:var(--accent-orange)">ARCHITECT</span>
+          <span style="color:var(--accent-cyan)">orchestrator</span>
+          <span class="right"><span class="key">prefix v</span> toggle viewer</span>
+        </div>
+      </div>
+
+      <div class="resize-handle"></div>
+
+      <div class="right-pane" style="width:340px">
+        <div class="right-mode-toggle">
+          <div class="right-mode-tab">VIEWER</div>
+          <div class="right-mode-tab active">AGENTS</div>
+        </div>
+
+        <div class="agent-tile-stack">
+          <!-- Expanded: reviewer report -->
+          <div class="agent-tile focused" style="flex:4">
+            <div class="tile-header">
+              <span class="tile-chevron">▾</span>
+              <span class="tile-name">reviewer</span>
+              <span class="state-badge state-done">done</span>
+              <span class="tile-meta">$0.034</span>
+            </div>
+            <div class="tile-body">
+              <div class="terminal-text" style="font-size:10px; padding:4px 8px"><span class="dim">[sonnet] Session: i9j0k1...</span>
+
+<span class="bright">Security review of auth endpoints.</span>
+
+<span class="tool">▸ Read</span> backend/auth.py <span class="ok">✓</span>
+<span class="tool">▸ Read</span> backend/validate.py <span class="ok">✓</span>
+<span class="tool">▸ Read</span> backend/main.py <span class="ok">✓</span>
+
+<span class="bright">Findings:
+ <span class="ok">✓</span> Password hashing uses bcrypt (correct)
+ <span class="ok">✓</span> Token expiry is set (30 min)
+ <span class="ok">✓</span> CORS is properly configured
+ <span class="ok">✓</span> No SQL injection vectors found
+ <span class="ok">✓</span> Rate limiting present on login
+
+No issues found. The auth module follows
+security best practices.</span>
+
+<span class="dim">[Done $0.0340]</span></div>
+            </div>
+          </div>
+
+          <!-- Collapsed: done agents -->
+          <div class="agent-tile collapsed">
+            <div class="tile-header">
+              <span class="tile-chevron">▸</span>
+              <span class="tile-name" style="color:var(--text-muted)">test-writer</span>
+              <span class="state-badge state-done">done</span>
+              <span class="tile-meta"><span style="color:var(--accent-green)">✓ 12 tests</span> <span>$0.041</span></span>
+            </div>
+          </div>
+
+          <div class="agent-tile collapsed">
+            <div class="tile-header">
+              <span class="tile-chevron">▸</span>
+              <span class="tile-name" style="color:var(--text-muted)">refactorer</span>
+              <span class="state-badge state-done">done</span>
+              <span class="tile-meta"><span style="color:var(--accent-green)">✓ 3 files</span> <span>$0.028</span></span>
+            </div>
+          </div>
+
+          <div class="agent-tile collapsed">
+            <div class="tile-header">
+              <span class="tile-chevron">▸</span>
+              <span class="tile-name" style="color:var(--text-muted)">docs-writer</span>
+              <span class="state-badge state-done">done</span>
+              <span class="tile-meta"><span style="color:var(--accent-green)">✓ 3 endpoints</span> <span>$0.039</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="agents-statusline">
+          <span><span class="as-val" style="color:var(--accent-green)">4</span> done</span>
+          <span style="margin-left:auto"><span class="as-val">$0.142</span> total</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation">
+    <em>Right pane modes:</em> <span class="key">prefix v</span> cycles: viewer → agents → viewer.
+    The VIEWER / AGENTS toggle at the top confirms which mode is active.
+    <em>Tile behavior:</em> Running agents auto-expand. Done agents auto-collapse to a single header line.
+    <span class="key">j/k</span> selects tile, <span class="key">l</span>/<span class="key">h</span> expand/collapse, <span class="key">enter</span> opens full terminal in center pane (focused mode).
+    The agent tiles are a new right-pane mode alongside code viewer and markdown viewer.
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  SUMMARY                                                       -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<div class="section">
+  <div class="section-title">How The Two Modes Connect</div>
+  <div style="padding:12px 16px; background:var(--bg-secondary); border:1px solid var(--border-color); font-size:12px; line-height:2.4">
+    <span style="color:var(--accent-red);text-transform:uppercase;letter-spacing:1px;font-size:11px">Focused</span>
+    <span style="color:var(--text-muted)"> &mdash; </span>
+    <span style="color:var(--text-secondary)">Agent tabs in center pane. One agent at a time. Right pane = viewer.</span><br>
+    <span style="color:var(--text-muted);font-size:10px;padding-left:12px">Best for: debugging a specific agent, reviewing output, diving deep into one task</span><br><br>
+
+    <span style="color:var(--accent-red);text-transform:uppercase;letter-spacing:1px;font-size:11px">Overview</span>
+    <span style="color:var(--text-muted)"> &mdash; </span>
+    <span style="color:var(--text-secondary)">Orchestrator chat in center. Agent tiles in right pane (replaces viewer).</span><br>
+    <span style="color:var(--text-muted);font-size:10px;padding-left:12px">Best for: monitoring all agents at a glance, watching the orchestrator coordinate</span><br><br>
+
+    <span style="color:var(--accent-red);text-transform:uppercase;letter-spacing:1px;font-size:11px">Switching</span>
+    <span style="color:var(--text-muted)"> &mdash; </span>
+    <span style="color:var(--text-secondary)"><span class="key">prefix v</span> toggles right pane mode. <span class="key">enter</span> on a tile jumps to focused view of that agent.</span><br>
+    <span style="color:var(--text-muted);font-size:10px;padding-left:12px">Both modes share the same agent-tab-bar &mdash; always shows agent state LEDs for at-a-glance awareness</span>
+  </div>
+</div>
+
+</body>
+</html>

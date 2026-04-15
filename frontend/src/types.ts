@@ -400,12 +400,13 @@ export interface ProviderSwitchMessage extends BaseMessage {
  */
 export interface ChatStreamMessage extends BaseMessage {
   type: "chat-stream";
-  event: "text-delta" | "done" | "error" | "tool-use-start" | "tool-result" | "thinking-delta" | "system-info" | "user-message" | "agent-approval-request" | "agent-approval-resolved" | "report-review-request";
+  event: "text-delta" | "done" | "error" | "tool-use-start" | "tool-result" | "thinking-delta" | "system-info" | "user-message" | "agent-approval-request" | "agent-approval-resolved" | "report-review-request" | "permission-request" | "permission-resolved";
   content?: string;
   usage?: Record<string, number>;
   message?: string;
   toolId?: string;
   toolName?: string;
+  toolInput?: Record<string, unknown>;
   status?: string;
   cancelled?: boolean;
   cost?: number;
@@ -424,6 +425,10 @@ export interface ChatStreamMessage extends BaseMessage {
   resolution?: string;
   // report review fields
   report?: string;
+  // permission prompt fields
+  requestId?: string;
+  description?: string;
+  decision?: string;
 }
 
 /**
@@ -501,7 +506,37 @@ export type ClientMessage =
   | NeovimKillMessage
   | NeovimInputMessage
   | NeovimResizeMessage
-  | NeovimRpcMessage;
+  | NeovimRpcMessage
+  | DashboardGetConfigMessage
+  | DashboardGetDataMessage
+  | DashboardActionMessage;
+
+// Dashboard messages
+export interface DashboardGetConfigMessage {
+  type: typeof import("./platform/protocol").MessageType.DASHBOARD_GET_CONFIG;
+}
+export interface DashboardGetDataMessage {
+  type: typeof import("./platform/protocol").MessageType.DASHBOARD_GET_DATA;
+  sourceId?: string;
+}
+export interface DashboardActionMessage {
+  type: typeof import("./platform/protocol").MessageType.DASHBOARD_ACTION;
+  action: string;
+  source: string;
+  entityId?: string;
+  patch?: Record<string, unknown>;
+}
+export interface DashboardConfigMessage {
+  type: typeof import("./platform/protocol").MessageType.DASHBOARD_CONFIG;
+  config: import("./dashboard/types").DashboardConfig;
+}
+export interface DashboardDataMessage {
+  type: typeof import("./platform/protocol").MessageType.DASHBOARD_DATA;
+  sources: Record<string, Record<string, unknown>[]>;
+}
+export interface DashboardClearedMessage {
+  type: typeof import("./platform/protocol").MessageType.DASHBOARD_CLEARED;
+}
 
 /**
  * Union of all server -> client messages.
@@ -531,7 +566,12 @@ export type ServerMessage =
   | NeovimExitedMessage
   | AgentSpawnedMessage
   | AgentKilledMessage
-  | AgentStateChangedMessage;
+  | AgentStateChangedMessage
+  | DashboardConfigMessage
+  | DashboardDataMessage
+  | DashboardClearedMessage
+  | { type: "dashboard-push-panel"; panel: { id: string; title: string; component: string }; data: Record<string, unknown>[] }
+  | { type: "notification"; message: string; style: string };
 
 /**
  * Event handler type.

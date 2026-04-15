@@ -188,6 +188,26 @@ class ClaudeCodeProvider(BaseProvider):
 
         if self._mcp_config_path and self._mcp_config_path.exists():
             cmd.extend(["--mcp-config", str(self._mcp_config_path)])
+            # Route permission prompts through the CADE permission MCP tool
+            cmd.extend(["--permission-prompt-tool", "mcp__cade-permissions__permission_prompt"])
+
+            # Pre-approve UI tools so the agent can push to dashboard/viewer without permission prompts
+            existing_allowed = []
+            try:
+                idx = cmd.index("--allowedTools")
+                existing_allowed = cmd[idx + 1].split(",")
+            except (ValueError, IndexError):
+                pass
+            ui_tools = [
+                "mcp__cade-orchestrator__view_file",
+                "mcp__cade-orchestrator__push_to_dashboard",
+                "mcp__cade-orchestrator__notify",
+            ]
+            all_allowed = existing_allowed + ui_tools
+            if existing_allowed:
+                cmd[cmd.index("--allowedTools") + 1] = ",".join(all_allowed)
+            else:
+                cmd.extend(["--allowedTools", ",".join(ui_tools)])
 
         cwd = str(self._working_dir) if self._working_dir else None
 
@@ -343,6 +363,7 @@ class ClaudeCodeProvider(BaseProvider):
                     yield ToolUseStart(
                         tool_id=block.get("id", ""),
                         tool_name=block.get("name", ""),
+                        tool_input=block.get("input", {}),
                     )
 
             return
@@ -372,6 +393,7 @@ class ClaudeCodeProvider(BaseProvider):
                         yield ToolUseStart(
                             tool_id=block.get("id", ""),
                             tool_name=block.get("name", ""),
+                            tool_input=block.get("input", {}),
                         )
                     elif block_type == "thinking":
                         text = block.get("thinking", "")
@@ -386,10 +408,19 @@ class ClaudeCodeProvider(BaseProvider):
                 if block.get("type") == "tool_result":
                     tool_use_id = block.get("tool_use_id", "")
                     is_error = block.get("is_error", False)
+                    raw_content = block.get("content", "")
+                    if isinstance(raw_content, list):
+                        content_text = "\n".join(
+                            b.get("text", "") for b in raw_content
+                            if isinstance(b, dict) and b.get("type") == "text"
+                        )
+                    else:
+                        content_text = str(raw_content) if raw_content else ""
                     yield ToolResult(
                         tool_id=tool_use_id,
                         tool_name="",
                         status="error" if is_error else "success",
+                        content=content_text,
                     )
 
         elif event_type == "result":

@@ -60,6 +60,7 @@ class ToolUseStart(ChatEvent):
 
     tool_id: str
     tool_name: str
+    tool_input: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -69,6 +70,7 @@ class ToolResult(ChatEvent):
     tool_id: str
     tool_name: str
     status: str  # "success" | "error"
+    content: str = ""
 
 
 @dataclass

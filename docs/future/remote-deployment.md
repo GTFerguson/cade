@@ -1,9 +1,14 @@
 ---
-title: Remote Deployment
 created: 2026-01-31
-updated: 2026-02-02
 status: in-progress
-tags: [deployment, remote, ec2, cloud, architecture]
+tags:
+- deployment
+- remote
+- ec2
+- cloud
+- architecture
+title: Remote Deployment
+updated: 2026-02-02
 ---
 
 # Remote Deployment

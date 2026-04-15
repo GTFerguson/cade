@@ -588,6 +588,110 @@ def create_app(config: Config | None = None) -> FastAPI:
             return JSONResponse({"error": "Agent not found or not in review"}, status_code=400)
         return JSONResponse({"status": "rejected"})
 
+    # --- Permission Prompt API ---
+
+    class PermissionPromptRequest(BaseModel):
+        tool_name: str
+        description: str
+        tool_input: dict = {}
+
+    @app.post("/api/permissions/prompt-and-wait")
+    async def permission_prompt_and_wait(body: PermissionPromptRequest) -> JSONResponse:
+        """Request user permission for a tool use. Blocks until user decides."""
+        from backend.permissions.manager import get_permission_manager
+        manager = get_permission_manager()
+        result = await manager.request_permission(
+            tool_name=body.tool_name,
+            description=body.description,
+            tool_input=body.tool_input,
+        )
+        return JSONResponse(result)
+
+    @app.post("/api/permissions/approve/{request_id}")
+    async def permission_approve(request_id: str) -> JSONResponse:
+        """Approve a pending permission request."""
+        from backend.permissions.manager import get_permission_manager
+        ok = await get_permission_manager().approve(request_id)
+        if not ok:
+            return JSONResponse({"error": "Request not found"}, status_code=400)
+        return JSONResponse({"status": "approved"})
+
+    @app.post("/api/permissions/deny/{request_id}")
+    async def permission_deny(request_id: str) -> JSONResponse:
+        """Deny a pending permission request."""
+        from backend.permissions.manager import get_permission_manager
+        ok = await get_permission_manager().deny(request_id)
+        if not ok:
+            return JSONResponse({"error": "Request not found"}, status_code=400)
+        return JSONResponse({"status": "denied"})
+
+    # --- UI Tools API (called by MCP tools) ---
+
+    class ViewFileRequest(BaseModel):
+        path: str
+
+    class PushPanelRequest(BaseModel):
+        id: str
+        title: str
+        component: str
+        data: list[dict] = []
+
+    class NotifyRequest(BaseModel):
+        message: str
+        style: str = "info"
+
+    @app.post("/api/ui/view-file")
+    async def ui_view_file(body: ViewFileRequest) -> JSONResponse:
+        """Open a file in the viewer for all connected clients."""
+        from backend.connection_registry import get_connection_registry
+        registry = get_connection_registry()
+        # Broadcast to all connections (the file path is project-relative)
+        for ws_conn in registry.get_all_connections():
+            try:
+                await ws_conn.send_json({
+                    "type": "view-file",
+                    "path": body.path,
+                })
+            except Exception:
+                pass
+        return JSONResponse({"status": "ok", "path": body.path})
+
+    @app.post("/api/ui/push-panel")
+    async def ui_push_panel(body: PushPanelRequest) -> JSONResponse:
+        """Push a dashboard panel to all connected clients."""
+        from backend.connection_registry import get_connection_registry
+        registry = get_connection_registry()
+        for ws_conn in registry.get_all_connections():
+            try:
+                await ws_conn.send_json({
+                    "type": "dashboard-push-panel",
+                    "panel": {
+                        "id": body.id,
+                        "title": body.title,
+                        "component": body.component,
+                    },
+                    "data": body.data,
+                })
+            except Exception:
+                pass
+        return JSONResponse({"status": "ok", "panelId": body.id})
+
+    @app.post("/api/ui/notify")
+    async def ui_notify(body: NotifyRequest) -> JSONResponse:
+        """Send a notification to all connected clients."""
+        from backend.connection_registry import get_connection_registry
+        registry = get_connection_registry()
+        for ws_conn in registry.get_all_connections():
+            try:
+                await ws_conn.send_json({
+                    "type": "notification",
+                    "message": body.message,
+                    "style": body.style,
+                })
+            except Exception:
+                pass
+        return JSONResponse({"status": "ok"})
+
     # --- Frontend serving ---
 
     if FRONTEND_DIST.exists():

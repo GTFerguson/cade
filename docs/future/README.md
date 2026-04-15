@@ -1,7 +1,7 @@
 ---
 title: Roadmap & Future Plans
 created: 2026-01-16
-updated: 2026-02-02
+updated: 2026-03-24
 status: active
 tags: [index, roadmap, future]
 ---
@@ -102,7 +102,7 @@ Orchestrator mode enables spawning worker agents that run as independent Claude 
 
 Generate a QR code on desktop that encodes the remote URL with auth token. Scanning with phone camera takes user directly into CADE, bypassing manual token entry. Useful for quick mobile access to remote deployments.
 
-*Other features being actively developed have been moved to `plans/` for rapid iteration.*
+*Other features being actively developed have been moved to `docs/plans/` for rapid iteration.*
 
 ## Blocking Issues
 

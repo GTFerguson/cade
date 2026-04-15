@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 MCP_SERVER_SCRIPT = Path(__file__).parent / "mcp_server.py"
+PERMISSION_SERVER_SCRIPT = Path(__file__).parent.parent / "permissions" / "mcp_server.py"
 
 # The venv Python has mcp/httpx installed; sys.executable may not if the
 # backend was launched outside the venv.
@@ -27,21 +28,28 @@ def create_mcp_config(backend_port: int, auth_token: str = "") -> Path:
     Returns the path to the temp file (caller should not delete it
     while CC is running).
     """
+    python = _get_python()
+    env: dict[str, str] = {
+        "CADE_BACKEND_PORT": str(backend_port),
+        "CADE_BACKEND_HOST": "localhost",
+    }
+    if auth_token:
+        env["CADE_AUTH_TOKEN"] = auth_token
+
     config = {
         "mcpServers": {
             "cade-orchestrator": {
-                "command": _get_python(),
+                "command": python,
                 "args": [str(MCP_SERVER_SCRIPT)],
-                "env": {
-                    "CADE_BACKEND_PORT": str(backend_port),
-                    "CADE_BACKEND_HOST": "localhost",
-                },
-            }
+                "env": dict(env),
+            },
+            "cade-permissions": {
+                "command": python,
+                "args": [str(PERMISSION_SERVER_SCRIPT)],
+                "env": dict(env),
+            },
         }
     }
-
-    if auth_token:
-        config["mcpServers"]["cade-orchestrator"]["env"]["CADE_AUTH_TOKEN"] = auth_token
 
     tmp = tempfile.NamedTemporaryFile(
         mode="w",

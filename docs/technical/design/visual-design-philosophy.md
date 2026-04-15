@@ -1,7 +1,7 @@
 ---
 title: Visual Design Philosophy
 created: 2026-02-04
-updated: 2026-03-05
+updated: 2026-03-25
 status: complete
 tags: [design, ui, ux, philosophy]
 ---
@@ -750,6 +750,154 @@ If yes, make it opt-in instead. Examples:
 ### 5. Does this duplicate existing functionality?
 Check if the backend/frontend already does this. Reuse instead of rebuild.
 
+## Dashboard Components
+
+The dashboard system renders config-driven interfaces from YAML files. Agents create dashboards by writing `.cade/dashboard.yml` — no frontend code needed. The visual language must match the rest of CADE while making data the focus.
+
+### Design Principle: Colour on Data, Not Chrome
+
+The dashboard's #1 lesson: **accent colours belong on data, not just UI elements.** Text defaults to `--text-primary` for readability. Reserve `--text-muted` for labels and metadata only. Every interactive element gets a visible accent-colour hover state.
+
+A dashboard should feel as colourful and readable as the file tree and markdown viewer. If the dashboard looks grey and washed out compared to the rest of CADE, it's wrong.
+
+**Anti-patterns that make dashboards dull:**
+- Setting all text to `--text-secondary` or `--text-muted`
+- Using `--border-color` for everything instead of accent colours on states
+- Missing hover states on interactive elements
+- Panel titles in `--text-muted` instead of an accent colour
+
+### Dashboard Header
+
+Bracket notation, centred, matching CADE's header convention:
+
+```
+[ BUSINESS MANAGER ] cognetic ltd
+```
+
+- Title: `--accent-red`, 16px, uppercase, `letter-spacing: 2px`, centred
+- Subtitle: `--text-muted`, 11px, lowercase, beside the title
+- Follows the same bracket pattern as `[ README.MD ]` in the viewer
+
+### View Tabs
+
+Flat tabs with spacing, not boxed buttons. Active tab uses underline indicator:
+
+- Active: `--text-primary` with 1px `::after` underline
+- Inactive: `--text-muted`
+- Centred below header
+- Tabs separated by `margin-left: 24px` (no pipe characters)
+- Underline sits flush on the bottom border via `position: absolute; bottom: -1px`
+
+### Panel Titles
+
+Panel titles use `--accent-red` — the same colour as CADE's section headers:
+
+- 11px uppercase, `letter-spacing: 1.5px`
+- Bottom border separator (`1px solid --border-color`)
+- **Not `--text-muted`** — panel titles are visual anchors that help the eye navigate
+
+### Cards
+
+Background contrast instead of visible borders. Hover reveals accent colour:
+
+- Background: `--bg-secondary`, no border
+- Hover: `--bg-tertiary` with `--accent-blue` left border (2px)
+- First field: `--text-primary`, 13px, `font-weight: 500`
+- Subsequent fields: `--text-secondary`, 12px
+- Badges: below fields, `margin-top: 6px`
+- Gap: 4px between cards
+
+### Kanban
+
+Columns with hairline top borders. Cards are draggable by default:
+
+- Column gap: 4px, no column borders
+- Column header: 10px uppercase, `letter-spacing: 1px`, 2px `border-top` in `--text-muted`
+- Cards: `--bg-secondary`, `--text-primary`, 12px. Blue left-border on hover
+- **Draggable by default** — HTML5 drag API, `cursor: grab`
+- Drag-over: dashed `--accent-blue` outline on target column
+- `.dragging`: `opacity: 0.3`
+- Click fallback: context menu for status change
+
+**Layout rule:** Kanban panels auto-span the full grid width (`grid-column: 1 / -1`). A 5-column kanban crammed into half a 2-col grid is unreadable. Tables and timelines also auto-span.
+
+### Checklist
+
+Custom checkboxes replacing native browser controls:
+
+- Checkbox: 12px square, `--text-muted` border, transparent background
+- Checked: fills `--accent-green` with dark checkmark (CSS `::after` border trick)
+- Hover: border transitions to `--accent-green`
+- Text: `--text-primary` at 13px — **readability over muted aesthetics**
+- Priority pips: 6px squares (not circles — zero border-radius rule)
+- Deadlines: `--accent-orange`, right-aligned
+- Done state: `line-through`, `--text-muted`
+- Row separator: `1px solid --bg-secondary`
+
+### Table
+
+Clean lines, terminal-prompt search input:
+
+- Header: 10px uppercase, `--text-muted`, `letter-spacing: 1px`, bottom border
+- Body cells: 13px, `--text-primary` — readable, not muted
+- Row separator: `1px solid --bg-secondary` (subtle, not `--border-color`)
+- Row hover: `--bg-secondary` background
+- No vertical cell borders, no zebra striping
+- Search: transparent background, `border-bottom` only, `--accent-green` on focus
+- **Auto-spans full grid width** (`grid-column: 1 / -1`)
+
+### Timeline
+
+Vertical connector line with accent-coloured dots:
+
+- Left border: `1px solid --border-color`
+- Entry dots: 5px squares in `--accent-blue` (not circles)
+- Dot hover: transitions to `--accent-green`
+- Dates: `--accent-orange`, 11px
+- Text: `--text-primary`
+- Section headings: `--text-muted`, 10px uppercase, `letter-spacing: 1.5px`
+- **Auto-spans full grid width**
+
+### Key-Value
+
+Rows of label/value pairs:
+
+- Labels: `--text-secondary`
+- Values: `--accent-green`, `font-weight: 500`
+- Row separator: `1px solid --bg-secondary`
+
+### Badges
+
+Inline status indicators:
+
+- No border-radius (matches zero-radius rule)
+- Default: `--accent-cyan` text, border at 40% opacity
+- Status variants: each accent colour with matching border
+- 10px, `padding: 1px 6px`
+
+### Dashboard Layout
+
+Two rendering contexts, same component system:
+
+**Full-width tab mode** (`Alt+q`):
+- 100% width, flex column container
+- Content padding: `16px 20px`
+- Grid layouts: `grid-2col` / `grid-3col` with 20px gap
+- Wide components (kanban, table, timeline) auto-span via `grid-column: 1 / -1`
+
+**Right pane mode** (`prefix+v` cycle):
+- Renders in the viewer pane (narrow)
+- Same components, same config
+- Wide components may need horizontal scroll or vertical stacking
+
+**Grid behaviour:**
+- `dashboard-layout-grid-2col`: `repeat(2, 1fr)`, 20px gap
+- `dashboard-layout-grid-3col`: `repeat(3, 1fr)`, 20px gap
+- Full-width panels: `.dashboard-panel--full-width { grid-column: 1 / -1 }`
+
+CSS: `frontend/styles/workspace/dashboard.css`
+Components: `frontend/src/dashboard/components/`
+
 ## Future Considerations
 
 ### Accessibility
@@ -776,6 +924,8 @@ Terminal aesthetics can conflict with accessibility:
 - `frontend/src/ui/mobile.ts` - Mobile coordinator
 - `frontend/src/remote/RemoteProjectSelector.ts` - Exemplar component
 - `frontend/src/remote/RemoteProfileEditor.ts` - Binary toggle exemplar
+- `frontend/styles/workspace/dashboard.css` - Dashboard component styles
+- `frontend/src/dashboard/components/` - Dashboard component implementations
 
 ---
 

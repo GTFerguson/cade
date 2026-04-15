@@ -1,7 +1,7 @@
 ---
 title: Documentation Hub
 created: 2026-01-16
-updated: 2026-02-02
+updated: 2026-03-24
 status: active
 tags: [index, navigation]
 ---
@@ -31,6 +31,7 @@ This means you can start work on your desktop, check progress from your phone, a
 |---------|---------|----------|
 | [[technical/README\|Technical]] | Architecture, APIs, implementation details | Developers |
 | [[future/README\|Future]] | Roadmap, planned features, improvements | Contributors |
+| [[plans/README\|Plans]] | Active development plans (ephemeral) | Contributors |
 | [[user/README\|User Guide]] | Usage guides, tutorials, feature docs | End users |
 
 ## Quick Links
@@ -45,7 +46,7 @@ This means you can start work on your desktop, check progress from your phone, a
 ### For Contributors
 
 - [[future/README]] - Roadmap and planned features
-- `plans/` - Active development (see project root)
+- [[plans/README]] - Active development plans
 
 ### For Users
 
@@ -54,4 +55,4 @@ This means you can start work on your desktop, check progress from your phone, a
 ## See Also
 
 - `CLAUDE.md` - Agent onboarding guide (project root)
-- `.roo/rules/` - Project conventions
+- `.claude/rules/` - Project conventions

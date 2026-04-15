@@ -34,6 +34,7 @@ from backend.models import FileChangeEvent, TerminalSize
 if TYPE_CHECKING:
     from backend.config import Config
     from backend.doc_index import DocIndexService
+    from backend.nkrdn_service import NkrdnService
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +64,11 @@ class ConnectionHandler:
         self._terminal_sizes: dict[str, TerminalSize] = {}
         self._user_config = None
         self._doc_index: "DocIndexService | None" = None
+        self._nkrdn: "NkrdnService | None" = None
         self._chat_session: ChatSession | None = None
         self._chat_task: asyncio.Task | None = None
         self._provider_registry: ProviderRegistry | None = None
+        self._dashboard: "DashboardHandler | None" = None
 
     async def _send_status(self, message: str) -> None:
         """Send a startup status message."""
@@ -118,6 +121,10 @@ class ConnectionHandler:
             orchestrator.set_working_dir(self._working_dir)
             orchestrator.register_broadcast(self._send)
 
+            # Register permission prompt broadcast
+            from backend.permissions.manager import get_permission_manager
+            get_permission_manager().register_broadcast(self._send)
+
             # Start output loop for claude terminal
             self._start_output_loop(SessionKey.CLAUDE)
             watch_task = asyncio.create_task(self._watch_loop())
@@ -140,6 +147,13 @@ class ConnectionHandler:
                     self._doc_index.initial_build()
                 )
 
+            # Build knowledge graph in background on project open
+            nkrdn_task: asyncio.Task | None = None
+            if self._nkrdn is not None:
+                nkrdn_task = asyncio.create_task(
+                    self._nkrdn.initial_build()
+                )
+
             # Receive loop controls connection lifetime
             # PTY output and watch loops run as long-lived background tasks
             try:
@@ -154,11 +168,14 @@ class ConnectionHandler:
                     deferred_task.cancel()
                 if doc_index_task is not None:
                     doc_index_task.cancel()
+                if nkrdn_task is not None:
+                    nkrdn_task.cancel()
                 await asyncio.gather(
                     *self._output_tasks.values(),
                     watch_task,
                     *([] if deferred_task is None else [deferred_task]),
                     *([] if doc_index_task is None else [doc_index_task]),
+                    *([] if nkrdn_task is None else [nkrdn_task]),
                     return_exceptions=True,
                 )
 
@@ -295,6 +312,18 @@ class ConnectionHandler:
             self._doc_index = DocIndexService(self._working_dir)
             self._watcher.on_change(self._doc_index.on_file_change)
 
+        from backend.nkrdn_service import NKRDN_AVAILABLE, NkrdnService
+        if NKRDN_AVAILABLE:
+            self._nkrdn = NkrdnService(self._working_dir)
+            self._watcher.on_change(self._nkrdn.on_file_change)
+
+        # Dashboard handler — watches .cade/dashboard.yml separately
+        # (main watcher ignores .cade/ directory)
+        from backend.dashboard.handler import DashboardHandler
+        self._dashboard = DashboardHandler(self._working_dir, self._send)
+        self._watcher.on_change(self._dashboard.on_data_source_file_change)
+        self._dashboard.start_watching()
+
     async def _cleanup(self) -> None:
         """Clean up resources."""
         self._closed = True
@@ -304,6 +333,14 @@ class ConnectionHandler:
         # Unregister orchestrator broadcast
         from backend.orchestrator.manager import get_orchestrator_manager
         get_orchestrator_manager().unregister_broadcast(self._send)
+
+        # Unregister permission broadcast
+        from backend.permissions.manager import get_permission_manager
+        get_permission_manager().unregister_broadcast(self._send)
+
+        # Stop dashboard watcher
+        if self._dashboard:
+            self._dashboard.stop()
 
         # Cancel in-progress chat stream
         if self._chat_task is not None and not self._chat_task.done():
@@ -322,6 +359,10 @@ class ConnectionHandler:
         if self._doc_index is not None:
             self._doc_index.cancel()
             self._doc_index = None
+
+        if self._nkrdn is not None:
+            self._nkrdn.cancel()
+            self._nkrdn = None
 
         if self._watcher is not None:
             self._watcher.stop()
@@ -465,6 +506,12 @@ class ConnectionHandler:
                         "messages": history,
                     })
 
+        # Auto-send dashboard config if one exists
+        if self._dashboard:
+            await self._dashboard.load_and_send_config()
+            if self._dashboard.has_config:
+                await self._dashboard.load_and_send_data()
+
     async def _receive_loop(self) -> None:
         """Receive and handle messages from the client."""
         while not self._closed:
@@ -531,6 +578,22 @@ class ConnectionHandler:
                 await self._handle_agent_approve_report(data)
             elif msg_type == MessageType.AGENT_REJECT_REPORT:
                 await self._handle_agent_reject_report(data)
+            elif msg_type == MessageType.DASHBOARD_GET_CONFIG:
+                if self._dashboard:
+                    await self._dashboard.load_and_send_config()
+                    await self._dashboard.load_and_send_data()
+            elif msg_type == MessageType.DASHBOARD_GET_DATA:
+                if self._dashboard:
+                    await self._dashboard.load_and_send_data()
+            elif msg_type == MessageType.DASHBOARD_ACTION:
+                if self._dashboard:
+                    await self._dashboard.handle_action(data)
+            elif msg_type == MessageType.PERMISSION_APPROVE:
+                from backend.permissions.manager import get_permission_manager
+                await get_permission_manager().approve(data.get("requestId", ""))
+            elif msg_type == MessageType.PERMISSION_DENY:
+                from backend.permissions.manager import get_permission_manager
+                await get_permission_manager().deny(data.get("requestId", ""))
             else:
                 raise ProtocolError.invalid_message(f"Unknown message type: {msg_type}")
 
@@ -953,6 +1016,7 @@ class ConnectionHandler:
                         "event": "tool-use-start",
                         "toolId": event.tool_id,
                         "toolName": event.tool_name,
+                        "toolInput": event.tool_input,
                     })
                 elif isinstance(event, ToolResult):
                     await self._send({
@@ -961,6 +1025,7 @@ class ConnectionHandler:
                         "toolId": event.tool_id,
                         "toolName": event.tool_name,
                         "status": event.status,
+                        "content": event.content[:2000] if event.content else "",
                     })
                 elif isinstance(event, ChatDone):
                     await self._send({

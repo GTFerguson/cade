@@ -17,9 +17,9 @@ cade/
 │   │   ├── reference/       # API documentation
 │   │   └── design/          # Design rationale
 │   ├── future/              # Roadmap & planned features
+│   ├── plans/               # Active development notes (no approval needed)
 │   └── user/                # End-user documentation
-├── plans/                   # Active development notes (no approval needed)
-├── .roo/rules/              # Project-specific conventions
+├── .claude/rules/           # Project-specific conventions
 └── CLAUDE.md                # This file
 ```
 
@@ -53,7 +53,7 @@ Global rules (apply to all projects) are in `~/.claude/rules/`:
 
 ## Development Workflow
 
-### `plans/` - Working documents
+### `docs/plans/` - Working documents
 - Create, modify, delete freely during development
 - For active planning, brainstorming, and work-in-progress
 - Delete or migrate when complete
@@ -66,8 +66,8 @@ Global rules (apply to all projects) are in `~/.claude/rules/`:
 ### Lifecycle
 
 ```
-plans/ (active) --> docs/technical/ (complete)
-                --> docs/future/ (deferred)
+docs/plans/ (active) --> docs/technical/ (complete)
+                     --> docs/future/ (deferred)
 ```
 
 ## Building the Desktop App

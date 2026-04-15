@@ -22,6 +22,8 @@ import type { ProjectContext as IProjectContext } from "./types";
 
 const PANE_ORDER: PaneType[] = ["file-tree", "terminal", "viewer"];
 
+export type TabViewMode = "workspace" | "dashboard";
+
 export class ProjectContextImpl implements IProjectContext {
   readonly container: HTMLElement;
   private layout: Layout | null = null;
@@ -34,6 +36,9 @@ export class ProjectContextImpl implements IProjectContext {
   private pendingSession: SessionState | null = null;
   private isVisible = false;
   private focusedPane: PaneType = "terminal";
+  private viewMode: TabViewMode = "workspace";
+  private dashboardFullContainer: HTMLElement | null = null;
+  private dashboardFullPane: import("../dashboard").DashboardPane | null = null;
   private boundHandlers = {
     startupStatus: (_msg: any) => {
       // Progress bar handles visual feedback; no per-message status updates
@@ -124,9 +129,14 @@ export class ProjectContextImpl implements IProjectContext {
         <div class="resize-handle resize-handle-right"></div>
         <div class="pane viewer-pane"></div>
       </div>
+      <div class="dashboard-full-container" style="display:none"></div>
     `;
 
     this.parentContainer.appendChild(this.container);
+
+    this.dashboardFullContainer = this.container.querySelector(
+      ".dashboard-full-container",
+    ) as HTMLElement;
 
     const appContainer = this.container.querySelector(
       ".app-container"
@@ -169,10 +179,12 @@ export class ProjectContextImpl implements IProjectContext {
       this.splash = new Splash(terminalEl);
       this.splash.setLoading();
 
-      // Dismiss on first shell output or first chat stream event
+      // Dismiss on first shell output, chat stream, or file tree load
+      // (enhanced mode doesn't emit output until user sends a message)
       const dismissSplash = () => {
         this.ws.off("output", dismissSplash);
         this.ws.off("chat-stream", dismissSplash);
+        this.ws.off("file-tree", dismissSplash);
         this.splash?.setProgress(4, "ready");
         this.splash?.hide();
 
@@ -192,6 +204,7 @@ export class ProjectContextImpl implements IProjectContext {
       };
       this.ws.on("output", dismissSplash);
       this.ws.on("chat-stream", dismissSplash);
+      this.ws.on("file-tree", dismissSplash);
     }
 
     // Sync focusedPane when user clicks on a pane (fixes desync where
@@ -210,6 +223,37 @@ export class ProjectContextImpl implements IProjectContext {
     this.rightPane.setAgentManager(this.agentManager);
     this.rightPane.setOnAgentSelect((agentId) => {
       this.agentManager?.switchToAgent(agentId);
+    });
+
+    // Wire dashboard pane in the right pane
+    const { DashboardPane } = await import("../dashboard");
+    const dashboardPane = new DashboardPane(
+      (this.rightPane as any).dashboardContainer,
+      this.ws,
+    );
+    dashboardPane.initialize();
+    this.rightPane.setDashboardPane(dashboardPane);
+
+    // Full-width dashboard pane (for dashboard tab mode)
+    if (this.dashboardFullContainer) {
+      this.dashboardFullPane = new DashboardPane(
+        this.dashboardFullContainer,
+        this.ws,
+      );
+      this.dashboardFullPane.initialize();
+
+      // Click file in dashboard → switch to workspace, open in viewer
+      this.dashboardFullPane.onViewFile((path) => {
+        this.setViewMode("workspace");
+        this.rightPane?.setMode("markdown");
+        this.rightPane?.getViewer().loadFile(path);
+      });
+    }
+
+    // Also wire the right-pane dashboard's view-file handler
+    dashboardPane.onViewFile((path) => {
+      this.rightPane?.setMode("markdown");
+      this.rightPane?.getViewer().loadFile(path);
     });
 
     this.fileTree.on("file-select", (path) => {
@@ -268,6 +312,31 @@ export class ProjectContextImpl implements IProjectContext {
       this.agentManager?.updateAgentState(msg.agentId, msg.state as AgentState);
       this.terminalManager?.updateStatusIndicator();
       this.rightPane?.getAgentPane()?.render();
+    });
+
+    // Dashboard events — feed both right-pane and full-width dashboard
+    this.ws.on("dashboard-config", (msg) => {
+      this.rightPane?.getDashboardPane()?.setConfig(msg.config);
+      this.dashboardFullPane?.setConfig(msg.config);
+    });
+    this.ws.on("dashboard-data", (msg) => {
+      this.rightPane?.getDashboardPane()?.setData(msg.sources);
+      this.dashboardFullPane?.setData(msg.sources);
+    });
+    this.ws.on("dashboard-cleared", () => {
+      this.rightPane?.getDashboardPane()?.clearConfig();
+      this.dashboardFullPane?.clearConfig();
+    });
+
+    // Agent-pushed panels
+    this.ws.on("dashboard-push-panel", (msg) => {
+      this.rightPane?.getDashboardPane()?.pushAgentPanel(msg.panel, msg.data);
+      this.dashboardFullPane?.pushAgentPanel(msg.panel, msg.data);
+    });
+
+    // Notifications
+    this.ws.on("notification", (msg) => {
+      this.showNotification(msg.message, msg.style);
     });
 
     this.hide();
@@ -402,6 +471,65 @@ export class ProjectContextImpl implements IProjectContext {
    */
   setRightPaneMode(mode: RightPaneMode): void {
     this.rightPane?.setMode(mode);
+  }
+
+  /**
+   * Get the current tab view mode.
+   */
+  getViewMode(): TabViewMode {
+    return this.viewMode;
+  }
+
+  /**
+   * Toggle between workspace (3-pane) and full-width dashboard mode.
+   */
+  setViewMode(mode: TabViewMode): void {
+    if (mode === this.viewMode) return;
+    this.viewMode = mode;
+
+    const workspace = this.container.querySelector(".app-container") as HTMLElement | null;
+
+    if (mode === "dashboard") {
+      if (workspace) workspace.style.display = "none";
+      if (this.dashboardFullContainer) this.dashboardFullContainer.style.display = "";
+    } else {
+      if (workspace) workspace.style.display = "";
+      if (this.dashboardFullContainer) this.dashboardFullContainer.style.display = "none";
+      // Re-sync layout after showing workspace
+      this.layout?.syncProportions();
+      window.dispatchEvent(new Event("resize"));
+    }
+  }
+
+  /**
+   * Toggle between workspace and dashboard view modes.
+   */
+  toggleViewMode(): void {
+    const hasDashboard = this.dashboardFullPane?.hasConfig() ?? false;
+    if (!hasDashboard) return;
+    this.setViewMode(this.viewMode === "workspace" ? "dashboard" : "workspace");
+  }
+
+  /**
+   * Check if full-width dashboard is available.
+   */
+  hasDashboard(): boolean {
+    return this.dashboardFullPane?.hasConfig() ?? false;
+  }
+
+  /**
+   * Show a toast notification.
+   */
+  private showNotification(message: string, style: string = "info"): void {
+    const toast = document.createElement("div");
+    toast.className = `dash-notification dash-notification--${style}`;
+    toast.textContent = message;
+    this.container.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
   }
 
   /**
@@ -587,6 +715,7 @@ export class ProjectContextImpl implements IProjectContext {
     }
     this.fileTree?.dispose();
     this.rightPane?.dispose();
+    this.dashboardFullPane?.dispose();
     this.layout?.dispose();
 
     this.container.remove();

@@ -10,22 +10,25 @@
  */
 
 import { AgentOverviewPane, type AgentManager } from "../agents";
+import { DashboardPane } from "../dashboard";
 import type { PaneKeyHandler } from "../input/keybindings";
 import { MarkdownViewer } from "../markdown/markdown";
 import { NeovimPane } from "../neovim";
 import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 
-export type RightPaneMode = "markdown" | "neovim" | "agents";
+export type RightPaneMode = "markdown" | "neovim" | "agents" | "dashboard";
 
 export class RightPaneManager implements Component, PaneKeyHandler {
   private mode: RightPaneMode = "markdown";
   private viewer: MarkdownViewer;
   private neovimPane: NeovimPane | null = null;
   private agentPane: AgentOverviewPane | null = null;
+  private dashboardPane: DashboardPane | null = null;
   private neovimContainer: HTMLElement;
   private viewerContainer: HTMLElement;
   private agentsContainer: HTMLElement;
+  private dashboardContainer: HTMLElement;
   private onModeChangeCallback: (() => void) | null = null;
   private onAgentSelectCallback: ((agentId: string) => void) | null = null;
 
@@ -51,9 +54,17 @@ export class RightPaneManager implements Component, PaneKeyHandler {
     this.agentsContainer.style.height = "100%";
     this.agentsContainer.style.display = "none";
 
+    this.dashboardContainer = document.createElement("div");
+    this.dashboardContainer.className = "right-pane-dashboard";
+    this.dashboardContainer.style.width = "100%";
+    this.dashboardContainer.style.height = "100%";
+    this.dashboardContainer.style.display = "none";
+    this.dashboardContainer.style.overflow = "auto";
+
     this.container.appendChild(this.viewerContainer);
     this.container.appendChild(this.neovimContainer);
     this.container.appendChild(this.agentsContainer);
+    this.container.appendChild(this.dashboardContainer);
 
     this.viewer = new MarkdownViewer(this.viewerContainer, this.ws);
   }
@@ -82,6 +93,7 @@ export class RightPaneManager implements Component, PaneKeyHandler {
     this.viewerContainer.style.display = mode === "markdown" ? "" : "none";
     this.neovimContainer.style.display = mode === "neovim" ? "" : "none";
     this.agentsContainer.style.display = mode === "agents" ? "" : "none";
+    this.dashboardContainer.style.display = mode === "dashboard" ? "" : "none";
 
     if (mode === "agents") {
       this.agentPane?.render();
@@ -132,6 +144,20 @@ export class RightPaneManager implements Component, PaneKeyHandler {
    */
   focus(): void {
     // Neovim: no-op (key forwarding handles input)
+  }
+
+  /**
+   * Get the DashboardPane (may be null if never initialized).
+   */
+  getDashboardPane(): DashboardPane | null {
+    return this.dashboardPane;
+  }
+
+  /**
+   * Initialize the dashboard pane.
+   */
+  setDashboardPane(pane: DashboardPane): void {
+    this.dashboardPane = pane;
   }
 
   /**
@@ -210,5 +236,6 @@ export class RightPaneManager implements Component, PaneKeyHandler {
     this.viewer.dispose();
     this.neovimPane?.dispose();
     this.agentPane?.dispose();
+    this.dashboardPane?.dispose();
   }
 }
