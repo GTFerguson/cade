@@ -36,31 +36,38 @@ export const wikiLinkExtension: TokenizerExtension & RendererExtension = {
 };
 
 /**
- * Resolve a wiki-link path relative to the current file.
+ * Resolve a wiki-link path.
+ *
+ * Two cases:
+ * - **Path-style** (``[[Folder/Subfolder/Page]]`` or ``[[/Folder/Page]]``):
+ *   resolved as **vault-relative** — the link describes its own location and
+ *   is *not* joined to the current file's directory. The export pipeline
+ *   pre-rewrites bare links to this form, so this is the common path.
+ * - **Bare basename** (``[[Page]]``): falls back to sibling-relative
+ *   resolution against the current file's directory. This is the legacy
+ *   behaviour and only kicks in for hand-typed links the preprocessor hasn't
+ *   touched.
  */
 export function resolveWikiLink(linkPath: string, currentPath: string | null): string {
   let targetPath = linkPath;
 
-  // Handle directory links (ending with /)
   if (targetPath.endsWith("/")) {
     targetPath = `${targetPath}README.md`;
   } else {
-    // Get filename (last segment after /)
     const lastSlash = targetPath.lastIndexOf("/");
     const filename = lastSlash === -1 ? targetPath : targetPath.slice(lastSlash + 1);
-
-    // Add .md if filename has no extension (no . or only leading .)
     if (!filename.includes(".") || filename.startsWith(".")) {
       targetPath = `${targetPath}.md`;
     }
   }
 
-  // If it's an absolute path (starts with /), use as-is
-  if (targetPath.startsWith("/")) {
-    return normalizePath(targetPath);
+  // Path-style links (anything containing /) are vault-relative. Strip any
+  // leading slashes so callers get a clean repo-relative path.
+  if (targetPath.includes("/")) {
+    return normalizePath(targetPath.replace(/^\/+/, ""));
   }
 
-  // Resolve relative to current file's directory
+  // Bare basename: legacy sibling-relative fallback.
   if (currentPath != null) {
     const lastSlash = currentPath.lastIndexOf("/");
     if (lastSlash !== -1) {

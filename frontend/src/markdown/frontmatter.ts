@@ -83,7 +83,7 @@ export function renderFrontmatter(frontmatter: Frontmatter): HTMLElement {
 
     const valueSpan = document.createElement("span");
     valueSpan.className = "frontmatter-value";
-    valueSpan.textContent = formatFrontmatterValue(value);
+    valueSpan.appendChild(renderValueWithWikiLinks(formatFrontmatterValue(value)));
 
     row.appendChild(keySpan);
     row.appendChild(separator);
@@ -105,4 +105,36 @@ export function formatFrontmatterValue(value: unknown): string {
     return "";
   }
   return String(value);
+}
+
+/**
+ * Convert a string containing ``[[Page]]`` or ``[[Page|Display]]`` patterns
+ * into a DocumentFragment of text nodes interleaved with ``<a class="wiki-link">``
+ * anchors. The anchors carry the same shape (``data-path`` attribute) as the
+ * marked extension's output, so {@link attachWikiLinkHandlers} picks them up
+ * automatically when called on a parent container.
+ */
+function renderValueWithWikiLinks(value: string): DocumentFragment {
+  const fragment = document.createDocumentFragment();
+  const re = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(value)) !== null) {
+    if (match.index > lastIndex) {
+      fragment.appendChild(document.createTextNode(value.slice(lastIndex, match.index)));
+    }
+    const path = (match[1] ?? "").trim();
+    const display = (match[2] ?? match[1] ?? "").trim();
+    const link = document.createElement("a");
+    link.href = "#";
+    link.className = "wiki-link";
+    link.dataset["path"] = path;
+    link.textContent = display;
+    fragment.appendChild(link);
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < value.length) {
+    fragment.appendChild(document.createTextNode(value.slice(lastIndex)));
+  }
+  return fragment;
 }
