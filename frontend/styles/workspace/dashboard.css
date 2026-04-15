@@ -121,26 +121,53 @@
   gap: 20px;
 }
 
+/* Multi-column layout for grid variants.
+ *
+ * ``column-count`` gives us masonry-style flow without waiting for
+ * ``grid-template-rows: masonry`` (still behind a flag in Chrome as of
+ * 2026-04). Panels with very different heights pack tightly in the
+ * shortest column instead of leaving a dead-zone below the shorter
+ * panel of a row (the ~700px gap in Overview with Deities vs Locations).
+ *
+ * Tradeoff: reading order goes top-to-bottom per column rather than
+ * left-to-right per row. For dashboards that's acceptable — the user
+ * reads each column as a group. Full-width panels use ``column-span:
+ * all`` to break out.
+ */
 .dashboard-layout-grid-2col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  /* Override the ``.dashboard-panels`` base ``display: flex`` — CSS
+   * columns need a block container to flow into. */
+  display: block;
+  column-count: 2;
+  column-gap: 20px;
 }
 
 .dashboard-layout-grid-3col {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  display: block;
+  column-count: 3;
+  column-gap: 20px;
 }
 
 /* ═══ Panel container ═══ */
 .dashboard-panel {
   background: transparent;
   overflow: hidden;
+  /* break-inside stops the renderer from slicing a panel across columns.
+   * margin-bottom provides the row gap since column layouts don't honour
+   * grid-gap's row axis. */
+  break-inside: avoid;
+  margin-bottom: 20px;
+}
+
+/* Panel in a grid-* layout doesn't need its own margin — the
+ * column/flex parent handles it. Cancel for the single-column flex
+ * case and let the parent ``gap`` take over. */
+.dashboard-panels:not(.dashboard-layout-grid-2col):not(.dashboard-layout-grid-3col) .dashboard-panel {
+  margin-bottom: 0;
 }
 
 .dashboard-panel--full-width {
-  grid-column: 1 / -1;
+  column-span: all;
 }
 
 .dashboard-panel-title {
@@ -212,17 +239,33 @@
   border-left-color: var(--accent-blue);
 }
 
+/* Keyboard focus ring. Matches the hover accent for clickable cards
+ * so keyboard users get the same visual affordance as mouse users. */
+.dash-card:focus-visible {
+  outline: none;
+  background: var(--bg-tertiary, #1a1918);
+  border-left-color: var(--accent-green);
+}
+
+/* Card title — rendered as <h4> for screen readers / document
+ * outline. Reset the browser h4 defaults since we're just reusing
+ * the tag for semantics, not headline styling. */
+.dash-card-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.6;
+  margin: 0;
+  padding: 0;
+  letter-spacing: 0.3px;
+}
+
 .dash-card-field {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.6;
-}
-
-.dash-card-field:first-child {
-  color: var(--text-primary);
-  font-weight: 500;
-  font-size: 13px;
 }
 
 .dash-card-badges {
