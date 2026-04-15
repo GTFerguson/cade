@@ -41,7 +41,7 @@ export class TableComponent extends BaseDashboardComponent {
       for (const filterField of panel.filterable) {
         const values = this.uniqueValues(data, filterField);
         const select = document.createElement("select");
-        select.className = "dash-table-search";
+        select.className = "dash-table-filter";
         const allOption = document.createElement("option");
         allOption.value = "";
         allOption.textContent = `All ${filterField}`;

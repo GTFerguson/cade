@@ -15,7 +15,14 @@ export class CardsComponent extends BaseDashboardComponent {
       `dash-cards dash-cards--${layout}`,
     );
 
-    for (const item of data) {
+    // Honour ``limit:`` from the panel config — otherwise overview panels
+    // dump every record and the pane becomes absurdly tall.
+    const limited =
+      typeof panel.limit === "number" && panel.limit > 0
+        ? data.slice(0, panel.limit)
+        : data;
+
+    for (const item of limited) {
       const card = this.el("div", "dash-card");
 
       // Render fields
