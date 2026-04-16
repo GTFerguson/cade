@@ -20,7 +20,6 @@ from backend.providers.config import ProviderConfig
 from backend.providers.types import ChatDone, ChatError, ChatMessage, TextDelta
 from backend.providers.websocket_provider import WebsocketProvider
 
-
 # --- Test-server fixture ----------------------------------------------------
 
 class ScriptedServer:

@@ -13,8 +13,6 @@ These catch issues that unit tests with mocks can't:
 
 from __future__ import annotations
 
-import asyncio
-import json
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -23,13 +21,9 @@ import pytest
 from starlette.testclient import TestClient
 
 from backend.config import Config, set_config
-from backend.errors import PTYError
 from backend.main import create_app
-from backend.protocol import ErrorCode, MessageType, SessionKey
-from backend.terminal.pty import PTYManager
+from backend.protocol import ErrorCode, MessageType
 from backend.terminal.sessions import SessionRegistry, set_registry
-from backend.models import TerminalSize
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
