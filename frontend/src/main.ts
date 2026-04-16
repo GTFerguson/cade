@@ -115,11 +115,18 @@ class App {
     }
 
     if (merged.view) {
-      console.log(`[launch] view preselect '${merged.view}' — not yet implemented`);
+      console.log(`[launch] view preselect '${merged.view}' — switching right pane to dashboard`);
+      // `view` declares a dashboard view id the project wants preselected.
+      // Flip the right pane to dashboard mode so the player sees it on open
+      // instead of having to switch manually. The dashboard pane auto-selects
+      // its first view once config arrives over the websocket; view-id-level
+      // preselection isn't wired yet but isn't needed for single-view configs.
+      tab.context?.getRightPane()?.setMode("dashboard");
     }
 
     if (merged.hide_tree === true) {
-      console.log("[launch] hide_tree — not yet implemented (toggleFileTree not built)");
+      console.log("[launch] hiding file tree");
+      tab.context?.getLayout()?.hideFileTree();
     }
   }
 

@@ -225,7 +225,7 @@ export interface LaunchPreset {
   enhanced?: boolean;   // toggle enhanced-mode ChatPane on connect
   spawn?: string;       // shell command to run in the manual terminal
   view?: string;        // dashboard view id to preselect (not yet implemented)
-  hide_tree?: boolean;  // collapse file tree (not yet implemented)
+  hide_tree?: boolean;  // hide the file-tree pane on startup
 }
 
 /**

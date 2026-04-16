@@ -26,6 +26,7 @@ export class Layout implements Component {
   private boundEndDrag: (() => void) | null = null;
   private rafId: number | null = null;
   private savedViewerProportion: number | null = null;
+  private savedFileTreeProportion: number | null = null;
 
   constructor(private container: HTMLElement) {
     this.proportions = { ...DEFAULT_PROPORTIONS };
@@ -108,13 +109,32 @@ export class Layout implements Component {
   private applyProportions(): void {
     const { fileTree, terminal, viewer } = this.proportions;
 
+    // Collapse the left handle to 0 when the file-tree pane is hidden —
+    // otherwise a 4px strip remains visible and stays interactive, so hovering
+    // it flashes the --border-focus colour and dragging it re-expands the
+    // tree via onDrag's minProportion clamp.
+    const leftHandleWidth = fileTree > 0 ? "4px" : "0px";
+    const rightHandleWidth = viewer > 0 ? "4px" : "0px";
+
     this.container.style.gridTemplateColumns = [
       `${fileTree * 100}%`,
-      "4px",
+      leftHandleWidth,
       `${terminal * 100}%`,
-      "4px",
+      rightHandleWidth,
       `${viewer * 100}%`,
     ].join(" ");
+
+    // Don't display:none the handles — that removes them from grid layout
+    // and shifts every subsequent child one column to the left, so the right
+    // handle ends up occupying the terminal's 1184px slot as a giant divider.
+    // The 0px grid column already makes the handle invisible and
+    // non-interactive; that's enough.
+
+    // The file-tree-pane has `border-right: 1px solid` which paints even when
+    // the grid column is 0% — showing as a thin vertical divider. Strip the
+    // border when the tree is hidden.
+    const fileTreePane = this.container.querySelector(".file-tree-pane") as HTMLElement | null;
+    if (fileTreePane) fileTreePane.style.borderRight = fileTree > 0 ? "" : "none";
 
     // Sync proportions to CSS custom properties for tab bar alignment
     document.documentElement.style.setProperty(
@@ -277,7 +297,10 @@ export class Layout implements Component {
   }
 
   /**
-   * Set layout proportions.
+   * Set layout proportions. If the file-tree has been explicitly hidden
+   * (via hideFileTree), a restored `fileTree` proportion is stashed for
+   * later restore but doesn't re-expose the pane — session restore must
+   * not override an intentional hide from the launch preset.
    */
   setProportions(proportions: LayoutProportions): void {
     if (
@@ -285,7 +308,18 @@ export class Layout implements Component {
       typeof proportions.terminal === "number" &&
       typeof proportions.viewer === "number"
     ) {
-      this.proportions = { ...proportions };
+      if (this.savedFileTreeProportion !== null) {
+        // File-tree is intentionally hidden — redirect its restored space to
+        // the terminal and keep savedFileTreeProportion as-is (the value from
+        // before the hide, so showFileTree() restores a sensible width).
+        this.proportions = {
+          fileTree: 0,
+          terminal: proportions.terminal + proportions.fileTree,
+          viewer: proportions.viewer,
+        };
+      } else {
+        this.proportions = { ...proportions };
+      }
       this.applyProportions();
       window.dispatchEvent(new Event("resize"));
     }
@@ -390,6 +424,44 @@ export class Layout implements Component {
    */
   isViewerVisible(): boolean {
     return this.proportions.viewer > 0;
+  }
+
+  /**
+   * Hide the file-tree pane by setting its proportion to 0.
+   * applyProportions collapses the left handle to 0 width so it's not
+   * hoverable or draggable while hidden.
+   */
+  hideFileTree(): void {
+    if (this.proportions.fileTree <= 0) return;
+    this.savedFileTreeProportion = this.proportions.fileTree;
+    this.proportions.terminal += this.proportions.fileTree;
+    this.proportions.fileTree = 0;
+    this.applyProportions();
+    this.onChangeCallback?.();
+    window.dispatchEvent(new Event("resize"));
+  }
+
+  /**
+   * Show the file-tree pane by restoring its saved proportion.
+   */
+  showFileTree(): void {
+    if (this.savedFileTreeProportion === null || this.savedFileTreeProportion <= 0) {
+      this.savedFileTreeProportion = DEFAULT_PROPORTIONS.fileTree;
+    }
+    const restored = this.savedFileTreeProportion;
+    this.proportions.terminal -= restored;
+    this.proportions.fileTree = restored;
+    this.savedFileTreeProportion = null;
+    this.applyProportions();
+    this.onChangeCallback?.();
+    window.dispatchEvent(new Event("resize"));
+  }
+
+  /**
+   * Check if the file-tree pane is visible.
+   */
+  isFileTreeVisible(): boolean {
+    return this.proportions.fileTree > 0;
   }
 
   /**
