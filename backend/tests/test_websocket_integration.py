@@ -449,3 +449,171 @@ class TestDummyMode:
             if output_msgs:
                 all_output = "".join(m.get("data", "") for m in output_msgs)
                 assert "dummy" in all_output.lower()
+
+
+# ---------------------------------------------------------------------------
+# WebsocketProvider integration with ConnectionHandler
+# ---------------------------------------------------------------------------
+#
+# These don't spin up the full FastAPI stack — they poke at the two methods
+# responsible for bridging padarax-server frames into CADE chat messages.
+# Full-stack coverage lives in the padarax repo's integration test.
+
+
+class TestWebsocketProviderIntegration:
+    def _make_handler(self):
+        """Construct a ConnectionHandler with just enough state to exercise
+        the WebsocketProvider callbacks. Bypasses __init__ (which expects a
+        real WebSocket + Config) and wires up the attributes the methods
+        under test actually read."""
+        from backend.chat.session import ChatSession
+        from backend.websocket import ConnectionHandler
+
+        handler = ConnectionHandler.__new__(ConnectionHandler)
+        handler._closed = False
+        handler._chat_session = ChatSession(provider_name="ws-test")
+        handler._session_id = "sess-1"
+        handler._provider_registry = None
+        sent: list[dict] = []
+
+        async def _send(msg: dict) -> None:
+            sent.append(msg)
+
+        handler._send = _send  # type: ignore[attr-defined]
+        return handler, sent
+
+    async def test_scene_update_emits_chat_stream_and_appends_assistant(self):
+        handler, sent = self._make_handler()
+
+        await handler._on_unsolicited_provider_event(
+            "scene_update", {"content": "the tavern is quiet"}
+        )
+
+        # Two CHAT_STREAM frames: text-delta then done.
+        chat_stream_msgs = [m for m in sent if m["type"] == MessageType.CHAT_STREAM]
+        assert len(chat_stream_msgs) == 2
+        assert chat_stream_msgs[0]["event"] == "text-delta"
+        assert chat_stream_msgs[0]["content"] == "the tavern is quiet"
+        assert chat_stream_msgs[1]["event"] == "done"
+
+        # Session got an unpaired assistant message so subsequent replays
+        # render the scene.
+        history = handler._chat_session.get_history_for_replay()
+        assert history == [{"role": "assistant", "content": "the tavern is quiet"}]
+
+    async def test_scene_update_empty_content_is_a_noop(self):
+        handler, sent = self._make_handler()
+        await handler._on_unsolicited_provider_event("scene_update", {"content": ""})
+        assert sent == []
+        assert handler._chat_session.get_history_for_replay() == []
+
+    async def test_chat_history_rehydrates_session_and_sends_history_frame(self):
+        handler, sent = self._make_handler()
+
+        await handler._on_unsolicited_provider_event(
+            "chat_history",
+            {"messages": [
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "content": "hi"},
+                {"role": "user", "content": "look"},
+                {"role": "assistant", "content": "you see..."},
+            ]},
+        )
+
+        history_frames = [
+            m for m in sent if m["type"] == MessageType.CHAT_HISTORY
+        ]
+        assert len(history_frames) == 1
+        assert len(history_frames[0]["messages"]) == 4
+        assert history_frames[0]["messages"][0] == {
+            "role": "user", "content": "hello"
+        }
+
+        # Session was rehydrated so in-memory history matches what went
+        # over the wire.
+        replayed = handler._chat_session.get_history_for_replay()
+        assert replayed == [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+            {"role": "user", "content": "look"},
+            {"role": "assistant", "content": "you see..."},
+        ]
+
+    async def test_chat_history_with_empty_messages_is_a_noop(self):
+        handler, sent = self._make_handler()
+        await handler._on_unsolicited_provider_event(
+            "chat_history", {"messages": []}
+        )
+        assert sent == []
+
+    async def test_handler_ignores_events_when_closed(self):
+        handler, sent = self._make_handler()
+        handler._closed = True
+
+        await handler._on_unsolicited_provider_event(
+            "scene_update", {"content": "shouldn't appear"}
+        )
+        assert sent == []
+
+    async def test_handler_ignores_events_without_chat_session(self):
+        handler, sent = self._make_handler()
+        handler._chat_session = None
+
+        await handler._on_unsolicited_provider_event(
+            "scene_update", {"content": "shouldn't appear"}
+        )
+        assert sent == []
+
+    async def test_maybe_start_does_nothing_without_provider_registry(self):
+        handler, sent = self._make_handler()
+        # _provider_registry is None from the fixture — method early-returns.
+        await handler._maybe_start_websocket_provider()
+        assert sent == []
+
+    async def test_maybe_start_skips_non_websocket_providers(self):
+        from backend.providers.registry import ProviderRegistry
+
+        handler, sent = self._make_handler()
+        registry = ProviderRegistry()
+        # A bare MagicMock stands in for a non-WS provider — isinstance
+        # check should filter it out without touching the handler state.
+        fake = MagicMock()
+        fake.name = "fake"
+        registry.register("fake", fake)
+        registry._default = "fake"  # type: ignore[attr-defined]
+        handler._provider_registry = registry
+
+        await handler._maybe_start_websocket_provider()
+        assert sent == []
+        fake.start.assert_not_called()
+
+    async def test_maybe_start_sends_error_frame_on_connect_failure(self):
+        from backend.providers.config import ProviderConfig
+        from backend.providers.registry import ProviderRegistry
+        from backend.providers.websocket_provider import WebsocketProvider
+
+        handler, sent = self._make_handler()
+        registry = ProviderRegistry()
+        # Point at a port that isn't listening; connect_timeout keeps this
+        # fast.
+        provider = WebsocketProvider(ProviderConfig(
+            name="ws-test",
+            type="cli",
+            model="padarax",
+            extra={
+                "url": "ws://127.0.0.1:1/nowhere",
+                "connect_timeout": 0.2,
+            },
+        ))
+        registry.register("ws-test", provider)
+        registry._default = "ws-test"  # type: ignore[attr-defined]
+        handler._provider_registry = registry
+
+        await handler._maybe_start_websocket_provider()
+
+        error_frames = [
+            m for m in sent
+            if m["type"] == MessageType.CHAT_STREAM and m.get("event") == "error"
+        ]
+        assert len(error_frames) == 1
+        assert "unreachable" in error_frames[0]["message"].lower()

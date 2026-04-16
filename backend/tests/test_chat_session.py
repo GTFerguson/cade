@@ -71,6 +71,52 @@ class TestChatSession:
         session.provider_name = "openai"
         assert session.provider_name == "openai"
 
+    def test_add_assistant_message_without_paired_user(self):
+        session = ChatSession()
+        session.add_assistant_message("a system-initiated scene")
+
+        messages = session.get_messages()
+        assert len(messages) == 1
+        assert messages[0].role == "assistant"
+        assert messages[0].content == "a system-initiated scene"
+
+    def test_add_assistant_message_skips_empty_content(self):
+        session = ChatSession()
+        session.add_assistant_message("")
+
+        assert session.get_messages() == []
+
+    def test_has_messages_starts_false(self):
+        session = ChatSession()
+        assert session.has_messages() is False
+
+    def test_has_messages_flips_after_any_message(self):
+        session = ChatSession()
+        session.add_user_message("hi")
+        assert session.has_messages() is True
+
+        fresh = ChatSession()
+        fresh.add_assistant_message("pushed scene")
+        assert fresh.has_messages() is True
+
+    def test_unpaired_assistant_survives_history_replay(self):
+        """Order-preserving replay — an assistant-first sequence, typical of
+        a fresh WebsocketProvider session emitting the initial scene before
+        the user ever speaks."""
+        session = ChatSession()
+        session.add_assistant_message("opening scene")
+        session.add_user_message("look")
+        session.start_response()
+        session.append_response_chunk("you see...")
+        session.finish_response()
+
+        history = session.get_history_for_replay()
+        assert history == [
+            {"role": "assistant", "content": "opening scene"},
+            {"role": "user", "content": "look"},
+            {"role": "assistant", "content": "you see..."},
+        ]
+
 
 class TestChatSessionRegistry:
     def test_get_or_create(self):
