@@ -205,12 +205,17 @@ class MarkdownAdapter(BaseAdapter):
 
         def _parse():
             text = file_path.read_text(encoding="utf-8")
+            if parse_mode == "raw":
+                # Single-record mode: return the entire file body as one
+                # record with a `content` field. Pair with the frontend
+                # MarkdownPanelComponent (fields: [content] or default)
+                # to render the whole file as rich markdown.
+                return [{"content": text}]
             if parse_mode == "date_entries":
                 return _parse_date_entries(text)
-            elif parse_mode == "ranked_list":
+            if parse_mode == "ranked_list":
                 return _parse_ranked_list(text)
-            else:
-                return _parse_list_items(text)
+            return _parse_list_items(text)
 
         try:
             return await asyncio.to_thread(_parse)
