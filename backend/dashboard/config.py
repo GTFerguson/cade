@@ -288,19 +288,38 @@ def validate_config(raw: dict[str, Any]) -> DashboardConfig:
     )
 
 
-def load_dashboard_config(project_root: Path) -> DashboardConfig | None:
-    """Load and validate .cade/dashboard.yml from a project.
+def load_dashboard_config(
+    project_root: Path,
+    filename: str | None = None,
+) -> DashboardConfig | None:
+    """Load and validate a dashboard config file from a project.
+
+    Without ``filename``, probes the default locations
+    (``.cade/dashboard.yml`` and ``.cade/dashboard.yaml``) in order.
+
+    With ``filename``, loads that exact path (relative to the project
+    root, or absolute). Useful for projects that ship multiple dashboard
+    configs selected by the launch preset — e.g. a player-mode dashboard
+    that's completely separate from a GM-mode dashboard.
 
     Returns None if no config file exists.
     Raises DashboardConfigError if the file exists but is invalid.
     """
-    cade_dir = project_root / ".cade"
-    config_path = None
-    for name in CONFIG_FILENAMES:
-        candidate = cade_dir / name
+    config_path: Path | None = None
+
+    if filename:
+        candidate = Path(filename)
+        if not candidate.is_absolute():
+            candidate = project_root / candidate
         if candidate.is_file():
             config_path = candidate
-            break
+    else:
+        cade_dir = project_root / ".cade"
+        for name in CONFIG_FILENAMES:
+            candidate = cade_dir / name
+            if candidate.is_file():
+                config_path = candidate
+                break
 
     if config_path is None:
         return None

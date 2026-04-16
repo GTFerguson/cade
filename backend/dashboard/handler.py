@@ -32,9 +32,19 @@ SendFn = Callable[[dict[str, Any]], Awaitable[None]]
 class DashboardHandler:
     """Handles dashboard operations for a single WebSocket connection."""
 
-    def __init__(self, working_dir: Path, send: SendFn) -> None:
+    def __init__(
+        self,
+        working_dir: Path,
+        send: SendFn,
+        config_filename: str | None = None,
+    ) -> None:
         self._working_dir = working_dir
         self._send = send
+        # If set, overrides the default .cade/dashboard.yml probe with
+        # a specific filename (useful for project-local launch presets
+        # that want to select between multiple dashboard configs —
+        # e.g. a player-mode dashboard alongside a GM-mode one).
+        self._config_filename = config_filename
         self._config: DashboardConfig | None = None
         self._watch_task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
@@ -50,7 +60,10 @@ class DashboardHandler:
     async def load_and_send_config(self) -> None:
         """Load dashboard config from disk and push to client."""
         try:
-            self._config = load_dashboard_config(self._working_dir)
+            self._config = load_dashboard_config(
+                self._working_dir,
+                filename=self._config_filename,
+            )
         except DashboardConfigError as e:
             logger.warning("Dashboard config error: %s", e)
             await self._send({
@@ -223,7 +236,11 @@ class DashboardHandler:
         if not cade_dir.is_dir():
             return
 
+        # Watch the default config filenames AND any filename explicitly
+        # overridden via the launch preset. Both trigger a reload.
         config_names = set(CONFIG_FILENAMES)
+        if self._config_filename:
+            config_names.add(Path(self._config_filename).name)
 
         try:
             async for changes in awatch(

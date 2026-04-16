@@ -7,11 +7,18 @@ is the sensible default and URL params are the one-off override.
 
 Supported top-level keys (all optional):
 
-    enhanced: bool    — toggle enhanced-mode ChatPane on connect
-    spawn: string     — shell command to run in the manual terminal
-    view: string      — dashboard view id to preselect on open
-    hide_tree: bool   — collapse the file tree on startup
-    provider: map     — register a project-local chat provider (see below)
+    enhanced: bool        — toggle enhanced-mode ChatPane on connect
+    spawn: string         — shell command to run in the manual terminal
+    view: string          — dashboard view id to preselect on open
+    hide_tree: bool       — collapse the file tree on startup
+    provider: map         — register a project-local chat provider (see below)
+    dashboard_file: str   — path to a dashboard config file to load instead
+                            of the default .cade/dashboard.yml probe. Useful
+                            for projects that ship multiple dashboards and
+                            want launch mode to pick which one is active
+                            (e.g. a player dashboard separate from a GM
+                            dashboard). Relative paths resolve against the
+                            project root; absolute paths are used as-is.
 
 The ``provider`` block defines a chat provider that CADE registers on
 connect and sets as the default for the session. Supports any provider
@@ -98,6 +105,19 @@ def extract_frontend_preset(raw: dict[str, Any]) -> dict[str, Any]:
     if raw.get("hide_tree") is True:
         preset["hide_tree"] = True
     return preset
+
+
+def extract_dashboard_filename(raw: dict[str, Any]) -> str | None:
+    """Extract the ``dashboard_file`` top-level key from launch.yml if set.
+
+    Returns the string (unchanged) on a valid non-empty value, else None.
+    The dashboard config loader resolves relative paths against the
+    project root at load time.
+    """
+    value = raw.get("dashboard_file")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 def extract_provider_config(raw: dict[str, Any]) -> dict[str, Any] | None:

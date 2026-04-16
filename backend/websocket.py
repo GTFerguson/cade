@@ -15,6 +15,7 @@ from backend.auth import extract_token_from_query, validate_token
 from backend.chat.session import ChatSession, get_chat_registry
 from backend.config import load_user_config
 from backend.launch_preset import (
+    extract_dashboard_filename,
     extract_frontend_preset,
     extract_provider_config,
     load_launch_preset,
@@ -351,9 +352,16 @@ class ConnectionHandler:
             self._watcher.on_change(self._nkrdn.on_file_change)
 
         # Dashboard handler — watches .cade/dashboard.yml separately
-        # (main watcher ignores .cade/ directory)
+        # (main watcher ignores .cade/ directory). If launch.yml specifies
+        # a `dashboard_file` override, point the handler at that instead
+        # so projects can ship multiple dashboards (e.g. player vs GM).
         from backend.dashboard.handler import DashboardHandler
-        self._dashboard = DashboardHandler(self._working_dir, self._send)
+        dashboard_filename = extract_dashboard_filename(self._launch_yaml)
+        self._dashboard = DashboardHandler(
+            self._working_dir,
+            self._send,
+            config_filename=dashboard_filename,
+        )
         self._watcher.on_change(self._dashboard.on_data_source_file_change)
         self._dashboard.start_watching()
 
