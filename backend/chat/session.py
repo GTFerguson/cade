@@ -36,6 +36,19 @@ class ChatSession:
         """Add a user message to the conversation."""
         self._messages.append(HumanMessage(content=content))
 
+    def add_assistant_message(self, content: str) -> None:
+        """Append an assistant message with no paired user message.
+
+        Used for system-initiated responses (e.g. the initial scene
+        emitted on fresh-session bootstrap). History replay handles
+        unpaired assistant messages correctly.
+        """
+        if content:
+            self._messages.append(AIMessage(content=content))
+
+    def has_messages(self) -> bool:
+        return bool(self._messages)
+
     def start_response(self) -> None:
         """Mark the beginning of a streamed assistant response."""
         self._streaming = True

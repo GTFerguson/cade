@@ -22,6 +22,7 @@ from backend.launch_preset import (
 )
 from backend.providers.config import ProviderConfig
 from backend.providers.subprocess_provider import SubprocessProvider
+from backend.providers.websocket_provider import WebsocketProvider
 from backend.terminal.connections import get_connection_manager
 from backend.connection_registry import get_connection_registry
 from backend.errors import CADEError, ProtocolError
@@ -33,7 +34,7 @@ from backend.protocol import ErrorCode, MessageType, SessionKey
 from backend.providers.config import get_providers_config
 from backend.providers.registry import ProviderRegistry
 from backend.providers.claude_code_provider import ClaudeCodeProvider
-from backend.providers.types import ChatDone, ChatError, SystemInfo, TextDelta, ThinkingDelta, ToolResult, ToolUseStart
+from backend.providers.types import ChatDone, ChatError, ChatMessage, SystemInfo, TextDelta, ThinkingDelta, ToolResult, ToolUseStart
 from backend.session import load_session, save_session
 from backend.terminal.pty import PTYManager
 from backend.terminal.sessions import PTYSession, TerminalState, get_registry
@@ -276,10 +277,18 @@ class ConnectionHandler:
                         "Registered project-local provider '%s' (type=%s) from %s",
                         pc.name, pc.type, self._working_dir / ".cade" / "launch.yml",
                     )
+                elif pc.type == "websocket":
+                    provider = WebsocketProvider(pc, working_dir=self._working_dir)
+                    self._provider_registry.register(pc.name, provider)
+                    self._provider_registry._default = pc.name  # type: ignore[attr-defined]
+                    logger.info(
+                        "Registered project-local provider '%s' (type=%s) from %s",
+                        pc.name, pc.type, self._working_dir / ".cade" / "launch.yml",
+                    )
                 else:
                     logger.warning(
                         "launch.yml provider type '%s' not supported yet "
-                        "(only 'subprocess' for now); ignoring",
+                        "(only 'subprocess'/'websocket' for now); ignoring",
                         pc.type,
                     )
             except Exception as e:  # noqa: BLE001
@@ -391,6 +400,14 @@ class ConnectionHandler:
             except asyncio.CancelledError:
                 pass
             self._chat_task = None
+
+        # Close any long-lived provider connections (WebsocketProvider etc.)
+        if self._provider_registry is not None:
+            for provider in list(self._provider_registry._providers.values()):  # type: ignore[attr-defined]
+                try:
+                    await provider.stop()
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("provider.stop() failed: %s", e)
 
         # Clean up Neovim instance for this session
         if self._session_id is not None:
@@ -559,6 +576,185 @@ class ConnectionHandler:
             await self._dashboard.load_and_send_config()
             if self._dashboard.has_config:
                 await self._dashboard.load_and_send_data()
+
+        # Bootstrap a fresh chat session by running the provider's
+        # initial_command (if any) so the enhanced view shows the opening
+        # scene before the player types anything. Mirrors the padarax-cli
+        # REPL, which prints the scene description on startup.
+        await self._maybe_stream_initial_scene()
+
+        # Start the WebsocketProvider (if any) so its long-lived connection
+        # is up and unsolicited server-pushed frames (initial scene, idle
+        # ambient beats) land in chat without waiting for user input.
+        await self._maybe_start_websocket_provider()
+
+    async def _maybe_stream_initial_scene(self) -> None:
+        """If the default provider declares an initial_command and this
+        session has no chat history yet, stream the command's response
+        into chat as an assistant-only message."""
+        if self._provider_registry is None:
+            return
+        provider = self._provider_registry.get_default()
+        if not isinstance(provider, SubprocessProvider):
+            return
+        command = provider.initial_command
+        if not command:
+            return
+
+        session_key = str(self._session_id or id(self))
+        chat_registry = get_chat_registry()
+        chat_session = chat_registry.get(session_key)
+        if chat_session is not None and chat_session.has_messages():
+            # Session already has content — either history was replayed
+            # above, or the player has already interacted.
+            return
+        if chat_session is None:
+            chat_session = chat_registry.get_or_create(
+                session_key, provider_name=provider.name
+            )
+        self._chat_session = chat_session
+
+        self._chat_task = asyncio.create_task(
+            self._stream_initial_scene(provider, command)
+        )
+
+    async def _maybe_start_websocket_provider(self) -> None:
+        """Open the WebsocketProvider's long-lived connection and register
+        the unsolicited-event handler. Idempotent — start() is safe to call
+        more than once."""
+        if self._provider_registry is None:
+            return
+        provider = self._provider_registry.get_default()
+        if not isinstance(provider, WebsocketProvider):
+            return
+
+        session_key = str(self._session_id or id(self))
+        chat_registry = get_chat_registry()
+        if self._chat_session is None:
+            self._chat_session = chat_registry.get_or_create(
+                session_key, provider_name=provider.name
+            )
+
+        # Hand the server our session_id so it can key chat_messages and
+        # replay the transcript on reconnect. Stable across CADE backend
+        # restarts since self._session_id is persisted by the browser.
+        provider.set_session_id(session_key)
+        provider.set_event_handler(self._on_unsolicited_provider_event)
+        try:
+            await provider.start()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("WebsocketProvider failed to start: %s", e)
+            await self._send({
+                "type": MessageType.CHAT_STREAM,
+                "event": "error",
+                "message": f"Game server unreachable: {e}",
+            })
+
+    async def _on_unsolicited_provider_event(
+        self, event_type: str, payload: dict,
+    ) -> None:
+        """Callback for server-pushed frames with no paired user message.
+
+        `scene_update` — opening scene on fresh connect, idle-tick ambient
+        beats, NPC chatter. Rendered as an assistant-only chat message.
+
+        `chat_history` — transcript replay on resume. Rehydrates the
+        in-memory chat session and emits a single CHAT_HISTORY frame so
+        the frontend paints the full conversation."""
+        if self._closed:
+            return
+        if self._chat_session is None:
+            return
+
+        if event_type == "scene_update":
+            content = payload.get("content") or ""
+            if not content:
+                return
+            await self._send({
+                "type": MessageType.CHAT_STREAM,
+                "event": "text-delta",
+                "content": content,
+            })
+            await self._send({
+                "type": MessageType.CHAT_STREAM,
+                "event": "done",
+                "usage": None,
+                "cost": None,
+            })
+            self._chat_session.add_assistant_message(content)
+            return
+
+        if event_type == "chat_history":
+            messages = payload.get("messages") or []
+            if not messages:
+                return
+            # Rehydrate the in-memory session so future turns replay
+            # correctly and the frontend's CHAT_HISTORY render matches
+            # what's in the DB.
+            for m in messages:
+                role = m.get("role")
+                content = m.get("content") or ""
+                if not content:
+                    continue
+                if role == "user":
+                    self._chat_session.add_user_message(content)
+                else:
+                    self._chat_session.add_assistant_message(content)
+            await self._send({
+                "type": MessageType.CHAT_HISTORY,
+                "messages": [
+                    {"role": m.get("role"), "content": m.get("content") or ""}
+                    for m in messages
+                ],
+            })
+            return
+
+        logger.debug("unsolicited event ignored: %s", event_type)
+
+    async def _stream_initial_scene(self, provider, command: str) -> None:
+        """Stream `command` through the provider and append the response
+        as an assistant-only message. The command itself is NOT recorded
+        as a user message — it's a system-initiated bootstrap."""
+        if self._chat_session is None:
+            return
+
+        self._chat_session.start_response()
+        try:
+            messages = [ChatMessage(role="user", content=command)]
+            async for event in provider.stream_chat(messages):
+                if self._closed:
+                    break
+                if isinstance(event, TextDelta):
+                    self._chat_session.append_response_chunk(event.content)
+                    await self._send({
+                        "type": MessageType.CHAT_STREAM,
+                        "event": "text-delta",
+                        "content": event.content,
+                    })
+                elif isinstance(event, ChatDone):
+                    await self._send({
+                        "type": MessageType.CHAT_STREAM,
+                        "event": "done",
+                        "usage": event.usage,
+                        "cost": event.cost,
+                    })
+                elif isinstance(event, ChatError):
+                    await self._send({
+                        "type": MessageType.CHAT_STREAM,
+                        "event": "error",
+                        "message": event.message,
+                    })
+        except asyncio.CancelledError:
+            logger.debug("Initial-scene stream cancelled")
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Initial-scene stream error: %s", e)
+            await self._send({
+                "type": MessageType.CHAT_STREAM,
+                "event": "error",
+                "message": str(e),
+            })
+        finally:
+            self._chat_session.finish_response()
 
     async def _receive_loop(self) -> None:
         """Receive and handle messages from the client."""

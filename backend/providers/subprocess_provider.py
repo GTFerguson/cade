@@ -91,6 +91,10 @@ class SubprocessProvider(BaseProvider):
         self._state_file: str | None = extra.get("state_file") or None
         self._cwd: str | None = extra.get("cwd") or None
         self._timeout: float = float(extra.get("timeout", 120))
+        # Command to run on fresh-session bootstrap so the UI isn't blank
+        # before the player types anything. Mirrors the padarax-cli REPL
+        # behaviour of printing the scene on startup.
+        self._initial_command: str | None = extra.get("initial_command") or None
         extra_env_raw = extra.get("env") or {}
         self._extra_env: dict[str, str] = {
             str(k): str(v) for k, v in extra_env_raw.items()
@@ -105,6 +109,10 @@ class SubprocessProvider(BaseProvider):
     @property
     def model(self) -> str:
         return self._model
+
+    @property
+    def initial_command(self) -> str | None:
+        return self._initial_command
 
     def get_capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(

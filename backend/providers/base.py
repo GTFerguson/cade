@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import Any
 
 from backend.providers.types import ChatEvent, ChatMessage, ProviderCapabilities
+
+# (event_type, payload) — event_type is provider-defined ("connected",
+# "scene_update", "chat_history", etc); payload is the parsed JSON frame
+# minus the `type` field. Registered by the connection handler so
+# unsolicited server-pushed frames can land in chat as assistant-only
+# messages or history replays.
+UnsolicitedEventHandler = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 
 class BaseProvider(ABC):
@@ -43,3 +51,19 @@ class BaseProvider(ABC):
     def get_capabilities(self) -> ProviderCapabilities:
         """Return provider capabilities."""
         return ProviderCapabilities()
+
+    async def start(self) -> None:
+        """Open any persistent resources the provider needs (e.g. WebSocket
+        connection to a game server). Default: no-op for request/response
+        providers like SubprocessProvider and APIProvider."""
+        return
+
+    async def stop(self) -> None:
+        """Close any persistent resources. Default: no-op."""
+        return
+
+    def set_event_handler(self, handler: UnsolicitedEventHandler | None) -> None:
+        """Register a callback for unsolicited server-pushed events (frames
+        that aren't responses to a specific stream_chat call). Default: no-op;
+        providers that don't emit unsolicited events can ignore this."""
+        return

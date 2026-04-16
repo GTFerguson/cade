@@ -9,6 +9,7 @@ from backend.providers.base import BaseProvider
 from backend.providers.claude_code_provider import ClaudeCodeProvider
 from backend.providers.config import ProvidersConfig
 from backend.providers.subprocess_provider import SubprocessProvider
+from backend.providers.websocket_provider import WebsocketProvider
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,8 @@ class ProviderRegistry:
                 provider_type = "claude-code"
             elif isinstance(provider, SubprocessProvider):
                 provider_type = "subprocess"
+            elif isinstance(provider, WebsocketProvider):
+                provider_type = "websocket"
             else:
                 provider_type = "api"
             result.append({
