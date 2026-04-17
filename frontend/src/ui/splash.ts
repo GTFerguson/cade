@@ -17,6 +17,7 @@ import {
   runLoadIn,
   runDismiss,
 } from "./splash-effects";
+import { renderSignInButton } from "../auth/googleAuth";
 
 export interface SplashOption {
   label: string;
@@ -271,6 +272,48 @@ export class Splash {
     this.element.appendChild(helpEl);
 
     input.focus();
+  }
+
+  /**
+   * Switch to Google auth mode: show a Sign In with Google button.
+   *
+   * Used when VITE_GOOGLE_CLIENT_ID is set and the app requires per-user
+   * Google identity rather than a shared token. On successful sign-in,
+   * calls onToken with the Google id_token.
+   */
+  setGoogleAuthMode(clientId: string, onToken: (idToken: string) => void): void {
+    this.options = null;
+    this.optionEls = [];
+    this.authActive = true;
+    this.ready = true;
+
+    // Clear any existing content from prior modes
+    this.statusEl.style.display = "none";
+    this.element.querySelector(".splash-options")?.remove();
+    this.element.querySelector(".splash-help")?.remove();
+    this.element.querySelector(".splash-progress")?.remove();
+    this.element.querySelector(".splash-auth-content")?.remove();
+    this.element.querySelector(".splash-google-auth-content")?.remove();
+
+    const container = document.createElement("div");
+    container.className = "splash-google-auth-content";
+
+    const msgEl = document.createElement("div");
+    msgEl.className = "auth-message";
+    msgEl.textContent = "sign in with google";
+    container.appendChild(msgEl);
+
+    // GIS renders its own button DOM into this div
+    const buttonContainer = document.createElement("div");
+    buttonContainer.className = "google-signin-button";
+    container.appendChild(buttonContainer);
+
+    this.element.appendChild(container);
+
+    // Render the GIS button; on success store the token and call back
+    renderSignInButton(buttonContainer, clientId, (idToken) => {
+      onToken(idToken);
+    });
   }
 
   /**

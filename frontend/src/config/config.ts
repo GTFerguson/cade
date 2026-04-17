@@ -91,4 +91,10 @@ export const config = {
    * LocalStorage key for layout preferences.
    */
   layoutStorageKey: "cade-layout",
+
+  /**
+   * Google OAuth client ID, or undefined when Google auth is not configured.
+   * Set VITE_GOOGLE_CLIENT_ID in the environment to enable Google Sign-In.
+   */
+  googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined,
 } as const;
