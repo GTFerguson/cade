@@ -9,7 +9,7 @@
 
 import type { Component } from "./types";
 import { getUserConfig, parseKeybinding } from "../config/user-config";
-import { renderHelpBar } from "./menu-nav";
+import { renderHelpBar } from "@core/ui/menu-nav";
 
 // ─── Label Maps ──────────────────────────────────────────────────────
 

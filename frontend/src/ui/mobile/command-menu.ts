@@ -9,7 +9,7 @@
  * Uses MenuNav for vim-style keyboard navigation.
  */
 
-import { MenuNav, escapeHtml } from "../menu-nav";
+import { MenuNav, escapeHtml } from "@core/ui/menu-nav";
 import type { MobileScreen } from "./screen-manager";
 import { setupSwipeBack } from "./swipe-back";
 

@@ -10,7 +10,7 @@
  * On mobile (≤768px), uses a narrower box-drawing logo and scramble effects.
  */
 
-import { MenuNav, renderHelpBar } from "./menu-nav";
+import { MenuNav, renderHelpBar } from "@core/ui/menu-nav";
 import {
   CADE_LOGO,
   CADE_LOGO_MOBILE,

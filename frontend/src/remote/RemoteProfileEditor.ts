@@ -1,6 +1,6 @@
 import type { RemoteProfile } from "./types";
 import { RemoteProfileManager } from "./profile-manager";
-import { MenuNav } from "../ui/menu-nav";
+import { MenuNav } from "@core/ui/menu-nav";
 import { pickFile, getUserHomePath } from "@core/platform/tauri-bridge";
 import { buildSshTunnelProfile, buildDirectProfile } from "./profile-utils";
 import { normalizeUrl } from "@core/platform/url-utils";

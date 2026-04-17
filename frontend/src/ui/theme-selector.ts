@@ -7,7 +7,7 @@
  */
 
 import { themes, getSavedThemeId, applyTheme, type Theme } from "../config/themes";
-import { MenuNav, renderHelpBar } from "./menu-nav";
+import { MenuNav, renderHelpBar } from "@core/ui/menu-nav";
 
 export class ThemeSelector {
   private overlay: HTMLElement | null = null;
