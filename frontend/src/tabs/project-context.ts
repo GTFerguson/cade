@@ -327,6 +327,10 @@ export class ProjectContextImpl implements IProjectContext {
       this.rightPane?.getDashboardPane()?.clearConfig();
       this.dashboardFullPane?.clearConfig();
     });
+    this.ws.on("dashboard-focus-view", (msg) => {
+      this.rightPane?.getDashboardPane()?.focusView(msg.view_id);
+      this.dashboardFullPane?.focusView(msg.view_id);
+    });
 
     // Agent-pushed panels
     this.ws.on("dashboard-push-panel", (msg) => {

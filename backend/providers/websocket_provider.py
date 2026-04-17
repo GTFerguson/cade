@@ -312,5 +312,9 @@ class WebsocketProvider(BaseProvider):
                 await handler("scene_update", {"content": content})
         elif ftype == "chat_history":
             await handler("chat_history", {"messages": frame.get("messages") or []})
+        elif ftype == "dashboard_focus":
+            view_id = frame.get("view_id") or ""
+            if view_id:
+                await handler("dashboard_focus", {"view_id": view_id})
         else:
             logger.debug("WS provider '%s' unhandled frame type: %s", self._name, ftype)

@@ -240,6 +240,19 @@ export class DashboardPane implements Component {
     this.renderView(viewId);
   }
 
+  /** Programmatic tab switch, driven by a server-pushed
+   * `dashboard_focus` frame (e.g. engine signalling "a barter
+   * session just opened, focus the Barter tab"). Silently no-ops
+   * if the view id isn't declared by the current config — the
+   * engine should only name views that exist, but a stale config
+   * shouldn't crash. */
+  focusView(viewId: string): void {
+    if (!this.config) return;
+    const exists = this.config.views.some((v) => v.id === viewId);
+    if (!exists) return;
+    this.activateView(viewId);
+  }
+
   // -------------------------------------------------------------------
   // Rendering
   // -------------------------------------------------------------------
