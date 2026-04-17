@@ -1,4 +1,4 @@
-import { getUserConfig, matchesKeybinding } from "../config/user-config";
+import { matchesKeybinding } from "@core/input/bindings";
 
 const SCROLL_LINE_HEIGHT = 40;
 const SCROLL_PAGE_FACTOR = 0.8;
@@ -11,6 +11,11 @@ export function createScrollState(): ScrollState {
   return { lastGPress: 0 };
 }
 
+export interface ScrollBindings {
+  scrollToTop: string;
+  scrollToBottom: string;
+}
+
 /**
  * Handle view mode scroll keys.
  * Returns true if the key was handled.
@@ -19,10 +24,9 @@ export function handleViewModeScroll(
   e: KeyboardEvent,
   container: HTMLElement,
   state: ScrollState,
-  scrollCodeBlocks: (direction: "left" | "right") => void
+  scrollCodeBlocks: (direction: "left" | "right") => void,
+  bindings: ScrollBindings
 ): boolean {
-  const nav = getUserConfig().keybindings.navigation;
-
   switch (e.key) {
     case "j":
     case "ArrowDown":
@@ -53,10 +57,10 @@ export function handleViewModeScroll(
   }
 
   // Navigation keybindings (configurable)
-  if (matchesKeybinding(e, nav.scrollToTop)) {
+  if (matchesKeybinding(e, bindings.scrollToTop)) {
     return handleScrollToTopKey(container, state);
   }
-  if (matchesKeybinding(e, nav.scrollToBottom)) {
+  if (matchesKeybinding(e, bindings.scrollToBottom)) {
     container.scrollTo(0, container.scrollHeight);
     return true;
   }

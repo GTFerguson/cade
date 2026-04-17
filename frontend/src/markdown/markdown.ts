@@ -21,6 +21,7 @@ import { renderCode } from "./code-highlight";
 import { wikiLinkExtension, attachWikiLinkHandlers } from "./wiki-links";
 import { handleViewModeScroll, scrollCodeBlocksHorizontally, createScrollState } from "./scroll";
 import type { ScrollState } from "./scroll";
+import { getUserConfig } from "../config/user-config";
 import {
   createEditorModeState,
   handleNormalModeKey,
@@ -349,11 +350,13 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
         return true;
       }
       if (!this.contentContainer) return false;
+      const nav = getUserConfig().keybindings.navigation;
       return handleViewModeScroll(
         e,
         this.contentContainer,
         this.scrollState,
-        (dir) => scrollCodeBlocksHorizontally(this.contentContainer, dir)
+        (dir) => scrollCodeBlocksHorizontally(this.contentContainer, dir),
+        { scrollToTop: nav.scrollToTop, scrollToBottom: nav.scrollToBottom }
       );
     }
 
