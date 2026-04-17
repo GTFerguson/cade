@@ -32,9 +32,9 @@ from typing import Any
 import websockets
 from websockets.asyncio.client import ClientConnection
 
-from backend.providers.base import BaseProvider, UnsolicitedEventHandler
-from backend.providers.config import ProviderConfig
-from backend.providers.types import (
+from core.backend.providers.base import BaseProvider, UnsolicitedEventHandler
+from core.backend.providers.config import ProviderConfig
+from core.backend.providers.types import (
     ChatDone,
     ChatError,
     ChatEvent,

@@ -21,9 +21,9 @@ from backend.launch_preset import (
     extract_provider_config,
     load_launch_preset,
 )
-from backend.providers.config import ProviderConfig
-from backend.providers.subprocess_provider import SubprocessProvider
-from backend.providers.websocket_provider import WebsocketProvider
+from core.backend.providers.config import ProviderConfig
+from core.backend.providers.subprocess_provider import SubprocessProvider
+from core.backend.providers.websocket_provider import WebsocketProvider
 from backend.terminal.connections import get_connection_manager
 from backend.connection_registry import get_connection_registry
 from backend.errors import CADEError, ProtocolError
@@ -38,10 +38,10 @@ from backend.files.tree import (
 from backend.files.watcher import FileWatcher
 from backend.neovim.manager import get_neovim_manager
 from backend.protocol import ErrorCode, MessageType, SessionKey
-from backend.providers.config import get_providers_config
+from core.backend.providers.config import get_providers_config
 from backend.providers.registry import ProviderRegistry
 from backend.providers.claude_code_provider import ClaudeCodeProvider
-from backend.providers.types import ChatDone, ChatError, ChatMessage, SystemInfo, TextDelta, ThinkingDelta, ToolResult, ToolUseStart
+from core.backend.providers.types import ChatDone, ChatError, ChatMessage, SystemInfo, TextDelta, ThinkingDelta, ToolResult, ToolUseStart
 from backend.session import load_session, save_session
 from backend.terminal.pty import PTYManager
 from backend.terminal.sessions import PTYSession, TerminalState, get_registry

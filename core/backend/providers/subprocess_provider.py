@@ -41,9 +41,9 @@ import shlex
 from collections.abc import AsyncIterator
 from pathlib import Path
 
-from backend.providers.base import BaseProvider
-from backend.providers.config import ProviderConfig
-from backend.providers.types import (
+from core.backend.providers.base import BaseProvider
+from core.backend.providers.config import ProviderConfig
+from core.backend.providers.types import (
     ChatDone,
     ChatError,
     ChatEvent,

@@ -6,7 +6,7 @@ import logging
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
-from backend.providers.types import ChatMessage
+from core.backend.providers.types import ChatMessage
 
 logger = logging.getLogger(__name__)
 

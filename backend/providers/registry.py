@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import logging
 
-from backend.providers.api_provider import APIProvider
-from backend.providers.base import BaseProvider
+from core.backend.providers.api_provider import APIProvider
+from core.backend.providers.base import BaseProvider
 from backend.providers.claude_code_provider import ClaudeCodeProvider
-from backend.providers.config import ProvidersConfig
-from backend.providers.subprocess_provider import SubprocessProvider
-from backend.providers.websocket_provider import WebsocketProvider
+from core.backend.providers.config import ProvidersConfig
+from core.backend.providers.subprocess_provider import SubprocessProvider
+from core.backend.providers.websocket_provider import WebsocketProvider
 
 logger = logging.getLogger(__name__)
 

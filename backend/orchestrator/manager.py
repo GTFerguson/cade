@@ -12,8 +12,8 @@ from typing import Any
 from backend.orchestrator.models import AgentRecord, AgentSpec, AgentState
 from backend.protocol import MessageType
 from backend.providers.claude_code_provider import ClaudeCodeProvider
-from backend.providers.config import ProviderConfig
-from backend.providers.types import (
+from core.backend.providers.config import ProviderConfig
+from core.backend.providers.types import (
     ChatDone,
     ChatError,
     ChatMessage,

@@ -8,7 +8,7 @@ from textwrap import dedent
 
 import pytest
 
-from backend.providers.config import load_providers_config
+from core.backend.providers.config import load_providers_config
 
 
 @pytest.fixture

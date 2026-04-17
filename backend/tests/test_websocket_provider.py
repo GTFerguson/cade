@@ -16,9 +16,9 @@ from typing import Any
 import pytest
 import websockets
 
-from backend.providers.config import ProviderConfig
-from backend.providers.types import ChatDone, ChatError, ChatMessage, TextDelta
-from backend.providers.websocket_provider import WebsocketProvider
+from core.backend.providers.config import ProviderConfig
+from core.backend.providers.types import ChatDone, ChatError, ChatMessage, TextDelta
+from core.backend.providers.websocket_provider import WebsocketProvider
 
 # --- Test-server fixture ----------------------------------------------------
 

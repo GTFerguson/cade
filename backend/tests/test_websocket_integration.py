@@ -582,9 +582,9 @@ class TestWebsocketProviderIntegration:
         fake.start.assert_not_called()
 
     async def test_maybe_start_sends_error_frame_on_connect_failure(self):
-        from backend.providers.config import ProviderConfig
+        from core.backend.providers.config import ProviderConfig
         from backend.providers.registry import ProviderRegistry
-        from backend.providers.websocket_provider import WebsocketProvider
+        from core.backend.providers.websocket_provider import WebsocketProvider
 
         handler, sent = self._make_handler()
         registry = ProviderRegistry()

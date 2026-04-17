@@ -24,7 +24,7 @@ from backend.dashboard.config import (
 )
 from backend.models import FileChangeEvent
 from backend.protocol import MessageType
-from backend.providers.base import BaseProvider
+from core.backend.providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
 

@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from backend.providers.config import ProviderConfig, ProvidersConfig
+from core.backend.providers.config import ProviderConfig, ProvidersConfig
 from backend.providers.registry import ProviderRegistry
-from backend.providers.types import ChatDone, ChatError, TextDelta
+from core.backend.providers.types import ChatDone, ChatError, TextDelta
 
 
 class MockWebSocket:

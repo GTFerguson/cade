@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
-from backend.providers.types import ChatEvent, ChatMessage, ProviderCapabilities
+from core.backend.providers.types import ChatEvent, ChatMessage, ProviderCapabilities
 
 # (event_type, payload) — event_type is provider-defined ("connected",
 # "scene_update", "chat_history", etc); payload is the parsed JSON frame

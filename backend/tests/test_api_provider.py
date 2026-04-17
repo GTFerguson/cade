@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from backend.providers.api_provider import APIProvider
-from backend.providers.config import ProviderConfig
-from backend.providers.types import ChatDone, ChatError, ChatMessage, TextDelta
+from core.backend.providers.api_provider import APIProvider
+from core.backend.providers.config import ProviderConfig
+from core.backend.providers.types import ChatDone, ChatError, ChatMessage, TextDelta
 
 
 @pytest.fixture
@@ -64,7 +64,7 @@ async def test_stream_chat_yields_text_deltas(provider: APIProvider):
         MockChunk(None),  # Final chunk with no content
     ]
 
-    with patch("backend.providers.api_provider.litellm") as mock_litellm:
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm:
         mock_litellm.acompletion = AsyncMock(
             return_value=MockStreamResponse(chunks)
         )
@@ -87,7 +87,7 @@ async def test_stream_chat_yields_text_deltas(provider: APIProvider):
 @pytest.mark.asyncio
 async def test_stream_chat_handles_error(provider: APIProvider):
     """Test that errors produce ChatError events."""
-    with patch("backend.providers.api_provider.litellm") as mock_litellm:
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm:
         mock_litellm.acompletion = AsyncMock(
             side_effect=Exception("API rate limited")
         )
@@ -107,7 +107,7 @@ async def test_stream_chat_includes_system_prompt(provider: APIProvider):
     """Test that system prompt is prepended to messages."""
     chunks = [MockChunk("OK")]
 
-    with patch("backend.providers.api_provider.litellm") as mock_litellm:
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm:
         mock_litellm.acompletion = AsyncMock(
             return_value=MockStreamResponse(chunks)
         )
