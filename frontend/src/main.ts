@@ -24,6 +24,7 @@ import { RemoteProjectSelector } from "./remote/RemoteProjectSelector";
 import { Splash } from "./ui/splash";
 import type { RemoteProfile } from "./remote/types";
 import { getAuthToken, setAuthToken } from "./auth/tokenManager";
+import { getStoredIdToken, setStoredIdToken } from "./auth/googleAuth";
 
 class App {
   private tabManager: TabManager;
@@ -526,7 +527,30 @@ class App {
     }
 
     tab.ws.sendSetProject(tab.projectPath, tab.id);
-    tab.ws.connect();
+
+    // When Google Sign-In is configured, obtain an id_token before opening
+    // the WebSocket so it can be forwarded to the game server in the hello frame.
+    if (config.googleClientId) {
+      const storedToken = getStoredIdToken();
+      if (storedToken) {
+        // Token already present (same session page reload) — connect immediately
+        tab.ws.setGoogleIdToken(storedToken);
+        tab.ws.connect();
+      } else if (this.startSplash?.isVisible()) {
+        // Show the Google Sign-In button in the splash; connect once the user signs in
+        this.startSplash.setGoogleAuthMode(config.googleClientId, (idToken) => {
+          setStoredIdToken(idToken);
+          tab.ws.setGoogleIdToken(idToken);
+          tab.ws.connect();
+        });
+      } else {
+        // No splash visible (e.g. extra tab opened) — connect anyway; the
+        // google_token from sessionStorage will be picked up inside connect()
+        tab.ws.connect();
+      }
+    } else {
+      tab.ws.connect();
+    }
 
     // Set up terminal key handler for prefix key interception
     context.setTerminalKeyHandler((e) => {

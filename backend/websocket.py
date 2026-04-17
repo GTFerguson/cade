@@ -54,6 +54,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _extract_google_token(query_string: str) -> str | None:
+    """Extract the google_token parameter from a WebSocket query string."""
+    if not query_string:
+        return None
+    for part in query_string.split("&"):
+        if "=" in part:
+            key, value = part.split("=", 1)
+            if key == "google_token":
+                from urllib.parse import unquote_plus
+                return unquote_plus(value) or None
+    return None
+
+
 class ConnectionHandler:
     """Handles a single WebSocket connection."""
 
@@ -84,6 +97,9 @@ class ConnectionHandler:
         self._chat_task: asyncio.Task | None = None
         self._provider_registry: ProviderRegistry | None = None
         self._dashboard: "DashboardHandler | None" = None
+        # Google id_token extracted from the WS query string; forwarded to the
+        # game server in the hello frame via WebsocketProvider.set_auth_token().
+        self._google_token: str | None = None
 
     async def _send_status(self, message: str) -> None:
         """Send a startup status message."""
@@ -97,6 +113,7 @@ class ConnectionHandler:
         # Validate auth token before accepting WebSocket connection
         query_string = self._ws.scope.get("query_string", b"").decode("utf-8")
         token = extract_token_from_query(query_string)
+        self._google_token = _extract_google_token(query_string)
 
         if not validate_token(token, cfg=self._config):
             logger.warning("WebSocket connection rejected: invalid or missing auth token")
@@ -653,6 +670,8 @@ class ConnectionHandler:
         # replay the transcript on reconnect. Stable across CADE backend
         # restarts since self._session_id is persisted by the browser.
         provider.set_session_id(session_key)
+        if self._google_token:
+            provider.set_auth_token(self._google_token)
         provider.set_event_handler(self._on_unsolicited_provider_event)
         try:
             await provider.start()
