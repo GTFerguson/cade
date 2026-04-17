@@ -741,6 +741,15 @@ class ConnectionHandler:
             self._chat_session.add_assistant_message(content)
             return
 
+        if event_type == "dashboard_focus":
+            view_id = payload.get("view_id") or ""
+            if view_id:
+                await self._send({
+                    "type": MessageType.DASHBOARD_FOCUS_VIEW,
+                    "view_id": view_id,
+                })
+            return
+
         if event_type == "chat_history":
             messages = payload.get("messages") or []
             if not messages:

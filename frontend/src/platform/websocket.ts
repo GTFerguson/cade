@@ -70,6 +70,7 @@ interface WebSocketEvents {
   "dashboard-config": DashboardConfigMessage;
   "dashboard-data": DashboardDataMessage;
   "dashboard-cleared": DashboardClearedMessage;
+  "dashboard-focus-view": { type: string; view_id: string };
   "dashboard-push-panel": { type: string; panel: { id: string; title: string; component: string }; data: Record<string, unknown>[] };
   "notification": { type: string; message: string; style: string };
   error: ErrorMessage;

@@ -62,6 +62,20 @@ The protocol is defined in `backend/protocol.py` (server) and `frontend/src/plat
 | `neovim-rpc-response` | S->C | `{ requestId, result?, error? }` | RPC response |
 | `neovim-exited` | S->C | `{ exitCode }` | Neovim exited |
 
+## Dashboard
+
+See [[dashboard-interactive-primitives]] for the end-to-end design. Message shapes:
+
+| Type | Direction | Payload | Description |
+|------|-----------|---------|-------------|
+| `dashboard-get-config` | C->S | `{}` | Request dashboard config |
+| `dashboard-get-data` | C->S | `{ sourceId? }` | Request a fresh source snapshot |
+| `dashboard-action` | C->S | `{ action, source, entityId?, patch?, message? }` | User interaction. `action: "patch"` applies `patch` to the named source via `DashboardHandler._apply_patch`. `action: "provider_message"` forwards `message` through the active provider's `send_frame` to the engine. |
+| `dashboard-config` | S->C | `{ config }` | Config payload (views, panels, data sources) |
+| `dashboard-data` | S->C | `{ sources }` | Data payload keyed by source name |
+| `dashboard-cleared` | S->C | `{}` | Config removed |
+| `dashboard-focus-view` | S->C | `{ view_id }` | Programmatic tab switch. Frontend switches if `view_id` is declared by the current config; silent no-op otherwise. Typically emitted when the provider's server pushes a `dashboard_focus` frame. |
+
 ## Errors
 
 | Type | Direction | Payload | Description |
