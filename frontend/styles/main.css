@@ -4,9 +4,9 @@
  * Vite inlines @import at build time — no runtime cost.
  */
 
-/* Foundation */
-@import "./base/variables.css";
-@import "./base/reset.css";
+/* Foundation (shared with other @core consumers) */
+@import "../../core/frontend/styles/base/variables.css";
+@import "../../core/frontend/styles/base/reset.css";
 
 /* Structure */
 @import "./layout/structure.css";

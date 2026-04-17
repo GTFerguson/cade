@@ -21,6 +21,17 @@ export default defineConfig({
     alias: {
       "mertex.md": resolve(__dirname, "../mertex.md/dist/mertex.esm.js"),
       "@core": resolve(__dirname, "../core/frontend"),
+      // core/frontend files live outside frontend/, so Rollup's default
+      // node_modules walk from core/ won't find Tauri packages installed
+      // here. Map them explicitly.
+      "@tauri-apps/plugin-dialog": resolve(
+        __dirname,
+        "node_modules/@tauri-apps/plugin-dialog"
+      ),
+      "@tauri-apps/api/window": resolve(
+        __dirname,
+        "node_modules/@tauri-apps/api/window.js"
+      ),
     },
   },
   server: {
