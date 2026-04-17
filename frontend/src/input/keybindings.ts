@@ -8,10 +8,10 @@
 import type { Component } from "../types";
 import {
   getUserConfig,
-  matchesKeybinding,
-  parseKeybinding,
   type KeybindingsConfig,
 } from "../config/user-config";
+import { matchesKeybinding, parseKeybinding } from "@core/input/bindings";
+import { PrefixController } from "@core/input/prefix-controller";
 
 export type PaneType = "file-tree" | "terminal" | "viewer" | "chat";
 
@@ -71,17 +71,22 @@ export interface PaneKeyHandler {
 }
 
 export class KeybindingManager implements Component {
-  private prefixActive = false;
-  private prefixTimeout: number | null = null;
   private callbacks: KeybindingCallbacks | null = null;
   private boundHandleKeydown: (e: KeyboardEvent) => void;
   private boundHandleKeyup: (e: KeyboardEvent) => void;
-  private prefixKeyHeld = false;
-  private prefixUsedWhileHeld = false;
+  private readonly prefix: PrefixController;
 
   constructor() {
     this.boundHandleKeydown = this.handleKeydown.bind(this);
     this.boundHandleKeyup = this.handleKeyup.bind(this);
+    this.prefix = new PrefixController({
+      getTimeout: () => this.getPrefixTimeout(),
+      onChange: (active) => {
+        if (active) {
+          console.log("[keybindings] Prefix mode activated");
+        }
+      },
+    });
   }
 
   /**
@@ -128,7 +133,7 @@ export class KeybindingManager implements Component {
    * Check if prefix mode is currently active.
    */
   isPrefixActive(): boolean {
-    return this.prefixActive;
+    return this.prefix.isActive();
   }
 
   /**
@@ -159,16 +164,15 @@ export class KeybindingManager implements Component {
       if (isInput && !target.dataset.kbPrefix) {
         return;
       }
-      this.prefixKeyHeld = true;
-      this.prefixUsedWhileHeld = false;
-      this.activatePrefix();
+      this.prefix.keyHeld();
+      this.prefix.activate();
       e.preventDefault();
       e.stopPropagation();
       return;
     }
 
     // If prefix active, handle global shortcuts
-    if (this.prefixActive) {
+    if (this.prefix.isActive()) {
       this.handlePrefixShortcut(e);
       e.stopPropagation();
       return;
@@ -247,70 +251,14 @@ export class KeybindingManager implements Component {
   }
 
   /**
-   * Activate prefix mode with timeout.
-   */
-  private activatePrefix(): void {
-    this.prefixActive = true;
-    this.clearPrefixTimeout();
-    console.log("[keybindings] Prefix mode activated");
-    this.prefixTimeout = window.setTimeout(() => {
-      this.deactivatePrefix();
-    }, this.getPrefixTimeout());
-  }
-
-  /**
-   * Deactivate prefix mode.
-   */
-  private deactivatePrefix(): void {
-    this.prefixActive = false;
-    this.clearPrefixTimeout();
-  }
-
-  /**
-   * Clear the prefix timeout.
-   */
-  private clearPrefixTimeout(): void {
-    if (this.prefixTimeout !== null) {
-      window.clearTimeout(this.prefixTimeout);
-      this.prefixTimeout = null;
-    }
-  }
-
-  /**
    * Check if a key matches a configured binding (for use after prefix).
-   * Binding format: "h" for simple key, "C-h" for Ctrl+h, etc.
-   * When prefix key is held, Ctrl modifier is ignored (it comes from the held prefix).
+   * When prefix key is held, Ctrl modifier is ignored (it comes from the
+   * held prefix) — delegated to core's matchesKeybinding via ignoreCtrl.
    */
   private matchesBinding(e: KeyboardEvent, binding: string): boolean {
-    const parsed = parseKeybinding(binding);
-
-    // When prefix key is held, ignore Ctrl (it's from the prefix, not the shortcut)
-    const effectiveCtrl = this.prefixKeyHeld ? false : e.ctrlKey;
-
-    // For shift: only enforce if binding explicitly uses S- prefix.
-    // Characters like ?, G, ! inherently require shift to type, so we
-    // shouldn't require shiftKey to match for single-character bindings.
-    const shiftMatches = parsed.shift ? e.shiftKey : true;
-
-    const matches = (
-      effectiveCtrl === parsed.ctrl &&
-      e.altKey === parsed.alt &&
-      shiftMatches &&
-      e.metaKey === parsed.meta &&
-      e.key === parsed.key
-    );
-
-    if (binding === "C" || binding === "c") {
-      console.log("[CADE] matchesBinding check:", {
-        binding,
-        eventKey: e.key,
-        parsedKey: parsed.key,
-        keyMatch: e.key === parsed.key,
-        matches
-      });
-    }
-
-    return matches;
+    return matchesKeybinding(e, binding, {
+      ignoreCtrl: this.prefix.isKeyHeld(),
+    });
   }
 
   /**
@@ -340,7 +288,7 @@ export class KeybindingManager implements Component {
     }
 
     // Don't process simple keys if Ctrl is still held (except when prefix key is held)
-    if (e.ctrlKey && !this.prefixKeyHeld) {
+    if (e.ctrlKey && !this.prefix.isKeyHeld()) {
       this.onPrefixShortcutUsed();
       return;
     }
@@ -500,16 +448,9 @@ export class KeybindingManager implements Component {
 
   /**
    * Called after a prefix shortcut is used.
-   * Tracks usage for hold mode and deactivates for tap mode.
    */
   private onPrefixShortcutUsed(): void {
-    if (this.prefixKeyHeld) {
-      // Hold mode: allow more shortcuts while held
-      this.prefixUsedWhileHeld = true;
-    } else {
-      // Tap flow: one shortcut only
-      this.deactivatePrefix();
-    }
+    this.prefix.notifyShortcutUsed();
   }
 
   /**
@@ -517,24 +458,19 @@ export class KeybindingManager implements Component {
    */
   private handleKeyup(e: KeyboardEvent): void {
     if (this.isPrefixKeyRelease(e)) {
-      this.prefixKeyHeld = false;
-      if (this.prefixUsedWhileHeld) {
-        // User used shortcuts while holding - immediately deactivate
-        this.deactivatePrefix();
-      }
-      // If not used while held, timeout handles deactivation (tap-then-shortcut flow)
+      this.prefix.keyReleased();
     }
   }
 
   /**
-   * Check if a keyup event is for the prefix key.
+   * Check if a keyup event is for the prefix key. We match on the key
+   * character alone (case-insensitive) because modifier release order is
+   * not guaranteed and the user may have already lifted Ctrl before the
+   * character key.
    */
   private isPrefixKeyRelease(e: KeyboardEvent): boolean {
     const prefix = this.getConfig().global.prefix;
     const parsed = parseKeybinding(prefix);
-    // For keyup, we check if the released key matches the prefix key character
-    // The modifiers may or may not be present depending on release order
-    // Use case-insensitive comparison for the prefix key
     return e.key.toLowerCase() === parsed.key.toLowerCase();
   }
 
@@ -544,6 +480,6 @@ export class KeybindingManager implements Component {
   dispose(): void {
     document.removeEventListener("keydown", this.boundHandleKeydown, true);
     document.removeEventListener("keyup", this.boundHandleKeyup, true);
-    this.clearPrefixTimeout();
+    this.prefix.dispose();
   }
 }

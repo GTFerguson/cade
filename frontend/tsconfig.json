@@ -22,7 +22,8 @@
 
     "baseUrl": ".",
     "paths": {
-      "@core/*": ["../core/frontend/*"]
+      "@core/*": ["../core/frontend/*"],
+      "vitest": ["./node_modules/vitest"]
     }
   },
   "include": ["src", "../core/frontend"]

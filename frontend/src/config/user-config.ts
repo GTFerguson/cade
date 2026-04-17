@@ -4,6 +4,9 @@
  * Mirrors backend/user_config.py structure for TypeScript.
  */
 
+export { parseKeybinding, matchesKeybinding } from "@core/input/bindings";
+export type { ParsedKeybinding, MatchOptions } from "@core/input/bindings";
+
 /**
  * Color theme configuration.
  */
@@ -367,65 +370,3 @@ export function applyAppearanceConfig(appearance: AppearanceConfig): void {
   console.log("[user-config] Applied appearance configuration");
 }
 
-/**
- * Parse a keybinding string like "C-a" or "C-h" into its components.
- */
-export function parseKeybinding(binding: string): {
-  ctrl: boolean;
-  alt: boolean;
-  shift: boolean;
-  meta: boolean;
-  key: string;
-} {
-  const result = {
-    ctrl: false,
-    alt: false,
-    shift: false,
-    meta: false,
-    key: "",
-  };
-
-  const parts = binding.split("-");
-
-  for (let i = 0; i < parts.length - 1; i++) {
-    const modifier = parts[i]?.toUpperCase();
-    switch (modifier) {
-      case "C":
-        result.ctrl = true;
-        break;
-      case "A":
-        result.alt = true;
-        break;
-      case "S":
-        result.shift = true;
-        break;
-      case "M":
-        result.meta = true;
-        break;
-    }
-  }
-
-  const lastPart = parts[parts.length - 1];
-  // Keep original case - don't lowercase
-  result.key = lastPart ?? "";
-
-  return result;
-}
-
-/**
- * Check if a keyboard event matches a keybinding string.
- */
-export function matchesKeybinding(e: KeyboardEvent, binding: string): boolean {
-  const parsed = parseKeybinding(binding);
-
-  // For shift: only enforce if binding explicitly uses S- prefix
-  const shiftMatches = parsed.shift ? e.shiftKey : true;
-
-  return (
-    e.ctrlKey === parsed.ctrl &&
-    e.altKey === parsed.alt &&
-    shiftMatches &&
-    e.metaKey === parsed.meta &&
-    e.key === parsed.key
-  );
-}
