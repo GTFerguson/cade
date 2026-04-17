@@ -2,7 +2,7 @@ import type { RemoteProfile, SavedProject } from "./types";
 import { RemoteProfileManager } from "./profile-manager";
 import { RemoteProfileEditor } from "./RemoteProfileEditor";
 import { WebSocketClient } from "../platform/websocket";
-import { toWebSocketUrl } from "../platform/url-utils";
+import { toWebSocketUrl } from "@core/platform/url-utils";
 import { MenuNav, escapeHtml } from "../ui/menu-nav";
 import { buildTunnelArgs, computeParentPath, filterDirectories, sortProjectsByLastUsed, getProfileDisplayMeta } from "./profile-utils";
 import type { FileNode } from "../types";

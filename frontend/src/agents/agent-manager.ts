@@ -6,7 +6,7 @@
  */
 
 import { ChatPane } from "../chat/chat-pane";
-import { wrapIndex } from "../nav";
+import { wrapIndex } from "@core/nav";
 import type { Component, ChatStreamMessage } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 

@@ -10,7 +10,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { PaneKeyHandler } from "../input/keybindings";
 import type { Component, ErrorMessage, NeovimExitedMessage, NeovimOutputMessage, NeovimReadyMessage } from "../types";
-import { ErrorCode } from "../platform/protocol";
+import { ErrorCode } from "@core/platform/protocol";
 import type { WebSocketClient } from "../platform/websocket";
 
 type NeovimPaneState = "idle" | "starting" | "ready" | "exited" | "error";

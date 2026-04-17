@@ -1,9 +1,9 @@
 import type { RemoteProfile } from "./types";
 import { RemoteProfileManager } from "./profile-manager";
 import { MenuNav } from "../ui/menu-nav";
-import { pickFile, getUserHomePath } from "../platform/tauri-bridge";
+import { pickFile, getUserHomePath } from "@core/platform/tauri-bridge";
 import { buildSshTunnelProfile, buildDirectProfile } from "./profile-utils";
-import { normalizeUrl } from "../platform/url-utils";
+import { normalizeUrl } from "@core/platform/url-utils";
 
 function generateId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {

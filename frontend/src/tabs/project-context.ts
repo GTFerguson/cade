@@ -8,14 +8,14 @@
 import { AgentManager, type AgentState } from "../agents";
 import { FileTree } from "../file-tree";
 import type { PaneKeyHandler, PaneType } from "../input/keybindings";
-import { wrapIndex } from "../nav";
+import { wrapIndex } from "@core/nav";
 import { Layout } from "../ui/layout";
 import { MarkdownViewer } from "../markdown/markdown";
 import { RightPaneManager, type RightPaneMode } from "../right-pane";
 import { Splash } from "../ui/splash";
 import { TerminalManager } from "../terminal/terminal-manager";
 import type { CustomKeyHandler } from "../terminal/terminal";
-import { ErrorCode } from "../platform/protocol";
+import { ErrorCode } from "@core/platform/protocol";
 import type { ConnectedMessage, PtyExitedMessage, SessionState } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 import type { ProjectContext as IProjectContext } from "./types";

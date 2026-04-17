@@ -6,11 +6,11 @@ export {
   type MessageTypeValue,
   type ErrorCodeValue,
   type SessionKeyValue,
-} from "./protocol";
+} from "@core/platform/protocol";
 export {
   pickProjectFolder,
   getUserHomePath,
   minimizeWindow,
   toggleMaximizeWindow,
   closeWindow,
-} from "./tauri-bridge";
+} from "@core/platform/tauri-bridge";

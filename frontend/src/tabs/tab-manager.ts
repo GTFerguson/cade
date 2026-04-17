@@ -2,8 +2,8 @@
  * Tab state management with localStorage persistence.
  */
 
-import { wrapIndex } from "../nav";
-import { toWebSocketUrl } from "../platform/url-utils";
+import { wrapIndex } from "@core/nav";
+import { toWebSocketUrl } from "@core/platform/url-utils";
 import { WebSocketClient } from "../platform/websocket";
 import { buildTunnelArgs } from "../remote/profile-utils";
 import type { EventHandler } from "../types";

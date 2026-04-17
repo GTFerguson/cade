@@ -8,7 +8,7 @@ import { BaseWSClient, type WSAuthFailedEvent } from "@core/platform/ws-client";
 import { appendTokenToUrl } from "../auth/tokenManager";
 import { getStoredIdToken } from "../auth/googleAuth";
 import { basePath, config, isRemoteBrowserAccess } from "../config/config";
-import { ErrorCode, MessageType, type AnySessionKey } from "./protocol";
+import { ErrorCode, MessageType, type AnySessionKey } from "@core/platform/protocol";
 import type {
   AgentKilledMessage,
   AgentSpawnedMessage,

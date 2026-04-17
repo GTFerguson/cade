@@ -23,7 +23,8 @@
     "baseUrl": ".",
     "paths": {
       "@core/*": ["../core/frontend/*"],
-      "vitest": ["./node_modules/vitest"]
+      "vitest": ["./node_modules/vitest"],
+      "@tauri-apps/*": ["./node_modules/@tauri-apps/*"]
     }
   },
   "include": ["src", "../core/frontend"]

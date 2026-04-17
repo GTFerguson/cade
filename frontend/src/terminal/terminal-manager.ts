@@ -6,7 +6,7 @@
  */
 
 import { ChatPane } from "../chat/chat-pane";
-import { SessionKey, type SessionKeyValue, type AnySessionKey } from "../platform/protocol";
+import { SessionKey, type SessionKeyValue, type AnySessionKey } from "@core/platform/protocol";
 import { Terminal, type CustomKeyHandler } from "./terminal";
 import type { ChatStreamMessage, Component, OutputMessage, SessionRestoredMessage } from "../types";
 import type { WebSocketClient } from "../platform/websocket";

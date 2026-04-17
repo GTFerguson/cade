@@ -2,7 +2,7 @@
  * TypeScript interfaces for CADE frontend.
  */
 
-import type { ErrorCodeValue, MessageTypeValue, AnySessionKey } from "./platform/protocol";
+import type { ErrorCodeValue, MessageTypeValue, AnySessionKey } from "@core/platform/protocol";
 import type { UserConfig } from "./config/user-config";
 
 /**
@@ -526,29 +526,29 @@ export type ClientMessage =
 
 // Dashboard messages
 export interface DashboardGetConfigMessage {
-  type: typeof import("./platform/protocol").MessageType.DASHBOARD_GET_CONFIG;
+  type: typeof import("@core/platform/protocol").MessageType.DASHBOARD_GET_CONFIG;
 }
 export interface DashboardGetDataMessage {
-  type: typeof import("./platform/protocol").MessageType.DASHBOARD_GET_DATA;
+  type: typeof import("@core/platform/protocol").MessageType.DASHBOARD_GET_DATA;
   sourceId?: string;
 }
 export interface DashboardActionMessage {
-  type: typeof import("./platform/protocol").MessageType.DASHBOARD_ACTION;
+  type: typeof import("@core/platform/protocol").MessageType.DASHBOARD_ACTION;
   action: string;
   source: string;
   entityId?: string;
   patch?: Record<string, unknown>;
 }
 export interface DashboardConfigMessage {
-  type: typeof import("./platform/protocol").MessageType.DASHBOARD_CONFIG;
+  type: typeof import("@core/platform/protocol").MessageType.DASHBOARD_CONFIG;
   config: import("./dashboard/types").DashboardConfig;
 }
 export interface DashboardDataMessage {
-  type: typeof import("./platform/protocol").MessageType.DASHBOARD_DATA;
+  type: typeof import("@core/platform/protocol").MessageType.DASHBOARD_DATA;
   sources: Record<string, Record<string, unknown>[]>;
 }
 export interface DashboardClearedMessage {
-  type: typeof import("./platform/protocol").MessageType.DASHBOARD_CLEARED;
+  type: typeof import("@core/platform/protocol").MessageType.DASHBOARD_CLEARED;
 }
 
 /**

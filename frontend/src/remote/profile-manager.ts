@@ -1,4 +1,4 @@
-import { toWebSocketUrl } from "../platform/url-utils";
+import { toWebSocketUrl } from "@core/platform/url-utils";
 import type { RemoteProfile, RemoteProfilesConfig, SavedProject } from "./types";
 
 const STORAGE_KEY = "cade_remote_profiles";

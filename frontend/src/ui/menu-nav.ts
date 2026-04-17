@@ -6,7 +6,7 @@
  * Components create a MenuNav with callbacks, then delegate keydown events.
  */
 
-import { wrapIndex } from "../nav";
+import { wrapIndex } from "@core/nav";
 
 // ─── Pure utilities ──────────────────────────────────────────────────
 

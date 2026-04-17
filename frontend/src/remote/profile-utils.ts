@@ -185,4 +185,4 @@ export function getProfileDisplayMeta(profile: RemoteProfile): string {
 }
 
 // Re-export shared navigation utility so existing imports keep working
-export { wrapIndex } from "../nav";
+export { wrapIndex } from "@core/nav";

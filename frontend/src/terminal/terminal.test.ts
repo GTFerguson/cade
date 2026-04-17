@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Terminal } from "./terminal";
-import { SessionKey } from "../platform/protocol";
+import { SessionKey } from "@core/platform/protocol";
 import type { WebSocketClient } from "../platform/websocket";
 
 // Mock ResizeObserver (not available in jsdom)

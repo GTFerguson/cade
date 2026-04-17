@@ -6,7 +6,7 @@
  * rendering to registered components.
  */
 
-import { MessageType } from "../platform/protocol";
+import { MessageType } from "@core/platform/protocol";
 import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 import { createDefaultRegistry, type ComponentRegistry } from "./registry";

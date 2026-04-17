@@ -14,7 +14,7 @@ import renderMathInElement from "katex/contrib/auto-render";
 import "katex/dist/katex.min.css";
 import mermaid from "mermaid";
 import type { PaneKeyHandler } from "../input/keybindings";
-import { MessageType } from "../platform/protocol";
+import { MessageType } from "@core/platform/protocol";
 import type {
   ChatHistoryMessage,
   ChatModeChangeMessage,
