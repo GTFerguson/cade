@@ -1,7 +1,10 @@
 /**
- * WebSocket client with auto-reconnection and event handling.
+ * CADE WebSocket client. Wraps the generic BaseWSClient primitive with
+ * CADE-specific protocol methods, typed event signatures, and the CADE
+ * auth path (remote token, Google id_token, /login redirect).
  */
 
+import { BaseWSClient, type WSAuthFailedEvent } from "@core/platform/ws-client";
 import { appendTokenToUrl } from "../auth/tokenManager";
 import { getStoredIdToken } from "../auth/googleAuth";
 import { basePath, config, isRemoteBrowserAccess } from "../config/config";
@@ -31,15 +34,12 @@ import type {
   OutputMessage,
   ProviderListMessage,
   PtyExitedMessage,
-  ServerMessage,
   SessionRestoredMessage,
   SessionState,
   SetProjectMessage,
   StartupStatusMessage,
   ViewFileMessage,
 } from "../types";
-
-type ConnectionState = "disconnected" | "connecting" | "connected";
 
 interface WebSocketEvents {
   connected: ConnectedMessage;
@@ -71,7 +71,11 @@ interface WebSocketEvents {
   "dashboard-data": DashboardDataMessage;
   "dashboard-cleared": DashboardClearedMessage;
   "dashboard-focus-view": { type: string; view_id: string };
-  "dashboard-push-panel": { type: string; panel: { id: string; title: string; component: string }; data: Record<string, unknown>[] };
+  "dashboard-push-panel": {
+    type: string;
+    panel: { id: string; title: string; component: string };
+    data: Record<string, unknown>[];
+  };
   "notification": { type: string; message: string; style: string };
   error: ErrorMessage;
   "auth-failed": { code: number };
@@ -80,217 +84,279 @@ interface WebSocketEvents {
   "connection-failed": void;
 }
 
-export class WebSocketClient {
-  private ws: WebSocket | null = null;
-  private state: ConnectionState = "disconnected";
-  private reconnectAttempts = 0;
-  private reconnectTimer: number | null = null;
-  private handlers: Map<keyof WebSocketEvents, Set<EventHandler<unknown>>> =
-    new Map();
-  private pendingProjectPath: string | null = null;
-  private pendingSessionId: string | null = null;
-  private urlPollTimer: number | null = null;
-  private readonly explicitUrl: boolean;
-  private fatalError = false;
-  private remoteAuthToken: string | null = null;
+// Message types that the base primitive already dispatches by `type`. Events
+// in WebSocketEvents that don't map to a wire message type (connection-level
+// signals, derived events) need manual bridging — tracked below.
+type BridgedEventKey =
+  | "connected"
+  | "disconnected"
+  | "auth-failed"
+  | "google-auth-required"
+  | "connection-lost"
+  | "connection-failed";
+
+// MessageType enum value → WebSocketEvents key mapping for protocol messages
+// whose base-primitive dispatch type does not match our event name.
+const EVENT_ALIAS: Partial<Record<string, keyof WebSocketEvents>> = {
+  [MessageType.BROWSE_CHILDREN]: "browse-children",
+};
+
+export class WebSocketClient extends BaseWSClient {
+  private remoteAuthToken: string | null;
   private googleIdToken: string | null = null;
   private pendingGoogleAuth: { client_id: string } | null = null;
-  private maxReconnectAttempts: number;
-  private url: string;
-  private hasEverConnected = false;
-  private initialConnectTimer: number | null = null;
+  private pendingProjectPath: string | null = null;
+  private pendingSessionId: string | null = null;
+
+  // Bridged subscribers for events that aren't just message-type passthrough.
+  private connectedHandlers = new Set<EventHandler<ConnectedMessage>>();
+  private disconnectedHandlers = new Set<EventHandler<void>>();
+  private authFailedHandlers = new Set<EventHandler<{ code: number }>>();
+  private googleAuthHandlers = new Set<EventHandler<{ client_id: string }>>();
+  private connectionLostHandlers = new Set<EventHandler<void>>();
+  private connectionFailedHandlers = new Set<EventHandler<void>>();
 
   constructor(url?: string, authToken?: string, maxReconnectAttempts?: number) {
-    this.explicitUrl = url !== undefined;
-    this.url = url || config.wsUrl;
+    super({
+      ...(url !== undefined && { url }),
+      getUrl: () => config.wsUrl,
+      isUrlPending: () => config.wsUrlPending,
+      maxReconnectAttempts: maxReconnectAttempts ?? config.reconnectMaxAttempts,
+      reconnectBaseDelay: config.reconnectBaseDelay,
+      reconnectMaxDelay: config.reconnectMaxDelay,
+      transformUrl: (resolvedUrl) => this.buildAuthedUrl(resolvedUrl),
+    });
+
     this.remoteAuthToken = authToken ?? null;
-    this.maxReconnectAttempts = maxReconnectAttempts ?? config.reconnectMaxAttempts;
+
+    // Route connection-level signals from the base primitive into the
+    // CADE-style typed event handlers.
+    this.onConnectionLost(() => this.fireBridged("connection-lost", undefined));
+    this.onConnectionFailed(() =>
+      this.fireBridged("connection-failed", undefined)
+    );
+    this.onDisconnected(() => this.fireBridged("disconnected", undefined));
   }
 
-  /**
-   * Register an event handler.
-   */
+  // ---------------------------------------------------------------------
+  // Typed event API — layered on top of BaseWSClient.on/off
+  // ---------------------------------------------------------------------
+
   on<K extends keyof WebSocketEvents>(
     event: K,
     handler: EventHandler<WebSocketEvents[K]>
-  ): void {
-    if (!this.handlers.has(event)) {
-      this.handlers.set(event, new Set());
+  ): () => void;
+  on<T = unknown>(event: string, handler: EventHandler<T>): () => void;
+  on(event: string, handler: EventHandler<any>): () => void {
+    const bridged = this.bridgedRegister(event, handler);
+    if (bridged !== null) {
+      return bridged;
     }
-    this.handlers.get(event)!.add(handler as EventHandler<unknown>);
+    return super.on(event, handler);
   }
 
-  /**
-   * Remove an event handler.
-   */
   off<K extends keyof WebSocketEvents>(
     event: K,
     handler: EventHandler<WebSocketEvents[K]>
-  ): void {
-    this.handlers.get(event)?.delete(handler as EventHandler<unknown>);
+  ): void;
+  off<T = unknown>(event: string, handler: EventHandler<T>): void;
+  off(event: string, handler: EventHandler<any>): void {
+    if (this.bridgedUnregister(event, handler)) {
+      return;
+    }
+    super.off(event, handler);
   }
 
-  /**
-   * Emit an event to all registered handlers.
-   */
-  private emit<K extends keyof WebSocketEvents>(
+  private bridgedRegister(
+    event: string,
+    handler: EventHandler<any>
+  ): (() => void) | null {
+    switch (event as BridgedEventKey) {
+      case "connected":
+        this.connectedHandlers.add(handler);
+        return () => this.connectedHandlers.delete(handler);
+      case "disconnected":
+        this.disconnectedHandlers.add(handler);
+        return () => this.disconnectedHandlers.delete(handler);
+      case "auth-failed":
+        this.authFailedHandlers.add(handler);
+        return () => this.authFailedHandlers.delete(handler);
+      case "google-auth-required":
+        this.googleAuthHandlers.add(handler);
+        return () => this.googleAuthHandlers.delete(handler);
+      case "connection-lost":
+        this.connectionLostHandlers.add(handler);
+        return () => this.connectionLostHandlers.delete(handler);
+      case "connection-failed":
+        this.connectionFailedHandlers.add(handler);
+        return () => this.connectionFailedHandlers.delete(handler);
+    }
+    return null;
+  }
+
+  private bridgedUnregister(
+    event: string,
+    handler: EventHandler<any>
+  ): boolean {
+    switch (event as BridgedEventKey) {
+      case "connected":
+        this.connectedHandlers.delete(handler);
+        return true;
+      case "disconnected":
+        this.disconnectedHandlers.delete(handler);
+        return true;
+      case "auth-failed":
+        this.authFailedHandlers.delete(handler);
+        return true;
+      case "google-auth-required":
+        this.googleAuthHandlers.delete(handler);
+        return true;
+      case "connection-lost":
+        this.connectionLostHandlers.delete(handler);
+        return true;
+      case "connection-failed":
+        this.connectionFailedHandlers.delete(handler);
+        return true;
+    }
+    return false;
+  }
+
+  private fireBridged<K extends BridgedEventKey>(
     event: K,
-    data: WebSocketEvents[K]
+    payload: WebSocketEvents[K]
   ): void {
-    this.handlers.get(event)?.forEach((handler) => {
+    const target =
+      event === "connected"
+        ? this.connectedHandlers
+        : event === "disconnected"
+          ? this.disconnectedHandlers
+          : event === "auth-failed"
+            ? this.authFailedHandlers
+            : event === "google-auth-required"
+              ? this.googleAuthHandlers
+              : event === "connection-lost"
+                ? this.connectionLostHandlers
+                : this.connectionFailedHandlers;
+    target.forEach((handler) => {
       try {
-        handler(data);
+        (handler as EventHandler<WebSocketEvents[K]>)(payload);
       } catch (e) {
         console.error(`Error in ${event} handler:`, e);
       }
     });
   }
 
-  /**
-   * Connect to the WebSocket server.
-   */
-  connect(): void {
-    if (this.state !== "disconnected") {
-      return;
-    }
+  // ---------------------------------------------------------------------
+  // BaseWSClient hooks
+  // ---------------------------------------------------------------------
 
-    // In Tauri, the backend URL is injected via eval() which may not have
-    // run yet. Poll until the URL is available rather than connecting to
-    // a wrong address.
-    if (!this.explicitUrl && config.wsUrlPending) {
-      if (this.urlPollTimer === null) {
-        this.urlPollTimer = window.setInterval(() => {
-          if (!config.wsUrlPending) {
-            window.clearInterval(this.urlPollTimer!);
-            this.urlPollTimer = null;
-            this.connect();
-          }
-        }, 50);
+  protected override onOpen(): void {
+    console.log("WebSocket connected");
+
+    if (this.pendingProjectPath !== null) {
+      const message: SetProjectMessage = {
+        type: MessageType.SET_PROJECT,
+        path: this.pendingProjectPath,
+      };
+      if (this.pendingSessionId !== null) {
+        message.sessionId = this.pendingSessionId;
+      }
+      this.send(message);
+    }
+  }
+
+  protected override onClose(event: CloseEvent): void {
+    if (event.code === 1008) {
+      // Project-level Google gate: server sent `auth-required` just before
+      // closing with 1008. Route to Google sign-in instead of generic auth.
+      if (this.pendingGoogleAuth) {
+        const { client_id } = this.pendingGoogleAuth;
+        this.pendingGoogleAuth = null;
+        console.warn("WebSocket auth required (1008), showing Google Sign-In");
+        this.fireBridged("google-auth-required", { client_id });
+        return;
+      }
+
+      const isTauri =
+        window.location.hostname === "tauri.localhost" ||
+        (window as any).__TAURI__ === true;
+
+      if (isTauri || isRemoteBrowserAccess()) {
+        console.warn("WebSocket auth rejected (1008), showing auth dialog");
+        this.fireBridged("auth-failed", { code: event.code });
+      } else {
+        console.warn("WebSocket auth rejected (1008), redirecting to login");
+        window.location.href = basePath + "/login";
       }
       return;
     }
 
-    // Always re-read the URL so Tauri's late-injected value is picked up
-    // (but only if an explicit URL wasn't provided for remote connections)
-    if (!this.explicitUrl) {
-      this.url = config.wsUrl;
+    super.onClose(event);
+  }
+
+  protected override handleMessage(message: unknown): boolean {
+    const typed = message as { type?: string; provider?: string; client_id?: string };
+
+    // Out-of-band auth-required frame sent just before a 1008 close. Stash
+    // the client_id so onClose can emit google-auth-required with it.
+    if (typed.type === "auth-required") {
+      if (typed.provider === "google" && typeof typed.client_id === "string") {
+        this.pendingGoogleAuth = { client_id: typed.client_id };
+      }
+      return true;
     }
 
-    // Use per-connection token for remote profiles, global token otherwise
-    let urlWithAuth = this.remoteAuthToken
-      ? appendTokenToUrl(this.url, this.remoteAuthToken)
-      : appendTokenToUrl(this.url);
+    // Track fatal errors (PTY spawn failure) so reconnect stops trying.
+    if (typed.type === MessageType.ERROR) {
+      const err = message as ErrorMessage;
+      console.error("Server error:", err.code, err.message);
+      if (err.code === ErrorCode.PTY_SPAWN_FAILED) {
+        this.setFatal();
+      }
+      this.dispatch("error", err);
+      return true;
+    }
 
-    // Append Google id_token when present (set explicitly or from sessionStorage)
+    if (typed.type === MessageType.CONNECTED) {
+      this.fireBridged("connected", message as ConnectedMessage);
+      return true;
+    }
+
+    if (typed.type === MessageType.PTY_EXITED) {
+      const msg = message as PtyExitedMessage;
+      console.error("PTY exited:", msg);
+      this.dispatch("pty-exited", msg);
+      return true;
+    }
+
+    // Remap protocol types whose dispatch key differs from the MessageType.
+    if (typeof typed.type === "string") {
+      const alias = EVENT_ALIAS[typed.type];
+      if (alias !== undefined) {
+        this.dispatch(alias, message);
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+// ---------------------------------------------------------------------
+  // URL building (auth token injection)
+  // ---------------------------------------------------------------------
+
+  private buildAuthedUrl(url: string): string {
+    let urlWithAuth = this.remoteAuthToken
+      ? appendTokenToUrl(url, this.remoteAuthToken)
+      : appendTokenToUrl(url);
+
     const googleToken = this.googleIdToken ?? getStoredIdToken();
     if (googleToken) {
       const sep = urlWithAuth.includes("?") ? "&" : "?";
       urlWithAuth = `${urlWithAuth}${sep}google_token=${encodeURIComponent(googleToken)}`;
     }
 
-    this.state = "connecting";
-    this.ws = new WebSocket(urlWithAuth);
-
-    // Abort hung connections to unreachable hosts (dead IPs, firewalled ports)
-    if (!this.hasEverConnected && this.explicitUrl) {
-      this.initialConnectTimer = window.setTimeout(() => {
-        this.initialConnectTimer = null;
-        if (this.state === "connecting" && this.ws) {
-          console.warn("Initial connection timed out after 10s");
-          this.ws.close();
-        }
-      }, 10_000);
-    }
-
-    this.ws.onopen = () => {
-      this.clearInitialConnectTimer();
-      this.state = "connected";
-      this.hasEverConnected = true;
-      this.reconnectAttempts = 0;
-      console.log("WebSocket connected");
-
-      if (this.pendingProjectPath !== null) {
-        const message: SetProjectMessage = {
-          type: MessageType.SET_PROJECT,
-          path: this.pendingProjectPath,
-        };
-        if (this.pendingSessionId !== null) {
-          message.sessionId = this.pendingSessionId;
-        }
-        this.send(message);
-      }
-    };
-
-    this.ws.onclose = (event) => {
-      this.clearInitialConnectTimer();
-      this.state = "disconnected";
-      this.ws = null;
-      this.emit("disconnected", undefined);
-
-      // Code 1008 = Policy Violation (auth failure)
-      // Emit auth-failed for Tauri and remote browser access (shows dialog)
-      // Redirect to /login only for local dev browser
-      if (event.code === 1008) {
-        // If the server sent an auth-required frame just before closing,
-        // it's a project-level Google gate — surface that separately so
-        // the UI shows Sign-In instead of the legacy token prompt.
-        if (this.pendingGoogleAuth) {
-          const { client_id } = this.pendingGoogleAuth;
-          this.pendingGoogleAuth = null;
-          console.warn("WebSocket auth required (1008), showing Google Sign-In");
-          this.emit("google-auth-required", { client_id });
-          return;
-        }
-
-        const isTauri =
-          window.location.hostname === "tauri.localhost" ||
-          (window as any).__TAURI__ === true;
-
-        if (isTauri || isRemoteBrowserAccess()) {
-          console.warn("WebSocket auth rejected (1008), showing auth dialog");
-          this.emit("auth-failed", { code: event.code });
-        } else {
-          console.warn("WebSocket auth rejected (1008), redirecting to login");
-          window.location.href = basePath + "/login";
-        }
-        return;
-      }
-
-      this.scheduleReconnect();
-    };
-
-    this.ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
-
-    this.ws.onmessage = (event) => {
-      this.handleMessage(event.data as string);
-    };
-  }
-
-  /**
-   * Disconnect from the server.
-   */
-  disconnect(): void {
-    this.clearInitialConnectTimer();
-
-    if (this.urlPollTimer !== null) {
-      window.clearInterval(this.urlPollTimer);
-      this.urlPollTimer = null;
-    }
-
-    if (this.reconnectTimer !== null) {
-      window.clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-
-    if (this.ws !== null) {
-      this.ws.close();
-      this.ws = null;
-    }
-
-    this.state = "disconnected";
-    this.reconnectAttempts = 0;
+    return urlWithAuth;
   }
 
   /**
@@ -298,33 +364,20 @@ export class WebSocketClient {
    */
   setAuthToken(token: string): void {
     this.remoteAuthToken = token;
-    this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = config.reconnectMaxAttempts;
+    this.resetReconnectBackoff();
   }
 
   /**
    * Store a Google id_token to be appended to the WS URL on connect.
-   * Called before connect() when Google Sign-In is configured.
    */
   setGoogleIdToken(token: string): void {
     this.googleIdToken = token;
   }
 
-  /**
-   * Send a message to the server.
-   */
-  send(message: ClientMessage): void {
-    if (this.ws === null || this.state !== "connected") {
-      console.warn("Cannot send message: not connected");
-      return;
-    }
+  // ---------------------------------------------------------------------
+  // CADE protocol send methods
+  // ---------------------------------------------------------------------
 
-    this.ws.send(JSON.stringify(message));
-  }
-
-  /**
-   * Send terminal input.
-   */
   sendInput(data: string, sessionKey?: AnySessionKey): void {
     const message = {
       type: MessageType.INPUT,
@@ -334,9 +387,6 @@ export class WebSocketClient {
     this.send(message);
   }
 
-  /**
-   * Send terminal resize.
-   */
   sendResize(cols: number, rows: number, sessionKey?: AnySessionKey): void {
     const message = {
       type: MessageType.RESIZE,
@@ -347,9 +397,6 @@ export class WebSocketClient {
     this.send(message);
   }
 
-  /**
-   * Request file tree.
-   */
   requestTree(showIgnored?: boolean): void {
     const message: { type: string; showIgnored?: boolean } = {
       type: MessageType.GET_TREE,
@@ -360,9 +407,6 @@ export class WebSocketClient {
     this.send(message as ClientMessage);
   }
 
-  /**
-   * Request children of a specific directory (lazy loading).
-   */
   requestChildren(path: string, showIgnored?: boolean): void {
     const message: { type: string; path: string; showIgnored?: boolean } = {
       type: MessageType.GET_CHILDREN,
@@ -374,10 +418,6 @@ export class WebSocketClient {
     this.send(message as ClientMessage);
   }
 
-  /**
-   * Browse absolute filesystem paths (for project directory selection).
-   * Unlike requestChildren, this expands ~ and allows navigation anywhere.
-   */
   requestBrowseChildren(path: string): void {
     this.send({
       type: MessageType.BROWSE_CHILDREN,
@@ -385,16 +425,10 @@ export class WebSocketClient {
     } as ClientMessage);
   }
 
-  /**
-   * Request file content.
-   */
   requestFile(path: string): void {
     this.send({ type: MessageType.GET_FILE, path });
   }
 
-  /**
-   * Write file content.
-   */
   writeFile(path: string, content: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const handleWritten = (message: any) => {
@@ -418,9 +452,6 @@ export class WebSocketClient {
     });
   }
 
-  /**
-   * Create a new file.
-   */
   createFile(path: string, content: string = ""): Promise<void> {
     return new Promise((resolve, reject) => {
       const handleCreated = (message: any) => {
@@ -444,26 +475,14 @@ export class WebSocketClient {
     });
   }
 
-  /**
-   * Save session state.
-   */
   saveSession(state: Partial<SessionState>): void {
     this.send({ type: MessageType.SAVE_SESSION, state });
   }
 
-  /**
-   * Request the most recent plan file.
-   */
   requestLatestPlan(): void {
     this.send({ type: MessageType.GET_LATEST_PLAN });
   }
 
-  /**
-   * Spawn a Neovim instance on the backend.
-   * When filePath is provided, the backend kills any existing instance
-   * and opens a fresh Neovim with that file.
-   * cols/rows set the initial PTY size (avoids post-spawn resize race).
-   */
   neovimSpawn(filePath?: string, cols?: number, rows?: number): void {
     const msg: Record<string, any> = { type: MessageType.NEOVIM_SPAWN };
     if (filePath !== undefined) {
@@ -476,44 +495,26 @@ export class WebSocketClient {
     this.send(msg as any);
   }
 
-  /**
-   * Kill the Neovim instance on the backend.
-   */
   neovimKill(): void {
     this.send({ type: MessageType.NEOVIM_KILL });
   }
 
-  /**
-   * Send terminal input to Neovim.
-   */
   neovimSendInput(data: string): void {
     this.send({ type: MessageType.NEOVIM_INPUT, data });
   }
 
-  /**
-   * Send terminal resize to Neovim.
-   */
   neovimSendResize(cols: number, rows: number): void {
     this.send({ type: MessageType.NEOVIM_RESIZE, cols, rows });
   }
 
-  /**
-   * Send an RPC command to Neovim.
-   */
   neovimRpc(method: string, args: unknown[], requestId: string): void {
     this.send({ type: MessageType.NEOVIM_RPC, method, args, requestId });
   }
 
-  /**
-   * Cancel the in-progress chat stream.
-   */
   sendChatCancel(): void {
     this.send({ type: MessageType.CHAT_CANCEL } as any);
   }
 
-  /**
-   * Send a chat message to the active provider.
-   */
   sendChatMessage(content: string, providerId?: string): void {
     const msg: Record<string, any> = {
       type: MessageType.CHAT_MESSAGE,
@@ -541,9 +542,6 @@ export class WebSocketClient {
     this.send({ type: MessageType.AGENT_REJECT_REPORT, agentId } as any);
   }
 
-  /**
-   * Switch the active chat provider.
-   */
   switchProvider(providerId: string): void {
     this.send({
       type: MessageType.PROVIDER_SWITCH,
@@ -552,13 +550,13 @@ export class WebSocketClient {
   }
 
   /**
-   * Set project directory for this connection.
-   * If not connected yet, the path is stored and sent on connect.
+   * Set project directory for this connection. If not connected yet, the
+   * path is stored and sent on connect.
    */
   sendSetProject(path: string, sessionId?: string): void {
     this.pendingProjectPath = path;
     this.pendingSessionId = sessionId ?? null;
-    if (this.state === "connected") {
+    if (this.isConnected()) {
       const message: SetProjectMessage = {
         type: MessageType.SET_PROJECT,
         path,
@@ -570,211 +568,7 @@ export class WebSocketClient {
     }
   }
 
-  /**
-   * Check if connected.
-   */
-  isConnected(): boolean {
-    return this.state === "connected";
-  }
-
-  /**
-   * Handle incoming message.
-   */
-  private handleMessage(data: string): void {
-    let message: ServerMessage;
-
-    try {
-      message = JSON.parse(data) as ServerMessage;
-    } catch {
-      console.error("Failed to parse message:", data);
-      return;
-    }
-
-    // Project-level Google auth gate. The server sends this just before
-    // closing the WS with 1008. Stash the client_id so onclose can emit
-    // google-auth-required with the right payload once the socket closes.
-    if ((message as { type?: string }).type === "auth-required") {
-      const msg = message as unknown as { provider?: string; client_id?: string };
-      if (msg.provider === "google" && typeof msg.client_id === "string") {
-        this.pendingGoogleAuth = { client_id: msg.client_id };
-      }
-      return;
-    }
-
-    switch (message.type) {
-      case MessageType.CONNECTED:
-        this.emit("connected", message);
-        break;
-
-      case MessageType.OUTPUT:
-        this.emit("output", message);
-        break;
-
-      case MessageType.FILE_TREE:
-        this.emit("file-tree", message);
-        break;
-
-      case MessageType.FILE_CHILDREN:
-        this.emit("file-children", message as FileChildrenMessage);
-        break;
-
-      case MessageType.BROWSE_CHILDREN:
-        this.emit("browse-children", message as unknown as FileChildrenMessage);
-        break;
-
-      case MessageType.FILE_CHANGE:
-        this.emit("file-change", message);
-        break;
-
-      case MessageType.FILE_CONTENT:
-        this.emit("file-content", message);
-        break;
-
-      case MessageType.FILE_WRITTEN:
-        this.emit("file-written", message as { path: string });
-        break;
-
-      case MessageType.FILE_CREATED:
-        this.emit("file-created", message as { path: string });
-        break;
-
-      case MessageType.VIEW_FILE:
-        this.emit("view-file", message as ViewFileMessage);
-        break;
-
-      case MessageType.ERROR:
-        this.emit("error", message);
-        console.error("Server error:", message.code, message.message);
-        if (message.code === ErrorCode.PTY_SPAWN_FAILED) {
-          this.fatalError = true;
-        }
-        break;
-
-      case MessageType.SESSION_RESTORED:
-        this.emit("session-restored", message);
-        break;
-
-      case MessageType.STARTUP_STATUS:
-        this.emit("startup-status", message);
-        break;
-
-      case MessageType.PTY_EXITED:
-        this.emit("pty-exited", message as PtyExitedMessage);
-        console.error("PTY exited:", message);
-        break;
-
-      case MessageType.NEOVIM_READY:
-        this.emit("neovim-ready", message as NeovimReadyMessage);
-        break;
-
-      case MessageType.NEOVIM_OUTPUT:
-        this.emit("neovim-output", message as NeovimOutputMessage);
-        break;
-
-      case MessageType.NEOVIM_RPC_RESPONSE:
-        this.emit("neovim-rpc-response", message as NeovimRpcResponseMessage);
-        break;
-
-      case MessageType.NEOVIM_EXITED:
-        this.emit("neovim-exited", message as NeovimExitedMessage);
-        break;
-
-      case MessageType.CHAT_STREAM:
-        this.emit("chat-stream", message as ChatStreamMessage);
-        break;
-
-      case MessageType.CHAT_HISTORY:
-        this.emit("chat-history", message as ChatHistoryMessage);
-        break;
-
-      case MessageType.CHAT_MODE_CHANGE:
-        this.emit("chat-mode-change", message as ChatModeChangeMessage);
-        break;
-
-      case MessageType.PROVIDER_LIST:
-        this.emit("provider-list", message as ProviderListMessage);
-        break;
-
-      case MessageType.AGENT_SPAWNED:
-        this.emit("agent-spawned", message as AgentSpawnedMessage);
-        break;
-
-      case MessageType.AGENT_KILLED:
-        this.emit("agent-killed", message as AgentKilledMessage);
-        break;
-
-      case MessageType.AGENT_STATE_CHANGED:
-        this.emit("agent-state-changed", message as AgentStateChangedMessage);
-        break;
-
-      case MessageType.DASHBOARD_CONFIG:
-        this.emit("dashboard-config", message as DashboardConfigMessage);
-        break;
-
-      case MessageType.DASHBOARD_DATA:
-        this.emit("dashboard-data", message as DashboardDataMessage);
-        break;
-
-      case MessageType.DASHBOARD_CLEARED:
-        this.emit("dashboard-cleared", message as DashboardClearedMessage);
-        break;
-
-      case MessageType.DASHBOARD_PUSH_PANEL:
-        this.emit("dashboard-push-panel", message as any);
-        break;
-
-      case MessageType.NOTIFICATION:
-        this.emit("notification", message as any);
-        break;
-
-      default:
-        console.warn("Unknown message type:", message);
-    }
-  }
-
-  /**
-   * Schedule a reconnection attempt.
-   */
-  private clearInitialConnectTimer(): void {
-    if (this.initialConnectTimer !== null) {
-      window.clearTimeout(this.initialConnectTimer);
-      this.initialConnectTimer = null;
-    }
-  }
-
-  private scheduleReconnect(): void {
-    if (this.fatalError) {
-      console.error("Not reconnecting: terminal failed to start");
-      return;
-    }
-
-    // Never managed to connect at all — surface the error immediately
-    if (!this.hasEverConnected && this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.warn("Connection failed: server unreachable");
-      this.emit("connection-failed", undefined);
-      return;
-    }
-
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.warn("Max reconnection attempts reached, will keep retrying");
-      this.emit("connection-lost", undefined);
-      // Reset counter so we keep retrying with max delay instead of giving up
-      this.reconnectAttempts = this.maxReconnectAttempts - 1;
-    }
-
-    const delay = Math.min(
-      config.reconnectBaseDelay * Math.pow(2, this.reconnectAttempts),
-      config.reconnectMaxDelay
-    );
-
-    this.reconnectAttempts++;
-    console.log(
-      `Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`
-    );
-
-    this.reconnectTimer = window.setTimeout(() => {
-      this.reconnectTimer = null;
-      this.connect();
-    }, delay);
-  }
 }
+
+// Re-export for consumers that imported the event-payload shape by name.
+export type { WSAuthFailedEvent };

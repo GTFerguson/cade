@@ -18,7 +18,12 @@
     "noFallthroughCasesInSwitch": true,
     "exactOptionalPropertyTypes": true,
     "noImplicitReturns": true,
-    "noUncheckedIndexedAccess": true
+    "noUncheckedIndexedAccess": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["../core/frontend/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "../core/frontend"]
 }

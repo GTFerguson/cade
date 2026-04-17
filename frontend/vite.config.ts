@@ -20,6 +20,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "mertex.md": resolve(__dirname, "../mertex.md/dist/mertex.esm.js"),
+      "@core": resolve(__dirname, "../core/frontend"),
     },
   },
   server: {
