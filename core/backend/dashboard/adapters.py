@@ -16,7 +16,7 @@ from typing import Any
 
 import yaml
 
-from backend.dashboard.config import DataSourceConfig, DashboardConfig
+from core.backend.dashboard.config import DataSourceConfig, DashboardConfig
 
 logger = logging.getLogger(__name__)
 

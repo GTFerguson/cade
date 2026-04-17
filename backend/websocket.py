@@ -35,7 +35,7 @@ from backend.files.tree import (
     get_file_type,
     read_file_content,
 )
-from backend.files.watcher import FileWatcher
+from core.backend.watcher import FileWatcher
 from backend.neovim.manager import get_neovim_manager
 from backend.protocol import ErrorCode, MessageType, SessionKey
 from core.backend.providers.config import get_providers_config
@@ -45,7 +45,8 @@ from core.backend.providers.types import ChatDone, ChatError, ChatMessage, Syste
 from backend.session import load_session, save_session
 from backend.terminal.pty import PTYManager
 from backend.terminal.sessions import PTYSession, TerminalState, get_registry
-from backend.models import FileChangeEvent, TerminalSize
+from backend.models import TerminalSize
+from core.backend.models import FileChangeEvent
 
 if TYPE_CHECKING:
     from backend.config import Config
@@ -414,7 +415,7 @@ class ConnectionHandler:
         # (main watcher ignores .cade/ directory). If launch.yml specifies
         # a `dashboard_file` override, point the handler at that instead
         # so projects can ship multiple dashboards (e.g. player vs GM).
-        from backend.dashboard.handler import DashboardHandler
+        from core.backend.dashboard.handler import DashboardHandler
         dashboard_filename = extract_dashboard_filename(self._launch_yaml)
         self._dashboard = DashboardHandler(
             self._working_dir,

@@ -9,7 +9,7 @@ from backend.files.tree import (
     read_file_content,
 )
 from backend.files.user_config import UserConfig, get_default_user_config
-from backend.files.watcher import FileWatcher
+from core.backend.watcher import FileWatcher
 
 __all__ = [
     "FileWatcher",

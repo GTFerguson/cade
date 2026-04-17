@@ -14,15 +14,15 @@ from typing import Any
 
 from watchfiles import Change, awatch
 
-from backend.dashboard.adapters import AdapterError, fetch_all_sources, get_adapter
-from backend.dashboard.config import (
+from core.backend.dashboard.adapters import AdapterError, fetch_all_sources, get_adapter
+from core.backend.dashboard.config import (
     CONFIG_FILENAMES,
     DashboardConfig,
     DashboardConfigError,
     config_to_dict,
     load_dashboard_config,
 )
-from backend.models import FileChangeEvent
+from core.backend.models import FileChangeEvent
 from backend.protocol import MessageType
 from core.backend.providers.base import BaseProvider
 

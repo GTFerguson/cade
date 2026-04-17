@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from backend.models import FileChangeEvent
+    from core.backend.models import FileChangeEvent
 
 logger = logging.getLogger(__name__)
 

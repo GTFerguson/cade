@@ -1,4 +1,9 @@
-"""Data types for CADE backend."""
+"""IDE-specific data types for CADE backend.
+
+Portable types (FileChangeEvent) live in core/backend/models.py so
+they can be consumed by other forks without pulling in IDE-specific
+fields like TerminalSize or FileNode.
+"""
 
 from __future__ import annotations
 
@@ -31,21 +36,6 @@ class FileNode:
         if self.has_more:
             result["hasMore"] = True
         return result
-
-
-@dataclass
-class FileChangeEvent:
-    """Represents a file system change event."""
-
-    event: Literal["created", "modified", "deleted"]
-    path: str
-
-    def to_dict(self) -> dict:
-        """Convert to dictionary for JSON serialization."""
-        return {
-            "event": self.event,
-            "path": self.path,
-        }
 
 
 @dataclass

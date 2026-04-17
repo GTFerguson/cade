@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from backend.dashboard.adapters import (
+from core.backend.dashboard.adapters import (
     AdapterError,
     VaultAdapter,
     _parse_frontmatter,
     _strip_frontmatter,
     get_adapter,
 )
-from backend.dashboard.config import DataSourceConfig
+from core.backend.dashboard.config import DataSourceConfig
 
 
 # ---------------------------------------------------------------------------
