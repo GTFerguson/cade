@@ -45,7 +45,7 @@ dev = [
 cade = "backend.main:main"
 
 [tool.setuptools.packages.find]
-include = ["backend*"]
+include = ["backend*", "core*"]
 
 [tool.ruff]
 line-length = 100
