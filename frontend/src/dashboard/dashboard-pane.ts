@@ -177,6 +177,7 @@ export class DashboardPane implements Component {
         comp.render(bodyEl, {
           panel: panelConfig,
           data,
+          allData: this.data,
           config: this.config ?? {
             dashboard: { title: "Agent" },
             data_sources: {},
@@ -309,6 +310,7 @@ export class DashboardPane implements Component {
       const props: DashboardComponentProps = {
         panel,
         data: filteredData,
+        allData: this.data,
         config: this.config!,
         onAction: (action) => this.handleAction(action),
       };

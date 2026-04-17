@@ -10,12 +10,13 @@ from typing import Literal
 
 from watchfiles import Change, awatch
 
-from backend.files.tree import get_file_tree_cache
 from backend.models import FileChangeEvent
 
 logger = logging.getLogger(__name__)
 
-# Directories to ignore when watching (aligned with tree.py IGNORED_DIRS)
+# Default ignore set — callers can override via `ignore_dirs` on FileWatcher.
+# Kept aligned with tree.py IGNORED_DIRS for CADE's use; Padarax / other
+# consumers can pass their own set.
 WATCH_IGNORE_DIRS = {
     ".git",
     ".hg",
@@ -47,10 +48,10 @@ def _change_to_event(change: Change) -> Literal["created", "modified", "deleted"
         return "modified"
 
 
-def _should_ignore_watch(path: str) -> bool:
+def _should_ignore_watch(path: str, ignore_dirs: set[str]) -> bool:
     """Check if a path should be ignored for watching."""
     parts = Path(path).parts
-    return any(part in WATCH_IGNORE_DIRS for part in parts)
+    return any(part in ignore_dirs for part in parts)
 
 
 class FileWatcher:
@@ -60,15 +61,24 @@ class FileWatcher:
         self,
         root: Path,
         debounce_ms: int = 100,
+        ignore_dirs: set[str] | None = None,
+        on_raw_change: Callable[[Path], None] | None = None,
     ) -> None:
         """Initialize the file watcher.
 
         Args:
             root: Root directory to watch
             debounce_ms: Debounce delay in milliseconds
+            ignore_dirs: Directory names to skip. Defaults to WATCH_IGNORE_DIRS.
+            on_raw_change: Synchronous hook fired per raw change *before*
+                debouncing. Used by CADE to invalidate its file-tree cache;
+                other consumers (e.g. Padarax) can leave it unset or supply
+                their own side-effect.
         """
         self._root = root
         self._debounce_ms = debounce_ms
+        self._ignore_dirs = ignore_dirs if ignore_dirs is not None else WATCH_IGNORE_DIRS
+        self._on_raw_change = on_raw_change
         self._stop_event = asyncio.Event()
         self._callbacks: list[Callable[[FileChangeEvent], None]] = []
         self._force_polling = False
@@ -103,16 +113,18 @@ class FileWatcher:
             async for changes in awatch(
                 self._root,
                 stop_event=self._stop_event,
-                watch_filter=lambda _, path: not _should_ignore_watch(path),
+                watch_filter=lambda _, path: not _should_ignore_watch(path, self._ignore_dirs),
                 force_polling=self._force_polling,
                 ignore_permission_denied=True,
             ):
                 for change_type, path_str in changes:
                     path = Path(path_str)
 
-                    # Invalidate file tree cache for affected paths
-                    cache = get_file_tree_cache()
-                    cache.invalidate(path)
+                    if self._on_raw_change is not None:
+                        try:
+                            self._on_raw_change(path)
+                        except Exception:
+                            logger.exception("on_raw_change hook failed for %s", path)
 
                     try:
                         rel_path = str(path.relative_to(self._root)).replace("\\", "/")

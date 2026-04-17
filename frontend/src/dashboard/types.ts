@@ -77,6 +77,13 @@ export interface DashboardConfig {
 export interface DashboardComponentProps {
   panel: PanelConfig;
   data: Record<string, unknown>[];
+  /**
+   * Full map of declared source name → fetched rows. Components usually
+   * only need their own `data`, but panels that interact across sources
+   * (e.g. barter reading a wallet source for affordability) read from
+   * here. Keyed by source name as declared in `data_sources`.
+   */
+  allData: Record<string, Record<string, unknown>[]>;
   config: DashboardConfig;
   onAction: (action: DashboardAction) => void;
 }
@@ -92,4 +99,7 @@ export interface DashboardAction {
   source: string;
   entityId?: string;
   patch?: Record<string, unknown>;
+  // Used by `provider_message` actions — freeform frame forwarded
+  // through the active provider to the engine.
+  message?: Record<string, unknown>;
 }

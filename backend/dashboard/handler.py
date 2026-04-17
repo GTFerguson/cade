@@ -24,6 +24,7 @@ from backend.dashboard.config import (
 )
 from backend.models import FileChangeEvent
 from backend.protocol import MessageType
+from backend.providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class DashboardHandler:
         working_dir: Path,
         send: SendFn,
         config_filename: str | None = None,
+        provider: BaseProvider | None = None,
     ) -> None:
         self._working_dir = working_dir
         self._send = send
@@ -46,6 +48,10 @@ class DashboardHandler:
         # that want to select between multiple dashboard configs —
         # e.g. a player-mode dashboard alongside a GM-mode one).
         self._config_filename = config_filename
+        # Optional — required only for panels that emit `provider_message`
+        # actions (interactive dashboards that dispatch frames through
+        # the provider's persistent engine channel).
+        self._provider = provider
         self._config: DashboardConfig | None = None
         self._watch_task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
@@ -106,28 +112,39 @@ class DashboardHandler:
     async def handle_action(self, data: dict[str, Any]) -> None:
         """Handle a user interaction from the dashboard.
 
-        Tier 1 actions are direct mutations — the handler applies them
-        and pushes updated data back to the client.
+        Two action types today:
+        - `patch`: direct mutation of a data source (REST / markdown / directory).
+          Handler applies the patch and pushes a refreshed snapshot.
+        - `provider_message`: forward a freeform frame through the active
+          provider's engine channel (e.g. trade commit, macro trigger).
+          Fire-and-forget — server-side effects drive dashboard refresh
+          through the normal file-watch loop.
         """
         if self._config is None:
             return
 
         action_type = data.get("action")
+
+        if action_type == "patch":
+            await self._handle_patch_action(data)
+        elif action_type == "provider_message":
+            await self._handle_provider_message(data)
+        else:
+            logger.warning("Dashboard action: unknown action type '%s'", action_type)
+
+    async def _handle_patch_action(self, data: dict[str, Any]) -> None:
+        """Apply a direct mutation to a data source and refresh it."""
+        assert self._config is not None
         source_name = data.get("source")
         entity_id = data.get("entityId")
         patch = data.get("patch", {})
 
         if not source_name or source_name not in self._config.data_sources:
-            logger.warning("Dashboard action: unknown source '%s'", source_name)
+            logger.warning("Dashboard patch action: unknown source '%s'", source_name)
             return
 
         src = self._config.data_sources[source_name]
-
-        if action_type == "patch":
-            await self._apply_patch(src, entity_id, patch)
-        else:
-            logger.warning("Dashboard action: unknown action type '%s'", action_type)
-            return
+        await self._apply_patch(src, entity_id, patch)
 
         # Re-fetch the affected source and push updated data
         try:
@@ -141,6 +158,32 @@ class DashboardHandler:
             "type": MessageType.DASHBOARD_DATA,
             "sources": {source_name: updated},
         })
+
+    async def _handle_provider_message(self, data: dict[str, Any]) -> None:
+        """Forward a freeform frame through the active provider to the engine.
+
+        The panel is responsible for assembling the frame shape from its
+        config (e.g. barter → `{type: "trade_commit", basket: {...}}`).
+        The handler does not validate the shape — the engine is the arbiter.
+        """
+        if self._provider is None:
+            logger.warning(
+                "Dashboard provider_message action requires an active provider; "
+                "none registered on this connection"
+            )
+            return
+
+        message = data.get("message")
+        if not isinstance(message, dict):
+            logger.warning("Dashboard provider_message: `message` must be a dict")
+            return
+
+        try:
+            await self._provider.send_frame(message)
+        except NotImplementedError as e:
+            logger.warning("Dashboard provider_message rejected: %s", e)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Dashboard provider_message failed: %s", e)
 
     async def _apply_patch(
         self, src: DataSourceConfig, entity_id: str | None, patch: dict[str, Any]
