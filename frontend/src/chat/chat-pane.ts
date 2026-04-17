@@ -6,13 +6,10 @@
  * for incremental markdown rendering.
  */
 
-import { MertexMD, type StreamRenderer } from "mertex.md";
-import { marked } from "marked";
-import hljs from "highlight.js";
-import katex from "katex";
-import renderMathInElement from "katex/contrib/auto-render";
-import "katex/dist/katex.min.css";
-import mermaid from "mermaid";
+import {
+  MarkdownRenderer,
+  type StreamRenderer,
+} from "@core/chat/markdown-renderer";
 import type { PaneKeyHandler } from "../input/keybindings";
 import { MessageType } from "@core/platform/protocol";
 import type {
@@ -43,65 +40,44 @@ const SLASH_DESCRIPTIONS: Record<string, string> = {
   insights: "Show session insights",
 };
 
-/** Same hash function mertex.md uses to generate mermaid placeholder IDs */
-function hashCode(str: string): string {
-  if (!str) return "0";
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return (hash >>> 0).toString(16);
-}
-
-// Ensure globals are set for mertex.md (marked, hljs, katex, mermaid)
-if (typeof window !== "undefined") {
-  (window as any).marked = marked;
-  (window as any).hljs = hljs;
-  (window as any).katex = katex;
-  (window as any).renderMathInElement = renderMathInElement;
-  (window as any).mermaid = mermaid;
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: "loose",
-    theme: "base",
-    themeVariables: {
-      darkMode: true,
-      background: "#111110",
-      primaryColor: "#1a1918",
-      primaryTextColor: "#f8f6f2",
-      primaryBorderColor: "#0a9dff",
-      secondaryColor: "#1a1918",
-      secondaryTextColor: "#c4b9ad",
-      secondaryBorderColor: "#aeee00",
-      tertiaryColor: "#1a1918",
-      tertiaryBorderColor: "#ff9eb0",
-      lineColor: "#0a9dff",
-      textColor: "#c4b9ad",
-      mainBkg: "#1a1918",
-      nodeBorder: "#0a9dff",
-      clusterBkg: "#111110",
-      clusterBorder: "#0a9dff",
-      titleColor: "#f8f6f2",
-      edgeLabelBackground: "#111110",
-      nodeTextColor: "#f8f6f2",
-      git0: "#0a9dff",
-      git1: "#aeee00",
-      git2: "#ff9eb0",
-      git3: "#ffa724",
-      git4: "#cf73e6",
-      git5: "#0a9dff",
-      git6: "#aeee00",
-      git7: "#ff9eb0",
-      gitBranchLabel0: "#f8f6f2",
-      gitBranchLabel1: "#f8f6f2",
-      gitBranchLabel2: "#f8f6f2",
-      gitBranchLabel3: "#f8f6f2",
-      gitInv0: "#0a9dff",
-    },
-  });
-}
+const CADE_MERMAID_CONFIG = {
+  securityLevel: "loose" as const,
+  theme: "base" as const,
+  themeVariables: {
+    darkMode: true,
+    background: "#111110",
+    primaryColor: "#1a1918",
+    primaryTextColor: "#f8f6f2",
+    primaryBorderColor: "#0a9dff",
+    secondaryColor: "#1a1918",
+    secondaryTextColor: "#c4b9ad",
+    secondaryBorderColor: "#aeee00",
+    tertiaryColor: "#1a1918",
+    tertiaryBorderColor: "#ff9eb0",
+    lineColor: "#0a9dff",
+    textColor: "#c4b9ad",
+    mainBkg: "#1a1918",
+    nodeBorder: "#0a9dff",
+    clusterBkg: "#111110",
+    clusterBorder: "#0a9dff",
+    titleColor: "#f8f6f2",
+    edgeLabelBackground: "#111110",
+    nodeTextColor: "#f8f6f2",
+    git0: "#0a9dff",
+    git1: "#aeee00",
+    git2: "#ff9eb0",
+    git3: "#ffa724",
+    git4: "#cf73e6",
+    git5: "#0a9dff",
+    git6: "#aeee00",
+    git7: "#ff9eb0",
+    gitBranchLabel0: "#f8f6f2",
+    gitBranchLabel1: "#f8f6f2",
+    gitBranchLabel2: "#f8f6f2",
+    gitBranchLabel3: "#f8f6f2",
+    gitInv0: "#0a9dff",
+  },
+};
 
 export interface ChatPaneOptions {
   autoSubscribe?: boolean;
@@ -116,7 +92,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   private providerEl: HTMLElement;
   private tokensEl: HTMLElement;
   private chatInput: ChatInput | null = null;
-  private mertex: MertexMD;
+  private renderer: MarkdownRenderer;
   private streamRenderer: StreamRenderer | null = null;
   private currentAssistantEl: HTMLElement | null = null;
   private totalTokens = 0;
@@ -151,12 +127,8 @@ export class ChatPane implements Component, PaneKeyHandler {
   ) {
     this.autoSubscribe = options?.autoSubscribe ?? true;
     this.readOnly = options?.readOnly ?? false;
-    this.mertex = new MertexMD({
-      breaks: true,
-      gfm: true,
-      highlight: true,
-      katex: true,
-      sanitize: false,
+    this.renderer = new MarkdownRenderer({
+      mermaidConfig: CADE_MERMAID_CONFIG,
     });
 
     const pane = document.createElement("div");
@@ -429,7 +401,7 @@ export class ChatPane implements Component, PaneKeyHandler {
       const segment = document.createElement("div");
       segment.className = "chat-text-segment";
       contentEl.appendChild(segment);
-      this.streamRenderer = this.mertex.createStreamRenderer(segment);
+      this.streamRenderer = this.renderer.createStream(segment);
     }
 
     this.streamRenderer.appendContent(content);
@@ -729,7 +701,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.finalizeThinking();
     this.activeToolEls.clear();
     this.currentAssistantEl = null;
-    if (targetEl && content) await this.renderRemainingDiagrams(targetEl, content);
+    if (targetEl && content) await this.renderer.renderRemainingDiagrams(targetEl, content);
 
     if (!msg.cancelled) {
       this.updateTokenCount(msg.usage);
@@ -773,8 +745,8 @@ export class ChatPane implements Component, PaneKeyHandler {
         contentEl.className = "chat-message-content";
         el.appendChild(contentEl);
         this.messagesEl.appendChild(el);
-        await this.mertex.renderInElement(contentEl, message.content);
-        await this.renderRemainingDiagrams(contentEl, message.content);
+        await this.renderer.render(contentEl, message.content);
+        await this.renderer.renderRemainingDiagrams(contentEl, message.content);
       } else if (message.role === "user") {
         const textEl = document.createElement("div");
         textEl.className = "chat-message-text";
@@ -788,53 +760,6 @@ export class ChatPane implements Component, PaneKeyHandler {
     }
 
     this.scrollToBottom();
-  }
-
-  /**
-   * Fallback for diagrams that mertex's MermaidHandler.renderInElement failed to render.
-   * Finds remaining .mermaid-placeholder elements, extracts the code from the
-   * original markdown, and renders them via mermaid.run() which handles diagram
-   * types (like gitGraph) that mermaid.render() can choke on.
-   */
-  /**
-   * Fallback for diagrams that mertex's MermaidHandler failed to render
-   * via mermaid.render(). Uses mermaid.run() instead, which handles
-   * diagram types like gitGraph that need DOM-attached elements.
-   */
-  private async renderRemainingDiagrams(container: HTMLElement, markdownContent: string): Promise<void> {
-    const placeholders = container.querySelectorAll(".mermaid-placeholder");
-    if (placeholders.length === 0) return;
-
-    // Build the same mermaid map that mertex uses
-    const codeMap = new Map<string, string>();
-    const re = /```mermaid\s*\n([\s\S]*?)```/gi;
-    let match: RegExpExecArray | null;
-    while ((match = re.exec(markdownContent)) !== null) {
-      const code = match[1]!.split("\n").map((l: string) => l.trimEnd()).join("\n").trim();
-      const id = "MERMAID_" + hashCode(code);
-      codeMap.set(id, code);
-    }
-
-    for (const placeholder of placeholders) {
-      const id = placeholder.getAttribute("data-mermaid-id");
-      const code = id ? codeMap.get(id) : null;
-      if (!code) continue;
-
-      try {
-        const wrapper = document.createElement("div");
-        wrapper.className = "mermaid-container";
-        const pre = document.createElement("pre");
-        pre.className = "mermaid";
-        pre.textContent = code;
-        wrapper.appendChild(pre);
-        placeholder.replaceWith(wrapper);
-        await mermaid.run({ nodes: [pre] });
-      } catch (err) {
-        console.error("[ChatPane] Fallback mermaid render failed:", err);
-        placeholder.textContent = `Diagram error: ${err}`;
-        placeholder.className = "chat-message error";
-      }
-    }
   }
 
   // ── Inline approval / report review blocks ────────────────────

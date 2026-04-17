@@ -32,6 +32,18 @@ export default defineConfig({
         __dirname,
         "node_modules/@tauri-apps/api/window.js"
       ),
+      marked: resolve(__dirname, "node_modules/marked"),
+      "highlight.js": resolve(__dirname, "node_modules/highlight.js"),
+      "katex/contrib/auto-render": resolve(
+        __dirname,
+        "node_modules/katex/dist/contrib/auto-render.mjs"
+      ),
+      "katex/dist/katex.min.css": resolve(
+        __dirname,
+        "node_modules/katex/dist/katex.min.css"
+      ),
+      katex: resolve(__dirname, "node_modules/katex"),
+      mermaid: resolve(__dirname, "node_modules/mermaid"),
     },
   },
   server: {

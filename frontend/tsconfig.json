@@ -24,7 +24,14 @@
     "paths": {
       "@core/*": ["../core/frontend/*"],
       "vitest": ["./node_modules/vitest"],
-      "@tauri-apps/*": ["./node_modules/@tauri-apps/*"]
+      "@tauri-apps/*": ["./node_modules/@tauri-apps/*"],
+      "mertex.md": ["./node_modules/mertex.md"],
+      "marked": ["./node_modules/marked"],
+      "highlight.js": ["./node_modules/highlight.js"],
+      "katex": ["./node_modules/@types/katex", "./node_modules/katex"],
+      "katex/contrib/*": ["./node_modules/@types/katex/contrib/*", "./node_modules/katex/contrib/*"],
+      "katex/*": ["./node_modules/katex/*"],
+      "mermaid": ["./node_modules/mermaid"]
     }
   },
   "include": ["src", "../core/frontend"]
