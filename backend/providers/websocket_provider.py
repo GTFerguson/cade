@@ -92,6 +92,9 @@ class WebsocketProvider(BaseProvider):
         # can key chat_messages and replay them on reconnect. Set by the
         # connection handler via set_session_id() before start().
         self._session_id: str = ""
+        # Google id_token forwarded from the browser; included in hello when set
+        # so the game server can verify the player's identity.
+        self._auth_token: str = ""
 
     # --- BaseProvider interface ---
 
@@ -130,6 +133,14 @@ class WebsocketProvider(BaseProvider):
         the primary key of `chat_sessions` — same value across reconnects
         replays the transcript. Must be called before start()."""
         self._session_id = session_id
+
+    def set_auth_token(self, token: str) -> None:
+        """Forward a Google id_token (or other bearer token) to the game server.
+
+        Included in the `hello` frame so the server can verify the player's
+        identity without a separate auth handshake. Safe to call after start();
+        the token is picked up on the next reconnect."""
+        self._auth_token = token
 
     async def start(self) -> None:
         """Open the WebSocket and spawn the background listener.
@@ -252,11 +263,14 @@ class WebsocketProvider(BaseProvider):
         )
         # Announce ourselves. The server replies with chat_history (if any)
         # followed by connected; the listener task routes both.
-        await self._ws.send(json.dumps({
+        hello: dict[str, Any] = {
             "type": "hello",
             "session_id": self._session_id,
             "client": "cade/1.0",
-        }))
+        }
+        if self._auth_token:
+            hello["auth_token"] = self._auth_token
+        await self._ws.send(json.dumps(hello))
         self._listener_task = asyncio.create_task(self._listen())
 
     async def _ensure_connected(self) -> None:

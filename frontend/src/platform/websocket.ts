@@ -3,6 +3,7 @@
  */
 
 import { appendTokenToUrl } from "../auth/tokenManager";
+import { getStoredIdToken } from "../auth/googleAuth";
 import { basePath, config, isRemoteBrowserAccess } from "../config/config";
 import { ErrorCode, MessageType, type AnySessionKey } from "./protocol";
 import type {
@@ -90,6 +91,7 @@ export class WebSocketClient {
   private readonly explicitUrl: boolean;
   private fatalError = false;
   private remoteAuthToken: string | null = null;
+  private googleIdToken: string | null = null;
   private maxReconnectAttempts: number;
   private url: string;
   private hasEverConnected = false;
@@ -172,9 +174,16 @@ export class WebSocketClient {
     }
 
     // Use per-connection token for remote profiles, global token otherwise
-    const urlWithAuth = this.remoteAuthToken
+    let urlWithAuth = this.remoteAuthToken
       ? appendTokenToUrl(this.url, this.remoteAuthToken)
       : appendTokenToUrl(this.url);
+
+    // Append Google id_token when present (set explicitly or from sessionStorage)
+    const googleToken = this.googleIdToken ?? getStoredIdToken();
+    if (googleToken) {
+      const sep = urlWithAuth.includes("?") ? "&" : "?";
+      urlWithAuth = `${urlWithAuth}${sep}google_token=${encodeURIComponent(googleToken)}`;
+    }
 
     this.state = "connecting";
     this.ws = new WebSocket(urlWithAuth);
@@ -277,6 +286,14 @@ export class WebSocketClient {
     this.remoteAuthToken = token;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = config.reconnectMaxAttempts;
+  }
+
+  /**
+   * Store a Google id_token to be appended to the WS URL on connect.
+   * Called before connect() when Google Sign-In is configured.
+   */
+  setGoogleIdToken(token: string): void {
+    this.googleIdToken = token;
   }
 
   /**
