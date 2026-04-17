@@ -1,3 +1,4 @@
+export { BasketComponent } from "./basket";
 export { CardsComponent } from "./cards";
 export { ChecklistComponent } from "./checklist";
 export { KanbanComponent } from "./kanban";
