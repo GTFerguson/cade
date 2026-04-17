@@ -460,7 +460,7 @@ class TestWebsocketProviderIntegration:
         the WebsocketProvider callbacks. Bypasses __init__ (which expects a
         real WebSocket + Config) and wires up the attributes the methods
         under test actually read."""
-        from backend.chat.session import ChatSession
+        from core.backend.chat.session import ChatSession
         from backend.websocket import ConnectionHandler
 
         handler = ConnectionHandler.__new__(ConnectionHandler)

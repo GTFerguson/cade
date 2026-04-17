@@ -48,7 +48,7 @@ def make_provider_config() -> ProvidersConfig:
 @pytest.mark.asyncio
 async def test_chat_stream_sends_text_deltas():
     """Test that chat-message triggers streaming text-delta events."""
-    from backend.chat.session import ChatSession
+    from core.backend.chat.session import ChatSession
 
     # Create a mock provider that yields known events
     mock_provider = MagicMock()

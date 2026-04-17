@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.auth import extract_token_from_query, validate_token
-from backend.chat.session import ChatSession, get_chat_registry
+from core.backend.chat.session import ChatSession, get_chat_registry
 from backend.config import load_user_config
 from backend.launch_preset import (
     extract_auth_config,

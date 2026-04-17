@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from backend.chat.session import ChatSession, ChatSessionRegistry
+from core.backend.chat.session import ChatSession, ChatSessionRegistry
 
 
 class TestChatSession:
