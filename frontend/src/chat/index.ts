@@ -1,2 +1,2 @@
 export { ChatPane, type ChatPaneOptions } from "./chat-pane";
-export { ChatInput } from "./chat-input";
+export { ChatInput } from "@core/chat/chat-input";

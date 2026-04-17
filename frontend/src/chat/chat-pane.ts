@@ -22,8 +22,8 @@ import type {
   Component,
 } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
-import { ChatInput } from "./chat-input";
-import { DiagramViewer } from "./diagram-viewer";
+import { ChatInput } from "@core/chat/chat-input";
+import { DiagramViewer } from "@core/chat/diagram-viewer";
 
 /** Descriptions for well-known Claude Code slash commands */
 const SLASH_DESCRIPTIONS: Record<string, string> = {

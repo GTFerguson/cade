@@ -6,7 +6,7 @@
  * Escape or backdrop click closes.
  */
 
-import type { Component } from "../types";
+import type { Component } from "@core/types";
 
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 5;
