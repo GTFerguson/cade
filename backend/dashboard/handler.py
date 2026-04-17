@@ -22,6 +22,7 @@ from backend.dashboard.config import (
     config_to_dict,
     load_dashboard_config,
 )
+from backend.models import FileChangeEvent
 from backend.protocol import MessageType
 
 logger = logging.getLogger(__name__)
@@ -265,7 +266,7 @@ class DashboardHandler:
         except Exception as e:
             logger.warning("Dashboard config watcher error: %s", e)
 
-    def on_data_source_file_change(self, path: str) -> None:
+    def on_data_source_file_change(self, event: FileChangeEvent) -> None:
         """Called by the main file watcher when a project file changes.
 
         Checks if the changed file is referenced by any data source and
@@ -274,6 +275,7 @@ class DashboardHandler:
         if self._config is None:
             return
 
+        path = event.path
         for src in self._config.data_sources.values():
             if src.path and path.startswith(src.path.rstrip("/")):
                 asyncio.create_task(self._refresh_source(src.name))
