@@ -27,7 +27,13 @@ from backend.terminal.connections import get_connection_manager
 from backend.connection_registry import get_connection_registry
 from backend.errors import CADEError, ProtocolError
 from backend.files.operations import create_file, write_file_content
-from backend.files.tree import build_directory_children, build_file_tree_cached, get_file_type, read_file_content
+from backend.files.tree import (
+    build_directory_children,
+    build_file_tree_cached,
+    get_file_tree_cache,
+    get_file_type,
+    read_file_content,
+)
 from backend.files.watcher import FileWatcher
 from backend.neovim.manager import get_neovim_manager
 from backend.protocol import ErrorCode, MessageType, SessionKey
@@ -348,7 +354,10 @@ class ConnectionHandler:
                 })
                 self._session.capture_output(dummy_output)
 
-        self._watcher = FileWatcher(self._working_dir)
+        self._watcher = FileWatcher(
+            self._working_dir,
+            on_raw_change=lambda p: get_file_tree_cache().invalidate(p),
+        )
 
         from backend.doc_index import DOC_INDEX_AVAILABLE, DocIndexService
         if DOC_INDEX_AVAILABLE:
@@ -1646,7 +1655,10 @@ class ConnectionHandler:
                         attempt + 1, max_retries, backoff, e,
                     )
                     await asyncio.sleep(backoff)
-                    self._watcher = FileWatcher(self._working_dir)
+                    self._watcher = FileWatcher(
+                        self._working_dir,
+                        on_raw_change=lambda p: get_file_tree_cache().invalidate(p),
+                    )
                 else:
                     logger.warning(
                         "File watcher failed after %d retries, disabling: %s",
