@@ -5,6 +5,10 @@
 import type { ErrorCodeValue, MessageTypeValue, AnySessionKey } from "@core/platform/protocol";
 import type { UserConfig } from "./config/user-config";
 
+// Portable lifecycle + event primitives live in core. Re-exported here so
+// existing CADE code can keep importing from "../types" / "./types".
+export type { Component, EventHandler, EventEmitter } from "@core/types";
+
 /**
  * Represents a file or directory in the file tree.
  */
@@ -15,14 +19,6 @@ export interface FileNode {
   children?: FileNode[];
   modified?: number;
   hasMore?: boolean;
-}
-
-/**
- * Component lifecycle interface.
- */
-export interface Component {
-  initialize(): void | Promise<void>;
-  dispose(): void | Promise<void>;
 }
 
 /**
@@ -586,16 +582,3 @@ export type ServerMessage =
   | { type: "dashboard-push-panel"; panel: { id: string; title: string; component: string }; data: Record<string, unknown>[] }
   | { type: "notification"; message: string; style: string };
 
-/**
- * Event handler type.
- */
-export type EventHandler<T> = (data: T) => void;
-
-/**
- * Event emitter interface.
- */
-export interface EventEmitter<Events extends Record<string, unknown>> {
-  on<K extends keyof Events>(event: K, handler: EventHandler<Events[K]>): void;
-  off<K extends keyof Events>(event: K, handler: EventHandler<Events[K]>): void;
-  emit<K extends keyof Events>(event: K, data: Events[K]): void;
-}
