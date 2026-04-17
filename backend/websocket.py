@@ -15,6 +15,7 @@ from backend.auth import extract_token_from_query, validate_token
 from backend.chat.session import ChatSession, get_chat_registry
 from backend.config import load_user_config
 from backend.launch_preset import (
+    extract_auth_config,
     extract_dashboard_filename,
     extract_frontend_preset,
     extract_provider_config,
@@ -129,6 +130,29 @@ class ConnectionHandler:
 
         try:
             await self._wait_for_project()
+
+            # Project-level auth gate: if launch.yml declares Google auth
+            # and no valid google_token arrived on the query string, abort
+            # before any project state is touched. The auth-required frame
+            # carries client_id so the frontend can render Sign-In without
+            # baking the client_id into its build. Defense in depth — the
+            # Padarax game server validates the id_token itself on hello.
+            launch_yaml_for_auth = load_launch_preset(self._working_dir)
+            auth_config = extract_auth_config(launch_yaml_for_auth)
+            if auth_config and auth_config["provider"] == "google":
+                if not self._google_token:
+                    logger.info(
+                        "Google auth required for %s but no google_token; closing WS",
+                        self._working_dir,
+                    )
+                    await self._send({
+                        "type": "auth-required",
+                        "provider": "google",
+                        "client_id": auth_config["client_id"],
+                    })
+                    await self._ws.close(code=1008, reason="google_auth_required")
+                    return
+
             # Register with connection registry for project-aware routing
             get_connection_registry().register(
                 self._ws,

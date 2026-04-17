@@ -74,6 +74,7 @@ interface WebSocketEvents {
   "notification": { type: string; message: string; style: string };
   error: ErrorMessage;
   "auth-failed": { code: number };
+  "google-auth-required": { client_id: string };
   "connection-lost": void;
   "connection-failed": void;
 }
@@ -92,6 +93,7 @@ export class WebSocketClient {
   private fatalError = false;
   private remoteAuthToken: string | null = null;
   private googleIdToken: string | null = null;
+  private pendingGoogleAuth: { client_id: string } | null = null;
   private maxReconnectAttempts: number;
   private url: string;
   private hasEverConnected = false;
@@ -228,6 +230,17 @@ export class WebSocketClient {
       // Emit auth-failed for Tauri and remote browser access (shows dialog)
       // Redirect to /login only for local dev browser
       if (event.code === 1008) {
+        // If the server sent an auth-required frame just before closing,
+        // it's a project-level Google gate — surface that separately so
+        // the UI shows Sign-In instead of the legacy token prompt.
+        if (this.pendingGoogleAuth) {
+          const { client_id } = this.pendingGoogleAuth;
+          this.pendingGoogleAuth = null;
+          console.warn("WebSocket auth required (1008), showing Google Sign-In");
+          this.emit("google-auth-required", { client_id });
+          return;
+        }
+
         const isTauri =
           window.location.hostname === "tauri.localhost" ||
           (window as any).__TAURI__ === true;
@@ -573,6 +586,17 @@ export class WebSocketClient {
       message = JSON.parse(data) as ServerMessage;
     } catch {
       console.error("Failed to parse message:", data);
+      return;
+    }
+
+    // Project-level Google auth gate. The server sends this just before
+    // closing the WS with 1008. Stash the client_id so onclose can emit
+    // google-auth-required with the right payload once the socket closes.
+    if ((message as { type?: string }).type === "auth-required") {
+      const msg = message as unknown as { provider?: string; client_id?: string };
+      if (msg.provider === "google" && typeof msg.client_id === "string") {
+        this.pendingGoogleAuth = { client_id: msg.client_id };
+      }
       return;
     }
 

@@ -120,6 +120,38 @@ def extract_dashboard_filename(raw: dict[str, Any]) -> str | None:
     return None
 
 
+def extract_auth_config(raw: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract the ``auth:`` block from launch.yml.
+
+    Returns ``{"provider": "google", "client_id": "..."}`` if the project
+    declares Google auth, else ``None``. Any other provider name is rejected
+    with a warning — the only supported value today is ``"google"``.
+
+    The caller is responsible for enforcement (rejecting connections when
+    auth is required but no valid token is present).
+    """
+    auth_raw = raw.get("auth")
+    if auth_raw is None:
+        return None
+    if not isinstance(auth_raw, dict):
+        logger.warning("launch.yml: 'auth' must be a mapping — ignoring")
+        return None
+
+    provider = auth_raw.get("provider")
+    if provider != "google":
+        logger.warning(
+            "launch.yml: unsupported auth.provider %r (only 'google' today) — ignoring", provider,
+        )
+        return None
+
+    client_id = auth_raw.get("client_id")
+    if not isinstance(client_id, str) or not client_id.strip():
+        logger.warning("launch.yml: auth.client_id is required when auth.provider is set")
+        return None
+
+    return {"provider": "google", "client_id": client_id.strip()}
+
+
 def extract_provider_config(raw: dict[str, Any]) -> dict[str, Any] | None:
     """Extract and validate the ``provider:`` block from a parsed launch.yml.
 

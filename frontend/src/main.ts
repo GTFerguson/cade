@@ -24,7 +24,7 @@ import { RemoteProjectSelector } from "./remote/RemoteProjectSelector";
 import { Splash } from "./ui/splash";
 import type { RemoteProfile } from "./remote/types";
 import { getAuthToken, setAuthToken } from "./auth/tokenManager";
-import { getStoredIdToken, setStoredIdToken } from "./auth/googleAuth";
+import { setStoredIdToken } from "./auth/googleAuth";
 
 class App {
   private tabManager: TabManager;
@@ -427,6 +427,25 @@ class App {
       this.tabManager.setConnected(tab.id, false);
     });
 
+    // Project-level Google Sign-In gate. Fires when the server tells us
+    // the project's launch.yml requires Google auth and we didn't present
+    // a valid token. Client_id comes from the server so no build-time env
+    // var is needed — IDE use on other projects stays unaffected.
+    tab.ws.on("google-auth-required", ({ client_id }) => {
+      if (!this.startSplash?.isVisible()) {
+        // Without a visible splash (reconnect after connection loss on an
+        // already-open tab), we have nowhere to render the button. Log and
+        // let the user manually reload — this is rare in practice.
+        console.warn("google-auth-required but no splash visible; user must reload");
+        return;
+      }
+      this.startSplash.setGoogleAuthMode(client_id, (idToken) => {
+        setStoredIdToken(idToken);
+        tab.ws.setGoogleIdToken(idToken);
+        tab.ws.connect();
+      });
+    });
+
     tab.ws.on("auth-failed", async () => {
       // Local tab on remote browser — prompt for server's auth token
       if (!tab.remoteProfileId && isRemoteBrowserAccess()) {
@@ -528,29 +547,11 @@ class App {
 
     tab.ws.sendSetProject(tab.projectPath, tab.id);
 
-    // When Google Sign-In is configured, obtain an id_token before opening
-    // the WebSocket so it can be forwarded to the game server in the hello frame.
-    if (config.googleClientId) {
-      const storedToken = getStoredIdToken();
-      if (storedToken) {
-        // Token already present (same session page reload) — connect immediately
-        tab.ws.setGoogleIdToken(storedToken);
-        tab.ws.connect();
-      } else if (this.startSplash?.isVisible()) {
-        // Show the Google Sign-In button in the splash; connect once the user signs in
-        this.startSplash.setGoogleAuthMode(config.googleClientId, (idToken) => {
-          setStoredIdToken(idToken);
-          tab.ws.setGoogleIdToken(idToken);
-          tab.ws.connect();
-        });
-      } else {
-        // No splash visible (e.g. extra tab opened) — connect anyway; the
-        // google_token from sessionStorage will be picked up inside connect()
-        tab.ws.connect();
-      }
-    } else {
-      tab.ws.connect();
-    }
+    // Auth is project-driven now: connect first; if the project's launch.yml
+    // declares Google auth, the server sends an `auth-required` frame with
+    // the client_id then closes with 1008. A stored id_token from a previous
+    // sign-in is attached automatically inside connect().
+    tab.ws.connect();
 
     // Set up terminal key handler for prefix key interception
     context.setTerminalKeyHandler((e) => {
