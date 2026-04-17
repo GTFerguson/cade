@@ -9,6 +9,7 @@ import {
   BasketComponent,
   CardsComponent,
   ChecklistComponent,
+  GraphComponent,
   KanbanComponent,
   KeyValueComponent,
   MarkdownPanelComponent,
@@ -43,6 +44,7 @@ export function createDefaultRegistry(): ComponentRegistry {
   const registry = new ComponentRegistry();
   registry.register("basket", BasketComponent);
   registry.register("cards", CardsComponent);
+  registry.register("graph", GraphComponent);
   registry.register("checklist", ChecklistComponent);
   registry.register("kanban", KanbanComponent);
   registry.register("key_value", KeyValueComponent);

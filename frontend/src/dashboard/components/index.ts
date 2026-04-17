@@ -1,5 +1,6 @@
 export { BasketComponent } from "./basket";
 export { CardsComponent } from "./cards";
+export { GraphComponent } from "./graph";
 export { ChecklistComponent } from "./checklist";
 export { KanbanComponent } from "./kanban";
 export { KeyValueComponent } from "./key-value";
