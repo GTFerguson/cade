@@ -67,3 +67,20 @@ class BaseProvider(ABC):
         that aren't responses to a specific stream_chat call). Default: no-op;
         providers that don't emit unsolicited events can ignore this."""
         return
+
+    async def send_frame(self, frame: dict[str, Any]) -> None:
+        """Send an arbitrary frame over the provider's persistent channel to
+        the server. Used by interactive dashboard panels that need to dispatch
+        actions (trade commits, macro triggers) to the server without routing
+        through chat.
+
+        Default: raises NotImplementedError. Only providers with a persistent
+        engine channel (WebsocketProvider) implement this. Request/response
+        providers (APIProvider, ClaudeCodeProvider, per-turn SubprocessProvider)
+        can't support it and leave the default.
+        """
+        raise NotImplementedError(
+            f"Provider '{self.name}' does not support send_frame; "
+            f"interactive panels require a provider with a persistent "
+            f"engine connection (e.g. WebsocketProvider)"
+        )

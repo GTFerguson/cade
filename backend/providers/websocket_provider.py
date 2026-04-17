@@ -109,6 +109,22 @@ class WebsocketProvider(BaseProvider):
     def set_event_handler(self, handler: UnsolicitedEventHandler | None) -> None:
         self._event_handler = handler
 
+    async def send_frame(self, frame: dict[str, Any]) -> None:
+        """Dispatch an arbitrary frame to the server over the persistent WS.
+
+        Connection is established lazily if not yet open. The server is
+        expected to handle the frame type; unknown types should surface an
+        error frame which the background listener routes through the event
+        handler as a scene_update or error message the user sees in chat.
+
+        Fire-and-forget from the caller's perspective — server-side effects
+        (e.g. save-file updates after a trade commit) drive dashboard refresh
+        via the existing file-watch loop; no response is awaited here.
+        """
+        await self._ensure_connected()
+        assert self._ws is not None
+        await self._ws.send(json.dumps(frame))
+
     def set_session_id(self, session_id: str) -> None:
         """Sent to the server in the `hello` frame. The server uses this as
         the primary key of `chat_sessions` — same value across reconnects

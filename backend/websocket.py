@@ -379,6 +379,11 @@ class ConnectionHandler:
             self._working_dir,
             self._send,
             config_filename=dashboard_filename,
+            provider=(
+                self._provider_registry.get_default()
+                if self._provider_registry
+                else None
+            ),
         )
         self._watcher.on_change(self._dashboard.on_data_source_file_change)
         self._dashboard.start_watching()
