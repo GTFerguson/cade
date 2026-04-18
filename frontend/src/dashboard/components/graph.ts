@@ -1,11 +1,16 @@
 /**
  * Graph component — renders a 2D tile-grid graph from node/edge data.
  *
- * Panel config options:
+ * Panel config options (static):
  *   options.src         — URL or project-relative path to a graph JSON file
  *   options.format      — "world-map" to auto-convert Padarax world-map JSON;
  *                         omit for native graph format
  *   options.active_node — initial active node ID (string)
+ *
+ * Panel config options (dynamic via state file):
+ *   options.state_src   — URL to a JSON file with { world_id, room_id };
+ *                         when set, derives src as /content/worlds/<world_id>-map.json
+ *                         and uses room_id as active_node. Takes precedence over src.
  *
  * Native graph format:
  *   { nodes: [{id, label, x, y, z}], edges: [{from, to, label, traversable}],
@@ -66,23 +71,14 @@ export class GraphComponent extends BaseDashboardComponent {
   protected build(): void {
     if (!this.container || !this.props) return;
 
-    const src        = String(this.props.panel.options?.src ?? "");
-    const format     = String(this.props.panel.options?.format ?? "");
-    this.activeNode  = String(this.props.panel.options?.active_node ?? "");
-
-    if (!src) {
-      this.container.innerHTML =
-        '<div class="dashboard-component-error">graph: options.src is required</div>';
-      return;
-    }
+    const stateSrc = String(this.props.panel.options?.state_src ?? "");
+    const format   = String(this.props.panel.options?.format ?? "world-map");
 
     this.container.innerHTML = '<div class="gg-loading">Loading…</div>';
 
-    fetch(src)
-      .then(r => {
-        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-        return r.json();
-      })
+    const load = stateSrc ? this.#loadFromState(stateSrc) : this.#loadFromOptions();
+
+    load
       .then((raw: Record<string, unknown>) => {
         this.graphData = format === "world-map" ? fromWorldMap(raw) : (raw as unknown as GraphData);
         if (!this.activeNode && this.graphData.nodes[0]) {
@@ -96,6 +92,32 @@ export class GraphComponent extends BaseDashboardComponent {
             `<div class="dashboard-component-error">graph: ${err.message}</div>`;
         }
       });
+  }
+
+  #loadFromState(stateSrc: string): Promise<Record<string, unknown>> {
+    return fetch(stateSrc)
+      .then(r => {
+        if (!r.ok) throw new Error(`state_src ${r.status} ${r.statusText}`);
+        return r.json() as Promise<{ world_id: string; room_id: string }>;
+      })
+      .then(({ world_id, room_id }) => {
+        this.activeNode = room_id;
+        const src = `/content/worlds/${world_id}-map.json`;
+        return fetch(src).then(r => {
+          if (!r.ok) throw new Error(`${src} ${r.status} ${r.statusText}`);
+          return r.json() as Promise<Record<string, unknown>>;
+        });
+      });
+  }
+
+  #loadFromOptions(): Promise<Record<string, unknown>> {
+    const src = String(this.props?.panel.options?.src ?? "");
+    if (!src) return Promise.reject(new Error("options.src or options.state_src is required"));
+    this.activeNode = String(this.props?.panel.options?.active_node ?? "");
+    return fetch(src).then(r => {
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json() as Promise<Record<string, unknown>>;
+    });
   }
 
   #reachable(): Map<string, string> {
