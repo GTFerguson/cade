@@ -5,5 +5,7 @@ export { ChecklistComponent } from "./checklist";
 export { KanbanComponent } from "./kanban";
 export { KeyValueComponent } from "./key-value";
 export { MarkdownPanelComponent } from "./markdown-panel";
+export { NpcDetailComponent } from "./npc-detail";
 export { TableComponent } from "./table";
 export { TimelineComponent } from "./timeline";
+export { WorldDetailComponent } from "./world-detail";

@@ -255,7 +255,7 @@ export class ProjectContextImpl implements IProjectContext {
             this.setViewMode("dashboard");
           });
           viewer.setPreview(buildPreviewEl(meta));
-          viewer.loadFile(path);
+          viewer.loadFile(path, meta);
         }
       });
     }
@@ -271,7 +271,7 @@ export class ProjectContextImpl implements IProjectContext {
           this.rightPane?.setMode("dashboard");
         });
         viewer.setPreview(buildPreviewEl(meta));
-        viewer.loadFile(path);
+        viewer.loadFile(path, meta);
       }
     });
 

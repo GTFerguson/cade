@@ -373,7 +373,7 @@ export class DashboardPane implements Component {
     if (panel.id) panelEl.dataset["panelId"] = panel.id;
 
     // Wide components span the full grid row
-    const wideComponents = new Set(["kanban", "table", "timeline"]);
+    const wideComponents = new Set(["kanban", "npc_detail", "table", "timeline", "world_detail"]);
     if (wideComponents.has(panel.component)) {
       panelEl.classList.add("dashboard-panel--full-width");
     }

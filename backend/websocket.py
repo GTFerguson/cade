@@ -82,6 +82,15 @@ class ConnectionHandler:
         self._working_dir: Path = config.working_dir
         self._session: PTYSession | None = None
         self._session_id: str | None = None
+        # Optional override for launch.yml's dashboard_file, sent by the
+        # client in SET_PROJECT. Set when the user opens cade with a
+        # ?dashboard=<path> URL param.
+        self._dashboard_file_override: str | None = None
+        # Optional override for launch.yml's `provider:` block. "none"
+        # means skip the project-local provider registration entirely
+        # (session uses CADE's default Claude Code chat). Set via
+        # ?provider= URL param.
+        self._provider_override: str | None = None
         self._watcher: FileWatcher | None = None
         self._closed = False
         self._suppress_output = False
@@ -281,6 +290,20 @@ class ConnectionHandler:
                         self._session_id = data.get("sessionId")
                         if self._session_id:
                             logger.debug("Session ID: %s", self._session_id)
+                        dashboard_override = data.get("dashboardFile")
+                        if isinstance(dashboard_override, str) and dashboard_override.strip():
+                            self._dashboard_file_override = dashboard_override.strip()
+                            logger.info(
+                                "Dashboard override from client: %s",
+                                self._dashboard_file_override,
+                            )
+                        provider_override = data.get("providerOverride")
+                        if isinstance(provider_override, str) and provider_override.strip():
+                            self._provider_override = provider_override.strip()
+                            logger.info(
+                                "Provider override from client: %s",
+                                self._provider_override,
+                            )
                         self._project_set.set()
                         return
                 except asyncio.TimeoutError:
@@ -312,8 +335,16 @@ class ConnectionHandler:
         # The project-local provider is set as the session default (beats the
         # global ~/.cade/providers.toml default), so opening a project with a
         # launch.yml provider gets you that provider in ChatPane automatically.
+        # Client-side ?provider=none URL param skips this entirely so the
+        # session falls back to CADE's default Claude Code chat — useful for
+        # opening an authoring/admin view of a game-mode project.
         self._launch_yaml: dict = load_launch_preset(self._working_dir)
         provider_config_dict = extract_provider_config(self._launch_yaml)
+        if self._provider_override == "none":
+            logger.info(
+                "Provider override 'none' — skipping launch.yml provider registration",
+            )
+            provider_config_dict = None
         if provider_config_dict is not None:
             try:
                 pc = ProviderConfig(**provider_config_dict)
@@ -416,7 +447,13 @@ class ConnectionHandler:
         # a `dashboard_file` override, point the handler at that instead
         # so projects can ship multiple dashboards (e.g. player vs GM).
         from core.backend.dashboard.handler import DashboardHandler
-        dashboard_filename = extract_dashboard_filename(self._launch_yaml)
+        # Client-side ?dashboard= URL param wins over launch.yml's
+        # dashboard_file when present, so a project shipping multiple
+        # dashboards can be opened on any of them via URL.
+        dashboard_filename = (
+            self._dashboard_file_override
+            or extract_dashboard_filename(self._launch_yaml)
+        )
         self._dashboard = DashboardHandler(
             self._working_dir,
             self._send,
@@ -748,6 +785,24 @@ class ConnectionHandler:
                 await self._send({
                     "type": MessageType.DASHBOARD_FOCUS_VIEW,
                     "view_id": view_id,
+                })
+            return
+
+        if event_type == "dashboard_hide_view":
+            view_id = payload.get("view_id") or ""
+            if view_id:
+                await self._send({
+                    "type": MessageType.DASHBOARD_HIDE_VIEW,
+                    "view_id": view_id,
+                })
+            return
+
+        if event_type == "dashboard_data":
+            sources = payload.get("sources")
+            if sources:
+                await self._send({
+                    "type": MessageType.DASHBOARD_DATA,
+                    "sources": sources,
                 })
             return
 

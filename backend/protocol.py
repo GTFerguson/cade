@@ -87,6 +87,7 @@ class MessageType:
     DASHBOARD_DATA = "dashboard-data"  # Data payload: { type, sources: dict[str, list] }
     DASHBOARD_CLEARED = "dashboard-cleared"  # Config removed: { type }
     DASHBOARD_FOCUS_VIEW = "dashboard-focus-view"  # Programmatic tab switch: { type, view_id }
+    DASHBOARD_HIDE_VIEW = "dashboard-hide-view"  # Hide a tab: { type, view_id }
 
 
 class SessionKey:

@@ -706,12 +706,6 @@ def create_app(config: Config | None = None) -> FastAPI:
             return FileResponse(FRONTEND_DIST / "index.html")
 
         app.mount(
-            "/project",
-            StaticFiles(directory=str(cfg.working_dir)),
-            name="project-files",
-        )
-
-        app.mount(
             "/",
             StaticFiles(directory=FRONTEND_DIST, html=True),
             name="static",

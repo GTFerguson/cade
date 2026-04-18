@@ -13,8 +13,10 @@ import {
   KanbanComponent,
   KeyValueComponent,
   MarkdownPanelComponent,
+  NpcDetailComponent,
   TableComponent,
   TimelineComponent,
+  WorldDetailComponent,
 } from "./components";
 import type { DashboardComponent } from "./types";
 
@@ -49,7 +51,9 @@ export function createDefaultRegistry(): ComponentRegistry {
   registry.register("kanban", KanbanComponent);
   registry.register("key_value", KeyValueComponent);
   registry.register("markdown", MarkdownPanelComponent);
+  registry.register("npc_detail", NpcDetailComponent);
   registry.register("table", TableComponent);
   registry.register("timeline", TimelineComponent);
+  registry.register("world_detail", WorldDetailComponent);
   return registry;
 }

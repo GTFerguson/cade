@@ -261,8 +261,6 @@ class WebsocketProvider(BaseProvider):
             websockets.connect(self._url, max_size=None),
             timeout=self._connect_timeout,
         )
-        # Announce ourselves. The server replies with chat_history (if any)
-        # followed by connected; the listener task routes both.
         hello: dict[str, Any] = {
             "type": "hello",
             "session_id": self._session_id,
@@ -271,7 +269,37 @@ class WebsocketProvider(BaseProvider):
         if self._auth_token:
             hello["auth_token"] = self._auth_token
         await self._ws.send(json.dumps(hello))
+        # Block until the server acks with `connected`. The server's hello
+        # handler posts a deferred state transition (Connecting → Playing) via
+        # its loop thread; if we return before that lands, a command sent
+        # immediately after reconnect arrives while the server still sees
+        # Connecting state and rejects it with "send a `hello` frame first".
+        # chat_history frames arriving before `connected` are routed normally.
+        await asyncio.wait_for(
+            self._drain_until_connected(), timeout=self._connect_timeout
+        )
         self._listener_task = asyncio.create_task(self._listen())
+
+    async def _drain_until_connected(self) -> None:
+        """Route frames from the server until the `connected` ack arrives."""
+        assert self._ws is not None
+        async for raw in self._ws:
+            if isinstance(raw, bytes):
+                raw = raw.decode("utf-8", errors="replace")
+            try:
+                frame = json.loads(raw)
+            except json.JSONDecodeError:
+                logger.warning(
+                    "WS provider '%s' got non-JSON frame during handshake", self._name
+                )
+                continue
+            await self._route_frame(frame)
+            if frame.get("type") == "connected":
+                return
+        raise RuntimeError(
+            f"WebsocketProvider '{self._name}': connection closed before "
+            "'connected' frame was received"
+        )
 
     async def _ensure_connected(self) -> None:
         if self._ws is None or self._is_closed():
@@ -330,5 +358,13 @@ class WebsocketProvider(BaseProvider):
             view_id = frame.get("view_id") or ""
             if view_id:
                 await handler("dashboard_focus", {"view_id": view_id})
+        elif ftype == "dashboard_hide_view":
+            view_id = frame.get("view_id") or ""
+            if view_id:
+                await handler("dashboard_hide_view", {"view_id": view_id})
+        elif ftype == "dashboard_data":
+            sources = frame.get("sources")
+            if sources:
+                await handler("dashboard_data", {"sources": sources})
         else:
             logger.debug("WS provider '%s' unhandled frame type: %s", self._name, ftype)

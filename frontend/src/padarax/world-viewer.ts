@@ -140,7 +140,13 @@ export class WorldViewer {
     el_.appendChild(header);
 
     if (room.description) {
-      el_.appendChild(el("p", "world-v-room-desc", room.description));
+      for (const para of room.description.split(/\n\s*\n/)) {
+        const trimmed = para.trim();
+        if (!trimmed) continue;
+        const p = el("p", "world-v-room-desc");
+        appendInline(p, trimmed);
+        el_.appendChild(p);
+      }
     }
 
     const exits = room.exits ?? [];
@@ -169,4 +175,22 @@ function el(tag: string, className?: string, text?: string): HTMLElement {
   if (className) e.className = className;
   if (text != null) e.textContent = text;
   return e;
+}
+
+// Minimal inline markdown: **bold** and *italic*. Builds text / strong / em
+// nodes only — never innerHTML — so authored content cannot inject markup.
+function appendInline(parent: HTMLElement, text: string): void {
+  const pattern = /\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(text)) !== null) {
+    if (m.index > last) parent.appendChild(document.createTextNode(text.slice(last, m.index)));
+    const tag = m[1] !== undefined ? "strong" : "em";
+    const inner = (m[1] ?? m[2]) as string;
+    const node = document.createElement(tag);
+    node.textContent = inner;
+    parent.appendChild(node);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
 }
