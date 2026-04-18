@@ -17,7 +17,7 @@ import {
   runLoadIn,
   runDismiss,
 } from "./splash-effects";
-import { renderSignInButton } from "../auth/googleAuth";
+import { initGoogleAuth } from "../auth/googleAuth";
 
 export interface SplashOption {
   label: string;
@@ -296,24 +296,43 @@ export class Splash {
     this.element.querySelector(".splash-google-auth-content")?.remove();
 
     const container = document.createElement("div");
-    container.className = "splash-google-auth-content";
+    container.className = "splash-auth-content";
 
-    const msgEl = document.createElement("div");
-    msgEl.className = "auth-message";
-    msgEl.textContent = "sign in with google";
-    container.appendChild(msgEl);
+    container.innerHTML = `
+      <div class="auth-message">authentication required</div>
+    `;
 
-    // GIS renders its own button DOM into this div
-    const buttonContainer = document.createElement("div");
-    buttonContainer.className = "google-signin-button";
-    container.appendChild(buttonContainer);
+    const optionsContainer = document.createElement("div");
+    optionsContainer.className = "splash-options";
 
+    const actions = [
+      { label: "connect", action: () => initGoogleAuth(clientId, onToken) },
+    ];
+
+    this.optionEls = actions.map((opt) => {
+      const el = document.createElement("div");
+      el.className = "splash-option";
+      el.textContent = `[${opt.label}]`;
+      el.addEventListener("click", () => opt.action());
+      optionsContainer.appendChild(el);
+      return el;
+    });
+
+    container.appendChild(optionsContainer);
     this.element.appendChild(container);
 
-    // Render the GIS button; on success store the token and call back
-    renderSignInButton(buttonContainer, clientId, (idToken) => {
-      onToken(idToken);
+    this.nav = new MenuNav({
+      getOptions: () => this.optionEls,
+      onSelect: (i) => actions[i]?.action(),
     });
+    this.nav.renderSelection();
+
+    const helpEl = document.createElement("div");
+    helpEl.className = "splash-help";
+    helpEl.innerHTML = renderHelpBar([
+      { key: "enter", label: "connect" },
+    ]);
+    this.element.appendChild(helpEl);
   }
 
   /**

@@ -25,6 +25,7 @@ import { Splash } from "./ui/splash";
 import type { RemoteProfile } from "./remote/types";
 import { getAuthToken, setAuthToken } from "./auth/tokenManager";
 import { setStoredIdToken } from "./auth/googleAuth";
+import { registerParadraxViewers } from "./padarax/register";
 
 class App {
   private tabManager: TabManager;
@@ -41,15 +42,61 @@ class App {
   private splashTimeout: number | null = null;
   private resumeInProgress = false;
   private launchOverrides: LaunchPreset;
+  /**
+   * URL ?dashboard=<path> override forwarded to the backend in SET_PROJECT.
+   * Overrides launch.yml's dashboard_file so a project shipping multiple
+   * dashboards (e.g. a worldbuilding/reference one + a player-facing one)
+   * can be opened on either via URL without editing launch.yml.
+   */
+  private dashboardOverride: string | null;
+  /**
+   * URL ?provider=<name|none> override forwarded to the backend in
+   * SET_PROJECT. "none" skips launch.yml's provider registration so the
+   * session uses CADE's default Claude Code chat — useful for opening
+   * an authoring/admin view of a project that normally registers a
+   * game-mode provider on connect.
+   */
+  private providerOverride: string | null;
 
   constructor() {
     this.tabManager = new TabManager();
     this.defaultProjectPath = this.getDefaultProjectPath();
     this.launchOverrides = App.parseLaunchOverrides();
+    this.dashboardOverride = App.parseDashboardOverride();
+    this.providerOverride = App.parseProviderOverride();
     this.keybindingManager = new KeybindingManager();
     this.helpOverlay = new HelpOverlay();
     this.themeSelector = new ThemeSelector();
     this.profileManager = new RemoteProfileManager();
+  }
+
+  /**
+   * Parse the ?provider=<name|none> URL param.
+   * "none" skips the project's launch.yml-registered provider so the
+   * session uses CADE's normal Claude Code chat. Forwarded to the
+   * backend via SET_PROJECT.
+   */
+  private static parseProviderOverride(): string | null {
+    const params = new URLSearchParams(window.location.search);
+    const value = params.get("provider");
+    if (value === null) return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  /**
+   * Parse the ?dashboard=<path> URL param.
+   * Returns the raw value (project-relative path or absolute) or null.
+   * Forwarded to the backend via SET_PROJECT to override launch.yml's
+   * dashboard_file. Aliases (e.g. "gm", "game") are project-specific and
+   * not handled here — projects can bookmark whatever filename they ship.
+   */
+  private static parseDashboardOverride(): string | null {
+    const params = new URLSearchParams(window.location.search);
+    const value = params.get("dashboard");
+    if (value === null) return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
   }
 
   /**
@@ -129,6 +176,11 @@ class App {
       console.log("[launch] hiding file tree");
       tab.context?.getLayout()?.hideFileTree();
     }
+
+    if (merged.viewers && merged.viewers.length > 0) {
+      console.log(`[launch] registering ${merged.viewers.length} viewer(s)`);
+      registerParadraxViewers(merged.viewers);
+    }
   }
 
   /**
@@ -207,6 +259,13 @@ class App {
     const urlParams = new URLSearchParams(window.location.search);
     const autoProject = urlParams.get("project");
     if (autoProject) {
+      // Mount the splash even on auto-project so the Google Sign-In flow
+      // (fired from `google-auth-required`) has a host to render its button.
+      // Splash hides itself on first shell output, exactly as the manual flow.
+      if (this.tabContentContainer) {
+        this.startSplash = new Splash(this.tabContentContainer);
+        this.startSplash.setLoading();
+      }
       const tab = this.tabManager.createTab(autoProject);
       this.tabManager.switchTab(tab.id);
     } else {
@@ -447,22 +506,33 @@ class App {
     });
 
     tab.ws.on("auth-failed", async () => {
-      // Local tab on remote browser — prompt for server's auth token
+      // Local tab on remote browser — authenticate to continue
       if (!tab.remoteProfileId && isRemoteBrowserAccess()) {
         const dialogKey = "__local_remote_browser__";
 
         if (this.activeAuthDialogs.has(dialogKey)) return;
         this.activeAuthDialogs.add(dialogKey);
 
-        this.showAuthSplash("Server", (newToken) => {
-          this.activeAuthDialogs.delete(dialogKey);
-
-          if (newToken) {
-            setAuthToken(newToken);
-            tab.ws.setAuthToken(newToken);
-            tab.ws.connect();
+        if (config.googleClientId) {
+          if (!this.startSplash?.isVisible()) {
+            this.startSplash = new Splash(this.tabContentContainer!);
           }
-        });
+          this.startSplash.setGoogleAuthMode(config.googleClientId, (idToken) => {
+            this.activeAuthDialogs.delete(dialogKey);
+            setStoredIdToken(idToken);
+            tab.ws.setGoogleIdToken(idToken);
+            tab.ws.connect();
+          });
+        } else {
+          this.showAuthSplash("Server", (newToken) => {
+            this.activeAuthDialogs.delete(dialogKey);
+            if (newToken) {
+              setAuthToken(newToken);
+              tab.ws.setAuthToken(newToken);
+              tab.ws.connect();
+            }
+          });
+        }
         return;
       }
 
@@ -486,31 +556,43 @@ class App {
       const profile = await this.profileManager.getProfile(tab.remoteProfileId);
       const displayName = profile?.name ?? tab.name.split(":")[0]?.trim() ?? "Remote";
 
-      this.showAuthSplash(displayName, async (newToken) => {
-        await this.tabManager.closeTab(tab.id);
-        this.activeAuthDialogs.delete(tab.remoteProfileId!);
-
-        if (newToken) {
-          if (profile) {
-            profile.authToken = newToken;
-            await this.profileManager.saveProfile(profile);
-            const newTab = await this.tabManager.createRemoteTab(profile);
-            this.tabManager.switchTab(newTab.id);
-          } else if (tab.remoteUrl) {
-            const fallbackProfile: RemoteProfile = {
-              id: tab.remoteProfileId!,
-              name: displayName,
-              url: tab.remoteUrl,
-              authToken: newToken,
-              connectionType: "direct",
-              defaultPath: tab.projectPath,
-            };
-            await this.profileManager.saveProfile(fallbackProfile);
-            const newTab = await this.tabManager.createRemoteTab(fallbackProfile);
-            this.tabManager.switchTab(newTab.id);
-          }
+      if (config.googleClientId) {
+        if (!this.startSplash?.isVisible()) {
+          this.startSplash = new Splash(this.tabContentContainer!);
         }
-      });
+        this.startSplash.setGoogleAuthMode(config.googleClientId, (idToken) => {
+          this.activeAuthDialogs.delete(tab.remoteProfileId!);
+          setStoredIdToken(idToken);
+          tab.ws.setGoogleIdToken(idToken);
+          tab.ws.connect();
+        });
+      } else {
+        this.showAuthSplash(displayName, async (newToken) => {
+          await this.tabManager.closeTab(tab.id);
+          this.activeAuthDialogs.delete(tab.remoteProfileId!);
+
+          if (newToken) {
+            if (profile) {
+              profile.authToken = newToken;
+              await this.profileManager.saveProfile(profile);
+              const newTab = await this.tabManager.createRemoteTab(profile);
+              this.tabManager.switchTab(newTab.id);
+            } else if (tab.remoteUrl) {
+              const fallbackProfile: RemoteProfile = {
+                id: tab.remoteProfileId!,
+                name: displayName,
+                url: tab.remoteUrl,
+                authToken: newToken,
+                connectionType: "direct",
+                defaultPath: tab.projectPath,
+              };
+              await this.profileManager.saveProfile(fallbackProfile);
+              const newTab = await this.tabManager.createRemoteTab(fallbackProfile);
+              this.tabManager.switchTab(newTab.id);
+            }
+          }
+        });
+      }
     });
 
     tab.ws.on("connection-lost", () => {
@@ -545,7 +627,12 @@ class App {
       tab.ws.on("output", onFirstOutput);
     }
 
-    tab.ws.sendSetProject(tab.projectPath, tab.id);
+    tab.ws.sendSetProject(
+      tab.projectPath,
+      tab.id,
+      this.dashboardOverride ?? undefined,
+      this.providerOverride ?? undefined,
+    );
 
     // Auth is project-driven now: connect first; if the project's launch.yml
     // declares Google auth, the server sends an `auth-required` frame with

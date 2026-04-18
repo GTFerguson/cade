@@ -71,6 +71,7 @@ interface WebSocketEvents {
   "dashboard-data": DashboardDataMessage;
   "dashboard-cleared": DashboardClearedMessage;
   "dashboard-focus-view": { type: string; view_id: string };
+  "dashboard-hide-view": { type: string; view_id: string };
   "dashboard-push-panel": {
     type: string;
     panel: { id: string; title: string; component: string };
@@ -107,6 +108,8 @@ export class WebSocketClient extends BaseWSClient {
   private pendingGoogleAuth: { client_id: string } | null = null;
   private pendingProjectPath: string | null = null;
   private pendingSessionId: string | null = null;
+  private pendingDashboardFile: string | null = null;
+  private pendingProviderOverride: string | null = null;
 
   // Bridged subscribers for events that aren't just message-type passthrough.
   private connectedHandlers = new Set<EventHandler<ConnectedMessage>>();
@@ -260,6 +263,12 @@ export class WebSocketClient extends BaseWSClient {
       };
       if (this.pendingSessionId !== null) {
         message.sessionId = this.pendingSessionId;
+      }
+      if (this.pendingDashboardFile !== null) {
+        message.dashboardFile = this.pendingDashboardFile;
+      }
+      if (this.pendingProviderOverride !== null) {
+        message.providerOverride = this.pendingProviderOverride;
       }
       this.send(message);
     }
@@ -553,9 +562,16 @@ export class WebSocketClient extends BaseWSClient {
    * Set project directory for this connection. If not connected yet, the
    * path is stored and sent on connect.
    */
-  sendSetProject(path: string, sessionId?: string): void {
+  sendSetProject(
+    path: string,
+    sessionId?: string,
+    dashboardFile?: string,
+    providerOverride?: string,
+  ): void {
     this.pendingProjectPath = path;
     this.pendingSessionId = sessionId ?? null;
+    this.pendingDashboardFile = dashboardFile ?? null;
+    this.pendingProviderOverride = providerOverride ?? null;
     if (this.isConnected()) {
       const message: SetProjectMessage = {
         type: MessageType.SET_PROJECT,
@@ -563,6 +579,12 @@ export class WebSocketClient extends BaseWSClient {
       };
       if (sessionId !== undefined) {
         message.sessionId = sessionId;
+      }
+      if (dashboardFile !== undefined) {
+        message.dashboardFile = dashboardFile;
+      }
+      if (providerOverride !== undefined) {
+        message.providerOverride = providerOverride;
       }
       this.send(message);
     }

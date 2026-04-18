@@ -17,15 +17,6 @@ interface GoogleAccountsId {
     auto_select?: boolean;
   }): void;
   prompt(): void;
-  renderButton(
-    parent: HTMLElement,
-    options: {
-      theme?: string;
-      size?: string;
-      type?: string;
-      text?: string;
-    }
-  ): void;
 }
 
 declare global {
@@ -87,34 +78,6 @@ export async function initGoogleAuth(
   });
 
   gis.prompt();
-}
-
-/**
- * Render a Sign In with Google button into the given container element.
- *
- * Calls back with the id_token once the user completes sign-in.
- */
-export async function renderSignInButton(
-  container: HTMLElement,
-  clientId: string,
-  callback: (idToken: string) => void
-): Promise<void> {
-  const gis = await waitForGis();
-
-  gis.initialize({
-    client_id: clientId,
-    callback: (response) => {
-      setStoredIdToken(response.credential);
-      callback(response.credential);
-    },
-  });
-
-  gis.renderButton(container, {
-    theme: "outline",
-    size: "large",
-    type: "standard",
-    text: "sign_in_with",
-  });
 }
 
 /**
