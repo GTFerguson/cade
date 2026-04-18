@@ -96,6 +96,8 @@ class ViewConfig:
     id: str
     title: str
     layout: str | None = None
+    hidden: bool = False
+    group: str | None = None
     panels: list[PanelConfig] = field(default_factory=list)
     sidebar_filters: list[dict[str, Any]] = field(default_factory=list)
     tab_filter: dict[str, Any] | None = None
@@ -203,6 +205,8 @@ def _parse_view(raw: dict[str, Any], idx: int) -> ViewConfig:
         id=view_id,
         title=title,
         layout=raw.get("layout"),
+        hidden=bool(raw.get("hidden", False)),
+        group=raw.get("group") or None,
         panels=panels,
         sidebar_filters=raw.get("sidebar_filters", []),
         tab_filter=raw.get("tab_filter"),

@@ -86,6 +86,60 @@
   margin-left: 32px;
 }
 
+.dashboard-view-subnav {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-color);
+  gap: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
+  background: var(--bg-secondary, var(--bg-primary));
+}
+
+.dashboard-view-subnav::-webkit-scrollbar { height: 3px; }
+.dashboard-view-subnav::-webkit-scrollbar-track { background: var(--scrollbar-bg); }
+.dashboard-view-subnav::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); }
+
+.dashboard-view-subtab {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  padding: 8px 2px 6px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: color 0.1s;
+  position: relative;
+  white-space: nowrap;
+}
+
+.dashboard-view-subtab + .dashboard-view-subtab {
+  margin-left: 24px;
+}
+
+.dashboard-view-subtab:hover {
+  color: var(--text-secondary);
+}
+
+.dashboard-view-subtab--active {
+  color: var(--text-primary);
+}
+
+.dashboard-view-subtab--active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--text-primary);
+}
+
 .dashboard-view-tab:hover {
   color: var(--text-secondary);
 }

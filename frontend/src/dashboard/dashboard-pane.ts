@@ -27,8 +27,11 @@ export class DashboardPane implements Component {
   private activeComponents: Map<string, DashboardComponent> = new Map();
   private onViewFileCallback: ((path: string) => void) | null = null;
 
+  private activeGroupId: string | null = null;
+
   private headerEl: HTMLElement;
   private viewNavEl: HTMLElement;
+  private subNavEl: HTMLElement;
   private contentEl: HTMLElement;
   private emptyEl: HTMLElement;
 
@@ -44,6 +47,9 @@ export class DashboardPane implements Component {
     this.viewNavEl = document.createElement("div");
     this.viewNavEl.className = "dashboard-view-nav";
 
+    this.subNavEl = document.createElement("div");
+    this.subNavEl.className = "dashboard-view-subnav";
+
     this.contentEl = document.createElement("div");
     this.contentEl.className = "dashboard-view-content";
 
@@ -53,6 +59,7 @@ export class DashboardPane implements Component {
 
     this.container.appendChild(this.headerEl);
     this.container.appendChild(this.viewNavEl);
+    this.container.appendChild(this.subNavEl);
     this.container.appendChild(this.contentEl);
     this.container.appendChild(this.emptyEl);
   }
@@ -81,10 +88,14 @@ export class DashboardPane implements Component {
     this.viewNavEl.style.display = "";
     this.contentEl.style.display = "";
 
-    // Activate first view
+    // Activate first group (or first ungrouped view)
     const firstView = config.views[0];
     if (firstView) {
-      this.activateView(firstView.id);
+      if (firstView.group) {
+        this.activateGroup(firstView.group);
+      } else {
+        this.activateView(firstView.id);
+      }
     }
   }
 
@@ -213,28 +224,73 @@ export class DashboardPane implements Component {
 
   private buildViewNav(): void {
     this.viewNavEl.innerHTML = "";
+    this.subNavEl.innerHTML = "";
     if (!this.config) return;
 
+    const seenGroups = new Set<string>();
+
     for (const view of this.config.views) {
+      if (view.group) {
+        if (!seenGroups.has(view.group)) {
+          seenGroups.add(view.group);
+          const tab = document.createElement("button");
+          tab.className = "dashboard-view-tab";
+          tab.textContent = view.group;
+          tab.dataset["groupId"] = view.group;
+          tab.addEventListener("click", () => this.activateGroup(view.group!));
+          this.viewNavEl.appendChild(tab);
+        }
+      } else {
+        const tab = document.createElement("button");
+        tab.className = "dashboard-view-tab";
+        tab.textContent = view.title;
+        tab.dataset["viewId"] = view.id;
+        if (view.hidden) tab.style.display = "none";
+        tab.addEventListener("click", () => this.activateView(view.id));
+        this.viewNavEl.appendChild(tab);
+      }
+    }
+  }
+
+  private activateGroup(groupName: string): void {
+    if (!this.config) return;
+    this.activeGroupId = groupName;
+
+    for (const tab of this.viewNavEl.querySelectorAll<HTMLElement>("[data-group-id]")) {
+      tab.classList.toggle("dashboard-view-tab--active", tab.dataset["groupId"] === groupName);
+    }
+    for (const tab of this.viewNavEl.querySelectorAll<HTMLElement>("[data-view-id]")) {
+      tab.classList.remove("dashboard-view-tab--active");
+    }
+
+    // Rebuild subnav for this group
+    this.subNavEl.innerHTML = "";
+    const groupViews = this.config.views.filter((v) => v.group === groupName);
+    this.subNavEl.style.display = groupViews.length > 0 ? "" : "none";
+
+    for (const view of groupViews) {
       const tab = document.createElement("button");
-      tab.className = "dashboard-view-tab";
+      tab.className = "dashboard-view-subtab";
       tab.textContent = view.title;
       tab.dataset["viewId"] = view.id;
+      if (view.hidden) tab.style.display = "none";
       tab.addEventListener("click", () => this.activateView(view.id));
-      this.viewNavEl.appendChild(tab);
+      this.subNavEl.appendChild(tab);
     }
+
+    // Activate first visible view in group
+    const first = groupViews.find((v) => !v.hidden);
+    if (first) this.activateView(first.id);
   }
 
   private activateView(viewId: string): void {
     this.activeViewId = viewId;
 
-    // Update tab active state
-    for (const tab of this.viewNavEl.children) {
-      const el = tab as HTMLElement;
-      el.classList.toggle(
-        "dashboard-view-tab--active",
-        el.dataset["viewId"] === viewId,
-      );
+    for (const tab of this.subNavEl.querySelectorAll<HTMLElement>("[data-view-id]")) {
+      tab.classList.toggle("dashboard-view-subtab--active", tab.dataset["viewId"] === viewId);
+    }
+    for (const tab of this.viewNavEl.querySelectorAll<HTMLElement>("[data-view-id]")) {
+      tab.classList.toggle("dashboard-view-tab--active", tab.dataset["viewId"] === viewId);
     }
 
     this.renderView(viewId);
@@ -245,12 +301,42 @@ export class DashboardPane implements Component {
    * session just opened, focus the Barter tab"). Silently no-ops
    * if the view id isn't declared by the current config — the
    * engine should only name views that exist, but a stale config
-   * shouldn't crash. */
+   * shouldn't crash. Unhides the tab if it was hidden. */
   focusView(viewId: string): void {
     if (!this.config) return;
-    const exists = this.config.views.some((v) => v.id === viewId);
-    if (!exists) return;
+    const view = this.config.views.find((v) => v.id === viewId);
+    if (!view) return;
+
+    // Switch to the view's group first if needed
+    if (view.group && view.group !== this.activeGroupId) {
+      this.activateGroup(view.group);
+    }
+
+    // Unhide in subnav or top nav
+    const navEl = view.group ? this.subNavEl : this.viewNavEl;
+    for (const tab of navEl.querySelectorAll<HTMLElement>("[data-view-id]")) {
+      if (tab.dataset["viewId"] === viewId) { tab.style.display = ""; break; }
+    }
+
     this.activateView(viewId);
+  }
+
+  /** Hide a tab and, if it was active, switch back to the first visible view.
+   * Driven by a server `dashboard_hide_view` frame (e.g. barter session
+   * closed). No-ops if the view doesn't exist. */
+  hideView(viewId: string): void {
+    if (!this.config) return;
+    const view = this.config.views.find((v) => v.id === viewId);
+    const navEl = view?.group ? this.subNavEl : this.viewNavEl;
+    for (const tab of navEl.querySelectorAll<HTMLElement>("[data-view-id]")) {
+      if (tab.dataset["viewId"] === viewId) { tab.style.display = "none"; break; }
+    }
+    if (this.activeViewId === viewId) {
+      const firstVisible = this.config.views.find(
+        (v) => v.id !== viewId && !v.hidden && v.group === view?.group,
+      );
+      if (firstVisible) this.activateView(firstVisible.id);
+    }
   }
 
   // -------------------------------------------------------------------

@@ -53,6 +53,8 @@ export interface ViewConfig {
   id: string;
   title: string;
   layout?: string;
+  hidden?: boolean;
+  group?: string;
   panels: PanelConfig[];
   sidebar_filters: Record<string, unknown>[];
   tab_filter?: Record<string, unknown>;
