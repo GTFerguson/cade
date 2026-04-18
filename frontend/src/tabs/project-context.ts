@@ -246,19 +246,37 @@ export class ProjectContextImpl implements IProjectContext {
       this.dashboardFullPane.onViewFile((path) => {
         this.setViewMode("workspace");
         this.rightPane?.setMode("markdown");
-        this.rightPane?.getViewer().loadFile(path);
+        const viewer = this.rightPane?.getViewer();
+        if (viewer) {
+          viewer.setDashboardReturn(() => {
+            viewer.setDashboardReturn(null);
+            this.setViewMode("dashboard");
+          });
+          viewer.loadFile(path);
+        }
       });
     }
 
     // Also wire the right-pane dashboard's view-file handler
     dashboardPane.onViewFile((path) => {
       this.rightPane?.setMode("markdown");
-      this.rightPane?.getViewer().loadFile(path);
+      const viewer = this.rightPane?.getViewer();
+      if (viewer) {
+        viewer.setDashboardReturn(() => {
+          viewer.setDashboardReturn(null);
+          this.rightPane?.setMode("dashboard");
+        });
+        viewer.loadFile(path);
+      }
     });
 
     this.fileTree.on("file-select", (path) => {
       this.rightPane?.setMode("markdown");
-      this.rightPane?.getViewer().loadFile(path);
+      const viewer = this.rightPane?.getViewer();
+      if (viewer) {
+        viewer.setDashboardReturn(null);
+        viewer.loadFile(path);
+      }
       this.scheduleSave();
     });
 
@@ -330,6 +348,10 @@ export class ProjectContextImpl implements IProjectContext {
     this.ws.on("dashboard-focus-view", (msg) => {
       this.rightPane?.getDashboardPane()?.focusView(msg.view_id);
       this.dashboardFullPane?.focusView(msg.view_id);
+    });
+    this.ws.on("dashboard-hide-view", (msg) => {
+      this.rightPane?.getDashboardPane()?.hideView(msg.view_id);
+      this.dashboardFullPane?.hideView(msg.view_id);
     });
 
     // Agent-pushed panels

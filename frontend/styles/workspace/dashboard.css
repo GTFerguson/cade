@@ -61,28 +61,29 @@
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
 }
 
 .dashboard-view-nav::-webkit-scrollbar { height: 4px; }
-.dashboard-view-nav::-webkit-scrollbar-track { background: transparent; }
-.dashboard-view-nav::-webkit-scrollbar-thumb { background: var(--border-color); }
+.dashboard-view-nav::-webkit-scrollbar-track { background: var(--scrollbar-bg); }
+.dashboard-view-nav::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); }
 
 .dashboard-view-tab {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
   background: none;
   border: none;
-  padding: 6px 0;
+  padding: 12px 2px 4px;
   cursor: pointer;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.75px;
   transition: color 0.1s;
   position: relative;
   white-space: nowrap;
 }
 
 .dashboard-view-tab + .dashboard-view-tab {
-  margin-left: 24px;
+  margin-left: 32px;
 }
 
 .dashboard-view-tab:hover {
@@ -312,7 +313,13 @@
   overflow-x: auto;
   font-size: 11px;
   line-height: 1.4;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
+
+.dash-markdown pre::-webkit-scrollbar { height: 4px; }
+.dash-markdown pre::-webkit-scrollbar-track { background: transparent; }
+.dash-markdown pre::-webkit-scrollbar-thumb { background: var(--border-color); }
 
 .dash-markdown pre code {
   background: transparent;
@@ -610,7 +617,13 @@
   gap: 4px;
   overflow-x: auto;
   min-height: 80px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
+
+.dash-kanban::-webkit-scrollbar { height: 4px; }
+.dash-kanban::-webkit-scrollbar-track { background: transparent; }
+.dash-kanban::-webkit-scrollbar-thumb { background: var(--border-color); }
 
 .dash-kanban-column {
   flex: 1;
@@ -704,7 +717,13 @@
    ═══════════════════════════════════════════════ */
 .dash-table-wrapper {
   overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
+
+.dash-table-wrapper::-webkit-scrollbar { height: 4px; }
+.dash-table-wrapper::-webkit-scrollbar-track { background: transparent; }
+.dash-table-wrapper::-webkit-scrollbar-thumb { background: var(--border-color); }
 
 .dash-table {
   width: 100%;
@@ -1023,7 +1042,13 @@
   max-width: 100%;
   overflow: auto;
   padding: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
+
+.gg-grid::-webkit-scrollbar { width: 4px; height: 4px; }
+.gg-grid::-webkit-scrollbar-track { background: transparent; }
+.gg-grid::-webkit-scrollbar-thumb { background: var(--border-color); }
 
 .gg-node {
   display: flex;

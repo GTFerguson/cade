@@ -18,6 +18,7 @@ import type { WebSocketClient } from "../platform/websocket";
 import type { MarkdownEvents, ViewState, MarkdownEventHandlers } from "./types";
 import { extractFrontmatter, renderFrontmatter } from "./frontmatter";
 import { renderCode } from "./code-highlight";
+import { renderJsonTree } from "./json-tree";
 import { wikiLinkExtension, attachWikiLinkHandlers } from "./wiki-links";
 import { handleViewModeScroll, scrollCodeBlocksHorizontally, createScrollState } from "./scroll";
 import type { ScrollState } from "./scroll";
@@ -63,6 +64,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   private planView: ViewState | null = null;
   private isPlanOverlayActive = false;
   private editorState: EditorModeState = createEditorModeState();
+  private dashboardReturnCallback: (() => void) | null = null;
   private boundHandlers = {
     fileContent: (message: any) => {
       this.currentPath = message.path;
@@ -151,6 +153,17 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
         console.error(`Error in ${event} handler:`, e);
       }
     });
+  }
+
+  /**
+   * Register a callback that returns the user to the dashboard.
+   * Pass null to clear (e.g. when the viewer is opened from the file tree).
+   */
+  setDashboardReturn(fn: (() => void) | null): void {
+    this.dashboardReturnCallback = fn;
+    if (this.currentPath !== null) {
+      this.render();
+    }
   }
 
   loadFile(path: string): void {
@@ -249,6 +262,13 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       closeBtn.title = "Close plan (Esc)";
       closeBtn.addEventListener("click", () => this.closePlanOverlay());
       header.appendChild(closeBtn);
+    } else if (this.dashboardReturnCallback) {
+      const backBtn = document.createElement("button");
+      backBtn.className = "viewer-close-btn";
+      backBtn.textContent = "[← dash]";
+      backBtn.title = "Return to dashboard (Esc)";
+      backBtn.addEventListener("click", () => this.dashboardReturnCallback?.());
+      header.appendChild(backBtn);
     }
 
     const content = document.createElement("div");
@@ -269,6 +289,9 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       attachWikiLinkHandlers(content, this.currentPath, (targetPath) => {
         this.emit("link-click", targetPath);
       });
+    } else if (this.currentFileType === "json") {
+      content.classList.add("json-viewer");
+      content.appendChild(renderJsonTree(this.currentContent));
     } else {
       content.classList.add("code-viewer");
       content.appendChild(renderCode(this.currentContent, this.currentFileType));
@@ -327,7 +350,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       return true;
     }
 
-    // ESC exits normal/edit mode or closes plan overlay
+    // ESC exits normal/edit mode, closes plan overlay, or returns to dashboard
     if (e.key === "Escape") {
       if (this.editorState.mode === "edit" || this.editorState.mode === "normal") {
         doExitToView(this.editorState, this.editorCallbacks(), this.ws);
@@ -335,6 +358,10 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       }
       if (this.isPlanOverlayActive) {
         this.closePlanOverlay();
+        return true;
+      }
+      if (this.dashboardReturnCallback) {
+        this.dashboardReturnCallback();
         return true;
       }
     }
