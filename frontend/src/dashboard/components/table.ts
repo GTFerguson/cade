@@ -109,6 +109,25 @@ export class TableComponent extends BaseDashboardComponent {
     const tbody = this.el("tbody");
     for (const item of sortedData) {
       const row = this.el("tr");
+      const filePath = String(item["_file"] ?? "");
+      if (filePath && this.props?.onAction) {
+        row.classList.add("dash-table-row--clickable");
+        const activate = () => {
+          this.props!.onAction({
+            action: "view_file",
+            source: typeof this.props!.panel.source === "string" ? this.props!.panel.source : "",
+            entityId: String(item["id"] ?? ""),
+            patch: { path: filePath },
+          });
+        };
+        row.addEventListener("click", activate);
+        row.addEventListener("keydown", (e: Event) => {
+          const key = (e as KeyboardEvent).key;
+          if (key === "Enter" || key === " ") { e.preventDefault(); activate(); }
+        });
+        row.setAttribute("tabindex", "0");
+        row.setAttribute("role", "button");
+      }
       for (const col of columns) {
         const td = this.el("td", undefined, this.fieldValue(item, col));
         row.appendChild(td);

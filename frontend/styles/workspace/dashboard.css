@@ -819,6 +819,15 @@
   background: var(--bg-secondary);
 }
 
+.dash-table-row--clickable {
+  cursor: pointer;
+}
+
+.dash-table-row--clickable:hover td {
+  background: var(--bg-hover, var(--bg-secondary));
+  color: var(--text-primary);
+}
+
 .dash-table-filters {
   display: flex;
   gap: 12px;
