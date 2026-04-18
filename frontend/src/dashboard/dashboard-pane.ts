@@ -25,7 +25,7 @@ export class DashboardPane implements Component {
   private registry: ComponentRegistry;
   private activeViewId: string | null = null;
   private activeComponents: Map<string, DashboardComponent> = new Map();
-  private onViewFileCallback: ((path: string) => void) | null = null;
+  private onViewFileCallback: ((path: string, meta?: Record<string, unknown>) => void) | null = null;
 
   private activeGroupId: string | null = null;
 
@@ -470,7 +470,7 @@ export class DashboardPane implements Component {
    * The host (ProjectContext) uses this to switch to workspace mode
    * and load the file in the markdown viewer.
    */
-  onViewFile(callback: (path: string) => void): void {
+  onViewFile(callback: (path: string, meta?: Record<string, unknown>) => void): void {
     this.onViewFileCallback = callback;
   }
 
@@ -479,7 +479,8 @@ export class DashboardPane implements Component {
     if (action.action === "view_file") {
       const path = String(action.patch?.["path"] ?? "");
       if (path && this.onViewFileCallback) {
-        this.onViewFileCallback(path);
+        const meta = action.patch ? { ...action.patch } : undefined;
+        this.onViewFileCallback(path, meta);
       }
       return;
     }

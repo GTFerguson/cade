@@ -449,6 +449,13 @@ class JsonDirectoryAdapter(BaseAdapter):
     exposed as `_filename` and used as `id` if the object has no `id`.
     The full parsed JSON is also exposed as `_json` (string) so detail
     views can pretty-print the raw file.
+
+    Extra options (via data source config `extra`):
+      merge_suffix: str  — e.g. "-map". For each primary file, look for a
+                           sibling named `{stem}{suffix}.json` and embed its
+                           parsed data as `_sibling` in the record. Sibling
+                           files are excluded from the primary listing.
+      exclude: str | list — filename(s) to skip entirely (exact match).
     """
 
     async def fetch(self, config: DataSourceConfig, project_root: Path) -> list[dict[str, Any]]:
@@ -460,19 +467,44 @@ class JsonDirectoryAdapter(BaseAdapter):
             logger.warning("JSON directory source '%s': not found: %s", config.name, dir_path)
             return []
 
+        merge_suffix: str = config.extra.get("merge_suffix", "")
+        exclude_raw = config.extra.get("exclude", [])
+        exclude_names: set[str] = (
+            {exclude_raw} if isinstance(exclude_raw, str) else set(exclude_raw)
+        )
+
+        def _load_json(path: Path) -> dict[str, Any] | None:
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                return data if isinstance(data, dict) else None
+            except Exception as e:
+                logger.warning("JSON directory '%s': skipping %s: %s", config.name, path.name, e)
+                return None
+
         def _scan():
             results = []
-            for item in sorted(dir_path.glob("*.json")):
+            all_files = sorted(dir_path.glob("*.json"))
+
+            # Build set of sibling filenames to skip in primary listing
+            sibling_names: set[str] = set()
+            if merge_suffix:
+                sibling_names = {
+                    f.name for f in all_files
+                    if f.stem.endswith(merge_suffix)
+                }
+
+            for item in all_files:
                 if item.name.startswith("."):
                     continue
-                try:
-                    text = item.read_text(encoding="utf-8")
-                    data = json.loads(text)
-                except Exception as e:
-                    logger.warning("JSON directory '%s': skipping %s: %s", config.name, item.name, e)
+                if item.name in exclude_names:
                     continue
-                if not isinstance(data, dict):
+                if item.name in sibling_names:
                     continue
+
+                data = _load_json(item)
+                if data is None:
+                    continue
+
                 entry = dict(data)
                 entry.setdefault("_filename", item.stem)
                 entry.setdefault("_file", str(item.relative_to(project_root)))
@@ -481,6 +513,14 @@ class JsonDirectoryAdapter(BaseAdapter):
                 entry.setdefault("_json_md", f"```json\n{pretty}\n```\n")
                 if not entry.get("id"):
                     entry["id"] = item.stem
+
+                if merge_suffix:
+                    sibling_path = dir_path / f"{item.stem}{merge_suffix}.json"
+                    if sibling_path.is_file():
+                        sibling_data = _load_json(sibling_path)
+                        if sibling_data is not None:
+                            entry["_sibling"] = sibling_data
+
                 results.append(entry)
             return results
 

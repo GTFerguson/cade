@@ -54,6 +54,7 @@ class DataSourceConfig:
     parse: str | None = None
     entity: EntityConfig | None = None
     headers: dict[str, str] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -134,10 +135,14 @@ def _parse_entity(raw: dict[str, Any] | None) -> EntityConfig | None:
     )
 
 
+_DATA_SOURCE_KNOWN_FIELDS = {"type", "endpoint", "path", "parse", "entity", "headers"}
+
+
 def _parse_data_source(name: str, raw: dict[str, Any]) -> DataSourceConfig:
     src_type = raw.get("type")
     if not src_type:
         raise DashboardConfigError(f"data_sources.{name}: missing 'type'")
+    extra = {k: v for k, v in raw.items() if k not in _DATA_SOURCE_KNOWN_FIELDS}
     return DataSourceConfig(
         name=name,
         type=src_type,
@@ -146,6 +151,7 @@ def _parse_data_source(name: str, raw: dict[str, Any]) -> DataSourceConfig:
         parse=raw.get("parse"),
         entity=_parse_entity(raw.get("entity")),
         headers=raw.get("headers", {}),
+        extra=extra,
     )
 
 

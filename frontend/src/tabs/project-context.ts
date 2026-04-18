@@ -19,6 +19,7 @@ import { ErrorCode } from "@core/platform/protocol";
 import type { ConnectedMessage, PtyExitedMessage, SessionState } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 import type { ProjectContext as IProjectContext } from "./types";
+import { createDefaultRegistry } from "../dashboard/registry";
 
 const PANE_ORDER: PaneType[] = ["file-tree", "terminal", "viewer"];
 
@@ -243,29 +244,33 @@ export class ProjectContextImpl implements IProjectContext {
       this.dashboardFullPane.initialize();
 
       // Click file in dashboard → switch to workspace, open in viewer
-      this.dashboardFullPane.onViewFile((path) => {
+      this.dashboardFullPane.onViewFile((path, meta) => {
         this.setViewMode("workspace");
         this.rightPane?.setMode("markdown");
         const viewer = this.rightPane?.getViewer();
         if (viewer) {
           viewer.setDashboardReturn(() => {
             viewer.setDashboardReturn(null);
+            viewer.setPreview(null);
             this.setViewMode("dashboard");
           });
+          viewer.setPreview(buildPreviewEl(meta));
           viewer.loadFile(path);
         }
       });
     }
 
     // Also wire the right-pane dashboard's view-file handler
-    dashboardPane.onViewFile((path) => {
+    dashboardPane.onViewFile((path, meta) => {
       this.rightPane?.setMode("markdown");
       const viewer = this.rightPane?.getViewer();
       if (viewer) {
         viewer.setDashboardReturn(() => {
           viewer.setDashboardReturn(null);
+          viewer.setPreview(null);
           this.rightPane?.setMode("dashboard");
         });
+        viewer.setPreview(buildPreviewEl(meta));
         viewer.loadFile(path);
       }
     });
@@ -746,4 +751,52 @@ export class ProjectContextImpl implements IProjectContext {
 
     this.container.remove();
   }
+}
+
+/**
+ * Build an HTMLElement preview from view_file meta, if meta carries a
+ * `preview: { component, data }` payload. Returns null when absent.
+ */
+function buildPreviewEl(meta: Record<string, unknown> | undefined): HTMLElement | null {
+  if (!meta) return null;
+  const preview = meta["preview"] as Record<string, unknown> | undefined;
+  if (!preview) return null;
+
+  const componentName = String(preview["component"] ?? "");
+  const data = preview["data"];
+  if (!componentName || data == null) return null;
+
+  const registry = createDefaultRegistry();
+  if (!registry.has(componentName)) return null;
+
+  const el = document.createElement("div");
+  el.className = "viewer-preview";
+  try {
+    const comp = registry.create(componentName);
+    const rowData = typeof data === "object" && !Array.isArray(data)
+      ? [data as Record<string, unknown>]
+      : [];
+    comp.render(el, {
+      panel: {
+        component: componentName,
+        fields: [],
+        columns: [],
+        badges: [],
+        filter: {},
+        sortable: false,
+        filterable: [],
+        searchable: [],
+        inline_edit: [],
+        options: {},
+        extra: {},
+      },
+      data: rowData,
+      allData: {},
+      config: { dashboard: { title: "" }, data_sources: {}, views: [], stats: [] },
+      onAction: () => {},
+    });
+  } catch {
+    return null;
+  }
+  return el;
 }

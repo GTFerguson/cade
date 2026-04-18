@@ -65,6 +65,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   private isPlanOverlayActive = false;
   private editorState: EditorModeState = createEditorModeState();
   private dashboardReturnCallback: (() => void) | null = null;
+  private previewEl: HTMLElement | null = null;
   private boundHandlers = {
     fileContent: (message: any) => {
       this.currentPath = message.path;
@@ -161,6 +162,17 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
    */
   setDashboardReturn(fn: (() => void) | null): void {
     this.dashboardReturnCallback = fn;
+    if (this.currentPath !== null) {
+      this.render();
+    }
+  }
+
+  /**
+   * Attach an element to render above the file content (with an hr divider).
+   * Pass null to clear. Re-renders if a file is open.
+   */
+  setPreview(el: HTMLElement | null): void {
+    this.previewEl = el;
     if (this.currentPath !== null) {
       this.render();
     }
@@ -273,6 +285,13 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
     const content = document.createElement("div");
     content.className = "viewer-content";
+
+    if (this.previewEl) {
+      content.appendChild(this.previewEl);
+      const divider = document.createElement("hr");
+      divider.className = "viewer-preview-divider";
+      content.appendChild(divider);
+    }
 
     if (this.currentFileType === "markdown") {
       const { frontmatter, content: markdown } = extractFrontmatter(this.currentContent);

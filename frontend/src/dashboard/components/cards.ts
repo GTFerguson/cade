@@ -3,6 +3,7 @@
  */
 
 import { BaseDashboardComponent } from "./base-component";
+import { createDefaultRegistry } from "../registry";
 
 export class CardsComponent extends BaseDashboardComponent {
   protected build(): void {
@@ -24,6 +25,11 @@ export class CardsComponent extends BaseDashboardComponent {
     const groupByField = typeof panel.extra?.["group_by"] === "string"
       ? panel.extra["group_by"] as string
       : null;
+
+    // inline_preview: render a sub-component inside each card body.
+    // Config: { component: "graph", field: "_sibling" }
+    // The field value becomes data[0] for the sub-component.
+    const preview = panel.extra?.["inline_preview"] as Record<string, unknown> | undefined;
 
     // Group items if group_by is set. Ungrouped (empty field) items come first.
     const groups: Array<{ label: string | null; items: typeof limited }> = groupByField
@@ -54,6 +60,51 @@ export class CardsComponent extends BaseDashboardComponent {
       // stable landmark for screen readers, while letting us override
       // the role to "button"/"link" when the card is interactive.
       const card = this.el("article", "dash-card");
+
+      // Inline preview — rendered at the TOP of the card, separated from
+      // the title/fields by a divider (like frontmatter in a markdown file).
+      if (preview) {
+        const previewComponent = String(preview["component"] ?? "");
+        const previewField = preview["field"] ? String(preview["field"]) : null;
+        if (previewComponent) {
+          const val = previewField ? item[previewField] : item;
+          if (val != null) {
+            const previewData = typeof val === "object" && !Array.isArray(val)
+              ? [val as Record<string, unknown>]
+              : [{ content: String(val) }];
+            const previewEl = this.el("div", "dash-card-preview");
+            card.appendChild(previewEl);
+            const registry = createDefaultRegistry();
+            if (registry.has(previewComponent)) {
+              try {
+                const comp = registry.create(previewComponent);
+                comp.render(previewEl, {
+                  panel: {
+                    component: previewComponent,
+                    fields: [],
+                    columns: [],
+                    badges: [],
+                    filter: {},
+                    sortable: false,
+                    filterable: [],
+                    searchable: [],
+                    inline_edit: [],
+                    options: (preview["options"] as Record<string, unknown>) ?? {},
+                    extra: {},
+                  },
+                  data: previewData,
+                  allData: this.props!.allData,
+                  config: this.props!.config,
+                  onAction: this.props!.onAction,
+                });
+              } catch {
+                // Silently skip failed previews — don't break the card
+              }
+            }
+            card.appendChild(document.createElement("hr"));
+          }
+        }
+      }
 
       let firstFieldRendered = false;
       for (const field of panel.fields) {
@@ -100,12 +151,26 @@ export class CardsComponent extends BaseDashboardComponent {
           titleText ? `${titleText} — open` : "open file",
         );
         card.style.cursor = "pointer";
+
+        // view_file_preview: { component, field } — attaches preview data to
+        // the view_file action so the viewer can render a preview above the file.
+        const vfp = panel.extra?.["view_file_preview"] as Record<string, unknown> | undefined;
+        const previewPatch: Record<string, unknown> = {};
+        if (vfp) {
+          const previewField = vfp["field"] ? String(vfp["field"]) : null;
+          const previewComponent = String(vfp["component"] ?? "");
+          const previewData = previewField ? item[previewField] : null;
+          if (previewComponent && previewData != null) {
+            previewPatch["preview"] = { component: previewComponent, data: previewData };
+          }
+        }
+
         const activate = () => {
           onAction({
             action: "view_file",
             source: typeof panel.source === "string" ? panel.source : "",
             entityId: String(item["id"] ?? ""),
-            patch: { path: filePath },
+            patch: { path: filePath, ...previewPatch },
           });
         };
         card.addEventListener("click", activate);
