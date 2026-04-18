@@ -289,8 +289,16 @@ export class ProjectContextImpl implements IProjectContext {
       this.scheduleSave();
     });
 
-    this.rightPane.getViewer().on("link-click", (path) => {
-      this.rightPane?.getViewer().loadFile(path);
+    this.rightPane.getViewer().on("link-click", async (path) => {
+      let meta: Record<string, unknown> | undefined;
+      if (/content\/worlds\/(?!.*-map\.json)[^/]+\.json$/.test(path)) {
+        const mapPath = path.replace(/\.json$/, "-map.json");
+        try {
+          const mapContent = await this.ws.readFileAsync(mapPath);
+          meta = { preview: { component: "graph", data: JSON.parse(mapContent) } };
+        } catch { /* no map file — open world without map */ }
+      }
+      this.rightPane?.getViewer().loadFile(path, meta);
       this.fileTree?.revealFile(path);
       this.scheduleSave();
     });

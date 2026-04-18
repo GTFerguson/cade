@@ -438,6 +438,19 @@ export class WebSocketClient extends BaseWSClient {
     this.send({ type: MessageType.GET_FILE, path });
   }
 
+  readFileAsync(path: string): Promise<string> {
+    return new Promise((resolve) => {
+      const handle = (msg: FileContentMessage) => {
+        if (msg.path === path) {
+          this.off("file-content", handle as never);
+          resolve(msg.content);
+        }
+      };
+      this.on("file-content", handle as never);
+      this.requestFile(path);
+    });
+  }
+
   writeFile(path: string, content: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const handleWritten = (message: any) => {
