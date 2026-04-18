@@ -102,7 +102,7 @@ export class GraphComponent extends BaseDashboardComponent {
       })
       .then(({ world_id, room_id }) => {
         this.activeNode = room_id;
-        const src = `/content/worlds/${world_id}-map.json`;
+        const src = `/project/content/worlds/${world_id}-map.json`;
         return fetch(src).then(r => {
           if (!r.ok) throw new Error(`${src} ${r.status} ${r.statusText}`);
           return r.json() as Promise<Record<string, unknown>>;
