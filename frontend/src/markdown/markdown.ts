@@ -89,12 +89,9 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
         this.isPlanOverlayActive = true;
         this.render();
       } else {
-        this.currentPath = message.path;
-        this.currentContent = message.content;
-        this.currentFileType = message.fileType;
-        this.isPlanOverlayActive = false;
-        this.mainView = null;
-        this.render();
+        // Delegate to link-click so project-context can handle pane switching,
+        // map loading for world files, and file-tree reveal.
+        this.emit("link-click", message.path);
       }
     },
     fileChange: (message: any) => {

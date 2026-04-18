@@ -290,6 +290,7 @@ export class ProjectContextImpl implements IProjectContext {
     });
 
     this.rightPane.getViewer().on("link-click", async (path) => {
+      this.rightPane?.setMode("markdown");
       let meta: Record<string, unknown> | undefined;
       if (/content\/worlds\/(?!.*-map\.json)[^/]+\.json$/.test(path)) {
         const mapPath = path.replace(/\.json$/, "-map.json");
