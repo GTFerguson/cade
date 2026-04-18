@@ -442,6 +442,54 @@ class VaultAdapter(BaseAdapter):
             raise AdapterError(f"Vault source '{config.name}': {e}") from e
 
 
+class JsonDirectoryAdapter(BaseAdapter):
+    """Reads a directory of `*.json` files, one record per file.
+
+    Each file's top-level object becomes a record. The filename stem is
+    exposed as `_filename` and used as `id` if the object has no `id`.
+    The full parsed JSON is also exposed as `_json` (string) so detail
+    views can pretty-print the raw file.
+    """
+
+    async def fetch(self, config: DataSourceConfig, project_root: Path) -> list[dict[str, Any]]:
+        if not config.path:
+            raise AdapterError(f"JSON directory source '{config.name}': missing 'path'")
+
+        dir_path = project_root / config.path
+        if not dir_path.is_dir():
+            logger.warning("JSON directory source '%s': not found: %s", config.name, dir_path)
+            return []
+
+        def _scan():
+            results = []
+            for item in sorted(dir_path.glob("*.json")):
+                if item.name.startswith("."):
+                    continue
+                try:
+                    text = item.read_text(encoding="utf-8")
+                    data = json.loads(text)
+                except Exception as e:
+                    logger.warning("JSON directory '%s': skipping %s: %s", config.name, item.name, e)
+                    continue
+                if not isinstance(data, dict):
+                    continue
+                entry = dict(data)
+                entry.setdefault("_filename", item.stem)
+                entry.setdefault("_file", str(item.relative_to(project_root)))
+                pretty = json.dumps(data, indent=2, ensure_ascii=False)
+                entry.setdefault("_json", pretty)
+                entry.setdefault("_json_md", f"```json\n{pretty}\n```\n")
+                if not entry.get("id"):
+                    entry["id"] = item.stem
+                results.append(entry)
+            return results
+
+        try:
+            return await asyncio.to_thread(_scan)
+        except Exception as e:
+            raise AdapterError(f"JSON directory source '{config.name}': {e}") from e
+
+
 def _strip_frontmatter(text: str) -> str:
     """Return the markdown body with any leading YAML frontmatter removed."""
     if not text.startswith("---"):
@@ -460,6 +508,7 @@ def _strip_frontmatter(text: str) -> str:
 _ADAPTERS: dict[str, BaseAdapter] = {
     "rest": RestAdapter(),
     "json_file": JsonFileAdapter(),
+    "json_directory": JsonDirectoryAdapter(),
     "directory": DirectoryAdapter(),
     "markdown": MarkdownAdapter(),
     "vault": VaultAdapter(),
