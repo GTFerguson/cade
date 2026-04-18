@@ -39,6 +39,34 @@
   color: var(--accent-red);
 }
 
+.viewer-json-toggle {
+  position: absolute;
+  left: 8px;
+  display: flex;
+  gap: 4px;
+}
+
+.viewer-json-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  text-transform: lowercase;
+  letter-spacing: 0;
+}
+
+.viewer-json-btn:hover {
+  color: var(--text-primary);
+}
+
+.viewer-json-btn--active {
+  color: var(--accent-green);
+}
+
 .viewer-content {
   flex: 1;
   overflow: auto;
@@ -390,7 +418,7 @@
 /* Relation (wiki-link) — ``→ Target``, purple by default, promotes
  * to cyan on hover. Clicks hook into attachWikiLinkHandlers via
  * the ``.wiki-link`` class which this element also carries. */
-.frontmatter-value .ir-relation {
+.ir-relation {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -399,23 +427,23 @@
   cursor: pointer;
   transition: color 0.1s;
 }
-.frontmatter-value .ir-relation::before {
+.ir-relation::before {
   content: "→";
   color: var(--text-muted);
   font-size: 10px;
   line-height: 1;
 }
-.frontmatter-value .ir-relation:hover {
+.ir-relation:hover {
   color: var(--accent-cyan);
 }
-.frontmatter-value .ir-relation:hover::before {
+.ir-relation:hover::before {
   color: var(--accent-cyan);
 }
-.frontmatter-value .ir-relation .target {
+.ir-relation .target {
   border-bottom: 1px solid transparent;
   padding-bottom: 1px;
 }
-.frontmatter-value .ir-relation:hover .target {
+.ir-relation:hover .target {
   border-bottom-color: currentColor;
 }
 
@@ -561,3 +589,238 @@
   font-size: 11px;
   font-family: var(--font-mono);
 }
+
+/* ─── NPC viewer (flat, viewer-native) ─────────────────────────────────── */
+
+.npc-v-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  margin: 0 -16px;
+  padding: 0 16px;
+}
+
+.npc-v-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  padding: 6px 12px;
+  margin-bottom: -1px;
+}
+.npc-v-tab:hover { color: var(--text-primary); }
+.npc-v-tab--active { color: var(--accent-green); border-bottom-color: var(--accent-green); }
+
+.npc-v-body { padding-top: 6px; }
+
+/* Semantic structure — headings, paragraphs, dividers */
+.npc-v-heading {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 12px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+  font-weight: normal;
+}
+
+.npc-v-para {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.6;
+  margin: 0 0 12px;
+}
+
+
+
+/* Clickable navigation links */
+.npc-v-nav-link {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+.npc-v-nav-link:hover { color: var(--accent-green) !important; }
+
+/* Identity grid — 4 columns, label above value */
+.npc-v-identity {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px 16px;
+  margin-top: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+.npc-v-identity-row   { display: flex; flex-direction: column; gap: 3px; }
+.npc-v-identity-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); }
+.npc-v-identity-value { font-size: 13px; color: var(--text-primary); }
+
+
+/* State/attribute bars */
+.npc-v-res-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+.npc-v-res-name  { width: 72px; flex-shrink: 0; font-size: 12px; color: var(--text-primary); }
+.npc-v-res-bar-wrap { flex: 1; height: 6px; background: var(--bg-secondary); border: 1px solid var(--border-color); }
+.npc-v-res-bar   { height: 100%; transition: width 0.2s; }
+.npc-v-res-num   { width: 44px; text-align: right; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* Attribute pip rows */
+.npc-v-attr-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+}
+.npc-v-attr-name { width: 72px; flex-shrink: 0; font-size: 12px; color: var(--text-primary); }
+.npc-v-pips      { display: flex; gap: 3px; flex: 1; }
+.npc-v-pip       { width: 10px; height: 10px; background: var(--bg-secondary); border: 1px solid var(--border-color); }
+.npc-v-attr-val  { width: 20px; text-align: right; font-size: 11px; color: var(--text-muted); }
+
+/* Relations table */
+.npc-v-rel-head {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 4px;
+}
+.npc-v-rel-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+}
+.npc-v-rel-name    { color: var(--text-primary); }
+.npc-v-rel-type    { color: var(--text-muted); }
+.npc-v-rel-valence { color: var(--accent-yellow, #f5c518); }
+
+/* Schedule */
+.npc-v-sched-row {
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+}
+.npc-v-sched-period   { color: var(--text-muted); text-transform: capitalize; }
+.npc-v-sched-activity { color: var(--text-primary); }
+.npc-v-sched-location { color: var(--accent-green); font-size: 11px; }
+
+/* Reflections */
+.npc-v-reflection {
+  display: flex;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.npc-v-reflection-num  { color: var(--text-muted); flex-shrink: 0; width: 20px; }
+.npc-v-reflection-text { color: var(--text-primary); }
+
+/* Inventory */
+.npc-v-wealth {
+  font-size: 14px;
+  color: var(--accent-yellow, #f5c518);
+  margin: 0 0 12px;
+}
+.npc-v-inv-item {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+/* ─── World viewer (flat, viewer-native) ────────────────────────────────── */
+
+.world-v-map-wrap {
+  overflow-x: auto;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid var(--border-color);
+  margin: 0 -16px;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.world-v-map-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+  padding: 12px 0;
+}
+
+.world-v-room-detail {
+  padding-top: 14px;
+}
+
+.world-v-room-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.world-v-room-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.world-v-room-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.world-v-room-id {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.world-v-room-desc {
+  font-size: 13px;
+  color: var(--text-secondary, var(--text-primary));
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.world-v-section-head {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 3px;
+}
+
+.world-v-exit-row {
+  display: flex;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--bg-tertiary, var(--border-color));
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.world-v-exit-row:hover .world-v-exit-target { color: var(--accent-green); }
+
+.world-v-exit-dir    { width: 80px; flex-shrink: 0; color: var(--text-muted); text-transform: capitalize; }
+.world-v-exit-target { color: var(--text-primary); }

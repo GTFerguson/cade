@@ -144,6 +144,22 @@ export interface SetProjectMessage extends BaseMessage {
   type: "set-project";
   path: string;
   sessionId?: string;
+  /**
+   * Optional override for launch.yml's dashboard_file. Path relative to
+   * the project root (or absolute). Driven by the ?dashboard= URL param
+   * so a project that ships multiple dashboards can be opened on any
+   * one of them via URL without editing launch.yml.
+   */
+  dashboardFile?: string;
+  /**
+   * Optional override for launch.yml's `provider:` block. Driven by the
+   * ?provider= URL param. Today the only recognised value is "none",
+   * which skips the project-local provider registration so the session
+   * falls back to CADE's normal Claude Code chat instead of the
+   * project's game/agent backend. Useful when a single project ships a
+   * game-mode launch preset but you want to open it for authoring/admin.
+   */
+  providerOverride?: string;
 }
 
 /**
@@ -217,11 +233,17 @@ export interface ErrorMessage extends BaseMessage {
  * Loaded from .cade/launch.yml in the project root. URL query params
  * on the frontend override any field here (URL wins on conflict).
  */
+export interface ViewerSpec {
+  pattern: string;
+  viewer: string;
+}
+
 export interface LaunchPreset {
-  enhanced?: boolean;   // toggle enhanced-mode ChatPane on connect
-  spawn?: string;       // shell command to run in the manual terminal
-  view?: string;        // dashboard view id to preselect (not yet implemented)
-  hide_tree?: boolean;  // hide the file-tree pane on startup
+  enhanced?: boolean;         // toggle enhanced-mode ChatPane on connect
+  spawn?: string;             // shell command to run in the manual terminal
+  view?: string;              // dashboard view id to preselect (not yet implemented)
+  hide_tree?: boolean;        // hide the file-tree pane on startup
+  viewers?: ViewerSpec[];     // file-path patterns → named viewer components
 }
 
 /**

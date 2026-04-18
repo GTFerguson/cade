@@ -104,6 +104,15 @@ def extract_frontend_preset(raw: dict[str, Any]) -> dict[str, Any]:
             preset["view"] = value
     if raw.get("hide_tree") is True:
         preset["hide_tree"] = True
+    viewers_raw = raw.get("viewers")
+    if isinstance(viewers_raw, list) and viewers_raw:
+        viewers = [
+            {"pattern": str(v["pattern"]), "viewer": str(v["viewer"])}
+            for v in viewers_raw
+            if isinstance(v, dict) and "pattern" in v and "viewer" in v
+        ]
+        if viewers:
+            preset["viewers"] = viewers
     return preset
 
 

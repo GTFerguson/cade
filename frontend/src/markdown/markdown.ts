@@ -34,6 +34,7 @@ import {
   destroyEditor,
 } from "./editor-mode";
 import type { EditorModeState, EditorCallbacks } from "./editor-mode";
+import { viewerRegistry } from "./viewer-registry";
 
 // Make libraries available globally for mertex.md
 declare global {
@@ -56,6 +57,9 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   private currentPath: string | null = null;
   private currentContent: string = "";
   private currentFileType: string = "plaintext";
+  private currentMeta: Record<string, unknown> | undefined = undefined;
+  private parsedMode = true;
+  private activeParsedComponent: { dispose(): void } | null = null;
   private mertex: MertexMD;
   private handlers: MarkdownEventHandlers = new Map();
   private contentContainer: HTMLElement | null = null;
@@ -178,7 +182,9 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     }
   }
 
-  loadFile(path: string): void {
+  loadFile(path: string, meta?: Record<string, unknown>): void {
+    this.currentMeta = meta;
+    this.parsedMode = true;
     this.ws.requestFile(path);
   }
 
@@ -309,8 +315,37 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
         this.emit("link-click", targetPath);
       });
     } else if (this.currentFileType === "json") {
-      content.classList.add("json-viewer");
-      content.appendChild(renderJsonTree(this.currentContent));
+      const viewerFactory = this.detectJsonViewerFactory();
+      if (viewerFactory) {
+        const toggleEl = document.createElement("span");
+        toggleEl.className = "viewer-json-toggle";
+
+        const rawBtn = document.createElement("button");
+        rawBtn.className = "viewer-json-btn" + (!this.parsedMode ? " viewer-json-btn--active" : "");
+        rawBtn.textContent = "[raw]";
+        rawBtn.addEventListener("click", () => { this.parsedMode = false; this.render(); });
+
+        const parsedBtn = document.createElement("button");
+        parsedBtn.className = "viewer-json-btn" + (this.parsedMode ? " viewer-json-btn--active" : "");
+        parsedBtn.textContent = "[parsed]";
+        parsedBtn.addEventListener("click", () => { this.parsedMode = true; this.render(); });
+
+        toggleEl.appendChild(rawBtn);
+        toggleEl.appendChild(parsedBtn);
+        header.appendChild(toggleEl);
+
+        if (this.parsedMode) {
+          this.renderParsedContent(content, viewerFactory);
+        } else {
+          this.activeParsedComponent?.dispose();
+          this.activeParsedComponent = null;
+          content.classList.add("json-viewer");
+          content.appendChild(renderJsonTree(this.currentContent));
+        }
+      } else {
+        content.classList.add("json-viewer");
+        content.appendChild(renderJsonTree(this.currentContent));
+      }
     } else {
       content.classList.add("code-viewer");
       content.appendChild(renderCode(this.currentContent, this.currentFileType));
@@ -356,6 +391,33 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
         }
       });
     }
+  }
+
+  private detectJsonViewerFactory(): ReturnType<typeof viewerRegistry.detect> {
+    const p = this.currentPath;
+    if (!p) return null;
+    return viewerRegistry.detect(p);
+  }
+
+  private renderParsedContent(container: HTMLElement, factory: NonNullable<ReturnType<typeof viewerRegistry.detect>>): void {
+    this.activeParsedComponent?.dispose();
+    this.activeParsedComponent = null;
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(this.currentContent) as Record<string, unknown>;
+    } catch {
+      container.textContent = "[ invalid JSON ]";
+      return;
+    }
+
+    // Allow registered viewers to receive sibling preview data (e.g. world map).
+    const preview = this.currentMeta?.["preview"] as Record<string, unknown> | undefined;
+    if (preview?.["data"] != null) {
+      parsed["_sibling"] = preview["data"];
+    }
+
+    this.activeParsedComponent = factory(container, parsed, (path) => this.loadFile(path));
   }
 
   // --- Keyboard handling ---
@@ -451,6 +513,9 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
   dispose(): void {
     destroyEditor(this.editorState);
+
+    this.activeParsedComponent?.dispose();
+    this.activeParsedComponent = null;
 
     this.ws.off("file-content", this.boundHandlers.fileContent);
     this.ws.off("view-file", this.boundHandlers.viewFile);
