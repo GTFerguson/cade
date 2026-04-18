@@ -21,8 +21,35 @@ export class CardsComponent extends BaseDashboardComponent {
         : data;
 
     const titleField = panel.fields[0];
+    const groupByField = typeof panel.extra?.["group_by"] === "string"
+      ? panel.extra["group_by"] as string
+      : null;
 
-    for (const item of limited) {
+    // Group items if group_by is set. Ungrouped (empty field) items come first.
+    const groups: Array<{ label: string | null; items: typeof limited }> = groupByField
+      ? (() => {
+          const map = new Map<string, typeof limited>();
+          for (const item of limited) {
+            const key = String(item[groupByField] ?? "");
+            if (!map.has(key)) map.set(key, []);
+            map.get(key)!.push(item);
+          }
+          const result: Array<{ label: string | null; items: typeof limited }> = [];
+          // Ungrouped (empty key) first, no label
+          if (map.has("")) result.push({ label: null, items: map.get("")! });
+          for (const [key, items] of map) {
+            if (key !== "") result.push({ label: key, items });
+          }
+          return result;
+        })()
+      : [{ label: null, items: limited }];
+
+    for (const group of groups) {
+      if (group.label !== null) {
+        const header = this.el("h5", "dash-cards-group-header", group.label);
+        wrapper.appendChild(header);
+      }
+      for (const item of group.items) {
       // <article> gives the card an implicit document region and a
       // stable landmark for screen readers, while letting us override
       // the role to "button"/"link" when the card is interactive.
@@ -114,6 +141,7 @@ export class CardsComponent extends BaseDashboardComponent {
       }
 
       wrapper.appendChild(card);
+      }
     }
 
     this.container.appendChild(wrapper);

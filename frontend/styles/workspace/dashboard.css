@@ -424,6 +424,18 @@
   gap: 8px;
 }
 
+.dash-cards-group-header {
+  grid-column: 1 / -1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 12px 0 2px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
 .dash-cards--grid {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 }
