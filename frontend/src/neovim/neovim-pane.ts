@@ -89,7 +89,9 @@ export class NeovimPane implements Component, PaneKeyHandler {
     this.terminal.open(this.terminalContainer);
 
     try {
-      this.terminal.loadAddon(new WebglAddon());
+      const webgl = new WebglAddon({ preserveDrawingBuffer: true });
+      webgl.onContextLoss(() => webgl.dispose());
+      this.terminal.loadAddon(webgl);
     } catch {
       // WebGL not available, canvas fallback
     }

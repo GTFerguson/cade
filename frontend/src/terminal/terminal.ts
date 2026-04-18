@@ -133,7 +133,10 @@ export class Terminal implements Component {
     this.terminal.open(this.container);
 
     try {
-      this.terminal.loadAddon(new WebglAddon());
+      const webgl = new WebglAddon({ preserveDrawingBuffer: true });
+      // Fall back to canvas renderer on context loss rather than leaving artifacts
+      webgl.onContextLoss(() => webgl.dispose());
+      this.terminal.loadAddon(webgl);
     } catch {
       // WebGL not available, fall back to canvas renderer
     }
