@@ -339,6 +339,9 @@ class ConnectionHandler:
         # session falls back to CADE's default Claude Code chat — useful for
         # opening an authoring/admin view of a game-mode project.
         self._launch_yaml: dict = load_launch_preset(self._working_dir)
+        self._kiosk_mode: bool = bool(self._launch_yaml.get("kiosk_mode", False))
+        if self._kiosk_mode:
+            logger.info("Kiosk mode enabled — PTY, file watcher, and CC features disabled")
         provider_config_dict = extract_provider_config(self._launch_yaml)
         if self._provider_override == "none":
             logger.info(
@@ -375,7 +378,12 @@ class ConnectionHandler:
 
         registry = get_registry()
 
-        if self._session_id:
+        if self._kiosk_mode:
+            # Player mode: no PTY, no shell. Create a minimal stub so the
+            # rest of the handler doesn't need to guard every _session access.
+            self._session = PTYSession(id=self._session_id or "", project_path=self._working_dir)
+            self._is_new_session = True
+        elif self._session_id:
             self._session, self._is_new_session = await registry.get_or_create(
                 self._session_id,
                 self._working_dir,
@@ -432,15 +440,16 @@ class ConnectionHandler:
             on_raw_change=lambda p: get_file_tree_cache().invalidate(p),
         )
 
-        from backend.doc_index import DOC_INDEX_AVAILABLE, DocIndexService
-        if DOC_INDEX_AVAILABLE:
-            self._doc_index = DocIndexService(self._working_dir)
-            self._watcher.on_change(self._doc_index.on_file_change)
+        if not self._kiosk_mode:
+            from backend.doc_index import DOC_INDEX_AVAILABLE, DocIndexService
+            if DOC_INDEX_AVAILABLE:
+                self._doc_index = DocIndexService(self._working_dir)
+                self._watcher.on_change(self._doc_index.on_file_change)
 
-        from backend.nkrdn_service import NKRDN_AVAILABLE, NkrdnService
-        if NKRDN_AVAILABLE:
-            self._nkrdn = NkrdnService(self._working_dir)
-            self._watcher.on_change(self._nkrdn.on_file_change)
+            from backend.nkrdn_service import NKRDN_AVAILABLE, NkrdnService
+            if NKRDN_AVAILABLE:
+                self._nkrdn = NkrdnService(self._working_dir)
+                self._watcher.on_change(self._nkrdn.on_file_change)
 
         # Dashboard handler — watches .cade/dashboard.yml separately
         # (main watcher ignores .cade/ directory). If launch.yml specifies
@@ -980,7 +989,7 @@ class ConnectionHandler:
 
     async def _handle_input(self, data: dict) -> None:
         """Handle terminal input."""
-        if self._session is None:
+        if self._kiosk_mode or self._session is None:
             return
 
         session_key = data.get("sessionKey", SessionKey.CLAUDE)
@@ -999,7 +1008,7 @@ class ConnectionHandler:
 
     async def _handle_resize(self, data: dict) -> None:
         """Handle terminal resize."""
-        if self._session is None:
+        if self._kiosk_mode or self._session is None:
             return
 
         session_key = data.get("sessionKey", SessionKey.CLAUDE)
@@ -1453,6 +1462,8 @@ class ConnectionHandler:
 
     async def _handle_neovim_spawn(self, data: dict) -> None:
         """Spawn a Neovim instance for this session."""
+        if self._kiosk_mode:
+            return
         if self._session_id is None:
             await self._send_error(ErrorCode.INTERNAL_ERROR, "No session ID")
             return

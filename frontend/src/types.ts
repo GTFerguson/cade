@@ -243,6 +243,7 @@ export interface LaunchPreset {
   spawn?: string;             // shell command to run in the manual terminal
   view?: string;              // dashboard view id to preselect (not yet implemented)
   hide_tree?: boolean;        // hide the file-tree pane on startup
+  kiosk_mode?: boolean;       // disable terminal, shell, and CC features for locked-down deployment
   viewers?: ViewerSpec[];     // file-path patterns → named viewer components
 }
 

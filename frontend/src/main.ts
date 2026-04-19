@@ -175,6 +175,11 @@ class App {
       tab.context?.getLayout()?.showFileTree();
     }
 
+    if (merged.kiosk_mode === true) {
+      console.log("[launch] kiosk mode — hiding terminal pane");
+      tab.context?.getLayout()?.hideTerminal();
+    }
+
     if (merged.viewers && merged.viewers.length > 0) {
       console.log(`[launch] registering ${merged.viewers.length} viewer(s)`);
       registerParadraxViewers(merged.viewers);

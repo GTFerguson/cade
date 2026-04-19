@@ -58,7 +58,7 @@ logger = logging.getLogger(__name__)
 # provider is NOT in this set because it's consumed entirely on the backend
 # (registered in the handler's provider registry) and the frontend never
 # needs to see the full config.
-_FRONTEND_KEYS = frozenset({"enhanced", "spawn", "view", "hide_tree"})
+_FRONTEND_KEYS = frozenset({"enhanced", "spawn", "view", "hide_tree", "kiosk_mode"})
 
 
 def load_launch_preset(project_dir: Path) -> dict[str, Any]:
@@ -104,6 +104,8 @@ def extract_frontend_preset(raw: dict[str, Any]) -> dict[str, Any]:
             preset["view"] = value
     if isinstance(raw.get("hide_tree"), bool):
         preset["hide_tree"] = raw["hide_tree"]
+    if isinstance(raw.get("kiosk_mode"), bool):
+        preset["kiosk_mode"] = raw["kiosk_mode"]
     viewers_raw = raw.get("viewers")
     if isinstance(viewers_raw, list) and viewers_raw:
         viewers = [
