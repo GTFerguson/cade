@@ -2,6 +2,7 @@ import { viewerRegistry } from "../markdown/viewer-registry";
 import type { ViewerFactory } from "../markdown/viewer-registry";
 import { NpcViewer } from "./npc-viewer";
 import { WorldViewer } from "./world-viewer";
+import { HistoryViewer } from "./history-viewer";
 
 interface ViewerSpec {
   pattern: string;
@@ -16,6 +17,11 @@ const VIEWER_FACTORIES: Record<string, ViewerFactory> = {
   },
   world: (container, data) => {
     const v = new WorldViewer();
+    v.render(container, data);
+    return { dispose: () => { container.innerHTML = ""; } };
+  },
+  history: (container, data) => {
+    const v = new HistoryViewer();
     v.render(container, data);
     return { dispose: () => { container.innerHTML = ""; } };
   },

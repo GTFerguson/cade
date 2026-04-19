@@ -5,7 +5,7 @@
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { WebglAddon } from "@xterm/addon-webgl";
+import { CanvasAddon } from "@xterm/addon-canvas";
 import { SessionKey, type AnySessionKey } from "@core/platform/protocol";
 import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
@@ -133,14 +133,9 @@ export class Terminal implements Component {
     this.terminal.open(this.container);
 
     try {
-      const webgl = new WebglAddon({ preserveDrawingBuffer: true });
-      webgl.onContextLoss(() => {
-        webgl.dispose();
-        this.terminal.refresh(0, this.terminal.rows - 1);
-      });
-      this.terminal.loadAddon(webgl);
+      this.terminal.loadAddon(new CanvasAddon());
     } catch {
-      // WebGL not available, fall back to canvas renderer
+      // Canvas renderer unavailable, fall back to DOM renderer
     }
 
     // Allow external key interception (e.g., for prefix key)

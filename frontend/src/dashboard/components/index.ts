@@ -1,4 +1,5 @@
 export { BasketComponent } from "./basket";
+export { ClaimsComponent } from "./claims";
 export { CardsComponent } from "./cards";
 export { GraphComponent } from "./graph";
 export { ChecklistComponent } from "./checklist";

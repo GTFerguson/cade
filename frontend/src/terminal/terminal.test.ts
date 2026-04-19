@@ -75,8 +75,8 @@ vi.mock("@xterm/addon-web-links", () => ({
   WebLinksAddon: class {},
 }));
 
-vi.mock("@xterm/addon-webgl", () => ({
-  WebglAddon: class {},
+vi.mock("@xterm/addon-canvas", () => ({
+  CanvasAddon: class {},
 }));
 
 // Mock WebSocket client

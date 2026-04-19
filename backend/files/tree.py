@@ -149,7 +149,7 @@ def build_file_tree(
             rel_path = path.name
 
         if _safe_is_dir(path):
-            if depth > max_depth:
+            if depth >= max_depth:
                 # At depth limit: check if directory has visible children
                 has_children = False
                 try:
@@ -245,7 +245,7 @@ def build_directory_children(
             rel_path = path.name
 
         if _safe_is_dir(path):
-            if depth > max_depth:
+            if depth >= max_depth:
                 has_children = False
                 try:
                     for child in path.iterdir():

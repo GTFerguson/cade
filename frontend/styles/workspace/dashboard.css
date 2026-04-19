@@ -1185,6 +1185,214 @@
 }
 
 /* ═══════════════════════════════════════════════
+   Component: Claims viewer (claims)
+   ═══════════════════════════════════════════════ */
+
+.dash-claims-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  font-family: var(--font-mono);
+}
+
+.dash-claims-header {
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 10px;
+}
+
+.dash-claims-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.dash-claims-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.dash-claims-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.dash-claims-filter-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.dash-claims-tier-sel {
+  min-width: 110px;
+}
+
+.dash-claims-tags-wrap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1;
+  min-width: 120px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 2px;
+}
+
+.dash-claims-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  padding: 1px 6px;
+  background: color-mix(in srgb, var(--accent-cyan) 15%, transparent);
+  color: var(--accent-cyan);
+  border: 1px solid color-mix(in srgb, var(--accent-cyan) 40%, transparent);
+}
+
+.dash-claims-tag-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1;
+}
+.dash-claims-tag-remove:hover { color: var(--accent-red); }
+
+.dash-claims-tag-input {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+  min-width: 80px;
+  flex: 1;
+}
+.dash-claims-tag-input::placeholder { color: var(--text-muted); }
+
+.dash-claims-reset {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  letter-spacing: 0.5px;
+}
+.dash-claims-reset:hover { color: var(--accent-orange); }
+
+.dash-claims-layers {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dash-claims-layer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dash-claims-layer-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.dash-claims-layer-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.dash-claims-layer-count {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.dash-claims-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dash-claims-claim {
+  padding: 6px 8px;
+  border-left: 2px solid;
+  transition: background 0.1s;
+}
+.dash-claims-claim:hover { background: var(--bg-secondary); }
+
+.dash-claims-claim--locked {
+  opacity: 0.45;
+}
+
+.dash-claims-claim-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 5px;
+  flex-wrap: wrap;
+}
+
+.dash-claims-tier-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
+  border: 1px solid;
+  text-transform: uppercase;
+}
+
+.dash-claims-access-tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.dash-claims-access-open {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.dash-claims-lock {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.dash-claims-prose {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+.dash-claims-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 8px 0;
+}
+
+/* ═══════════════════════════════════════════════
    Component: NPC Detail (npc_detail)
    ═══════════════════════════════════════════════ */
 
