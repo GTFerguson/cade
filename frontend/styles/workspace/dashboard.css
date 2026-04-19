@@ -458,6 +458,8 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  position: relative;
+  padding-right: 38px;
 }
 
 /* The card title (h4, rendered from the first field) sits flush with
@@ -2005,3 +2007,257 @@
   flex-shrink: 0;
 }
 .dash-world-exit-target { font-size: 12px; color: var(--text-secondary); }
+
+/* ═══════════════════════════════════════════════
+   Cards: chevron expansion, favourite star
+   ═══════════════════════════════════════════════ */
+
+/* Chevron — absolutely positioned at the top-right of every expandable
+ * card. Sits in the same visual zone as the title without displacing it.
+ * pointer-events: none so clicks always reach the card toggle handler. */
+.dash-card-chevron {
+  position: absolute;
+  bottom: 10px;
+  right: 11px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  line-height: 1;
+  pointer-events: none;
+  transition: color 0.1s;
+}
+
+.dash-card:hover .dash-card-chevron {
+  color: var(--text-primary);
+}
+
+.dash-card-chevron--open {
+  color: var(--accent-cyan);
+}
+
+.dash-card:hover .dash-card-chevron--open {
+  color: var(--accent-cyan);
+}
+
+/* Expanded state — cyan left accent + slightly elevated background so
+ * the open card reads as visually distinct when scrolling a long list. */
+.dash-card[aria-expanded="true"] {
+  border-left-color: var(--accent-cyan);
+  background: var(--bg-tertiary, #1a1918);
+}
+
+/* Inline detail region — appended inside the card below badge row.
+ * Border-top reads as a deliberate structural cut, not decoration. */
+.dash-card-detail {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+/* Favourite star button — right-aligned within the badges row via
+ * margin-left: auto so it always sits at the far right, separated from
+ * the badge pills. Larger than the pills so it reads as an interactive
+ * control, not a label. */
+.dash-card-favourite {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: none;
+  padding: 0px 2px;
+  font-family: var(--font-mono);
+  font-size: 28px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: 1;
+  text-decoration: none;
+  transition: color 0.1s;
+  outline: none;
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  flex-shrink: 0;
+}
+
+.dash-card-favourite:hover {
+  color: var(--accent-orange);
+}
+
+.dash-card-favourite:focus-visible {
+  outline: 1px solid var(--accent-orange);
+  outline-offset: 2px;
+}
+
+.dash-card-favourite--on {
+  color: var(--accent-orange);
+}
+
+/* ═══════════════════════════════════════════════
+   Component: Split Markdown (split_markdown)
+   ═══════════════════════════════════════════════ */
+
+.dash-split-md {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Read zone — mirrors .dash-markdown exactly so the world event and any
+ * other markdown content in the panel family share identical rendering. */
+.dash-split-md__read {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.dash-split-md__read > :first-child { margin-top: 0; }
+.dash-split-md__read > :last-child  { margin-bottom: 0; }
+
+.dash-split-md__read p,
+.dash-split-md__read ul,
+.dash-split-md__read ol,
+.dash-split-md__read pre,
+.dash-split-md__read blockquote,
+.dash-split-md__read table {
+  margin: 0 0 12px;
+}
+
+.dash-split-md__read ul,
+.dash-split-md__read ol { padding-left: 20px; }
+
+.dash-split-md__read li { margin: 3px 0; }
+
+.dash-split-md__read h1,
+.dash-split-md__read h2,
+.dash-split-md__read h3,
+.dash-split-md__read h4,
+.dash-split-md__read h5,
+.dash-split-md__read h6 {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  margin: 16px 0 8px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.dash-split-md__read h1:first-child,
+.dash-split-md__read h2:first-child,
+.dash-split-md__read h3:first-child,
+.dash-split-md__read h4:first-child,
+.dash-split-md__read h5:first-child,
+.dash-split-md__read h6:first-child { margin-top: 0; }
+
+.dash-split-md__read h1 { font-size: 16px; letter-spacing: 0.5px; }
+.dash-split-md__read h2 { font-size: 14px; }
+.dash-split-md__read h3 { font-size: 13px; }
+.dash-split-md__read h4 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+}
+
+.dash-split-md__read strong  { color: var(--text-primary); font-weight: 600; }
+.dash-split-md__read em      { font-style: italic; color: var(--accent-cyan); }
+.dash-split-md__read a       { color: var(--accent-blue); text-decoration: none; }
+.dash-split-md__read a:hover { text-decoration: underline; }
+
+.dash-split-md__read code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 5px;
+  background: var(--bg-secondary);
+  color: var(--accent-green);
+}
+
+.dash-split-md__read pre {
+  background: var(--bg-secondary);
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.dash-split-md__read blockquote {
+  border-left: 2px solid var(--accent-blue);
+  padding-left: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Divider — 2px solid reads as a structural seam ("world above, yours
+ * below"), distinct from the 1px hairlines used for decoration. */
+.dash-split-md__divider {
+  border: none;
+  border-top: 2px solid var(--border-color);
+  margin: 14px 0 12px;
+}
+
+.dash-split-md__edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-split-md__edit-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-muted);
+  margin: 0;
+  padding: 0;
+}
+
+.dash-split-md__textarea {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-left: 2px solid var(--border-color);
+  padding: 8px 10px;
+  line-height: 1.6;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 72px;
+  outline: none;
+  transition: border-left-color 0.1s;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.dash-split-md__textarea:focus {
+  border-left-color: var(--accent-cyan);
+}
+
+.dash-split-md__textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* Save button — right-aligned, primary filled. Matches .dash-basket-confirm
+ * conventions (accent-green fill, bg-primary text, no border-radius). */
+.dash-split-md__save {
+  align-self: flex-end;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  padding: 5px 14px;
+  background: var(--accent-green);
+  color: var(--bg-primary);
+  border: none;
+  cursor: pointer;
+  transition: filter 0.1s;
+}
+
+.dash-split-md__save:hover {
+  filter: brightness(1.15);
+}
+
+.dash-split-md__save:focus-visible {
+  outline: 1px solid var(--accent-green);
+  outline-offset: 2px;
+}
