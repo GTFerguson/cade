@@ -14,6 +14,7 @@ import {
   KanbanComponent,
   KeyValueComponent,
   MarkdownPanelComponent,
+  SplitMarkdownComponent,
   NpcDetailComponent,
   TableComponent,
   TimelineComponent,
@@ -53,6 +54,7 @@ export function createDefaultRegistry(): ComponentRegistry {
   registry.register("kanban", KanbanComponent);
   registry.register("key_value", KeyValueComponent);
   registry.register("markdown", MarkdownPanelComponent);
+  registry.register("split_markdown", SplitMarkdownComponent);
   registry.register("npc_detail", NpcDetailComponent);
   registry.register("table", TableComponent);
   registry.register("timeline", TimelineComponent);

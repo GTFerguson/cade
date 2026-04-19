@@ -88,6 +88,12 @@ export class GraphComponent extends BaseDashboardComponent {
     }
 
     // Static fallback: load from options.src via HTTP.
+    const src = String(this.props.panel.options?.src ?? "");
+    if (!src) {
+      // No push data yet and no static src — render blank until server pushes.
+      if (this.container) this.container.innerHTML = "";
+      return;
+    }
     const format = String(this.props.panel.options?.format ?? "world-map");
     this.container.innerHTML = '<div class="gg-loading">Loading…</div>';
 
@@ -109,7 +115,6 @@ export class GraphComponent extends BaseDashboardComponent {
 
   #loadFromOptions(): Promise<Record<string, unknown>> {
     const src = String(this.props?.panel.options?.src ?? "");
-    if (!src) return Promise.reject(new Error("options.src is required for static graph panels"));
     this.activeNode = String(this.props?.panel.options?.active_node ?? "");
     return fetch(src).then(r => {
       if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
@@ -173,10 +178,16 @@ export class GraphComponent extends BaseDashboardComponent {
         tile.tabIndex = 0;
         tile.setAttribute("aria-label", `Go to ${node.label} (${edgeLabel})`);
         const id = node.id;
+        const dir = edgeLabel;
         tile.addEventListener("click", () => {
           this.activeNode = id;
           this.#renderGrid();
-          this.props?.onAction({ action: "node_click", source: (this.props.panel.source as string) ?? "", entityId: id });
+          this.props?.onAction({
+            action: "provider_message",
+            source: (this.props.panel.source as string) ?? "",
+            entityId: id,
+            message: { type: "dashboard-action", action: "node_click", patch: { direction: dir } },
+          });
         });
       } else if (isActive) {
         tile.setAttribute("aria-current", "location");
