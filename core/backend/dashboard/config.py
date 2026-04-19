@@ -275,8 +275,11 @@ def validate_config(raw: dict[str, Any]) -> DashboardConfig:
         raise DashboardConfigError("at least one view is required")
     views = [_parse_view(v, i) for i, v in enumerate(views_raw)]
 
-    # Validate source references in panels
-    source_names = set(data_sources.keys())
+    # Validate source references in panels.
+    # push_sources lists sources sent by the server over WebSocket (no data_sources entry needed).
+    push_sources_raw = raw.get("push_sources", [])
+    push_sources = set(push_sources_raw) if isinstance(push_sources_raw, list) else set()
+    source_names = set(data_sources.keys()) | push_sources
     for view in views:
         for panel in view.panels:
             if isinstance(panel.source, str) and panel.source not in source_names:

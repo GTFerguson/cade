@@ -23,7 +23,7 @@ from backend.launch_preset import (
 )
 from core.backend.providers.config import ProviderConfig
 from core.backend.providers.subprocess_provider import SubprocessProvider
-from core.backend.providers.websocket_provider import WebsocketProvider
+from core.backend.providers.websocket_provider import ProviderAuthError, WebsocketProvider
 from backend.terminal.connections import get_connection_manager
 from backend.connection_registry import get_connection_registry
 from backend.errors import CADEError, ProtocolError
@@ -737,6 +737,15 @@ class ConnectionHandler:
         provider.set_event_handler(self._on_unsolicited_provider_event)
         try:
             await provider.start()
+        except ProviderAuthError:
+            logger.info("WebsocketProvider auth rejected — sending auth-required to frontend")
+            auth_config = extract_auth_config(self._launch_yaml)
+            await self._send({
+                "type": "auth-required",
+                "provider": "google",
+                "client_id": auth_config["client_id"] if auth_config else "",
+            })
+            await self._ws.close(code=1008, reason="google_auth_required")
         except Exception as e:  # noqa: BLE001
             logger.warning("WebsocketProvider failed to start: %s", e)
             await self._send({

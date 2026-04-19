@@ -162,19 +162,17 @@ class App {
       }, 500);
     }
 
-    if (merged.view) {
-      console.log(`[launch] view preselect '${merged.view}' — switching right pane to dashboard`);
-      // `view` declares a dashboard view id the project wants preselected.
-      // Flip the right pane to dashboard mode so the player sees it on open
-      // instead of having to switch manually. The dashboard pane auto-selects
-      // its first view once config arrives over the websocket; view-id-level
-      // preselection isn't wired yet but isn't needed for single-view configs.
+    if (merged.view || this.dashboardOverride) {
+      console.log(`[launch] switching right pane to dashboard`);
       tab.context?.getRightPane()?.setMode("dashboard");
     }
 
     if (merged.hide_tree === true) {
       console.log("[launch] hiding file tree");
       tab.context?.getLayout()?.hideFileTree();
+    } else if (merged.hide_tree === false) {
+      console.log("[launch] showing file tree");
+      tab.context?.getLayout()?.showFileTree();
     }
 
     if (merged.viewers && merged.viewers.length > 0) {

@@ -302,11 +302,15 @@ export class Splash {
       <div class="auth-message">authentication required</div>
     `;
 
+    const googleButtonContainer = document.createElement("div");
+    googleButtonContainer.className = "splash-google-button";
+    container.appendChild(googleButtonContainer);
+
     const optionsContainer = document.createElement("div");
     optionsContainer.className = "splash-options";
 
     const actions = [
-      { label: "connect", action: () => initGoogleAuth(clientId, onToken) },
+      { label: "connect", action: () => initGoogleAuth(clientId, onToken, googleButtonContainer) },
     ];
 
     this.optionEls = actions.map((opt) => {

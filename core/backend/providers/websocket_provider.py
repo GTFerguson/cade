@@ -23,6 +23,10 @@ side (padarax-server). Protocol shape:
 from __future__ import annotations
 
 import asyncio
+
+
+class ProviderAuthError(RuntimeError):
+    """Raised when the game server rejects the hello frame due to auth failure."""
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -283,6 +287,7 @@ class WebsocketProvider(BaseProvider):
     async def _drain_until_connected(self) -> None:
         """Route frames from the server until the `connected` ack arrives."""
         assert self._ws is not None
+        last_error: str | None = None
         async for raw in self._ws:
             if isinstance(raw, bytes):
                 raw = raw.decode("utf-8", errors="replace")
@@ -293,12 +298,17 @@ class WebsocketProvider(BaseProvider):
                     "WS provider '%s' got non-JSON frame during handshake", self._name
                 )
                 continue
+            if frame.get("type") == "error":
+                last_error = frame.get("message") or frame.get("code") or "unknown error"
+                logger.warning("WS provider '%s' handshake error: %s", self._name, last_error)
+                await self._ws.close()
+                raise ProviderAuthError(last_error)
             await self._route_frame(frame)
             if frame.get("type") == "connected":
                 return
         raise RuntimeError(
-            f"WebsocketProvider '{self._name}': connection closed before "
-            "'connected' frame was received"
+            last_error
+            or f"WebsocketProvider '{self._name}': connection closed before 'connected' frame"
         )
 
     async def _ensure_connected(self) -> None:

@@ -57,27 +57,40 @@ function waitForGis(timeoutMs = 10_000): Promise<GoogleAccountsId> {
 }
 
 /**
- * Initialise GIS and trigger the One Tap prompt.
+ * Initialise GIS and trigger sign-in.
  *
- * Suitable for pages where no explicit button is shown — Google's One Tap
- * overlay appears automatically when the user is signed into a Google account.
+ * Tries One Tap first. If Google suppresses the overlay (e.g. user already
+ * used it this session, dismissed it, or it was auto-closed), falls back to
+ * rendering a proper Sign In with Google button inside `fallbackContainer`.
  */
 export async function initGoogleAuth(
   clientId: string,
-  callback: (idToken: string) => void
+  callback: (idToken: string) => void,
+  fallbackContainer?: HTMLElement | null,
 ): Promise<void> {
   const gis = await waitForGis();
 
-  gis.initialize({
-    client_id: clientId,
-    callback: (response) => {
-      setStoredIdToken(response.credential);
-      callback(response.credential);
-    },
-    auto_select: false,
-  });
+  const wrapped = (response: { credential: string }) => {
+    setStoredIdToken(response.credential);
+    callback(response.credential);
+  };
 
-  gis.prompt();
+  gis.initialize({ client_id: clientId, callback: wrapped, auto_select: false });
+
+  gis.prompt((notification: any) => {
+    const suppressed =
+      notification.isNotDisplayed?.() || notification.isSkippedMoment?.();
+    if (suppressed && fallbackContainer) {
+      fallbackContainer.innerHTML = "";
+      window.google!.accounts.id.renderButton(fallbackContainer, {
+        type: "standard",
+        theme: "filled_black",
+        size: "large",
+        text: "signin_with",
+        shape: "rectangular",
+      });
+    }
+  });
 }
 
 /**
