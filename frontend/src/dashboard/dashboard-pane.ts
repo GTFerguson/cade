@@ -104,9 +104,36 @@ export class DashboardPane implements Component {
     for (const [key, value] of Object.entries(sources)) {
       this.data[key] = value;
     }
-    // Re-render active view with new data
-    if (this.activeViewId) {
+    if (!this.activeViewId) return;
+    // When components are already mounted, push new props via update()
+    // so they can diff in-place without losing UI state (search query,
+    // active filters, expanded cards, scroll position, etc.).
+    // Full re-render is reserved for tab switches and initial load.
+    if (this.activeComponents.size > 0) {
+      this.updateActiveComponents();
+    } else {
       this.renderView(this.activeViewId);
+    }
+  }
+
+  private updateActiveComponents(): void {
+    if (!this.config || !this.activeViewId) return;
+    const view = this.config.views.find((v) => v.id === this.activeViewId);
+    if (!view) return;
+    for (const panel of view.panels) {
+      const comp = this.activeComponents.get(panel.id ?? panel.component);
+      if (!comp) continue;
+      const sourceName =
+        typeof panel.source === "string" ? panel.source : undefined;
+      const panelData = sourceName ? this.data[sourceName] ?? [] : [];
+      const filteredData = this.applyFilters(panelData, panel);
+      comp.update({
+        panel,
+        data: filteredData,
+        allData: this.data,
+        config: this.config!,
+        onAction: (action) => this.handleAction(action),
+      });
     }
   }
 

@@ -39,11 +39,20 @@ export class CardsComponent extends BaseDashboardComponent {
   // -1 = uninitialised; set to pageSize on first build, then preserved.
   private visibleCount = -1;
 
+  // Stable container for the cards grid + footer. Controls live outside
+  // this element so they survive rebuildCards() without losing focus.
+  private cardsHost: HTMLElement | null = null;
+
+  protected rebuild(): void {
+    // Null out cardsHost so build() recreates it inside the fresh DOM.
+    this.cardsHost = null;
+    super.rebuild();
+  }
+
   protected build(): void {
     if (!this.container || !this.props) return;
 
-    const { panel, data, onAction } = this.props;
-    const layout = panel.layout ?? "grid";
+    const { panel } = this.props;
 
     const pageSize =
       typeof panel.extra?.["page_size"] === "number" &&
@@ -55,19 +64,22 @@ export class CardsComponent extends BaseDashboardComponent {
       this.visibleCount = pageSize;
     }
 
-    // Honour ``limit:`` from the panel config — overview panels use this
-    // to hard-cap the record set before search/filter/pagination runs.
-    const limited =
-      typeof panel.limit === "number" && panel.limit > 0
-        ? data.slice(0, panel.limit)
-        : data;
-
     const favouriteField =
       typeof panel.extra?.["favourite_field"] === "string"
         ? (panel.extra["favourite_field"] as string)
         : "favourite";
 
+    // Honour ``limit:`` from the panel config — overview panels use this
+    // to hard-cap the record set before search/filter/pagination runs.
+    const limited =
+      typeof panel.limit === "number" && panel.limit > 0
+        ? this.props.data.slice(0, panel.limit)
+        : this.props.data;
+
     // ── Search / filter controls ──────────────────────────────────────
+    // Rendered once per full build, outside cardsHost. Search/filter
+    // changes call rebuildCards() which only replaces cardsHost contents,
+    // leaving the controls DOM (and any focused input) untouched.
     const hasSearch = panel.searchable.length > 0;
     const hasFilter = panel.filterable.length > 0;
 
@@ -84,15 +96,13 @@ export class CardsComponent extends BaseDashboardComponent {
         input.addEventListener("input", () => {
           this.searchQuery = input.value.toLowerCase();
           if (pageSize > 0) this.visibleCount = pageSize;
-          this.rebuild();
+          this.rebuildCards();
         });
         controls.appendChild(input);
       }
 
       for (const field of panel.filterable) {
         if (field === favouriteField) {
-          // Boolean favourite gets a dedicated toggle rather than a
-          // true/false dropdown.
           const isOn = this.activeFilters[field] === "true";
           const btn = this.el(
             "button",
@@ -106,12 +116,16 @@ export class CardsComponent extends BaseDashboardComponent {
             } else {
               this.activeFilters[field] = "true";
             }
+            // Update button appearance in-place — avoids a full rebuild
+            // just to flip a button class.
+            const wasOn = btn.classList.contains("dash-cards-filter-toggle--on");
+            btn.classList.toggle("dash-cards-filter-toggle--on", !wasOn);
+            btn.textContent = !wasOn ? "★ Starred" : "☆ Starred";
             if (pageSize > 0) this.visibleCount = pageSize;
-            this.rebuild();
+            this.rebuildCards();
           });
           controls.appendChild(btn);
         } else {
-          // Enum-style filter — derive unique values from the full dataset.
           const values = [
             ...new Set(
               limited
@@ -143,7 +157,7 @@ export class CardsComponent extends BaseDashboardComponent {
                 delete this.activeFilters[field];
               }
               if (pageSize > 0) this.visibleCount = pageSize;
-              this.rebuild();
+              this.rebuildCards();
             });
             controls.appendChild(select);
           }
@@ -153,7 +167,44 @@ export class CardsComponent extends BaseDashboardComponent {
       this.container.appendChild(controls);
     }
 
-    // ── Apply search + filter to full dataset ─────────────────────────
+    // ── Cards host ────────────────────────────────────────────────────
+    this.cardsHost = this.el("div", "dash-cards-host");
+    this.container.appendChild(this.cardsHost);
+    this.buildCardsInto(this.cardsHost, limited, pageSize, favouriteField);
+  }
+
+  // Rebuild only the cards + footer, leaving controls untouched.
+  private rebuildCards(): void {
+    if (!this.cardsHost || !this.props) return;
+    const { panel } = this.props;
+    const pageSize =
+      typeof panel.extra?.["page_size"] === "number" &&
+      (panel.extra["page_size"] as number) > 0
+        ? (panel.extra["page_size"] as number)
+        : 0;
+    const favouriteField =
+      typeof panel.extra?.["favourite_field"] === "string"
+        ? (panel.extra["favourite_field"] as string)
+        : "favourite";
+    const limited =
+      typeof panel.limit === "number" && panel.limit > 0
+        ? this.props.data.slice(0, panel.limit)
+        : this.props.data;
+    this.cardsHost.innerHTML = "";
+    this.buildCardsInto(this.cardsHost, limited, pageSize, favouriteField);
+  }
+
+  private buildCardsInto(
+    host: HTMLElement,
+    limited: Record<string, unknown>[],
+    pageSize: number,
+    favouriteField: string,
+  ): void {
+    if (!this.props) return;
+    const { panel, onAction } = this.props;
+    const layout = panel.layout ?? "grid";
+
+    // ── Apply search + filter ─────────────────────────────────────────
     let filtered = limited;
 
     for (const [field, value] of Object.entries(this.activeFilters)) {
@@ -220,13 +271,8 @@ export class CardsComponent extends BaseDashboardComponent {
         wrapper.appendChild(header);
       }
       for (const item of group.items) {
-        // <article> gives the card an implicit document region and a
-        // stable landmark for screen readers, while letting us override
-        // the role to "button"/"link" when the card is interactive.
         const card = this.el("article", "dash-card");
 
-        // Inline preview — rendered at the TOP of the card, separated from
-        // the title/fields by a divider (like frontmatter in a markdown file).
         if (preview) {
           const previewComponent = String(preview["component"] ?? "");
           const previewField = preview["field"]
@@ -266,7 +312,7 @@ export class CardsComponent extends BaseDashboardComponent {
                     onAction: this.props!.onAction,
                   });
                 } catch {
-                  // Silently skip failed previews — don't break the card
+                  // Silently skip failed previews
                 }
               }
               card.appendChild(document.createElement("hr"));
@@ -286,13 +332,10 @@ export class CardsComponent extends BaseDashboardComponent {
           }
         }
 
-        // Favourite-toggle config — when set, the badge whose field is
-        // `favouriteField` becomes a clickable star instead of a static label.
         const onFavourite = panel.options?.["on_favourite"] as
           | { action: string; message?: Record<string, unknown> }
           | undefined;
 
-        // Render badges
         if (panel.badges.length > 0) {
           const badgesEl = this.el("div", "dash-card-badges");
           badgesEl.setAttribute("role", "list");
@@ -340,10 +383,6 @@ export class CardsComponent extends BaseDashboardComponent {
           card.appendChild(badgesEl);
         }
 
-        // Inline detail expansion — when panel.detail is configured, every
-        // card gets a chevron and is clickable. Click anywhere on the card
-        // toggles the detail block. State persists in this.expanded across
-        // re-renders so live pushes don't collapse what the user opened.
         const detailCfg = panel.detail;
         if (detailCfg && typeof detailCfg["component"] === "string") {
           const cardKey = String(item["id"] ?? "");
@@ -418,9 +457,7 @@ export class CardsComponent extends BaseDashboardComponent {
             | undefined;
           const previewPatch: Record<string, unknown> = {};
           if (vfp) {
-            const previewField = vfp["field"]
-              ? String(vfp["field"])
-              : null;
+            const previewField = vfp["field"] ? String(vfp["field"]) : null;
             const previewComponent = String(vfp["component"] ?? "");
             const previewData = previewField ? item[previewField] : null;
             if (previewComponent && previewData != null) {
@@ -474,7 +511,7 @@ export class CardsComponent extends BaseDashboardComponent {
       }
     }
 
-    this.container.appendChild(wrapper);
+    host.appendChild(wrapper);
 
     // ── Pagination footer ─────────────────────────────────────────────
     if (pageSize > 0 && (hasMore || filtered.length !== limited.length)) {
@@ -491,19 +528,16 @@ export class CardsComponent extends BaseDashboardComponent {
         btn.setAttribute("type", "button");
         btn.addEventListener("click", () => {
           this.visibleCount += pageSize;
-          this.rebuild();
+          this.rebuildCards();
         });
         footer.appendChild(btn);
       }
 
       const shown = Math.min(this.visibleCount, filtered.length);
-      const count = this.el(
-        "span",
-        "dash-cards-count",
-        `${shown} of ${filtered.length}`,
+      footer.appendChild(
+        this.el("span", "dash-cards-count", `${shown} of ${filtered.length}`),
       );
-      footer.appendChild(count);
-      this.container.appendChild(footer);
+      host.appendChild(footer);
     }
   }
 
