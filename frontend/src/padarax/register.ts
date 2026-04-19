@@ -20,9 +20,9 @@ const VIEWER_FACTORIES: Record<string, ViewerFactory> = {
     v.render(container, data);
     return { dispose: () => { container.innerHTML = ""; } };
   },
-  history: (container, data) => {
+  history: (container, data, navigateTo) => {
     const v = new HistoryViewer();
-    v.render(container, data);
+    v.render(container, data, navigateTo);
     return { dispose: () => { container.innerHTML = ""; } };
   },
 };

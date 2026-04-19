@@ -1,11 +1,13 @@
 /**
  * Viewer-native renderer for history event/period JSON files.
  *
- * Renders into the CADE file viewer: name/year/era header, access-filter
- * bar, then claims grouped by layer. Claims outside the active filter are
- * dimmed so the GM can see what knowledge gates exist without losing
- * structural context.
+ * Renders into the CADE file viewer: name/year/era header, cross-refs as
+ * frontmatter, access-filter bar, then claims grouped by layer. Claims
+ * outside the active filter collapse to their meta row (tier + tags) so the
+ * GM can see what knowledge gates exist without losing structural context.
  */
+
+import { parseRef, renderProseWithRefs } from "./knowledge-refs";
 
 const TIER_ORDER = ["common", "informed", "specialist", "secret"] as const;
 
@@ -56,12 +58,18 @@ export class HistoryViewer {
   private data: Record<string, unknown> = {};
   private ceilingTier = "";
   private filterTag = "";
+  private navigateTo: (path: string) => void = () => {};
 
-  render(container: HTMLElement, data: Record<string, unknown>): void {
+  render(
+    container: HTMLElement,
+    data: Record<string, unknown>,
+    navigateTo?: (path: string) => void,
+  ): void {
     this.container = container;
     this.data = data;
     this.ceilingTier = "";
     this.filterTag = "";
+    if (navigateTo) this.navigateTo = navigateTo;
     this.rebuild();
   }
 
@@ -83,13 +91,14 @@ export class HistoryViewer {
 
     const wrap = el("div", "hv-wrap");
     wrap.appendChild(this.buildHeader());
-    wrap.appendChild(this.buildFilterBar());
-    wrap.appendChild(this.buildClaims());
 
     const crossRefs = this.data["cross_refs"] as Record<string, unknown[]> | undefined;
     if (crossRefs && Object.keys(crossRefs).length > 0) {
       wrap.appendChild(this.buildCrossRefs(crossRefs));
     }
+
+    wrap.appendChild(this.buildFilterBar());
+    wrap.appendChild(this.buildClaims());
 
     this.container.appendChild(wrap);
   }
@@ -237,22 +246,66 @@ export class HistoryViewer {
 
     if (!visible) meta.appendChild(el("span", "hv-lock", "⊘"));
     claimEl.appendChild(meta);
-    claimEl.appendChild(el("p", "hv-prose", claim.prose));
+    if (visible) {
+      const p = el("p", "hv-prose");
+      const frag = renderProseWithRefs(claim.prose);
+      frag.querySelectorAll<HTMLElement>(".hv-ref").forEach((badge) => {
+        const type = badge.dataset.refType ?? "";
+        const id   = badge.dataset.refId   ?? "";
+        if (!type || !id) return;
+        const key = `@${type}:${id}`;
+        const status = this.refStatus[key] ?? "dead";
+        badge.classList.add(`hv-ref--${status}`);
+        if (status !== "dead") {
+          badge.addEventListener("click", () => this.navigateTo(this.refPath(type, id)));
+        }
+      });
+      p.appendChild(frag);
+      claimEl.appendChild(p);
+    }
 
     return claimEl;
   }
 
+  private get refStatus(): Record<string, string> {
+    return (this.data["_ref_status"] as Record<string, string>) ?? {};
+  }
+
+  private refPath(type: string, id: string): string {
+    return `content/knowledge/history/enriched/${id}.json`;
+  }
+
+  private makeRefBadge(type: string, id: string): HTMLElement {
+    const key = `@${type}:${id}`;
+    const status = this.refStatus[key] ?? "dead";
+    const badge = el("span", `hv-ref hv-ref--${status}`);
+    badge.dataset.refType = type;
+    badge.dataset.refId = id;
+    badge.textContent = key;
+    if (status !== "dead") {
+      badge.addEventListener("click", () => this.navigateTo(this.refPath(type, id)));
+    }
+    return badge;
+  }
+
   private buildCrossRefs(crossRefs: Record<string, unknown[]>): HTMLElement {
     const section = el("div", "hv-crossrefs");
-    section.appendChild(el("div", "hv-section-head", "Cross-References"));
     for (const [rel, targets] of Object.entries(crossRefs)) {
       const arr = Array.isArray(targets) ? targets : [targets];
+      const row = el("div", "hv-crossref-row");
+      row.appendChild(el("span", "hv-crossref-rel", rel.replace(/_/g, " ")));
+      const targetsWrap = el("span", "hv-crossref-targets");
       for (const target of arr) {
-        const row = el("div", "hv-crossref-row");
-        row.appendChild(el("span", "hv-crossref-rel", rel));
-        row.appendChild(el("span", "hv-crossref-target", String(target)));
-        section.appendChild(row);
+        const ref = parseRef(String(target));
+        if (ref) {
+          targetsWrap.appendChild(this.makeRefBadge(ref.type, ref.id));
+        } else {
+          targetsWrap.appendChild(el("span", "hv-ref", String(target)));
+        }
+
       }
+      row.appendChild(targetsWrap);
+      section.appendChild(row);
     }
     return section;
   }

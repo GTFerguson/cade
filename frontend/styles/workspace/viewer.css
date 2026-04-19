@@ -1045,5 +1045,24 @@
   font-size: 12px;
 }
 .hv-crossref-row:last-child { border-bottom: none; }
-.hv-crossref-rel    { color: var(--text-muted); min-width: 120px; flex-shrink: 0; }
-.hv-crossref-target { color: var(--accent-cyan); }
+.hv-crossref-rel     { color: var(--text-muted); min-width: 120px; flex-shrink: 0; }
+.hv-crossref-targets { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.hv-ref {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.85em;
+}
+.hv-ref--dead {
+  color: inherit;
+}
+.hv-ref--stub {
+  color: var(--accent-cyan);
+  cursor: pointer;
+  font-style: italic;
+  opacity: 0.65;
+}
+.hv-ref--resolved {
+  color: var(--accent-cyan);
+  cursor: pointer;
+  font-weight: 600;
+}
