@@ -8,8 +8,16 @@ STABLE_PORT ?= 3000
 DEV_PORT ?= 3001
 VITE_PORT ?= 5173
 
-# Python command (adjust if needed)
-PYTHON ?= python
+# Python command (adjust if needed).
+# Prefer the project's .venv if it exists (has pinned deps from
+# scripts/setup-dev.sh), then python3, then python. Without this,
+# `make dev` silently started nothing on systems where `python` wasn't
+# on PATH — the Makefile's "Backend ready" check would still pass if a
+# stale backend was already listening on the port.
+PYTHON ?= $(shell \
+    if [ -x .venv/bin/python ]; then echo .venv/bin/python; \
+    elif command -v python3 >/dev/null 2>&1; then command -v python3; \
+    else echo python; fi)
 
 # OS detection for cross-platform commands
 ifeq ($(OS),Windows_NT)

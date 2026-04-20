@@ -669,7 +669,9 @@ class ConnectionHandler:
                     if isinstance(default, ClaudeCodeProvider):
                         message["chatMode"] = default.mode
 
-        session = load_session(self._working_dir)
+        session = load_session(
+            self._working_dir, getattr(self, "_dashboard_filename", None)
+        )
         if session is not None:
             message["session"] = session
 
@@ -1169,7 +1171,9 @@ class ConnectionHandler:
     async def _handle_save_session(self, data: dict) -> None:
         """Handle session save request."""
         state = data.get("state", {})
-        save_session(self._working_dir, state)
+        save_session(
+            self._working_dir, state, getattr(self, "_dashboard_filename", None),
+        )
 
     async def _handle_get_latest_plan(self) -> None:
         """Handle request for plan file associated with current project.

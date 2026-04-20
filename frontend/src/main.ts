@@ -176,8 +176,17 @@ class App {
     }
 
     if (merged.kiosk_mode === true) {
-      console.log("[launch] kiosk mode — hiding terminal pane");
-      tab.context?.getLayout()?.hideTerminal();
+      // Kiosk locks down the raw shell on the backend (PTY input/resize
+      // rejected in websocket.py); the middle pane in enhanced mode is
+      // ChatPane, not a shell, so it must stay visible for game I/O.
+      // Only hide the pane entirely if enhanced mode is off — then the
+      // middle pane really would be a raw terminal with nothing to do.
+      if (merged.enhanced !== true) {
+        console.log("[launch] kiosk + non-enhanced — hiding terminal pane");
+        tab.context?.getLayout()?.hideTerminal();
+      } else {
+        console.log("[launch] kiosk mode — shell locked, chat pane kept");
+      }
     }
 
     if (merged.viewers && merged.viewers.length > 0) {

@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 SESSION_DIR = ".cade"
 SESSION_FILE = "session.json"
+SESSION_SUBDIR = "sessions"
 SESSION_VERSION = 1
 
 
@@ -31,21 +32,48 @@ class SessionState(TypedDict, total=False):
     layout: LayoutProportions
 
 
-def _get_session_path(working_dir: Path) -> Path:
-    """Get the path to the session file."""
-    return working_dir / SESSION_DIR / SESSION_FILE
+def _slugify_dashboard(dashboard_filename: str) -> str:
+    """Derive a filesystem-safe slug from a dashboard filename.
+
+    Strips directory, takes stem, replaces path separators. Used to
+    namespace session state per active dashboard so player-mode and
+    GM-mode pane widths don't stomp each other.
+    """
+    stem = Path(dashboard_filename).stem or "dashboard"
+    return stem.replace("/", "_").replace("\\", "_")
 
 
-def load_session(working_dir: Path) -> SessionState | None:
-    """Load session state from .cade/session.json.
+def _get_session_path(working_dir: Path, dashboard_filename: str | None = None) -> Path:
+    """Get the path to the session file for a given dashboard.
+
+    When ``dashboard_filename`` is set, sessions are stored under
+    ``.cade/sessions/<slug>.json`` so each dashboard keeps its own
+    pane proportions and tree-expansion state. When None, the legacy
+    ``.cade/session.json`` is used (backwards-compatible for projects
+    that don't declare a dashboard_file).
+    """
+    base = working_dir / SESSION_DIR
+    if dashboard_filename:
+        return base / SESSION_SUBDIR / f"{_slugify_dashboard(dashboard_filename)}.json"
+    return base / SESSION_FILE
+
+
+def load_session(
+    working_dir: Path, dashboard_filename: str | None = None
+) -> SessionState | None:
+    """Load session state, namespaced by active dashboard when provided.
 
     Args:
         working_dir: Project root directory
+        dashboard_filename: Active dashboard file (launch.yml's
+            ``dashboard_file`` or the ``?dashboard=`` override). When
+            set, reads ``.cade/sessions/<slug>.json`` so different
+            dashboards keep independent pane widths.
 
     Returns:
         Session state dict or None if not found/invalid
     """
-    session_path = _get_session_path(working_dir)
+    session_path = _get_session_path(working_dir, dashboard_filename)
 
     if not session_path.exists():
         return None
@@ -69,17 +97,25 @@ def load_session(working_dir: Path) -> SessionState | None:
         return None
 
 
-def save_session(working_dir: Path, state: SessionState) -> bool:
-    """Save session state to .cade/session.json.
+def save_session(
+    working_dir: Path,
+    state: SessionState,
+    dashboard_filename: str | None = None,
+) -> bool:
+    """Save session state, namespaced by active dashboard when provided.
 
     Args:
         working_dir: Project root directory
         state: Session state to save
+        dashboard_filename: Active dashboard file — sessions are
+            keyed by dashboard slug so player-mode and GM-mode
+            (different dashboards on the same project) don't
+            overwrite each other's pane proportions.
 
     Returns:
         True if saved successfully, False otherwise
     """
-    session_path = _get_session_path(working_dir)
+    session_path = _get_session_path(working_dir, dashboard_filename)
 
     state_with_version: SessionState = {
         "version": SESSION_VERSION,
