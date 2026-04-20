@@ -162,6 +162,8 @@ def extract_dashboard_chrome(project_dir: Path, dashboard_filename: str | None) 
     out: dict[str, Any] = {}
     if isinstance(raw.get("hide_tree"), bool):
         out["hide_tree"] = raw["hide_tree"]
+    if isinstance(raw.get("kiosk_mode"), bool):
+        out["kiosk_mode"] = raw["kiosk_mode"]
     return out
 
 

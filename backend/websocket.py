@@ -465,6 +465,14 @@ class ConnectionHandler:
             or extract_dashboard_filename(self._launch_yaml)
         )
         self._dashboard_filename = dashboard_filename
+        # Dashboard chrome may override kiosk_mode (e.g. dashboard-player.yml
+        # declares kiosk_mode: true even when launch.yml doesn't). Re-check now
+        # that the dashboard filename is resolved. PTY is already created above,
+        # so this only affects the frontend preset sent in the connected message.
+        dashboard_chrome = extract_dashboard_chrome(self._working_dir, dashboard_filename)
+        if not self._kiosk_mode and dashboard_chrome.get("kiosk_mode") is True:
+            self._kiosk_mode = True
+            logger.info("Kiosk mode enabled via dashboard chrome — terminal pane hidden")
         self._dashboard = DashboardHandler(
             self._working_dir,
             self._send,

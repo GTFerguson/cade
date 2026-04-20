@@ -65,36 +65,50 @@ check:
 stable: build
 	$(PYTHON) -m backend.main serve --port $(STABLE_PORT)
 
+# Wait for backend to be ready (polls /api/auth/check until 200)
+define wait_for_backend
+	@echo "Waiting for backend on port $(1)..."; \
+	for i in $$(seq 1 30); do \
+		if curl -sf http://localhost:$(1)/api/auth/check > /dev/null 2>&1; then \
+			echo "Backend ready."; break; \
+		fi; \
+		sleep 0.5; \
+	done
+endef
+
 # Run dev version (Vite hot reload + backend)
 dev:
 	@echo "Starting dev backend on port $(DEV_PORT)..."
+	$(call run_bg,$(PYTHON) -m backend.main serve --port $(DEV_PORT) --no-browser --debug)
+	$(call wait_for_backend,$(DEV_PORT))
 	@echo "Starting Vite on port $(VITE_PORT)..."
 	@echo "Access dev at http://localhost:$(VITE_PORT)"
 	@echo "To view files: cade view -p $(DEV_PORT) <path>"
-	$(call run_bg,$(PYTHON) -m backend.main serve --port $(DEV_PORT) --no-browser --debug)
 	cd frontend && $(SET_BACKEND_PORT) npm run dev -- --port $(VITE_PORT)
 
 # Run dev version with dummy Claude UI (no real Claude connection)
 # Clears session state on each restart for clean testing
 dev-dummy:
 	@echo "Starting dev backend in DUMMY mode on port $(DEV_PORT)..."
+	$(call run_bg,$(PYTHON) -m backend.main serve --port $(DEV_PORT) --no-browser --debug --dummy)
+	$(call wait_for_backend,$(DEV_PORT))
 	@echo "Starting Vite on port $(VITE_PORT) (sessions will be cleared)..."
 	@echo "Access dev at http://localhost:$(VITE_PORT)"
 	@echo "To view files: cade view -p $(DEV_PORT) <path>"
-	$(call run_bg,$(PYTHON) -m backend.main serve --port $(DEV_PORT) --no-browser --debug --dummy)
 	cd frontend && $(SET_BACKEND_PORT) $(SET_CLEAR_SESSION) npm run dev -- --port $(VITE_PORT)
 
 # Run both stable and dev
 both: build
 	@echo "Starting stable on port $(STABLE_PORT)..."
+	$(call run_bg,$(PYTHON) -m backend.main serve --port $(STABLE_PORT) --no-browser)
+	$(call wait_for_backend,$(STABLE_PORT))
 	@echo "Starting dev backend on port $(DEV_PORT)..."
-	@echo "Starting Vite on port $(VITE_PORT)..."
+	$(call run_bg,$(PYTHON) -m backend.main serve --port $(DEV_PORT) --no-browser)
+	$(call wait_for_backend,$(DEV_PORT))
 	@echo ""
 	@echo "Stable: http://localhost:$(STABLE_PORT)"
 	@echo "Dev:    http://localhost:$(VITE_PORT)"
 	@echo ""
-	$(call run_bg,$(PYTHON) -m backend.main serve --port $(STABLE_PORT) --no-browser)
-	$(call run_bg,$(PYTHON) -m backend.main serve --port $(DEV_PORT) --no-browser)
 	cd frontend && $(SET_BACKEND_PORT) npm run dev -- --port $(VITE_PORT)
 
 # Stop all CADE processes

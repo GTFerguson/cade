@@ -445,6 +445,7 @@ export class Layout implements Component {
    * Show the file-tree pane by restoring its saved proportion.
    */
   showFileTree(): void {
+    if (this.proportions.fileTree > 0) return;
     if (this.savedFileTreeProportion === null || this.savedFileTreeProportion <= 0) {
       this.savedFileTreeProportion = DEFAULT_PROPORTIONS.fileTree;
     }
