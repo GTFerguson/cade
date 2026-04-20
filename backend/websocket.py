@@ -16,6 +16,7 @@ from core.backend.chat.session import ChatSession, get_chat_registry
 from backend.config import load_user_config
 from backend.launch_preset import (
     extract_auth_config,
+    extract_dashboard_chrome,
     extract_dashboard_filename,
     extract_frontend_preset,
     extract_provider_config,
@@ -463,6 +464,7 @@ class ConnectionHandler:
             self._dashboard_file_override
             or extract_dashboard_filename(self._launch_yaml)
         )
+        self._dashboard_filename = dashboard_filename
         self._dashboard = DashboardHandler(
             self._working_dir,
             self._send,
@@ -641,6 +643,10 @@ class ConnectionHandler:
         # (The provider block was consumed in _setup and registered on the
         # handler's provider registry — the frontend doesn't need to see it.)
         frontend_preset = extract_frontend_preset(self._launch_yaml)
+        dashboard_chrome = extract_dashboard_chrome(
+            self._working_dir, getattr(self, "_dashboard_filename", None),
+        )
+        frontend_preset.update(dashboard_chrome)
         if frontend_preset:
             message["launchPreset"] = frontend_preset
 

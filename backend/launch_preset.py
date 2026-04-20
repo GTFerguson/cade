@@ -10,7 +10,10 @@ Supported top-level keys (all optional):
     enhanced: bool        — toggle enhanced-mode ChatPane on connect
     spawn: string         — shell command to run in the manual terminal
     view: string          — dashboard view id to preselect on open
-    hide_tree: bool       — collapse the file tree on startup
+    hide_tree: bool       — collapse the file tree on startup (fallback;
+                            a `hide_tree:` declared in the active dashboard
+                            yml overrides this, so chrome tracks the
+                            dashboard rather than the project)
     provider: map         — register a project-local chat provider (see below)
     dashboard_file: str   — path to a dashboard config file to load instead
                             of the default .cade/dashboard.yml probe. Useful
@@ -129,6 +132,37 @@ def extract_dashboard_filename(raw: dict[str, Any]) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
+
+def extract_dashboard_chrome(project_dir: Path, dashboard_filename: str | None) -> dict[str, Any]:
+    """Read frontend chrome overrides from the active dashboard yml.
+
+    A dashboard file may declare top-level `hide_tree: bool` to bind chrome
+    to the dashboard itself, so switching dashboards (via launch.yml's
+    `dashboard_file` or `?dashboard=` URL param) also switches file-tree
+    visibility. Values here override launch.yml's top-level equivalents.
+    Missing file or malformed yml returns {} — silent degradation, same as
+    load_launch_preset.
+    """
+    if not dashboard_filename:
+        return {}
+    path = Path(dashboard_filename)
+    if not path.is_absolute():
+        path = project_dir / path
+    if not path.exists():
+        return {}
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+    except (yaml.YAMLError, OSError) as e:
+        logger.warning("Failed to read dashboard chrome from %s: %s", path, e)
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, Any] = {}
+    if isinstance(raw.get("hide_tree"), bool):
+        out["hide_tree"] = raw["hide_tree"]
+    return out
 
 
 def extract_auth_config(raw: dict[str, Any]) -> dict[str, Any] | None:
