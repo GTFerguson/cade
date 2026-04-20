@@ -465,6 +465,28 @@ export class Layout implements Component {
   }
 
   /**
+   * Hide the terminal pane by setting its proportion to 0.
+   * Used by kiosk_mode launches to lock down shell access.
+   * Remaining space is redistributed to the viewer, falling back to
+   * the file-tree if no viewer is visible.
+   */
+  hideTerminal(): void {
+    if (this.proportions.terminal <= 0) return;
+    const freed = this.proportions.terminal;
+    this.proportions.terminal = 0;
+    if (this.proportions.viewer > 0) {
+      this.proportions.viewer += freed;
+    } else if (this.proportions.fileTree > 0) {
+      this.proportions.fileTree += freed;
+    } else {
+      this.proportions.viewer = freed;
+    }
+    this.applyProportions();
+    this.onChangeCallback?.();
+    window.dispatchEvent(new Event("resize"));
+  }
+
+  /**
    * Dispose of resources.
    */
   dispose(): void {

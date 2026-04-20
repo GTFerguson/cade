@@ -14,7 +14,7 @@ export interface KnowledgeRef {
 export function parseRef(raw: string): KnowledgeRef | null {
   const m = /^@([a-z]+):([\w-]+)(\+pl)?$/.exec(raw.trim());
   if (!m) return null;
-  return { type: m[1], id: m[2], plural: m[3] != null };
+  return { type: m[1]!, id: m[2]!, plural: m[3] != null };
 }
 
 /**

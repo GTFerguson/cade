@@ -568,7 +568,9 @@ export class CardsComponent extends BaseDashboardComponent {
         options:
           (detailCfg["options"] as Record<string, unknown>) ?? detailCfg,
         extra: {},
-        source: this.props.panel.source,
+        ...(this.props.panel.source !== undefined
+          ? { source: this.props.panel.source }
+          : {}),
       };
       comp.render(host, {
         panel: detailPanel,

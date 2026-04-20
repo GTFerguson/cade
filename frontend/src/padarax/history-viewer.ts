@@ -271,7 +271,7 @@ export class HistoryViewer {
     return (this.data["_ref_status"] as Record<string, string>) ?? {};
   }
 
-  private refPath(type: string, id: string): string {
+  private refPath(_type: string, id: string): string {
     return `content/knowledge/history/enriched/${id}.json`;
   }
 
