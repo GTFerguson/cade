@@ -224,7 +224,7 @@ export class WebSocketClient extends BaseWSClient {
     return false;
   }
 
-  private fireBridged<K extends BridgedEventKey>(
+  protected fireBridged<K extends BridgedEventKey>(
     event: K,
     payload: WebSocketEvents[K]
   ): void {
@@ -605,7 +605,15 @@ export class WebSocketClient extends BaseWSClient {
 
   /** Dev-only: fire a synthetic inbound event as if received from the server. */
   injectEvent(type: string, data: unknown): void {
-    if (import.meta.env.DEV) {
+    if (!import.meta.env.DEV) return;
+    const BRIDGED: ReadonlySet<string> = new Set([
+      "connected", "disconnected", "auth-failed",
+      "google-auth-required", "access-not-approved",
+      "connection-lost", "connection-failed",
+    ]);
+    if (BRIDGED.has(type)) {
+      this.fireBridged(type as BridgedEventKey, data as never);
+    } else {
       this.dispatch(type, data);
     }
   }
