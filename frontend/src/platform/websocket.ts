@@ -603,6 +603,13 @@ export class WebSocketClient extends BaseWSClient {
     }
   }
 
+  /** Dev-only: fire a synthetic inbound event as if received from the server. */
+  injectEvent(type: string, data: unknown): void {
+    if (import.meta.env.DEV) {
+      this.dispatch(type, data);
+    }
+  }
+
 }
 
 // Re-export for consumers that imported the event-payload shape by name.
