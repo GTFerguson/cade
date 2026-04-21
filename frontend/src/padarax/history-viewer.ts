@@ -55,12 +55,15 @@ function el(tag: string, cls?: string, text?: string): HTMLElement {
   return e;
 }
 
+function humaniseEntityId(id: string): string {
+  return id.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function humaniseAccessTag(tag: string): string {
   const m = tag.match(/^@([\w-]+):([\w-]+)$/);
   if (!m) return tag;
-  const predicate = m[1].charAt(0).toUpperCase() + m[1].slice(1);
-  const entity = m[2].replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-  return `${predicate} of ${entity}`;
+  const predicate = m[1]!.charAt(0).toUpperCase() + m[1]!.slice(1);
+  return `${predicate} of ${humaniseEntityId(m[2]!)}`;
 }
 
 export class HistoryViewer {
@@ -106,6 +109,9 @@ export class HistoryViewer {
     if (crossRefs && Object.keys(crossRefs).length > 0) {
       wrap.appendChild(this.buildCrossRefs(crossRefs));
     }
+
+    const gates = this.buildAccessGates();
+    if (gates) wrap.appendChild(gates);
 
     wrap.appendChild(this.buildFilterBar());
     wrap.appendChild(this.buildClaims());
@@ -166,7 +172,7 @@ export class HistoryViewer {
       tagSel.className = "hv-filter-select";
       const tagOpts: [string, string][] = [
         ["", "— all —"],
-        ...availableTags.map((t): [string, string] => [t, t]),
+        ...availableTags.map((t): [string, string] => [t, humaniseAccessTag(t)]),
       ];
       for (const [value, label] of tagOpts) {
         const opt = document.createElement("option");
@@ -264,7 +270,20 @@ export class HistoryViewer {
 
     if (claim.access_tags.length > 0) {
       for (const tag of claim.access_tags) {
-        meta.appendChild(el("span", "hv-access-tag", humaniseAccessTag(tag)));
+        const m = tag.match(/^@([\w-]+):([\w-]+)$/);
+        if (m) {
+          const type = m[1]!;
+          const id = m[2]!;
+          const status = this.refStatus[tag] ?? "dead";
+          const badge = el("span", `hv-access-tag hv-ref--${status}`, humaniseAccessTag(tag));
+          if (status !== "dead") {
+            badge.style.cursor = "pointer";
+            badge.addEventListener("click", () => this.navigateTo(this.refPath(type, id)));
+          }
+          meta.appendChild(badge);
+        } else {
+          meta.appendChild(el("span", "hv-access-tag", tag));
+        }
       }
     } else {
       meta.appendChild(el("span", "hv-access-open", "all"));
@@ -307,11 +326,42 @@ export class HistoryViewer {
     const badge = el("span", `hv-ref hv-ref--${status}`);
     badge.dataset.refType = type;
     badge.dataset.refId = id;
-    badge.textContent = key;
+    badge.textContent = humaniseEntityId(id);
     if (status !== "dead") {
       badge.addEventListener("click", () => this.navigateTo(this.refPath(type, id)));
     }
     return badge;
+  }
+
+  private buildAccessGates(): HTMLElement | null {
+    const claims = this.data["claims"] as ClaimsData | undefined;
+    if (!claims) return null;
+
+    const byPred = new Map<string, string[]>();
+    for (const layer of LAYER_ORDER) {
+      for (const c of normalizeClaims(claims[layer])) {
+        for (const tag of c.access_tags) {
+          const m = tag.match(/^@([\w-]+):([\w-]+)$/);
+          if (!m) continue;
+          const pred = m[1]!;
+          const id = m[2]!;
+          if (!byPred.has(pred)) byPred.set(pred, []);
+          if (!byPred.get(pred)!.includes(id)) byPred.get(pred)!.push(id);
+        }
+      }
+    }
+    if (byPred.size === 0) return null;
+
+    const section = el("div", "hv-crossrefs");
+    for (const [pred, ids] of byPred) {
+      const row = el("div", "hv-crossref-row");
+      row.appendChild(el("span", "hv-crossref-rel", pred.replace(/-/g, " ")));
+      const wrap = el("span", "hv-crossref-targets");
+      for (const id of ids) wrap.appendChild(this.makeRefBadge(pred, id));
+      row.appendChild(wrap);
+      section.appendChild(row);
+    }
+    return section;
   }
 
   private buildCrossRefs(crossRefs: Record<string, unknown[]>): HTMLElement {
