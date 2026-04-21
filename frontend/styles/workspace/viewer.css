@@ -733,6 +733,7 @@
   line-height: 1.5;
 }
 .npc-v-reflection-num  { color: var(--text-muted); flex-shrink: 0; width: 20px; }
+.npc-v-reflection-year { color: var(--text-muted); flex-shrink: 0; font-style: italic; }
 .npc-v-reflection-text { color: var(--text-primary); }
 
 /* Inventory */

@@ -18,6 +18,11 @@ interface NpcScheduleEntry {
   location_id: string;
 }
 
+interface NpcSeededReflection {
+  text: string;
+  year?: number;
+}
+
 interface NpcPersona {
   name?: string;
   species?: string;
@@ -30,7 +35,7 @@ interface NpcPersona {
   contradiction?: string;
   current_state?: string;
   relationships?: NpcRelationship[];
-  seeded_reflections?: string[];
+  seeded_reflections?: (string | NpcSeededReflection)[];
 }
 
 interface NpcSheet {
@@ -360,15 +365,30 @@ function buildScheduleTab(
 }
 
 function buildReflectionsTab(container: HTMLElement, persona: NpcPersona): void {
-  const refs = persona.seeded_reflections ?? [];
-  if (refs.length === 0) {
+  const raw = persona.seeded_reflections ?? [];
+  if (raw.length === 0) {
     container.appendChild(para("No reflections seeded for this NPC."));
     return;
   }
-  refs.forEach((text, i) => {
+
+  const refs: NpcSeededReflection[] = raw.map(r =>
+    typeof r === "string" ? { text: r } : r,
+  );
+
+  refs.sort((a, b) => {
+    if (a.year == null && b.year == null) return 0;
+    if (a.year == null) return 1;
+    if (b.year == null) return -1;
+    return a.year - b.year;
+  });
+
+  refs.forEach((ref, i) => {
     const entry = el("div", "npc-v-reflection");
     entry.appendChild(el("span", "npc-v-reflection-num", `${i + 1}.`));
-    entry.appendChild(el("span", "npc-v-reflection-text", text));
+    if (ref.year != null) {
+      entry.appendChild(el("span", "npc-v-reflection-year", `${ref.year} AE`));
+    }
+    entry.appendChild(el("span", "npc-v-reflection-text", ref.text));
     container.appendChild(entry);
   });
 }
