@@ -71,11 +71,58 @@ More server → client signals can be added the same way: new case in `_route_fr
 
 Built-in components that emit actions:
 
-| Component  | Action          | Notes |
-|------------|-----------------|-------|
-| `checklist`| `patch`         | Toggle a row's done state. |
-| `kanban`   | `patch`         | Move a card between columns. |
-| `basket`   | `provider_message` or user-defined | Two-column stepper basket with balance + Confirm. First component that routes through a provider instead of CADE's backend. |
+| Component     | Action                              | Notes |
+|---------------|-------------------------------------|-------|
+| `checklist`   | `patch`                             | Toggle a row's done state. |
+| `kanban`      | `patch`                             | Move a card between columns. |
+| `basket`      | `provider_message` or user-defined  | Two-column stepper basket with balance + Confirm. |
+| `cards_paged` | `provider_message` or user-defined  | Windowed infinite-scroll card list. Favourite toggle + expandable detail panel. |
+
+### `cards_paged`
+
+A windowed variant of `cards` for data sources that grow unboundedly (live-push event logs, journals, feed-style lists). Renders a sliding slice of whatever the source last pushed — no server pagination required, no request per scroll event.
+
+Configurable via `panel.extra`:
+
+| Key           | Default  | Description |
+|---------------|----------|-------------|
+| `target_size` | `15`     | Entries to render by default (and to trim back to after idle). |
+| `buffer_size` | `5`      | Overflow before trim triggers — max window = target + buffer. |
+| `page_size`   | `5`      | Entries added per scroll-to-bottom load. |
+| `stale_ms`    | `180000` | Gap in ms since the panel was hidden; if exceeded and the first entry changed, the window resets to `target_size` and expanded state is cleared. |
+
+Trim logic: when `windowSize > target + buffer` AND the scroll has been idle for 800 ms AND the viewport is within 50 px of the top, the oldest entries are discarded back to `target_size`. This keeps the DOM lean while preserving entries the user is actively reading further down.
+
+Scroll-position preservation: saves `scrollTop` on dispose (view-switch or data rebuild) and restores it on the next render, so live data pushes don't snap the view.
+
+Return-to-top: a margin-tab strip (`[ ↑ latest ]`) is injected directly into the scroll container so `position: sticky` works despite `overflow: hidden` on `.dashboard-panel`. It appears after 80 px of scroll and scrolls smoothly to the top on click.
+
+Supports the full `cards` feature set: `fields`, `badges`, `favourite` toggle (via `options.on_favourite`), and expandable `detail` sub-components (e.g. `split_markdown`). Expansion state is preserved across view switches.
+
+Example config snippet:
+
+```yaml
+- component: cards_paged
+  source: game_journal
+  fields: [title, location, timestamp]
+  badges: [kind, favourite]
+  filterable: [kind, favourite]
+  searchable: [title, location, _body, _notes]
+  extra:
+    page_size: 25
+  detail:
+    component: split_markdown
+    options:
+      read_field: _body
+      edit_field: _notes
+      on_save:
+        action: provider_message
+        message: { type: journal_note_update }
+  options:
+    on_favourite:
+      action: provider_message
+      message: { type: journal_note_update }
+```
 
 ### `basket`
 
