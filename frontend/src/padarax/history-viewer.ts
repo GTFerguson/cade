@@ -38,7 +38,9 @@ type ClaimsData = Partial<Record<Layer, Claim | Claim[]>>;
 
 function normalizeClaims(raw: Claim | Claim[] | undefined): Claim[] {
   if (!raw) return [];
-  return Array.isArray(raw) ? raw : [raw];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "object" && "absent" in (raw as object)) return [];
+  return [raw];
 }
 
 function tierIndex(t: string): number {
@@ -51,6 +53,14 @@ function el(tag: string, cls?: string, text?: string): HTMLElement {
   if (cls) e.className = cls;
   if (text != null) e.textContent = text;
   return e;
+}
+
+function humaniseAccessTag(tag: string): string {
+  const m = tag.match(/^@([\w-]+):([\w-]+)$/);
+  if (!m) return tag;
+  const predicate = m[1].charAt(0).toUpperCase() + m[1].slice(1);
+  const entity = m[2].replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  return `${predicate} of ${entity}`;
 }
 
 export class HistoryViewer {
@@ -199,6 +209,22 @@ export class HistoryViewer {
     const isFiltering = this.ceilingTier !== "" || this.filterTag !== "";
 
     for (const layer of LAYER_ORDER) {
+      const raw = claims[layer] as unknown;
+      if (raw === undefined || raw === null) continue;
+
+      // Absent sentinel — render the reason rather than skipping silently.
+      if (typeof raw === "object" && !Array.isArray(raw) && "absent" in (raw as object)) {
+        const layerEl = el("div", "hv-layer");
+        const head = el("div", "hv-layer-head");
+        head.appendChild(el("span", "hv-layer-label", LAYER_LABELS[layer]));
+        layerEl.appendChild(head);
+        const card = el("div", "hv-claim hv-claim--absent");
+        card.appendChild(el("div", "hv-absent", (raw as { absent: string }).absent));
+        layerEl.appendChild(card);
+        wrap.appendChild(layerEl);
+        continue;
+      }
+
       const entries = normalizeClaims(claims[layer]);
       if (entries.length === 0) continue;
 
@@ -238,7 +264,7 @@ export class HistoryViewer {
 
     if (claim.access_tags.length > 0) {
       for (const tag of claim.access_tags) {
-        meta.appendChild(el("span", "hv-access-tag", tag));
+        meta.appendChild(el("span", "hv-access-tag", humaniseAccessTag(tag)));
       }
     } else {
       meta.appendChild(el("span", "hv-access-open", "all"));
