@@ -161,13 +161,95 @@
 /* ═══ Content area ═══ */
 .dashboard-view-content {
   flex: 1;
+  /* min-height: 0 lets the flex item respect its allocated height and
+   * scroll internally rather than growing to content height and
+   * pushing overflow up to the parent container. */
+  min-height: 0;
   overflow-y: auto;
   padding: 16px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
 }
 
-.dashboard-view-content::-webkit-scrollbar { width: 6px; }
-.dashboard-view-content::-webkit-scrollbar-track { background: transparent; }
-.dashboard-view-content::-webkit-scrollbar-thumb { background: var(--border-color); }
+.dashboard-view-content::-webkit-scrollbar { width: 8px; }
+.dashboard-view-content::-webkit-scrollbar-track { background: var(--scrollbar-bg); }
+.dashboard-view-content::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); }
+.dashboard-view-content::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+/* ═══ Back-to-top strip (cards_paged) ═══
+ *
+ * Injected as the first child of .dashboard-view-content so that
+ * position:sticky works — overflow:hidden on .dashboard-panel would
+ * block it if rendered inside the component container.
+ * top: -16px compensates for the container's padding-top so the strip
+ * sits flush at the top edge with no gap when sticky.
+ * Negative side margins cancel the 20px side padding for full-bleed.
+ */
+.cards-paged-back-to-top {
+  position: sticky;
+  top: -16px;
+  z-index: 10;
+  display: flex;
+  align-items: stretch;
+  margin: -16px -20px 12px;
+  background: var(--bg-primary);
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.cards-paged-back-to-top-tab {
+  width: 28px;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--accent-red);
+}
+
+.cards-paged-back-to-top-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 5px 12px;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cards-paged-back-to-top-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent-red);
+  white-space: nowrap;
+}
+
+.cards-paged-back-to-top-dots {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--border-color);
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.cards-paged-back-to-top:hover .cards-paged-back-to-top-tab {
+  background: var(--bg-tertiary, var(--bg-secondary));
+}
+
+.cards-paged-back-to-top:hover .cards-paged-back-to-top-label {
+  color: #c73320;
+}
 
 /* ═══ Panel layouts ═══ */
 .dashboard-panels {

@@ -1,4 +1,5 @@
 export { BasketComponent } from "./basket";
+export { CardsPaged } from "./cards-paged";
 export { ClaimsComponent } from "./claims";
 export { CardsComponent } from "./cards";
 export { GraphComponent } from "./graph";

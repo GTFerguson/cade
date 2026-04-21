@@ -7,6 +7,7 @@
 
 import {
   BasketComponent,
+  CardsPaged,
   CardsComponent,
   ClaimsComponent,
   ChecklistComponent,
@@ -49,6 +50,7 @@ export function createDefaultRegistry(): ComponentRegistry {
   registry.register("basket", BasketComponent);
   registry.register("claims", ClaimsComponent);
   registry.register("cards", CardsComponent);
+  registry.register("cards_paged", CardsPaged);
   registry.register("graph", GraphComponent);
   registry.register("checklist", ChecklistComponent);
   registry.register("kanban", KanbanComponent);
