@@ -36,6 +36,7 @@ export class TouchToolbar implements Component {
   constructor(
     private sendInput: (data: string) => void,
     private onCmd: () => void,
+    private onKeyboardOpen?: () => void,
   ) {
     this.toolbar = document.getElementById("touch-toolbar") as HTMLElement;
     this.boundViewportResize = () => this.handleViewportResize();
@@ -99,6 +100,7 @@ export class TouchToolbar implements Component {
     // When keyboard is visible, safe-area padding is unnecessary
     if (keyboardHeight > 0) {
       this.toolbar.style.paddingBottom = "0";
+      this.onKeyboardOpen?.();
     } else {
       this.toolbar.style.paddingBottom = "";
     }

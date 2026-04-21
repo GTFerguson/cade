@@ -1165,6 +1165,11 @@ export class ChatPane implements Component, PaneKeyHandler {
     }
   }
 
+  prefillInput(text: string): void {
+    this.chatInput?.setValue(text);
+    this.chatInput?.focus();
+  }
+
   focus(): void {
     this.chatInput?.focus();
   }
