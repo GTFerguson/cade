@@ -55,16 +55,6 @@ function el(tag: string, cls?: string, text?: string): HTMLElement {
   return e;
 }
 
-function humaniseEntityId(id: string): string {
-  return id.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function humaniseAccessTag(tag: string): string {
-  const m = tag.match(/^@([\w-]+):([\w-]+)$/);
-  if (!m) return tag;
-  const predicate = m[1]!.charAt(0).toUpperCase() + m[1]!.slice(1);
-  return `${predicate} of ${humaniseEntityId(m[2]!)}`;
-}
 
 export class HistoryViewer {
   private container: HTMLElement | null = null;
@@ -172,7 +162,7 @@ export class HistoryViewer {
       tagSel.className = "hv-filter-select";
       const tagOpts: [string, string][] = [
         ["", "— all —"],
-        ...availableTags.map((t): [string, string] => [t, humaniseAccessTag(t)]),
+        ...availableTags.map((t): [string, string] => [t, t]),
       ];
       for (const [value, label] of tagOpts) {
         const opt = document.createElement("option");
@@ -275,7 +265,7 @@ export class HistoryViewer {
           const type = m[1]!;
           const id = m[2]!;
           const status = this.refStatus[tag] ?? "dead";
-          const badge = el("span", `hv-access-tag hv-ref--${status}`, humaniseAccessTag(tag));
+          const badge = el("span", `hv-access-tag hv-ref--${status}`, tag);
           if (status !== "dead") {
             badge.style.cursor = "pointer";
             badge.addEventListener("click", () => this.navigateTo(this.refPath(type, id)));
@@ -326,7 +316,7 @@ export class HistoryViewer {
     const badge = el("span", `hv-ref hv-ref--${status}`);
     badge.dataset.refType = type;
     badge.dataset.refId = id;
-    badge.textContent = humaniseEntityId(id);
+    badge.textContent = key;
     if (status !== "dead") {
       badge.addEventListener("click", () => this.navigateTo(this.refPath(type, id)));
     }
