@@ -57,6 +57,13 @@ class App {
    * game-mode provider on connect.
    */
   private providerOverride: string | null;
+  /**
+   * Raw ?project=<path> URL param, used to scope ?dashboard= and ?provider=
+   * overrides to tabs whose projectPath matches. Without this, a user who
+   * bookmarks ?project=X&dashboard=Y and then opens a new tab for project Z
+   * would wrongly have Y applied to Z.
+   */
+  private urlProjectPath: string | null;
 
   constructor() {
     this.tabManager = new TabManager();
@@ -64,6 +71,7 @@ class App {
     this.launchOverrides = App.parseLaunchOverrides();
     this.dashboardOverride = App.parseDashboardOverride();
     this.providerOverride = App.parseProviderOverride();
+    this.urlProjectPath = App.parseUrlProjectPath();
     this.keybindingManager = new KeybindingManager();
     this.helpOverlay = new HelpOverlay();
     this.themeSelector = new ThemeSelector();
@@ -97,6 +105,31 @@ class App {
     if (value === null) return null;
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
+  }
+
+  /**
+   * Parse the raw ?project=<path> URL param (null if absent).
+   * Unlike getDefaultProjectPath(), this does NOT fall back to the home
+   * directory — callers need to know whether the value came from the URL
+   * so ?dashboard= and ?provider= overrides can be scoped to matching tabs.
+   */
+  private static parseUrlProjectPath(): string | null {
+    const params = new URLSearchParams(window.location.search);
+    const value = params.get("project");
+    if (value === null) return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  /**
+   * URL overrides (?dashboard=, ?provider=) apply only to tabs whose
+   * projectPath matches the ?project= URL param. Tabs for other projects
+   * — including new tabs opened via the `+` button — get no override and
+   * fall back to their project's launch.yml / default dashboard.yml.
+   */
+  private overridesMatchTab(tab: TabState): boolean {
+    if (this.urlProjectPath === null) return false;
+    return tab.projectPath === this.urlProjectPath;
   }
 
   /**
@@ -162,7 +195,7 @@ class App {
       }, 500);
     }
 
-    if (merged.view || this.dashboardOverride) {
+    if (merged.view || (this.dashboardOverride && this.overridesMatchTab(tab))) {
       console.log(`[launch] switching right pane to dashboard`);
       tab.context?.getRightPane()?.setMode("dashboard");
     }
@@ -646,11 +679,12 @@ class App {
     }
 
     if (!isDemoTab) {
+      const matches = this.overridesMatchTab(tab);
       tab.ws.sendSetProject(
         tab.projectPath,
         tab.id,
-        this.dashboardOverride ?? undefined,
-        this.providerOverride ?? undefined,
+        matches ? (this.dashboardOverride ?? undefined) : undefined,
+        matches ? (this.providerOverride ?? undefined) : undefined,
       );
 
       // Auth is project-driven now: connect first; if the project's launch.yml
