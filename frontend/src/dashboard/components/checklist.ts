@@ -2,6 +2,7 @@
  * Checklist component with completion state.
  */
 
+import { marked } from "marked";
 import { BaseDashboardComponent } from "./base-component";
 
 export class ChecklistComponent extends BaseDashboardComponent {
@@ -48,15 +49,20 @@ export class ChecklistComponent extends BaseDashboardComponent {
       const textField = panel.fields[0] ?? "text";
       const text = this.fieldValue(item, textField);
       const url = String(item["url"] ?? "");
+      // Render inline markdown (bold, italic, code, links) — checklist items
+      // often come from markdown sources with **bold** emphasis intact.
+      const rendered = marked.parseInline(text, { async: false }) as string;
       if (url) {
         const link = document.createElement("a");
-        link.textContent = text;
+        link.innerHTML = rendered;
         link.href = url;
         link.target = "_blank";
         link.className = "dash-checklist-link";
         li.appendChild(link);
       } else {
-        li.appendChild(this.el("span", undefined, text));
+        const span = this.el("span");
+        span.innerHTML = rendered;
+        li.appendChild(span);
       }
 
       // Deadline badge
