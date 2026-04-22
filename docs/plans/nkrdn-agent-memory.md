@@ -96,6 +96,20 @@ project graph (per-repo named graph)
 
 Cross-cutting memories (e.g. "auth always needs X regardless of which service") live at workspace scope. Project-specific memories live in the project graph at the appropriate granularity.
 
+## Tailored Advantages
+
+Most of the research this plan draws on was conducted on legacy codebases where structure must be inferred. Here it's explicit — which changes what the retrieval system gets for free:
+
+**Wiki-links are graph edges**: `[[agentic-context-engineering]]` is a typed relationship already in the files. nkrdn should parse these as first-class edges rather than treating them as plain text. Cross-document links become traversable connections in the graph, not just text similarity candidates.
+
+**Doc type is a trust signal**: Reference docs are evidence, architecture docs are ground truth about shipped systems, plan docs are intent. When the agent retrieves knowledge, these carry different confidence levels and should be weighted accordingly — not treated as a flat document pool.
+
+**PROVEN tiers are quality weights**: A Tier 1 citation (meta-analysis) is epistemically different from a Tier 5 practitioner opinion. That distinction is already in the files as structured metadata — it's a retrieval weight waiting to be used.
+
+**Frontmatter status is freshness**: `status: active` vs `status: draft` vs a plan that should be deleted. The lifecycle is declared, not inferred. Stale docs can be down-weighted without heuristics.
+
+**Section boundaries enable semantic chunking**: Every `## Section` is a natural chunk with known context from the document's frontmatter. Character-based chunking (embedding first N chars) throws this away. Section-level chunks with inherited metadata are strictly better.
+
 ## Integration Points
 
 - **`nkrdn context <filepath>`** — already the load-on-open command. Extend to include memory annotations in output.
@@ -103,6 +117,7 @@ Cross-cutting memories (e.g. "auth always needs X regardless of which service") 
 - **`nkrdn memory list <uri>`** — list memories on a node and its ancestors
 - **`nkrdn memory retire <id>`** — mark a memory as no longer valid
 - **CADE agent hooks** — after-task Curator pass triggers memory update cycle
+- **nkrdn RAG suite** (dependency) — Phase 2 Neo4j vector index and Phase 3 VectorStore abstraction are the retrieval infrastructure this plan runs on. Memory nodes plug into the existing RRF fusion pipeline as a new node type.
 
 ## Key Challenges
 
