@@ -136,6 +136,19 @@ Most of the research this plan draws on was conducted on legacy codebases where 
 - Should memories be committed to git (reproducible, reviewable) or stay in the local `.nkrdn/` store only?
 - How does CADE surface memories in the UI — inline in the chat context, separate panel, or invisible (agent-only)?
 
+## Double Duty: Retrieval and Many-Shot Learning
+
+Memory bullets stored in nkrdn serve two roles simultaneously:
+
+1. **Retrieval targets** — loaded into context when the agent works near the relevant node
+2. **Few-shot examples** — loaded as in-context demonstrations that implicitly calibrate the agent to project conventions
+
+Many-shot in-context learning (Agarwal et al., 2024) shows performance keeps improving well beyond the traditional 2-5 examples, particularly on tasks where the model has weak priors — niche domains, unusual patterns, project-specific conventions. This is exactly the case for accumulated project memory. Describing conventions explicitly in a system prompt is weaker than showing 20-50 examples of them in action.
+
+ACE's itemized bullet format is well-suited to this: short, structured bullets are efficient few-shot material. Prose memories would consume window budget too fast. The format constraint that makes bullets good for retrieval (concise, self-contained) also makes them good as few-shot examples.
+
+**Implication for context assembly**: when loading memories for a task, ordering matters. The most relevant memories should be at the start or end of the loaded set, not the middle — lost-in-the-middle attention bias applies within the memory block too.
+
 ## Evidence Base
 
 - [[agentic-context-engineering]] — ACE framework, itemized bullets, Generator-Reflector-Curator
