@@ -42,6 +42,7 @@ class ProviderConfig:
     model: str = ""
     region: str = ""
     api_key: str = ""
+    system_prompt: str = ""
     extra: dict = field(default_factory=dict)
 
 
@@ -94,7 +95,7 @@ def load_providers_config(path: Path | None = None) -> ProvidersConfig:
         # Resolve env vars in string values
         resolved = {}
         extra = {}
-        known_keys = {"type", "model", "region", "api-key", "api_key"}
+        known_keys = {"type", "model", "region", "api-key", "api_key", "system-prompt", "system_prompt"}
         for key, value in provider_data.items():
             if isinstance(value, str):
                 value = _resolve_env_vars(value)
@@ -104,6 +105,7 @@ def load_providers_config(path: Path | None = None) -> ProvidersConfig:
                 extra[key] = value
 
         api_key = resolved.get("api-key", resolved.get("api_key", ""))
+        system_prompt = resolved.get("system-prompt", resolved.get("system_prompt", ""))
 
         providers[name] = ProviderConfig(
             name=name,
@@ -111,6 +113,7 @@ def load_providers_config(path: Path | None = None) -> ProvidersConfig:
             model=resolved.get("model", ""),
             region=resolved.get("region", ""),
             api_key=api_key,
+            system_prompt=system_prompt,
             extra=extra,
         )
 
