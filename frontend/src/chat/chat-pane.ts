@@ -21,6 +21,7 @@ import type {
 import type { WebSocketClient } from "../platform/websocket";
 import { ChatInput } from "@core/chat/chat-input";
 import { DiagramViewer } from "@core/chat/diagram-viewer";
+import { ContextBudgetIndicator } from "../components/context-budget-indicator";
 
 /** Descriptions for well-known Claude Code slash commands */
 const SLASH_DESCRIPTIONS: Record<string, string> = {
@@ -102,6 +103,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   private thinkingContentEl: HTMLElement | null = null;
   private costEl: HTMLElement;
   private totalCost = 0;
+  private contextBudget: ContextBudgetIndicator | null = null;
   private systemInfo: { model?: string; slashCommands?: string[] } = {
     slashCommands: Object.keys(SLASH_DESCRIPTIONS),
   };
@@ -160,10 +162,13 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.costEl.className = "status-cost";
     this.costEl.textContent = "";
 
+    this.contextBudget = new ContextBudgetIndicator();
+
     this.statuslineEl.appendChild(this.modeEl);
     this.statuslineEl.appendChild(this.providerEl);
     this.statuslineEl.appendChild(this.tokensEl);
     this.statuslineEl.appendChild(this.costEl);
+    this.statuslineEl.appendChild(this.contextBudget.getElement());
 
     if (!this.readOnly) {
       this.chatInput = new ChatInput(this.inputArea, (text) =>
@@ -387,6 +392,8 @@ export class ChatPane implements Component, PaneKeyHandler {
     if (msg.slashCommands) this.systemInfo.slashCommands = msg.slashCommands;
     if (msg.model) {
       this.providerEl.textContent = msg.model;
+      this.contextBudget?.setModel(msg.model);
+      this.contextBudget?.reset();
     }
   }
 
@@ -706,6 +713,8 @@ export class ChatPane implements Component, PaneKeyHandler {
     if (!msg.cancelled) {
       this.updateTokenCount(msg.usage);
       this.updateCost(msg.cost);
+      const promptTokens = msg.usage?.["prompt_tokens"] ?? 0;
+      if (promptTokens > 0) this.contextBudget?.update(promptTokens);
     }
 
     this.chatInput?.setDisabled(false);

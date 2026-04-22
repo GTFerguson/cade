@@ -639,11 +639,37 @@
 }
 
 .chat-statusline .status-tokens {
-  margin-left: auto;
 }
 
 .chat-statusline .status-cost {
   color: var(--accent-orange);
+}
+
+/* --- Context budget indicator --- */
+
+.context-budget {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.context-budget-bar {
+  display: flex;
+  gap: 2px;
+}
+
+.context-budget-seg {
+  width: 8px;
+  height: 5px;
+  background: var(--border-color);
+  transition: background 0.2s;
+}
+
+.context-budget-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  min-width: 28px;
 }
 
 /* --- Cancelled indicator --- */

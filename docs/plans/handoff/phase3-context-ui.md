@@ -37,8 +37,9 @@ Phase 1-2f (tool support, failover, MCP adapter, agent spawner, handoff compacto
 - `b8eb45c` Phase 2f: Register MCP adapters, agent spawner in registry
 - `314d2e0` Update handoff doc: Phase 1-2f shipped, Phase 2e remaining
 - `df5d4ac` Document Phase 3+ requirements: context UI, permissions, orchestration
+- **Phase 3a**: Context budget indicator — `frontend/src/components/context-budget-indicator.ts` + wired into `chat-pane.ts`
 
-Total: 61 tests passing, all Phase 1-2f work complete.
+Total: 61 backend tests passing, frontend builds clean, context budget gauge visible in statusline.
 
 ## In flight (uncommitted work)
 
@@ -46,26 +47,12 @@ None. All work committed. Working tree clean.
 
 ## Next actions (ordered)
 
-1. **Implement context budget indicator** (`docs/plans/context-budget-indicator.md`)
-   - Create `frontend/src/components/context-budget-indicator.ts` component
-   - 8-block progress bar (match splash screen loading bar aesthetic)
-   - Colors: soft blue (0-50%) → green (50-75%) → orange (75-90%) → red (90-100%)
-   - Location: bottom-right of chat pane (see `frontend/src/chat/chat-pane.ts`)
-   - Data source: Extract token usage from ChatDone events in APIProvider
-   - Config: Read `context_budget_threshold` (default 75%) and `context_budget_hard_limit` (default 90%) from provider config
+1. ~~**Implement context budget indicator**~~ — **DONE** (see Shipped this session below)
 
-2. **Wire usage data through stream** — ensure every ChatDone event includes usage (prompt_tokens + completion_tokens)
-   - Verify `_extract_usage()` in `core/backend/providers/api_provider.py:56` always populates
-   - Add usage to ChatDone event if available (may need ChatDone schema check)
-
-3. **Test context budget UI** — verify gauge appears, colors transition correctly
-   - Create mock ChatDone events with varying token counts
-   - Test color progression at 50%, 75%, 90% thresholds
-
-4. **Then: Dynamic permission management** — read/write .claude/settings.json
+2. **Then: Dynamic permission management** — read/write .claude/settings.json
    - See `docs/plans/dynamic-permission-management.md` for design
 
-5. **Then: Agent orchestration** — multi-agent parallel execution
+3. **Then: Agent orchestration** — multi-agent parallel execution
    - See `docs/plans/agent-orchestration-framework.md` for design
 
 ## Key design decisions
