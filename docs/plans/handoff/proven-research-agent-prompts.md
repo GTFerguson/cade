@@ -51,28 +51,13 @@ Frontend builds clean (`cd frontend && npm run build`). Tests still pass (532 pa
 
 ## Next actions (ordered)
 
-1. **Answer the open question**: "which are the cream of the crop and why?" — synthesize a clear winner analysis from the 45+ papers found across three search passes. Key candidates:
-   - **ACE** (Zhang et al., 2025) — itemized playbook, Generator-Reflector-Curator, +10.6% agent tasks, 82-91% cost reduction
-   - **Prompt Alchemy** (Ye et al., 2025) — execution-driven iterative refinement, +4-14% code gen
-   - **EvolveR / Memento-Skills / AgentFactory** — self-improving agent systems, very recent (2026)
-   - **Padarax reflection system** — production implementation of Park et al. (2023) with real tuning insights
+- [x] **Answer the open question**: synthesized in `docs/reference/self-improving-agent-systems.md` §1
+- [x] **Read padarax NPC reference docs** — all five docs read, insights extracted
+- [x] **Deep-read standout self-improvement papers** — SICA, Memento-Skills, SkillClaw, EvolveR
+- [x] **Write synthesis reference doc**: `docs/reference/self-improving-agent-systems.md`
+- [x] **Commit all outstanding work**
 
-2. **Read padarax NPC reference docs** to extract insights for CADE:
-   - `/home/gary/projects/padarax/docs/reference/memory/generative-agents-park-2023.md` — Park 2023 analysis (mentioned in npc-memory.md evidence base)
-   - `/home/gary/projects/padarax/docs/reference/memory/reflection-trigger-tuning.md` — trigger threshold research (Kouba et al. 2026, 0-5 scale outperforms 1-10)
-   - `/home/gary/projects/padarax/docs/reference/memory/memory-importance-scoring.md` — 5-question rubric
-   - `/home/gary/projects/padarax/docs/reference/llm-craft/narrative-coherence-for-narrator-agents.md` — narrative craft for agents
-   - `/home/gary/projects/padarax/docs/architecture/npc-agency.md` — full agency architecture
-
-3. **Deep-read the standout self-improvement papers** from the search:
-   - `2504.15228` — A Self-Improving Coding Agent (Bristol, 2025) — most directly relevant to CADE
-   - `2603.18743` — Memento-Skills: agents that design agents (2026)
-   - `2604.08377` — SkillClaw: skills that evolve collectively (2026, very new)
-   - `2510.16079` — EvolveR: experience-driven agent lifecycle (2025)
-
-4. **Write synthesis reference doc**: `docs/reference/self-improving-agent-systems.md` covering memory + self-evolution + multi-agent coordination winners
-
-5. **Commit all outstanding work** once research session concludes
+**Research session complete. This file can be deleted.**
 
 ## Key design decisions
 
