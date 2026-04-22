@@ -1,15 +1,35 @@
 ---
 title: APIProvider Tool Support + FailoverProvider
 created: 2026-04-22
-status: approved
+status: in-progress
 tags: [cade, providers, tools, litellm]
 ---
 
 # Tool Support for APIProvider + FailoverProvider
 
+## Status
+
+**Phase 1-2f: Shipped** ✓
+- APIProvider tool support with async tool loop
+- FailoverProvider with exponential backoff
+- ToolExecutor protocol + ToolRegistry
+- MCP tools adapter, agent spawner, handoff compactor
+- Registry integration for tool wiring
+- **61 tests passing**
+
+**Phase 2e: Pending**
+- Auto-trigger handoff on context budget threshold
+
+**Phase 3: Planning**
+- [[context-budget-indicator.md]] — UI progress bar for token usage
+- [[dynamic-permission-management.md]] — Read/write .claude permissions
+- [[agent-orchestration-framework.md]] — Multi-agent parallel execution
+
+See also: [[../handoff/tool-support-and-failover.md]] for active handoff notes.
+
 ## Context
 
-CADE's `APIProvider` (LiteLLM-based) has no tool support — `tool_use=False`, no tool schema passing, no tool call parsing. The goal is to make it a viable alternative to `ClaudeCodeProvider` for non-CC sessions (Groq, Mistral, etc.) using nkrdn for code intelligence. We also need a `FailoverProvider` to replicate padarax's model-routing pattern. These two together let CADE route across free-tier LLMs with graceful failover.
+CADE's `APIProvider` (LiteLLM-based) now has full tool support. Tool loop integrated directly into `stream_chat`, enabling tool calling for any LLM via LiteLLM. `FailoverProvider` implements graceful fallback across multiple providers with exponential backoff. These together let CADE route across diverse LLMs (Claude, Groq, Mistral, etc.) with intelligent failover and nkrdn-powered code intelligence.
 
 ## Architecture
 
