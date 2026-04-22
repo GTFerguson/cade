@@ -1178,6 +1178,11 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.chatInput?.blur();
   }
 
+  prefillInput(text: string): void {
+    this.chatInput?.setValue(text);
+    this.chatInput?.focus();
+  }
+
   private handleModeChange(msg: ChatModeChangeMessage): void {
     this.setMode(msg.mode);
     // Mode commands (e.g. /orch) are intercepted server-side and never
