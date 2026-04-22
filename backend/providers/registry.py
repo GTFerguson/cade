@@ -7,12 +7,48 @@ import logging
 from core.backend.providers.api_provider import APIProvider
 from core.backend.providers.base import BaseProvider
 from core.backend.providers.failover_provider import FailoverProvider
+from core.backend.providers.tool_executor import NkrdnExecutor, ToolRegistry
 from backend.providers.claude_code_provider import ClaudeCodeProvider
+from backend.providers.handoff_compactor import HandoffCompactor
 from core.backend.providers.config import ProvidersConfig
+from core.backend.providers.mcp_tools import MCPToolAdapter
+from core.backend.providers.agent_spawner import AgentSpawnerTool
 from core.backend.providers.subprocess_provider import SubprocessProvider
 from core.backend.providers.websocket_provider import WebsocketProvider
 
 logger = logging.getLogger(__name__)
+
+
+def _create_tool_registry(provider_config) -> ToolRegistry:
+    """Create a ToolRegistry for an API provider based on its config.
+
+    Includes: nkrdn (always), MCP tools (if configured), agent spawner (if enabled).
+    """
+    registry = ToolRegistry()
+
+    # Always include nkrdn for code intelligence
+    nkrdn = NkrdnExecutor()
+    registry.register(nkrdn, "nkrdn")
+
+    # Add MCP tools if configured via "mcp_servers" or "mcp-servers"
+    mcp_servers = provider_config.extra.get("mcp_servers") or provider_config.extra.get("mcp-servers")
+    if mcp_servers and isinstance(mcp_servers, dict):
+        for server_name, server_config in mcp_servers.items():
+            if isinstance(server_config, dict):
+                command = server_config.get("command")
+                args = server_config.get("args", [])
+                env = server_config.get("env", {})
+                if command:
+                    adapter = MCPToolAdapter(command, args, env)
+                    registry.register(adapter, f"mcp_{server_name}")
+
+    # Add agent spawner if enabled
+    enable_agent_spawner = provider_config.extra.get("enable_agent_spawner", False)
+    if enable_agent_spawner:
+        spawner = AgentSpawnerTool()
+        registry.register(spawner, "spawn_agent")
+
+    return registry
 
 
 class ProviderRegistry:
@@ -79,7 +115,8 @@ class ProviderRegistry:
         # Pass 1: register all non-failover providers
         for name, provider_config in config.providers.items():
             if provider_config.type == "api":
-                provider = APIProvider(provider_config)
+                tool_registry = _create_tool_registry(provider_config)
+                provider = APIProvider(provider_config, tool_registry)
                 registry.register(name, provider)
             elif provider_config.type == "claude-code":
                 provider = ClaudeCodeProvider(provider_config)

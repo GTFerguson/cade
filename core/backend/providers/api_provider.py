@@ -81,7 +81,11 @@ class APIProvider(BaseProvider):
         return self._model
 
     def _build_kwargs(self, messages: list[dict]) -> dict:
-        """Build litellm kwargs from config and current messages."""
+        """Build litellm kwargs from config and current messages.
+
+        Handles: api_key, region, extra config, tools from registry.
+        Note: system_prompt is passed separately to _build_litellm_messages.
+        """
         kwargs: dict = {
             "model": self._model,
             "messages": messages,
@@ -116,7 +120,13 @@ class APIProvider(BaseProvider):
 
         Supports tool calling: if the model requests a tool, executes it via
         the configured ToolRegistry, then continues the conversation.
+
+        If system_prompt is None, uses the default from provider config.
         """
+        # Use config default if no system_prompt provided
+        if system_prompt is None and self._config.system_prompt:
+            system_prompt = self._config.system_prompt
+
         litellm_messages = _build_litellm_messages(messages, system_prompt)
         kwargs = self._build_kwargs(litellm_messages)
 
