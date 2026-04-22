@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -542,6 +544,289 @@ def _strip_frontmatter(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Model usage adapter — aggregates JSONL call logs across projects
+# ---------------------------------------------------------------------------
+
+def _parse_window_seconds(window: str) -> float:
+    """Parse '7d', '24h', '30m' to seconds. Defaults to 7 days."""
+    m = re.match(r"^(\d+)([dhm])$", window.strip())
+    if not m:
+        return 7 * 86400
+    value, unit = int(m.group(1)), m.group(2)
+    return value * {"d": 86400, "h": 3600, "m": 60}[unit]
+
+
+# ---------------------------------------------------------------------------
+# Plog helpers (Padarax structured log format)
+# ---------------------------------------------------------------------------
+
+# Matches: [YYYY-MM-DD HH:MM:SS.mmm] [info] [llm] command  key=val ...
+_PLOG_LLM_RE = re.compile(
+    r"\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+)\] \[info\] \[llm\] command\s+(.*)"
+)
+_PLOG_KV_RE = re.compile(r"(\w+)=(\S+)")
+
+# Default model-name prefix → provider inference.
+# Longer / more-specific prefixes must come first so they win over shorter ones.
+_MODEL_PREFIX_PROVIDERS: list[tuple[str, str]] = [
+    ("llama-3.3-70b-versatile", "groq"),
+    ("llama-3.1-70b-versatile", "groq"),
+    ("llama-3.1-8b-instant", "groq"),
+    ("llama-3.1-8b", "groq"),
+    ("llama-3.3-70b", "cerebras"),  # cerebras uses base name without -versatile
+    ("llama-3.1-70b", "cerebras"),
+    ("llama", "groq"),              # groq is the default llama host
+    ("mistral", "mistral"),
+    ("codestral", "mistral"),
+    ("devstral", "mistral"),
+    ("gemini", "google"),
+    ("qwen", "cerebras"),
+]
+
+
+def _infer_provider(model: str, custom: dict[str, str]) -> str:
+    """Infer LLM provider from model name. custom dict takes priority."""
+    if model in custom:
+        return custom[model]
+    lower = model.lower()
+    for prefix, provider in _MODEL_PREFIX_PROVIDERS:
+        if lower.startswith(prefix):
+            return provider
+    return "unknown"
+
+
+def _parse_plog_ts(ts_str: str) -> float:
+    """Parse plog timestamp '[YYYY-MM-DD HH:MM:SS.mmm]' → Unix time."""
+    import datetime
+    try:
+        dt = datetime.datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S.%f")
+        return dt.timestamp()
+    except ValueError:
+        return 0.0
+
+
+def _read_plog_records(
+    fp: Path,
+    cutoff: float,
+    model_providers: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Read `[llm] command` lines from a plog file, returning normalised dicts."""
+    records: list[dict[str, Any]] = []
+    try:
+        with fp.open(encoding="utf-8", errors="replace") as f:
+            for line in f:
+                m = _PLOG_LLM_RE.match(line)
+                if not m:
+                    continue
+                ts = _parse_plog_ts(m.group(1))
+                if ts < cutoff:
+                    continue
+                kv = dict(_PLOG_KV_RE.findall(m.group(2)))
+                model = kv.get("model", "unknown")
+                records.append({
+                    "ts": ts,
+                    "model": model,
+                    "provider": _infer_provider(model, model_providers),
+                    "latency_ms": float(kv["latency_ms"]) if "latency_ms" in kv else None,
+                    "slot": kv.get("slot", ""),
+                    # plog does not carry token counts
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                })
+    except OSError as exc:
+        logger.warning("ModelUsageAdapter plog: failed to read %s: %s", fp, exc)
+    return records
+
+
+def _read_jsonl_records(fp: Path, cutoff: float) -> list[dict[str, Any]]:
+    """Read JSONL records from a file, filtering by timestamp."""
+    records: list[dict[str, Any]] = []
+    try:
+        with fp.open(encoding="utf-8") as f:
+            for raw_line in f:
+                raw_line = raw_line.strip()
+                if not raw_line:
+                    continue
+                try:
+                    obj = json.loads(raw_line)
+                    if isinstance(obj, dict) and float(obj.get("ts", 0)) >= cutoff:
+                        records.append(obj)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+    except OSError as exc:
+        logger.warning("ModelUsageAdapter jsonl: failed to read %s: %s", fp, exc)
+    return records
+
+
+class ModelUsageAdapter(BaseAdapter):
+    """Aggregates model call logs from one or more log files.
+
+    Supports two log formats via ``parse``:
+
+    ``jsonl`` (default)  — newline-delimited JSON, one object per call:
+        {"ts": 1745301234.5, "model": "llama-3.3-70b-versatile",
+         "provider": "groq", "input_tokens": 350, "output_tokens": 150}
+
+    ``plog_llm``  — Padarax structured-log format:
+        [2026-01-01 12:00:00.000] [info] [llm] command  model=mistral-small-2603
+        latency_ms=1200 slot=dialogue
+        Provider is inferred from model-name prefixes (configurable via
+        ``model_providers`` in extra).
+
+    Config options via ``extra``:
+        inputs          list   [{path: str, label: str}, ...]  — files to aggregate
+        window          str    Time window, e.g. "7d", "24h" (default: "7d")
+        model_providers dict   {model_name: provider} overrides for inference
+        static_quotas   dict   {provider: {daily_tokens: N, monthly_tokens: N}}
+        quota_endpoints dict   {provider: {endpoint: url, headers: {k: v}}}
+
+    Returns one row per model (sorted by call count) plus a leading
+    ``_summary`` row with aggregate totals.
+    """
+
+    async def fetch(self, config: DataSourceConfig, project_root: Path) -> list[dict[str, Any]]:
+        from collections import defaultdict
+
+        parse_mode: str = config.parse or "jsonl"
+        inputs: list[dict[str, Any]] = list(config.extra.get("inputs", []))
+        if config.path:
+            inputs.insert(0, {"path": config.path, "label": config.extra.get("label", "default")})
+
+        window_str: str = config.extra.get("window", "7d")
+        cutoff = time.time() - _parse_window_seconds(window_str)
+        model_providers: dict[str, str] = config.extra.get("model_providers", {})
+        static_quotas: dict[str, dict[str, Any]] = config.extra.get("static_quotas", {})
+        quota_endpoints: dict[str, dict[str, Any]] = config.extra.get("quota_endpoints", {})
+
+        # model_key → aggregated stats
+        model_data: dict[str, dict[str, Any]] = defaultdict(lambda: {
+            "calls": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "latency_ms_total": 0.0,
+            "latency_count": 0,
+            "projects": defaultdict(int),
+        })
+        total_calls = 0
+
+        for inp in inputs:
+            path_str = inp.get("path")
+            if not path_str:
+                continue
+            label: str = inp.get("label") or str(path_str)
+            inp_parse: str = inp.get("parse") or parse_mode  # per-input override
+
+            file_path = Path(path_str)
+            if not file_path.is_absolute():
+                file_path = project_root / file_path
+            if not file_path.is_file():
+                logger.warning("ModelUsageAdapter: file not found: %s", file_path)
+                continue
+
+            if inp_parse == "plog_llm":
+                records = await asyncio.to_thread(
+                    _read_plog_records, file_path, cutoff, model_providers
+                )
+            else:
+                records = await asyncio.to_thread(_read_jsonl_records, file_path, cutoff)
+
+            for rec in records:
+                model = str(rec.get("model", "unknown"))
+                provider = str(rec.get("provider", "unknown"))
+                key = f"{provider}/{model}"
+                entry = model_data[key]
+                entry["model"] = model
+                entry["provider"] = provider
+                entry["calls"] += 1
+                entry["input_tokens"] += int(rec.get("input_tokens", 0))
+                entry["output_tokens"] += int(rec.get("output_tokens", 0))
+                if rec.get("latency_ms") is not None:
+                    entry["latency_ms_total"] += float(rec["latency_ms"])
+                    entry["latency_count"] += 1
+                entry["projects"][label] += 1
+                total_calls += 1
+
+        if total_calls == 0:
+            return [{"id": "_summary", "total_calls": 0, "window": window_str, "model_count": 0}]
+
+        # Optional: fetch live quota data from provider REST endpoints
+        quota_api_data: dict[str, dict[str, Any]] = {}
+        for provider, qcfg in quota_endpoints.items():
+            endpoint = qcfg.get("endpoint")
+            if not endpoint:
+                continue
+            headers = {k: os.path.expandvars(str(v)) for k, v in qcfg.get("headers", {}).items()}
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    resp = await client.get(endpoint, headers=headers)
+                    resp.raise_for_status()
+                    quota_api_data[provider] = resp.json()
+            except Exception as exc:
+                logger.warning("ModelUsageAdapter: quota endpoint error for %s: %s", provider, exc)
+
+        # Build per-model result rows
+        results: list[dict[str, Any]] = []
+        for key, entry in sorted(model_data.items(), key=lambda x: -x[1]["calls"]):
+            calls = entry["calls"]
+            calls_pct = round(calls / total_calls * 100, 1) if total_calls else 0
+            total_tokens = entry["input_tokens"] + entry["output_tokens"]
+            avg_latency = (
+                round(entry["latency_ms_total"] / entry["latency_count"])
+                if entry["latency_count"]
+                else None
+            )
+            provider = entry["provider"]
+
+            row: dict[str, Any] = {
+                "id": key,
+                "model": entry["model"],
+                "provider": provider,
+                "calls": calls,
+                "calls_pct": calls_pct,
+                "input_tokens": entry["input_tokens"],
+                "output_tokens": entry["output_tokens"],
+                "total_tokens": total_tokens,
+                "avg_latency_ms": avg_latency,
+                "projects": [
+                    {"label": lbl, "calls": cnt}
+                    for lbl, cnt in sorted(entry["projects"].items(), key=lambda x: -x[1])
+                ],
+            }
+
+            # Attach quota — prefer live API data, fall back to static config
+            sq = static_quotas.get(provider, {})
+            live_quota = quota_api_data.get(provider)
+
+            if live_quota:
+                row["quota_used"] = live_quota.get("used")
+                row["quota_limit"] = live_quota.get("limit")
+                row["quota_unit"] = live_quota.get("unit", "tokens")
+                row["quota_reset"] = live_quota.get("reset")
+                if row["quota_limit"]:
+                    row["quota_pct"] = round(row["quota_used"] / row["quota_limit"] * 100, 1)
+            elif sq:
+                for quota_key in ("daily_tokens", "monthly_tokens", "weekly_tokens"):
+                    if quota_key in sq:
+                        limit = int(sq[quota_key])
+                        row["quota_limit"] = limit
+                        row["quota_unit"] = quota_key.replace("_", " ")
+                        row["quota_used"] = total_tokens
+                        row["quota_pct"] = min(100.0, round(total_tokens / limit * 100, 1)) if limit else 0
+                        break
+
+            results.append(row)
+
+        results.insert(0, {
+            "id": "_summary",
+            "total_calls": total_calls,
+            "window": window_str,
+            "model_count": len(model_data),
+        })
+        return results
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 
@@ -551,6 +836,7 @@ _ADAPTERS: dict[str, BaseAdapter] = {
     "json_directory": JsonDirectoryAdapter(),
     "directory": DirectoryAdapter(),
     "markdown": MarkdownAdapter(),
+    "model_usage": ModelUsageAdapter(),
     "vault": VaultAdapter(),
 }
 

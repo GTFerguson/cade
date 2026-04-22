@@ -48,13 +48,17 @@ class EntityConfig:
 @dataclass(frozen=True)
 class DataSourceConfig:
     name: str
-    type: str  # rest, json_file, directory, markdown, vault
+    type: str  # rest, json_file, directory, markdown, vault, model_usage
     endpoint: str | None = None
     path: str | None = None
     parse: str | None = None
     entity: EntityConfig | None = None
     headers: dict[str, str] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
+    # Seconds between automatic re-fetches. Only useful for sources that
+    # don't benefit from file watching (e.g. REST endpoints). Omit or set
+    # to 0 to disable polling — file-based sources refresh via watchfiles.
+    refresh_interval: int = 0
 
 
 @dataclass(frozen=True)
@@ -144,7 +148,7 @@ def _parse_entity(raw: dict[str, Any] | None) -> EntityConfig | None:
     )
 
 
-_DATA_SOURCE_KNOWN_FIELDS = {"type", "endpoint", "path", "parse", "entity", "headers"}
+_DATA_SOURCE_KNOWN_FIELDS = {"type", "endpoint", "path", "parse", "entity", "headers", "refresh_interval"}
 
 
 def _parse_data_source(name: str, raw: dict[str, Any]) -> DataSourceConfig:
@@ -161,6 +165,7 @@ def _parse_data_source(name: str, raw: dict[str, Any]) -> DataSourceConfig:
         entity=_parse_entity(raw.get("entity")),
         headers=raw.get("headers", {}),
         extra=extra,
+        refresh_interval=int(raw.get("refresh_interval", 0)),
     )
 
 

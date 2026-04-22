@@ -2301,6 +2301,142 @@
 }
 
 /* ═══════════════════════════════════════════════
+   Component: Model Stats (model_stats)
+   ═══════════════════════════════════════════════ */
+
+.dash-model-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-family: var(--font-mono);
+}
+
+.dash-model-stats-empty {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Summary header: "230 calls / 7d" */
+.dash-model-stats-summary {
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+}
+
+.dash-model-stats-total {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.dash-model-stats-window {
+  color: var(--accent-orange);
+}
+
+.dash-model-stats-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dash-model-stats-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Label row: [provider]  [model name]             [N calls] */
+.dash-model-stats-label-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.dash-model-stats-provider {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  width: 64px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-model-stats-model {
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.dash-model-stats-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Primary calls bar — full width */
+.dash-model-stats-bar-wrap {
+  height: 4px;
+  background: var(--bg-secondary);
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* Secondary rows: [label] [bar] */
+.dash-model-stats-secondary-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dash-model-stats-secondary-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  width: 52px;
+  text-align: right;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Thinner bar used inside secondary rows */
+.dash-model-stats-bar-wrap--thin {
+  height: 3px;
+  background: var(--bg-secondary);
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-model-stats-bar {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* Per-project chips row */
+.dash-model-stats-projects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 1px;
+}
+
+.dash-model-stats-project-chip {
+  font-size: 10px;
+  padding: 1px 5px;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════
    Component: Split Markdown (split_markdown)
    ═══════════════════════════════════════════════ */
 

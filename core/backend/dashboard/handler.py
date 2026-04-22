@@ -56,6 +56,7 @@ class DashboardHandler:
         self._provider = provider
         self._config: DashboardConfig | None = None
         self._watch_task: asyncio.Task | None = None
+        self._poll_tasks: list[asyncio.Task] = []
         self._stop_event = asyncio.Event()
         # Debounce: track last script run time per watch name to avoid
         # thrashing when a tool writes many files at once.
@@ -277,39 +278,48 @@ class DashboardHandler:
     # ------------------------------------------------------------------
 
     def start_watching(self) -> None:
-        """Start watching .cade/ for config changes."""
+        """Start watching .cade/ for config changes and kick off any polling loops."""
         self._watch_task = asyncio.create_task(self._config_watch_loop())
+        self._start_polling()
 
     async def _config_watch_loop(self) -> None:
-        """Watch .cade/ directory for dashboard config changes."""
-        cade_dir = self._working_dir / ".cade"
-        if not cade_dir.is_dir():
-            return
+        """Watch for dashboard config file creation, changes, and deletion.
 
+        Watches the project root (not just .cade/) so that creating the file
+        from scratch — including creating the .cade/ directory itself — is
+        detected without needing to reconnect.
+        """
         # Watch the default config filenames AND any filename explicitly
-        # overridden via the launch preset. Both trigger a reload.
+        # overridden via the launch preset.
         config_names = set(CONFIG_FILENAMES)
         if self._config_filename:
             config_names.add(Path(self._config_filename).name)
 
+        def _is_config(change: Change, path: str) -> bool:
+            p = Path(path)
+            return p.name in config_names and p.parent.name == ".cade"
+
         try:
             async for changes in awatch(
-                cade_dir,
+                self._working_dir,
                 stop_event=self._stop_event,
                 ignore_permission_denied=True,
+                watch_filter=_is_config,
             ):
                 for change_type, path_str in changes:
-                    filename = Path(path_str).name
-                    if filename not in config_names:
-                        continue
-
                     if change_type == Change.deleted:
                         logger.info("Dashboard config deleted")
                         await self.send_cleared()
                     else:
                         logger.info("Dashboard config changed, reloading")
+                        # Cancel old poll tasks before loading the new config
+                        # so stale intervals don't linger.
+                        for t in self._poll_tasks:
+                            t.cancel()
+                        self._poll_tasks.clear()
                         await self.load_and_send_config()
                         await self.load_and_send_data()
+                        self._start_polling()
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -386,6 +396,35 @@ class DashboardHandler:
         })
 
     # ------------------------------------------------------------------
+    # Polling — periodic refresh for REST sources
+    # ------------------------------------------------------------------
+
+    def _start_polling(self) -> None:
+        """Spawn one background task per source that has refresh_interval > 0."""
+        if self._config is None:
+            return
+        for src in self._config.data_sources.values():
+            if src.refresh_interval > 0:
+                task = asyncio.create_task(self._poll_source_loop(src.name, src.refresh_interval))
+                self._poll_tasks.append(task)
+
+    async def _poll_source_loop(self, source_name: str, interval: int) -> None:
+        """Sleep for interval, then refresh the source, forever."""
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(self._stop_event.wait()),
+                        timeout=float(interval),
+                    )
+                    return  # stop_event fired
+                except asyncio.TimeoutError:
+                    pass  # interval elapsed — time to refresh
+                await self._refresh_source(source_name)
+        except asyncio.CancelledError:
+            pass
+
+    # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
 
@@ -394,3 +433,6 @@ class DashboardHandler:
         self._stop_event.set()
         if self._watch_task is not None:
             self._watch_task.cancel()
+        for task in self._poll_tasks:
+            task.cancel()
+        self._poll_tasks.clear()
