@@ -50,6 +50,15 @@ The agent gets both:
 
 **The retrieval query matters more than the mechanism**: File path / graph proximity is coarse — it loads everything attached to the current file regardless of relevance. The stronger signal is the agent's current task intent ("fix the pagination cursor off-by-one" vs "refactor the pagination module" — same file, very different memories needed). This is the Memento-Skills finding: behaviour-aligned retrieval (optimised for execution success) outperforms semantic similarity retrieval. The query should be task intent + structural location, not structural location alone.
 
+**Proximity-weighted fusion**: Graph structure provides the behaviour-alignment signal without a separate routing model. The fusion score combines semantic relevance with spatial proximity to where the agent is currently focused:
+
+```
+score = semantic_similarity(memory, task_intent)
+      × proximity_decay(graph_distance(memory_node, focus_nodes))
+```
+
+`focus_nodes` is a session-weighted set, not a single file — nodes touched more during the session accumulate higher focus weight, creating a heat map across the graph. Two semantically identical memories rank differently based on where they're anchored relative to where the agent has been working. Decay function: exponential over edge hops, flattening at package boundaries so workspace-level memories aren't suppressed by distance alone.
+
 ### Update Cycle (ACE Generator-Reflector-Curator)
 
 After each task, the Reflector pass reviews the session and proposes memory updates:
