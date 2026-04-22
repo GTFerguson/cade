@@ -285,6 +285,7 @@
 .terminal-pane {
   display: flex;
   flex-direction: column;
+  padding: 8px 2px;
 }
 
 .terminal-content {

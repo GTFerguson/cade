@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ from core.backend.dashboard.config import (
     CONFIG_FILENAMES,
     DashboardConfig,
     DashboardConfigError,
+    WatchConfig,
     config_to_dict,
     load_dashboard_config,
 )
@@ -55,6 +57,10 @@ class DashboardHandler:
         self._config: DashboardConfig | None = None
         self._watch_task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
+        # Debounce: track last script run time per watch name to avoid
+        # thrashing when a tool writes many files at once.
+        self._watch_last_run: dict[str, float] = {}
+        self._WATCH_DEBOUNCE_S = 2.0
 
     @property
     def has_config(self) -> bool:
@@ -313,7 +319,7 @@ class DashboardHandler:
         """Called by the main file watcher when a project file changes.
 
         Checks if the changed file is referenced by any data source and
-        triggers a data refresh if so.
+        triggers a data refresh if so. Also fires any matching watch rules.
         """
         if self._config is None:
             return
@@ -323,6 +329,43 @@ class DashboardHandler:
             if src.path and path.startswith(src.path.rstrip("/")):
                 asyncio.create_task(self._refresh_source(src.name))
                 return
+
+        for watch in self._config.watches:
+            if self._watch_matches(watch, path):
+                now = time.monotonic()
+                if now - self._watch_last_run.get(watch.name, 0) >= self._WATCH_DEBOUNCE_S:
+                    self._watch_last_run[watch.name] = now
+                    asyncio.create_task(self._run_watch_script(watch))
+
+    @staticmethod
+    def _watch_matches(watch: WatchConfig, path: str) -> bool:
+        p = Path(path)
+        if not p.match(watch.watch):
+            return False
+        if watch.exclude and p.match(watch.exclude):
+            return False
+        return True
+
+    async def _run_watch_script(self, watch: WatchConfig) -> None:
+        logger.info("Watch '%s' triggered, running: %s", watch.name, watch.run)
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                watch.run,
+                cwd=self._working_dir,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            stdout, _ = await proc.communicate()
+            if proc.returncode != 0:
+                logger.warning(
+                    "Watch '%s' script exited %d: %s",
+                    watch.name, proc.returncode,
+                    stdout.decode(errors="replace").strip(),
+                )
+            else:
+                logger.info("Watch '%s' completed", watch.name)
+        except Exception as e:
+            logger.warning("Watch '%s' failed to run: %s", watch.name, e)
 
     async def _refresh_source(self, source_name: str) -> None:
         """Re-fetch a single data source and push to client."""

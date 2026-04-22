@@ -1,7 +1,7 @@
 ---
 title: Frontend Architecture
 created: 2026-01-17
-updated: 2026-02-02
+updated: 2026-04-22
 status: active
 tags: [technical, frontend, architecture, wiki-links, tabs, session-persistence, keybindings, state-machine]
 ---
@@ -163,6 +163,10 @@ Wraps xterm.js to provide terminal emulation.
 | `clear()` | Clear scrollback buffer |
 | `reset()` | Reset terminal state and clear for session replay |
 | `focus()` | Focus the terminal |
+
+**ChatPane — `prefillInput(text)`:**
+
+Sets the chat input value and focuses it without submitting. Useful for verb-sheet and command-palette integrations that want to stage a command for the user to review before sending.
 
 **Dependencies:**
 
@@ -438,6 +442,22 @@ Both FileTree and Viewer support vim-style navigation when focused.
 ## WebSocket Communication
 
 The `WebSocketClient` class manages server communication with automatic reconnection.
+
+**Dev Testing — `injectEvent(type, data)`:**
+
+A `DEV`-only method on `WebSocketClient` that fires a synthetic inbound event as if the server sent it. Lets you drive the UI from the console or a `?demo=<scenario>` URL parameter without a real server connection.
+
+```typescript
+// In browser console (dev builds only):
+ws.injectEvent("connected", { type: "connected", workingDir: "/", resumed: false });
+ws.injectEvent("dashboard-data", { sources: { ... } });
+```
+
+Bridged lifecycle events (`connected`, `disconnected`, `auth-failed`, etc.) are routed through `fireBridged` automatically; all other events go through the normal `dispatch` registry. `fireBridged` is `protected` so subclasses can fire bridged events too.
+
+**GraphComponent — bounds auto-derivation:**
+
+`dashboard-data` payloads that include a `game_map` source may omit `bounds`. `GraphComponent` derives bounds from node `x/y` coordinates automatically when the server omits them, and null-coalesces missing `x/y/z` fields to `0`. Server-provided bounds take precedence when present.
 
 **Client Messages:**
 

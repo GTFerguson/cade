@@ -114,11 +114,20 @@ class DashboardMeta:
 
 
 @dataclass(frozen=True)
+class WatchConfig:
+    name: str
+    watch: str           # glob pattern relative to project root
+    run: str             # shell command to execute
+    exclude: str | None = None  # glob pattern for paths to skip
+
+
+@dataclass(frozen=True)
 class DashboardConfig:
     dashboard: DashboardMeta
     data_sources: dict[str, DataSourceConfig]
     views: list[ViewConfig]
     stats: list[StatConfig] = field(default_factory=list)
+    watches: list[WatchConfig] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -293,11 +302,33 @@ def validate_config(raw: dict[str, Any]) -> DashboardConfig:
     stats_raw = raw.get("stats", [])
     stats = [_parse_stat(s, i) for i, s in enumerate(stats_raw)]
 
+    # Watches (optional)
+    watches_raw = raw.get("watches", [])
+    if not isinstance(watches_raw, list):
+        raise DashboardConfigError("'watches' must be a list")
+    watches: list[WatchConfig] = []
+    for i, w in enumerate(watches_raw):
+        if not isinstance(w, dict):
+            raise DashboardConfigError(f"watches[{i}]: must be a mapping")
+        watch_pat = w.get("watch")
+        if not watch_pat:
+            raise DashboardConfigError(f"watches[{i}]: missing 'watch'")
+        run = w.get("run")
+        if not run:
+            raise DashboardConfigError(f"watches[{i}]: missing 'run'")
+        watches.append(WatchConfig(
+            name=w.get("name") or f"watch-{i}",
+            watch=watch_pat,
+            run=run,
+            exclude=w.get("exclude"),
+        ))
+
     return DashboardConfig(
         dashboard=dashboard,
         data_sources=data_sources,
         views=views,
         stats=stats,
+        watches=watches,
     )
 
 

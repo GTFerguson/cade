@@ -1017,6 +1017,10 @@ class App {
       },
     });
     this.mobileUI.initialize();
+
+    if (import.meta.env.DEV) {
+      import("./demo").then(({ activateDemoMode }) => activateDemoMode(tab.ws));
+    }
   }
 
   /**
