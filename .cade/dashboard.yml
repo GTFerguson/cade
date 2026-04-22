@@ -1,0 +1,173 @@
+dashboard:
+  title: "Business Manager"
+  subtitle: "cognetic ltd"
+  theme: terminal-dark
+
+data_sources:
+  plans:
+    type: directory
+    path: docs/plans/
+    parse: frontmatter
+
+  future:
+    type: directory
+    path: docs/future/
+    parse: frontmatter
+
+  technical:
+    type: directory
+    path: docs/technical/core/
+    parse: frontmatter
+
+  # ── Model usage stats ──────────────────────────────────────────────────────
+  # Local dev: reads padarax-server.log directly from the padarax project.
+  # Switch to the `rest` source below when pointing at admin-dash for prod.
+  padarax_llm:
+    type: model_usage
+    path: ../padarax/logs/padarax-server.log
+    parse: plog_llm
+    window: 7d
+    static_quotas:
+      mistral:   { monthly_tokens: 1000000 }
+      groq:      { daily_tokens: 500000 }
+      cerebras:  { daily_tokens: 200000 }
+      google:    { daily_tokens: 1500000 }
+
+  # Production variant — uncomment and comment out the local source above:
+  # padarax_llm:
+  #   type: rest
+  #   endpoint: http://127.0.0.1:8080/api/projects/padarax/llm-stats
+
+  padarax_access:
+    type: rest
+    endpoint: http://127.0.0.1:8080/api/projects/padarax/access-requests
+    refresh_interval: 300  # 5 min
+
+  padarax_players:
+    type: rest
+    endpoint: http://127.0.0.1:8080/api/projects/padarax/player-stats
+    refresh_interval: 120  # 2 min
+
+  tensyl_access:
+    type: rest
+    endpoint: http://127.0.0.1:8080/api/projects/tensyl/access-requests
+    refresh_interval: 300  # 5 min
+
+  tensyl_players:
+    type: rest
+    endpoint: http://127.0.0.1:8080/api/projects/tensyl/player-stats
+    refresh_interval: 300  # 5 min
+
+views:
+  - id: overview
+    title: "Overview"
+    layout: grid-2col
+    panels:
+      - id: pipeline
+        title: "Development Pipeline"
+        component: kanban
+        source: future
+        columns:
+          - { status: planned, label: "Planned" }
+          - { status: in-progress, label: "In Progress" }
+          - { status: design, label: "Design" }
+          - { status: exploratory, label: "Exploratory" }
+          - { status: implemented, label: "Done" }
+
+      - id: active-plans
+        title: "Active Plans"
+        component: cards
+        source: plans
+        fields: [title, status, created]
+        badges: [status]
+
+      - id: priorities
+        title: "Priority Actions"
+        component: checklist
+        source: future
+        fields: [title]
+
+  - id: technical
+    title: "Technical"
+    panels:
+      - id: tech-table
+        title: "Technical Documentation"
+        component: table
+        source: technical
+        columns: [title, status, created, updated]
+        sortable: true
+        filterable: [status]
+        searchable: [title]
+
+  - id: roadmap
+    title: "Roadmap"
+    panels:
+      - id: future-cards
+        title: "Future Features"
+        component: cards
+        source: future
+        fields: [title, status, tags]
+        badges: [status]
+
+  - id: llm-usage
+    title: "LLM Usage"
+    group: "Server"
+    layout: grid-2col
+    panels:
+      - id: padarax-models
+        title: "Padarax — Model Calls (7d)"
+        component: model_stats
+        source: padarax_llm
+        options:
+          show_tokens: false
+          show_latency: true
+          show_projects: false
+
+      - id: padarax-quota
+        title: "Padarax — Quota Gauges"
+        component: model_stats
+        source: padarax_llm
+        options:
+          show_tokens: false
+          show_latency: false
+
+  - id: players
+    title: "Players"
+    group: "Server"
+    layout: grid-2col
+    panels:
+      - id: padarax-players
+        title: "Padarax — Active"
+        component: key_value
+        source: padarax_players
+        fields: [online_now, last_24h, last_7d]
+
+      - id: tensyl-players
+        title: "Tensyl — Active"
+        component: key_value
+        source: tensyl_players
+        fields: [active_7d, active_30d, total_users]
+
+  - id: access-requests
+    title: "Access Requests"
+    group: "Server"
+    layout: grid-2col
+    panels:
+      - id: padarax-access
+        title: "Padarax — Pending"
+        component: table
+        source: padarax_access
+        columns: [email, requested_at, timezone, locale]
+        sortable: true
+
+      - id: tensyl-access
+        title: "Tensyl — Pending"
+        component: table
+        source: tensyl_access
+        columns: [email, requested_at, timezone, locale]
+        sortable: true
+
+watches:
+  - name: padarax-log-changed
+    watch: "../padarax/logs/padarax-server.log"
+    run: "echo 'padarax log updated'"

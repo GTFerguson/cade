@@ -24,8 +24,7 @@ mockups/
 .env
 .env.local
 
-# Project session data
-.cade/
+# Project session data — .cade/ is now tracked
 .ccplus/
 
 # Local settings
