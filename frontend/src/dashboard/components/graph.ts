@@ -50,17 +50,24 @@ function shortLabel(label: string): string {
 function fromWorldMap(raw: Record<string, unknown>): GraphData {
   const rooms = raw.rooms as Array<Record<string, unknown>>;
   const exits  = raw.exits  as Array<Record<string, unknown>>;
-  return {
-    nodes: rooms.map(r => ({
-      id: String(r.id), label: String(r.title),
-      x: Number(r.x), y: Number(r.y), z: Number(r.z),
-    })),
-    edges: exits.map(e => ({
-      from: String(e.from), to: String(e.to),
-      label: String(e.direction), traversable: !e.non_euclidean,
-    })),
-    bounds: raw.bounds as GraphBounds,
-  };
+  const nodes = rooms.map(r => ({
+    id: String(r.id), label: String(r.title),
+    x: Number(r.x ?? 0), y: Number(r.y ?? 0), z: Number(r.z ?? 0),
+  }));
+  const edges = exits.map(e => ({
+    from: String(e.from), to: String(e.to),
+    label: String(e.direction), traversable: !e.non_euclidean,
+  }));
+  let bounds = raw.bounds as GraphBounds | undefined;
+  if (!bounds && nodes.length > 0) {
+    const xs = nodes.map(n => n.x);
+    const ys = nodes.map(n => n.y);
+    bounds = {
+      min_x: Math.min(...xs), max_x: Math.max(...xs),
+      min_y: Math.min(...ys), max_y: Math.max(...ys),
+    };
+  }
+  return { nodes, edges, bounds: bounds ?? { min_x: 0, max_x: 0, min_y: 0, max_y: 0 } };
 }
 
 export class GraphComponent extends BaseDashboardComponent {

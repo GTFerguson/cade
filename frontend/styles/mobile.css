@@ -86,14 +86,7 @@
 
 .app-container.mobile-layout .terminal-pane {
   width: 100%;
-  height: calc(100dvh - 48px);
-  height: calc(100vh - 48px);
-}
-
-@supports (height: 100dvh) {
-  .app-container.mobile-layout .terminal-pane {
-    height: calc(100dvh - 48px);
-  }
+  height: calc(100% - 48px);
 }
 
 /* ==========================================================================

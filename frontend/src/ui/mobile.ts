@@ -110,6 +110,14 @@ export class MobileUI implements Component {
   // ─── Screen navigation ───────────────────────────────
 
   private openCommandMenu(): void {
+    // Toggle: if menu is already open, close it
+    if (this.screenManager.depth > 0) {
+      this.screenManager.popToRoot();
+      this.activeViewer = null;
+      this.focusTerminal();
+      return;
+    }
+
     const menu = new CommandMenu({
       getTabs: () => this.callbacks.getTabs(),
       onSwitchTab: (id) => {

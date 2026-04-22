@@ -32,6 +32,7 @@ export class TouchToolbar implements Component {
   private cmdButton: HTMLButtonElement | null = null;
   private resizeTimer: number | null = null;
   private boundViewportResize: () => void;
+  private prevVvHeight = 0;
 
   constructor(
     private sendInput: (data: string) => void,
@@ -94,18 +95,53 @@ export class TouchToolbar implements Component {
   private handleViewportResize(): void {
     if (!window.visualViewport) return;
 
-    const keyboardHeight = window.innerHeight - window.visualViewport.height;
+    const vv = window.visualViewport;
+    const keyboardHeight = window.innerHeight - vv.height;
+    const viewportShrank = this.prevVvHeight > 0 && vv.height < this.prevVvHeight;
+    this.prevVvHeight = vv.height;
     this.toolbar.style.bottom = `${Math.max(0, keyboardHeight)}px`;
+
+    this.syncViewportHeight(vv.height, keyboardHeight > 0);
 
     // When keyboard is visible, safe-area padding is unnecessary
     if (keyboardHeight > 0) {
       this.toolbar.style.paddingBottom = "0";
-      this.onKeyboardOpen?.();
     } else {
       this.toolbar.style.paddingBottom = "";
     }
 
+    if (keyboardHeight > 0 || viewportShrank) {
+      this.onKeyboardOpen?.();
+    }
+
     this.debouncedRefit();
+  }
+
+  /**
+   * Keep the app container height locked to the visual viewport so the chat
+   * feed clears the keyboard on iOS Safari. Setting an inline style bypasses
+   * CSS cascade ambiguity; the --vvh variable is a secondary fallback for the
+   * terminal-pane calc() rule.
+   */
+  private syncViewportHeight(height: number, keyboardOpen = false): void {
+    const appEl = document.getElementById("app");
+    if (!appEl) return;
+    if (keyboardOpen) {
+      // iOS Safari: 100dvh doesn't shrink with the keyboard, so we switch #app
+      // to position:fixed which also prevents the body-scroll iOS triggers on
+      // input focus from shifting the container out of view.
+      appEl.style.position = "fixed";
+      appEl.style.top = "0";
+      appEl.style.left = "0";
+      appEl.style.right = "0";
+      appEl.style.height = `${height}px`;
+    } else {
+      appEl.style.position = "";
+      appEl.style.top = "";
+      appEl.style.left = "";
+      appEl.style.right = "";
+      appEl.style.height = "";
+    }
   }
 
   /**

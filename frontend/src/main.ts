@@ -469,7 +469,13 @@ class App {
 
     tab.context = context;
 
-    const splashActive = this.startSplash?.isVisible() ?? false;
+    // Demo mode: synthetic events injected by demo.ts; no server contact.
+    const isDemoTab =
+      import.meta.env.DEV && new URLSearchParams(window.location.search).has("demo");
+
+    // In demo mode there's no start splash, but we still skip the per-tab
+    // splash so it doesn't sit undismissed (no output event fires in demo).
+    const splashActive = isDemoTab || (this.startSplash?.isVisible() ?? false);
     await context.initialize(splashActive);
 
     tab.ws.on("connected", (message) => {
@@ -639,18 +645,20 @@ class App {
       tab.ws.on("output", onFirstOutput);
     }
 
-    tab.ws.sendSetProject(
-      tab.projectPath,
-      tab.id,
-      this.dashboardOverride ?? undefined,
-      this.providerOverride ?? undefined,
-    );
+    if (!isDemoTab) {
+      tab.ws.sendSetProject(
+        tab.projectPath,
+        tab.id,
+        this.dashboardOverride ?? undefined,
+        this.providerOverride ?? undefined,
+      );
 
-    // Auth is project-driven now: connect first; if the project's launch.yml
-    // declares Google auth, the server sends an `auth-required` frame with
-    // the client_id then closes with 1008. A stored id_token from a previous
-    // sign-in is attached automatically inside connect().
-    tab.ws.connect();
+      // Auth is project-driven now: connect first; if the project's launch.yml
+      // declares Google auth, the server sends an `auth-required` frame with
+      // the client_id then closes with 1008. A stored id_token from a previous
+      // sign-in is attached automatically inside connect().
+      tab.ws.connect();
+    }
 
     // Set up terminal key handler for prefix key interception
     context.setTerminalKeyHandler((e) => {
