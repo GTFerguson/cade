@@ -24,8 +24,9 @@ mockups/
 .env
 .env.local
 
-# Project session data — .cade/ is now tracked
-.ccplus/
+# .cade runtime state (regenerable) — track config only
+.cade/*
+!.cade/dashboard.yml
 
 # Local settings
 .claude/settings.local.json
