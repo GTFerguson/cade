@@ -6,6 +6,7 @@ import logging
 
 from core.backend.providers.api_provider import APIProvider
 from core.backend.providers.base import BaseProvider
+from core.backend.providers.failover_provider import FailoverProvider
 from backend.providers.claude_code_provider import ClaudeCodeProvider
 from core.backend.providers.config import ProvidersConfig
 from core.backend.providers.subprocess_provider import SubprocessProvider
@@ -66,10 +67,16 @@ class ProviderRegistry:
 
     @classmethod
     def from_config(cls, config: ProvidersConfig) -> ProviderRegistry:
-        """Create a registry from configuration."""
+        """Create a registry from configuration.
+
+        Two-pass approach: first registers all non-failover providers,
+        then builds failover providers (which depend on other providers
+        being registered).
+        """
         registry = cls()
         registry._default = config.default_provider
 
+        # Pass 1: register all non-failover providers
         for name, provider_config in config.providers.items():
             if provider_config.type == "api":
                 provider = APIProvider(provider_config)
@@ -81,7 +88,35 @@ class ProviderRegistry:
                 # CLI providers are not managed through the registry —
                 # they run as terminal processes
                 logger.debug("Skipping CLI provider: %s", name)
+            elif provider_config.type == "failover":
+                # Defer to pass 2
+                pass
             else:
                 logger.warning("Unknown provider type '%s' for %s", provider_config.type, name)
+
+        # Pass 2: build failover providers (sub-providers now registered)
+        for name, provider_config in config.providers.items():
+            if provider_config.type == "failover":
+                primary_name = provider_config.extra.get("primary", "")
+                fallback_names = provider_config.extra.get("fallbacks", [])
+
+                # Resolve named providers
+                sub_providers: list[BaseProvider] = []
+                for sub_name in [primary_name, *fallback_names]:
+                    p = registry.get(sub_name)
+                    if p is not None:
+                        sub_providers.append(p)
+                    else:
+                        logger.warning(
+                            "Failover '%s': sub-provider '%s' not found (not yet registered?)",
+                            name,
+                            sub_name,
+                        )
+
+                if sub_providers:
+                    provider = FailoverProvider(name=name, providers=sub_providers)
+                    registry.register(name, provider)
+                else:
+                    logger.error("Failover '%s': no valid sub-providers found, skipping", name)
 
         return registry

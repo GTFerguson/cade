@@ -11,4 +11,5 @@ Intent before code exists. Plans are ephemeral — once the work ships and desig
 
 ## Active Plans
 
+- [[tool-support-and-failover]] — APIProvider tool support, FailoverProvider routing, Phase 2 skills + handoff compaction
 - [[agent-ui-system]] — Config-driven dashboard framework for agent-built interactive interfaces

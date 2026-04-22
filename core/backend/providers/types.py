@@ -22,6 +22,15 @@ class ProviderCapabilities:
     vision: bool = False
 
 
+@dataclass
+class ToolDefinition:
+    """Describes a callable tool for an LLM provider."""
+
+    name: str
+    description: str
+    parameters_schema: dict  # JSON Schema object {"type": "object", "properties": {...}}
+
+
 # --- Streaming events ---
 
 @dataclass
