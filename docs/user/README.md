@@ -191,6 +191,12 @@ On phones and tablets, CADE switches to a full-screen terminal with a touch tool
 
 See [[mobile-guide|Mobile Guide]] for full details on using the mobile interface.
 
+## Dashboard
+
+The dashboard is a YAML-driven, hot-reloading data visualisation panel. Point it at markdown files, directories, JSON files, or REST APIs and display them as checklists, kanbans, timelines, cards, and tables — all live-updating as files change on disk.
+
+See [[dashboard|Dashboard Guide]] for the full YAML schema, component reference, and examples.
+
 ## See Also
 
 - [[../README|Documentation Hub]]
