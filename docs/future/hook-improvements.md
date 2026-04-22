@@ -1,9 +1,12 @@
 ---
-title: Hook Infrastructure Improvements
 created: 2026-01-20
+status: in-progress
+tags:
+- hooks
+- infrastructure
+- improvements
+title: Hook Infrastructure Improvements
 updated: 2026-01-20
-status: planned
-tags: [hooks, infrastructure, improvements]
 ---
 
 # Hook Infrastructure Improvements
