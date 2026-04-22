@@ -46,6 +46,10 @@ The agent gets both:
 - Structural knowledge: what this file contains, what depends on it, what it inherits
 - Experiential knowledge: what previous agent sessions learned about it
 
+**Retrieval mechanisms**: nkrdn already has graph traversal, embedding index, and TF-IDF index (`.cade/doc-index-embeddings.json`, `.cade/doc-index-tfidf.json`). Hybrid retrieval across all three is an option. The better question is what to use as the query.
+
+**The retrieval query matters more than the mechanism**: File path / graph proximity is coarse — it loads everything attached to the current file regardless of relevance. The stronger signal is the agent's current task intent ("fix the pagination cursor off-by-one" vs "refactor the pagination module" — same file, very different memories needed). This is the Memento-Skills finding: behaviour-aligned retrieval (optimised for execution success) outperforms semantic similarity retrieval. The query should be task intent + structural location, not structural location alone.
+
 ### Update Cycle (ACE Generator-Reflector-Curator)
 
 After each task, the Reflector pass reviews the session and proposes memory updates:
