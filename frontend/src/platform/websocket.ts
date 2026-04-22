@@ -224,6 +224,19 @@ export class WebSocketClient extends BaseWSClient {
     return false;
   }
 
+  private bridgedHandlerSet(event: BridgedEventKey): Set<EventHandler<any>> {
+    switch (event) {
+      case "connected":            return this.connectedHandlers;
+      case "disconnected":         return this.disconnectedHandlers;
+      case "auth-failed":          return this.authFailedHandlers;
+      case "google-auth-required": return this.googleAuthHandlers;
+      case "access-not-approved":  return this.accessNotApprovedHandlers;
+      case "connection-lost":      return this.connectionLostHandlers;
+      case "connection-failed":    return this.connectionFailedHandlers;
+    }
+  }
+
+
   protected fireBridged<K extends BridgedEventKey>(
     event: K,
     payload: WebSocketEvents[K]
@@ -606,6 +619,8 @@ export class WebSocketClient extends BaseWSClient {
   /** Dev-only: fire a synthetic inbound event as if received from the server. */
   injectEvent(type: string, data: unknown): void {
     if (!import.meta.env.DEV) return;
+    // "connected" and other lifecycle events use a dedicated bridged handler
+    // set, not the base-class dispatch registry. Route accordingly.
     const BRIDGED: ReadonlySet<string> = new Set([
       "connected", "disconnected", "auth-failed",
       "google-auth-required", "access-not-approved",
