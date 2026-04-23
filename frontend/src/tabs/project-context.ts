@@ -685,14 +685,8 @@ export class ProjectContextImpl implements IProjectContext {
     }
 
     if (session.viewerPath != null && this.rightPane != null) {
-<<<<<<< HEAD
       this.rightPane.getViewer().loadFile(session.viewerPath);
       this.fileTree?.revealFile(session.viewerPath);
-=======
-      const viewerPath = preferEnrichedPath(session.viewerPath);
-      this.rightPane.getViewer().loadFile(viewerPath);
-      this.fileTree?.revealFile(viewerPath);
->>>>>>> 5d1e019 (Refactor: extract KNOWLEDGE_ENRICHED_DIR and preferEnrichedPath to knowledge-refs)
     }
   }
 
