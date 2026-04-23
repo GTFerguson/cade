@@ -163,6 +163,13 @@ class SplashBehaviorConfig:
 
 
 @dataclass
+class NeovimBehaviorConfig:
+    """Neovim integration settings."""
+
+    enabled: bool = True
+
+
+@dataclass
 class BehaviorConfig:
     """Behavior configuration."""
 
@@ -170,6 +177,7 @@ class BehaviorConfig:
     file_tree: FileTreeBehaviorConfig = field(default_factory=FileTreeBehaviorConfig)
     layout: LayoutBehaviorConfig = field(default_factory=LayoutBehaviorConfig)
     splash: SplashBehaviorConfig = field(default_factory=SplashBehaviorConfig)
+    neovim: NeovimBehaviorConfig = field(default_factory=NeovimBehaviorConfig)
 
 
 @dataclass
