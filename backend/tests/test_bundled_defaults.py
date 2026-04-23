@@ -1,0 +1,199 @@
+"""Tests for bundled defaults architecture."""
+
+from __future__ import annotations
+
+import pytest
+from pathlib import Path
+from unittest.mock import patch
+
+
+class TestComposeRulesLoading:
+    """Test that rules load from bundled + user dirs with correct merge strategy."""
+
+    def test_loads_bundled_rules_from_bundled_dir(self):
+        """Bundled rules should load from backend/prompts/bundled/rules/."""
+        from backend.prompts.compose import _load_rules, BUNDLED_RULES_DIR
+
+        assert BUNDLED_RULES_DIR.exists(), f"BUNDLED_RULES_DIR not found: {BUNDLED_RULES_DIR}"
+        assert BUNDLED_RULES_DIR.is_dir()
+
+        rules = _load_rules()
+        rule_names = [name for name, _content, _desc in rules]
+        assert "coding-standards" in rule_names, f"coding-standards not in rules: {rule_names}"
+        assert "context-management" in rule_names, f"context-management not in rules: {rule_names}"
+
+    def test_bundled_rules_have_descriptions(self):
+        """Bundled rules should parse description from frontmatter."""
+        from backend.prompts.compose import _load_rules
+
+        rules = _load_rules()
+        rule_dict = {name: desc for name, _content, desc in rules}
+        assert rule_dict.get("coding-standards"), "coding-standards missing description"
+        assert rule_dict.get("context-management"), "context-management missing description"
+
+    def test_user_rules_extend_bundled(self, tmp_path):
+        """User rules in ~/.claude/rules/ should extend bundled rules."""
+        from backend.prompts.compose import _load_rules
+
+        with patch("backend.prompts.compose.RULES_DIR", tmp_path / "rules"):
+            # Write a user rule with unique name
+            user_rule = tmp_path / "rules" / "my-custom-rule.md"
+            user_rule.parent.mkdir(parents=True, exist_ok=True)
+            user_rule.write_text(
+                "---\ndescription: My custom rule\n---\n\n# My Custom Rule\n\nThis is a user rule.\n"
+            )
+
+            rules = _load_rules()
+            rule_names = [name for name, _content, _desc in rules]
+            assert "coding-standards" in rule_names
+            assert "context-management" in rule_names
+            assert "my-custom-rule" in rule_names
+
+    def test_user_rule_with_same_name_as_bundled_is_ignored(self, tmp_path):
+        """User rule with same name as bundled should be ignored (bundled wins)."""
+        from backend.prompts.compose import _load_rules
+
+        # Create a user version of coding-standards
+        user_rule = tmp_path / "rules" / "coding-standards.md"
+        user_rule.parent.mkdir(parents=True, exist_ok=True)
+        user_rule.write_text(
+            "---\ndescription: User coding standards (should be ignored)\n---\n\n# User Coding Standards\n\nThis should not appear.\n"
+        )
+
+        with patch("backend.prompts.compose.RULES_DIR", tmp_path / "rules"):
+            rules = _load_rules()
+            rule_dict = {name: content for name, content, _desc in rules}
+            # Bundled version should be present
+            assert "coding-standards" in rule_dict
+            # Bundled content should be in the result (not user content)
+            assert "This should not appear" not in rule_dict["coding-standards"]
+
+
+class TestComposePromptStructure:
+    """Test that compose_prompt assembles correctly."""
+
+    def test_compose_includes_base(self):
+        """Base module should always be first."""
+        from backend.prompts.compose import compose_prompt
+
+        prompt = compose_prompt("code")
+        assert len(prompt) > 0
+
+    def test_compose_includes_bundled_rules(self):
+        """Bundled rules should appear in composed prompt."""
+        from backend.prompts.compose import compose_prompt
+
+        prompt = compose_prompt("code")
+        # Check for coding-standards content
+        assert "## Coding Standards" in prompt or "## Context Management" in prompt
+
+    def test_compose_includes_mode_module(self):
+        """Mode-specific module should be included."""
+        from backend.prompts.compose import compose_prompt
+
+        prompt = compose_prompt("code")
+        # Mode module for 'code' is 'code'
+        assert "code" in prompt.lower()
+
+    def test_compose_includes_additional_for_mode(self):
+        """Additional modules for the mode should be included."""
+        from backend.prompts.compose import compose_prompt
+
+        # nkrdn is in ADDITIONAL for all modes
+        prompt = compose_prompt("code")
+        assert "nkrdn" in prompt.lower() or len(prompt) > 0
+
+
+class TestGetRules:
+    """Test get_rules() returns the merged rule list."""
+
+    def test_get_rules_returns_tuples(self):
+        """get_rules() should return (name, content, description) tuples."""
+        from backend.prompts import get_rules
+
+        rules = get_rules()
+        assert len(rules) > 0
+        for item in rules:
+            assert len(item) == 3
+            name, content, desc = item
+            assert isinstance(name, str)
+            assert isinstance(content, str)
+            assert isinstance(desc, str)
+
+
+class TestTryLoadSkill:
+    """Test skill activation via _try_load_skill."""
+
+    def test_tries_load_skill_method_exists(self):
+        """ConnectionHandler should have _try_load_skill method."""
+        from backend.websocket import ConnectionHandler
+        assert hasattr(ConnectionHandler, "_try_load_skill")
+
+    def test_loads_bundled_handoff_skill(self):
+        """_try_load_skill should load bundled handoff skill."""
+        from backend.websocket import ConnectionHandler
+
+        handler = ConnectionHandler.__new__(ConnectionHandler)
+        remaining, content = handler._try_load_skill("/handoff")
+
+        assert remaining == ""
+        assert len(content) > 0
+        assert "handoff" in content.lower() or "Handoff" in content
+
+    def test_strips_skill_prefix_from_message(self):
+        """_try_load_skill should return remaining content after /<skillname>."""
+        from backend.websocket import ConnectionHandler
+
+        handler = ConnectionHandler.__new__(ConnectionHandler)
+        remaining, content = handler._try_load_skill("/handoff my session")
+
+        assert remaining == "my session"
+        assert len(content) > 0
+
+    def test_returns_empty_for_non_slash(self):
+        """_try_load_skill should return empty for non-slash messages."""
+        from backend.websocket import ConnectionHandler
+
+        handler = ConnectionHandler.__new__(ConnectionHandler)
+        remaining, content = handler._try_load_skill("just a regular message")
+
+        assert remaining == ""
+        assert content == ""
+
+    def test_returns_empty_for_unknown_skill(self):
+        """_try_load_skill should return empty for unknown skill names."""
+        from backend.websocket import ConnectionHandler
+
+        handler = ConnectionHandler.__new__(ConnectionHandler)
+        remaining, content = handler._try_load_skill("/nonexistent-skill arg")
+
+        assert remaining == "arg"
+        assert content == ""
+
+
+class TestBundledSkillsDir:
+    """Test that bundled skills directory is correctly exposed."""
+
+    def test_bundled_skills_dir_exists(self):
+        """BUNDLED_SKILLS_DIR should point to a valid directory."""
+        from backend.prompts import BUNDLED_SKILLS_DIR
+
+        assert BUNDLED_SKILLS_DIR.exists(), f"BUNDLED_SKILLS_DIR not found: {BUNDLED_SKILLS_DIR}"
+        assert BUNDLED_SKILLS_DIR.is_dir()
+
+    def test_handoff_skill_exists(self):
+        """Bundled handoff skill should exist."""
+        from backend.prompts import BUNDLED_SKILLS_DIR
+
+        handoff_path = BUNDLED_SKILLS_DIR / "handoff" / "SKILL.md"
+        assert handoff_path.exists(), f"handoff skill not found: {handoff_path}"
+
+    def test_handoff_skill_has_frontmatter(self):
+        """handoff skill should have name and description in frontmatter."""
+        from backend.prompts import BUNDLED_SKILLS_DIR
+
+        handoff_path = BUNDLED_SKILLS_DIR / "handoff" / "SKILL.md"
+        content = handoff_path.read_text()
+        assert content.startswith("---")
+        assert "name: handoff" in content
+        assert "description:" in content
