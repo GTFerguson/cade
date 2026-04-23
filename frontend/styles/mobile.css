@@ -454,11 +454,18 @@
 
 .mobile-file-viewer .md-view pre {
   background: var(--bg-tertiary);
-  padding: 10px;
+  border-radius: 12px;
+  padding: 0;
   overflow-x: auto;
   margin: 8px 0;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.mobile-file-viewer .md-view pre code {
+  background: transparent;
+  padding: 12px;
+  display: block;
 }
 
 .mobile-file-viewer .md-view ul {

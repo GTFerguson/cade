@@ -445,12 +445,19 @@
 
 .dash-markdown pre {
   background: var(--bg-secondary);
-  padding: 10px 12px;
+  border-radius: 12px;
+  padding: 0;
   overflow-x: auto;
   font-size: 11px;
   line-height: 1.4;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
+}
+
+.dash-markdown pre code {
+  background: transparent;
+  padding: 12px;
+  display: block;
 }
 
 .dash-markdown pre::-webkit-scrollbar { height: 4px; }
@@ -2516,10 +2523,17 @@
 
 .dash-split-md__read pre {
   background: var(--bg-secondary);
-  padding: 10px 12px;
+  border-radius: 12px;
+  padding: 0;
   overflow-x: auto;
   font-size: 11px;
   line-height: 1.4;
+}
+
+.dash-split-md__read pre code {
+  background: transparent;
+  padding: 12px;
+  display: block;
 }
 
 .dash-split-md__read blockquote {
