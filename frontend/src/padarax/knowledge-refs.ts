@@ -3,6 +3,20 @@
  * Mirrors the REF_RE pattern from tools/validate_knowledge.py.
  */
 
+export const KNOWLEDGE_ENRICHED_DIR = "content/knowledge/generated/enriched";
+
+/**
+ * Source knowledge files lack _ref_status metadata; redirect to the enriched
+ * version which has it. Passes through paths already pointing at generated/.
+ */
+export function preferEnrichedPath(path: string): string {
+  if (/^content\/knowledge\/(?!generated\/)(?:[^/]+\/).*\.json$/.test(path)) {
+    const filename = path.split("/").pop()!;
+    return `${KNOWLEDGE_ENRICHED_DIR}/${filename}`;
+  }
+  return path;
+}
+
 export const REF_RE = /@([a-z]+):([\w-]+)(\+pl)?/g;
 
 export interface KnowledgeRef {
