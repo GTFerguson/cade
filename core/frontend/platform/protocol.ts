@@ -72,12 +72,14 @@ export const MessageType = {
   NEOVIM_INPUT: "neovim-input",
   NEOVIM_RESIZE: "neovim-resize",
   NEOVIM_RPC: "neovim-rpc",
+  NEOVIM_OPEN_DIFF: "neovim-open-diff",
 
   // Neovim - Server -> Client
   NEOVIM_READY: "neovim-ready",
   NEOVIM_OUTPUT: "neovim-output",
   NEOVIM_RPC_RESPONSE: "neovim-rpc-response",
   NEOVIM_EXITED: "neovim-exited",
+  NEOVIM_DIFF_AVAILABLE: "neovim-diff-available",
 
   // Permissions - Client -> Server
   PERMISSION_APPROVE: "permission-approve",

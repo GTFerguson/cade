@@ -972,6 +972,8 @@ class ConnectionHandler:
                 await self._handle_neovim_input(data)
             elif msg_type == MessageType.NEOVIM_RESIZE:
                 await self._handle_neovim_resize(data)
+            elif msg_type == MessageType.NEOVIM_OPEN_DIFF:
+                await self._handle_neovim_open_diff(data)
             elif msg_type == MessageType.AGENT_APPROVE:
                 await self._handle_agent_approve(data)
             elif msg_type == MessageType.AGENT_REJECT:
@@ -1511,6 +1513,9 @@ class ConnectionHandler:
                 file_path=file_path,
             )
 
+            # Wire send callback so manager can push diff notifications
+            instance.send_callback = self._send
+
             # Start forwarding Neovim PTY output to the client
             task = asyncio.create_task(
                 self._neovim_output_loop(self._session_id)
@@ -1534,6 +1539,16 @@ class ConnectionHandler:
                 ErrorCode.NEOVIM_SPAWN_FAILED,
                 f"Failed to spawn Neovim: {e}",
             )
+
+    async def _handle_neovim_open_diff(self, data: dict) -> None:
+        """Open a diff split in Neovim for the given file path."""
+        if self._session_id is None:
+            return
+        file_path = data.get("filePath")
+        if not file_path:
+            return
+        manager = get_neovim_manager()
+        await manager.open_diff(self._working_dir, Path(file_path))
 
     async def _handle_neovim_kill(self) -> None:
         """Kill the Neovim instance for this session."""

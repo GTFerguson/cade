@@ -9,7 +9,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import type { PaneKeyHandler } from "../input/keybindings";
-import type { Component, ErrorMessage, NeovimExitedMessage, NeovimOutputMessage, NeovimReadyMessage } from "../types";
+import type { Component, ErrorMessage, NeovimDiffAvailableMessage, NeovimExitedMessage, NeovimOutputMessage, NeovimReadyMessage } from "../types";
 import { ErrorCode } from "@core/platform/protocol";
 import type { WebSocketClient } from "../platform/websocket";
 
@@ -23,25 +23,44 @@ export class NeovimPane implements Component, PaneKeyHandler {
   private state: NeovimPaneState = "idle";
   private statusEl: HTMLElement;
   private terminalContainer: HTMLElement;
+  private headerEl: HTMLElement;
+  private diffBtnEl: HTMLButtonElement;
   private lastSentSize: { cols: number; rows: number } | null = null;
   private exitCallback: (() => void) | null = null;
+  private latestDiff: { filePath: string; added: number; removed: number } | null = null;
   private boundHandlers = {
     output: (msg: NeovimOutputMessage) => this.handleOutput(msg),
     ready: (msg: NeovimReadyMessage) => this.handleReady(msg),
     exited: (msg: NeovimExitedMessage) => this.handleExited(msg),
     error: (msg: ErrorMessage) => this.handleError(msg),
+    diffAvailable: (msg: NeovimDiffAvailableMessage) => this.handleDiffAvailable(msg),
   };
 
   constructor(
     private container: HTMLElement,
     private ws: WebSocketClient,
   ) {
+    this.headerEl = document.createElement("div");
+    this.headerEl.className = "neovim-header";
+
+    const title = document.createElement("span");
+    title.className = "neovim-header-title";
+    title.textContent = "NEOVIM";
+    this.headerEl.appendChild(title);
+
+    this.diffBtnEl = document.createElement("button");
+    this.diffBtnEl.className = "neovim-diff-btn";
+    this.diffBtnEl.style.display = "none";
+    this.diffBtnEl.addEventListener("click", () => this.openDiff());
+    this.headerEl.appendChild(this.diffBtnEl);
+
     this.terminalContainer = document.createElement("div");
     this.terminalContainer.className = "neovim-terminal-container";
 
     this.statusEl = document.createElement("div");
     this.statusEl.className = "neovim-status-overlay";
 
+    this.container.appendChild(this.headerEl);
     this.container.appendChild(this.terminalContainer);
     this.container.appendChild(this.statusEl);
   }
@@ -124,6 +143,7 @@ export class NeovimPane implements Component, PaneKeyHandler {
     this.ws.on("neovim-ready", this.boundHandlers.ready);
     this.ws.on("neovim-exited", this.boundHandlers.exited);
     this.ws.on("error", this.boundHandlers.error);
+    this.ws.on("neovim-diff-available", this.boundHandlers.diffAvailable);
 
     this.showStatus("idle");
   }
@@ -281,6 +301,21 @@ export class NeovimPane implements Component, PaneKeyHandler {
     }
   }
 
+  private handleDiffAvailable(msg: NeovimDiffAvailableMessage): void {
+    this.latestDiff = { filePath: msg.filePath, added: msg.added, removed: msg.removed };
+    const parts: string[] = [];
+    if (msg.added > 0) parts.push(`+${msg.added}`);
+    if (msg.removed > 0) parts.push(`-${msg.removed}`);
+    this.diffBtnEl.textContent = `± ${parts.join(" ") || msg.hunkCount}`;
+    this.diffBtnEl.style.display = "block";
+  }
+
+  private openDiff(): void {
+    if (this.latestDiff) {
+      this.ws.neovimOpenDiff(this.latestDiff.filePath);
+    }
+  }
+
   private handleOutput(msg: NeovimOutputMessage): void {
     this.terminal?.write(msg.data);
   }
@@ -392,6 +427,7 @@ export class NeovimPane implements Component, PaneKeyHandler {
     this.ws.off("neovim-ready", this.boundHandlers.ready);
     this.ws.off("neovim-exited", this.boundHandlers.exited);
     this.ws.off("error", this.boundHandlers.error);
+    this.ws.off("neovim-diff-available", this.boundHandlers.diffAvailable);
 
     if (this.state === "ready" || this.state === "starting") {
       this.kill();

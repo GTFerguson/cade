@@ -146,6 +146,13 @@ class FileToolExecutor:
         except ValueError:
             return False
 
+    async def _nvim_record_edit(self, path: Path, old_content: str, new_content: str) -> None:
+        try:
+            from backend.neovim.manager import get_neovim_manager
+            await get_neovim_manager().record_edit(self._root, path, old_content, new_content)
+        except Exception:
+            pass
+
     async def _check_write_permission(
         self, path: Path, tool_name: str, tool_input: dict
     ) -> str | None:
@@ -214,8 +221,16 @@ class FileToolExecutor:
         if err:
             return err
 
+        old_content = ""
+        if path.exists():
+            try:
+                old_content = path.read_text(encoding="utf-8")
+            except Exception:
+                pass
+
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
+        await self._nvim_record_edit(path, old_content, content)
         return f"Written {len(content)} bytes to {path}"
 
     async def _edit_file(self, args: dict) -> str:
@@ -246,7 +261,9 @@ class FileToolExecutor:
                 "Add more surrounding context to make it unique."
             )
 
-        path.write_text(content.replace(old_str, new_str, 1), encoding="utf-8")
+        new_content = content.replace(old_str, new_str, 1)
+        path.write_text(new_content, encoding="utf-8")
+        await self._nvim_record_edit(path, content, new_content)
         return f"Edited {path}"
 
     async def _delete_file(self, args: dict) -> str:

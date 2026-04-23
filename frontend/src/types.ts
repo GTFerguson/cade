@@ -387,6 +387,26 @@ export interface NeovimExitedMessage extends BaseMessage {
   exitCode: number;
 }
 
+/**
+ * Diff available for a file (server -> client).
+ * Sent after each agent write/edit so the frontend can show a diff button.
+ */
+export interface NeovimDiffAvailableMessage extends BaseMessage {
+  type: "neovim-diff-available";
+  filePath: string;
+  hunkCount: number;
+  added: number;
+  removed: number;
+}
+
+/**
+ * Request to open diff view for a file (client -> server).
+ */
+export interface NeovimOpenDiffMessage extends BaseMessage {
+  type: "neovim-open-diff";
+  filePath: string;
+}
+
 // --- Chat types ---
 
 /**

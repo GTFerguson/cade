@@ -67,11 +67,14 @@ class MessageType:
     NEOVIM_RESIZE = "neovim-resize"  # Resize Neovim terminal: { type, cols: int, rows: int }
     NEOVIM_RPC = "neovim-rpc"  # RPC command: { type, method: str, args: list, requestId: str }
 
+    NEOVIM_OPEN_DIFF = "neovim-open-diff"  # Request diff view for a file: { type, filePath: str }
+
     # Neovim - Server -> Client
     NEOVIM_READY = "neovim-ready"  # Neovim running: { type, pid: int }
     NEOVIM_OUTPUT = "neovim-output"  # Terminal output from Neovim: { type, data: str }
     NEOVIM_RPC_RESPONSE = "neovim-rpc-response"  # RPC response: { type, requestId, result?, error? }
     NEOVIM_EXITED = "neovim-exited"  # Neovim exited: { type, exitCode: int }
+    NEOVIM_DIFF_AVAILABLE = "neovim-diff-available"  # Diff ready: { type, filePath, hunkCount, added, removed }
 
     # Permissions - Client -> Server
     PERMISSION_APPROVE = "permission-approve"  # Approve tool use: { type, requestId }

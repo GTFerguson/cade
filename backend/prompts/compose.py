@@ -12,7 +12,7 @@ from pathlib import Path
 
 MODULES_DIR = Path(__file__).parent / "modules"
 
-ALWAYS = ["dashboard", "nkrdn"]
+ALWAYS = ["dashboard", "nkrdn", "neovim"]
 
 MODE_MODULES: dict[str, list[str]] = {
     "code": ["code"],

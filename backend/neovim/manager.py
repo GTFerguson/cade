@@ -15,6 +15,7 @@ import sys
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+import tempfile
 from typing import Any
 
 from backend.models import TerminalSize
@@ -34,6 +35,10 @@ class NeovimInstance:
     socket_path: str
     pid: int | None = None
     output_task: asyncio.Task | None = field(default=None, repr=False)
+    # async callable set by the websocket handler to push messages to the client
+    send_callback: Any | None = field(default=None, repr=False)
+    # maps absolute file path string → temp snapshot path (pre-edit content)
+    snapshots: dict[str, str] = field(default_factory=dict, repr=False)
 
     def is_alive(self) -> bool:
         return self.pty.is_alive()
@@ -176,6 +181,174 @@ class NeovimManager:
         """Get a Neovim instance by session ID."""
         return self._instances.get(session_id)
 
+    async def open_file_for_project(self, project_path: Path, file_path: Path) -> None:
+        """Open or reload a file in the Neovim instance for the given project.
+
+        No-op if no live instance exists for the project or RPC fails.
+        """
+        instance = self._find_for_project(project_path)
+        if instance is None:
+            return
+        await self._rpc_edit(instance.socket_path, file_path)
+
+    async def record_edit(
+        self,
+        project_path: Path,
+        file_path: Path,
+        old_content: str,
+        new_content: str,
+    ) -> None:
+        """Snapshot old content, apply diff highlights, and notify the frontend.
+
+        Called by file tools after every write/edit so the user sees which lines
+        changed and can open a diff view on demand.
+        """
+        from backend.neovim.diff import compute_hunks
+        from backend.protocol import MessageType
+
+        instance = self._find_for_project(project_path)
+        if instance is None:
+            return
+
+        hunks = compute_hunks(old_content, new_content)
+
+        # Save snapshot so open_diff can compare against it later
+        await self._save_snapshot(instance, file_path, old_content)
+
+        # Apply highlights in Neovim (opens/reloads file as side-effect)
+        await self._rpc_highlight(instance.socket_path, file_path, hunks)
+
+        # Notify the frontend so it can show the diff button
+        if instance.send_callback and hunks:
+            added = sum(
+                h.new_end - h.new_start for h in hunks if h.tag in ("insert", "replace")
+            )
+            removed = sum(
+                h.old_end - h.old_start for h in hunks if h.tag in ("delete", "replace")
+            )
+            await instance.send_callback({
+                "type": MessageType.NEOVIM_DIFF_AVAILABLE,
+                "filePath": str(file_path),
+                "hunkCount": len(hunks),
+                "added": added,
+                "removed": removed,
+            })
+
+    async def open_diff(self, project_path: Path, file_path: Path) -> None:
+        """Open a vertical diff split comparing current file to its pre-edit snapshot."""
+        instance = self._find_for_project(project_path)
+        if instance is None:
+            return
+        snapshot = instance.snapshots.get(str(file_path))
+        if not snapshot:
+            return
+        await self._rpc_open_diff(instance.socket_path, file_path, snapshot)
+
+    async def _save_snapshot(
+        self, instance: NeovimInstance, file_path: Path, content: str
+    ) -> None:
+        loop = asyncio.get_running_loop()
+        path_str = str(file_path)
+        old_snap = instance.snapshots.get(path_str)
+
+        def _write() -> str:
+            if old_snap:
+                try:
+                    Path(old_snap).unlink(missing_ok=True)
+                except OSError:
+                    pass
+            fd, tmp = tempfile.mkstemp(suffix=".orig", prefix="cade-diff-")
+            import os
+            os.close(fd)
+            Path(tmp).write_text(content, encoding="utf-8")
+            return tmp
+
+        tmp_path = await loop.run_in_executor(None, _write)
+        instance.snapshots[path_str] = tmp_path
+
+    async def _rpc_highlight(
+        self, socket_path: str, file_path: Path, hunks: list
+    ) -> None:
+        loop = asyncio.get_running_loop()
+        path_str = str(file_path)
+
+        def _run() -> None:
+            try:
+                import pynvim
+                nvim = pynvim.attach("socket", path=socket_path)
+                try:
+                    escaped = nvim.funcs.fnameescape(path_str)
+                    nvim.command(f"e {escaped}")
+                    buf = nvim.current.buffer
+                    ns = nvim.api.create_namespace("cade_diff")
+                    nvim.api.buf_clear_namespace(buf, ns, 0, -1)
+                    for hunk in hunks:
+                        if hunk.tag == "insert":
+                            hl = "DiffAdd"
+                            for line in range(hunk.new_start, hunk.new_end):
+                                nvim.api.buf_add_highlight(buf, ns, hl, line, 0, -1)
+                        elif hunk.tag == "replace":
+                            hl = "DiffChange"
+                            for line in range(hunk.new_start, hunk.new_end):
+                                nvim.api.buf_add_highlight(buf, ns, hl, line, 0, -1)
+                        # "delete" hunks have no new lines — nothing to highlight
+                finally:
+                    nvim.close()
+            except Exception as exc:
+                logger.debug("Neovim highlight skipped: %s", exc)
+
+        await loop.run_in_executor(None, _run)
+
+    async def _rpc_open_diff(
+        self, socket_path: str, file_path: Path, snapshot_path: str
+    ) -> None:
+        loop = asyncio.get_running_loop()
+        path_str = str(file_path)
+
+        def _run() -> None:
+            try:
+                import pynvim
+                nvim = pynvim.attach("socket", path=socket_path)
+                try:
+                    escaped_file = nvim.funcs.fnameescape(path_str)
+                    escaped_snap = nvim.funcs.fnameescape(snapshot_path)
+                    # Navigate to the edited file, clear any existing diff
+                    nvim.command(f"e {escaped_file}")
+                    nvim.command("diffoff!")
+                    # Open snapshot in a vertical split — activates diff mode on both
+                    nvim.command(f"vert diffsplit {escaped_snap}")
+                finally:
+                    nvim.close()
+            except Exception as exc:
+                logger.debug("Neovim diff open skipped: %s", exc)
+
+        await loop.run_in_executor(None, _run)
+
+    def _find_for_project(self, project_path: Path) -> NeovimInstance | None:
+        for instance in self._instances.values():
+            if instance.project_path == project_path and instance.is_alive():
+                return instance
+        return None
+
+    async def _rpc_edit(self, socket_path: str, file_path: Path) -> None:
+        """Run :e <file_path> in Neovim via the RPC socket."""
+        loop = asyncio.get_running_loop()
+        path_str = str(file_path)
+
+        def _run() -> None:
+            try:
+                import pynvim
+                nvim = pynvim.attach("socket", path=socket_path)
+                try:
+                    escaped = nvim.funcs.fnameescape(path_str)
+                    nvim.command(f"e {escaped}")
+                finally:
+                    nvim.close()
+            except Exception as exc:
+                logger.debug("Neovim RPC open_file skipped: %s", exc)
+
+        await loop.run_in_executor(None, _run)
+
     async def stop(self) -> None:
         """Stop all Neovim instances (cleanup on shutdown)."""
         async with self._lock:
@@ -200,6 +373,13 @@ class NeovimManager:
                 socket = Path(instance.socket_path)
                 if socket.exists():
                     socket.unlink()
+            except OSError:
+                pass
+
+        # Clean up diff snapshot temp files
+        for snap_path in instance.snapshots.values():
+            try:
+                Path(snap_path).unlink(missing_ok=True)
             except OSError:
                 pass
 

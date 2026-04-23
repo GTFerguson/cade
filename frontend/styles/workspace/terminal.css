@@ -55,6 +55,41 @@
   position: relative;
 }
 
+.neovim-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  height: 24px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.neovim-header-title {
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.neovim-diff-btn {
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--accent-orange);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+}
+
+.neovim-diff-btn:hover {
+  background: rgba(255, 167, 36, 0.1);
+  border-color: var(--accent-orange);
+}
+
 .neovim-terminal-container {
   flex: 1;
   width: 100%;

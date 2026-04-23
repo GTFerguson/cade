@@ -27,8 +27,10 @@ import type {
   FileChildrenMessage,
   FileContentMessage,
   FileTreeMessage,
+  NeovimDiffAvailableMessage,
   NeovimExitedMessage,
   NeovimOutputMessage,
+  NeovimOpenDiffMessage,
   NeovimReadyMessage,
   NeovimRpcResponseMessage,
   OutputMessage,
@@ -60,6 +62,7 @@ interface WebSocketEvents {
   "neovim-output": NeovimOutputMessage;
   "neovim-rpc-response": NeovimRpcResponseMessage;
   "neovim-exited": NeovimExitedMessage;
+  "neovim-diff-available": NeovimDiffAvailableMessage;
   "chat-stream": ChatStreamMessage;
   "chat-history": ChatHistoryMessage;
   "chat-mode-change": ChatModeChangeMessage;
@@ -531,6 +534,11 @@ export class WebSocketClient extends BaseWSClient {
 
   neovimRpc(method: string, args: unknown[], requestId: string): void {
     this.send({ type: MessageType.NEOVIM_RPC, method, args, requestId });
+  }
+
+  neovimOpenDiff(filePath: string): void {
+    const msg: NeovimOpenDiffMessage = { type: MessageType.NEOVIM_OPEN_DIFF, filePath };
+    this.send(msg);
   }
 
   sendChatCancel(): void {
