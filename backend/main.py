@@ -625,6 +625,26 @@ def create_app(config: Config | None = None) -> FastAPI:
             return JSONResponse({"error": "Request not found"}, status_code=400)
         return JSONResponse({"status": "denied"})
 
+    class AcceptEditsRequest(BaseModel):
+        enabled: bool
+
+    @app.post("/api/permissions/accept-edits")
+    async def set_accept_edits(body: AcceptEditsRequest) -> JSONResponse:
+        """Toggle accept-edits mode — when enabled, agent writes auto-approve within scope."""
+        from backend.permissions.manager import get_permission_manager
+        get_permission_manager().set_accept_edits(body.enabled)
+        return JSONResponse({"acceptEdits": body.enabled})
+
+    @app.get("/api/permissions/state")
+    async def get_permissions_state() -> JSONResponse:
+        """Return current permission state."""
+        from backend.permissions.manager import get_permission_manager
+        perms = get_permission_manager()
+        return JSONResponse({
+            "mode": perms.get_mode(),
+            "acceptEdits": perms.accept_edits,
+        })
+
     # --- UI Tools API (called by MCP tools) ---
 
     class ViewFileRequest(BaseModel):

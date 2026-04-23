@@ -328,7 +328,7 @@ class ConnectionHandler:
         # Initialize provider registry from global config (~/.cade/providers.toml)
         try:
             providers_config = get_providers_config()
-            self._provider_registry = ProviderRegistry.from_config(providers_config)
+            self._provider_registry = ProviderRegistry.from_config(providers_config, self._working_dir)
         except Exception as e:
             logger.warning("Failed to initialize provider registry: %s", e)
             self._provider_registry = ProviderRegistry()
@@ -1301,6 +1301,8 @@ class ConnectionHandler:
     async def _handle_mode_switch(self, mode: str) -> None:
         """Switch the active Claude Code provider's mode and notify the client."""
         self._current_mode = mode
+        from backend.permissions.manager import get_permission_manager
+        get_permission_manager().set_mode(mode)
 
         provider = None
         if self._provider_registry is not None:

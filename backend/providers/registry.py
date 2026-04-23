@@ -20,12 +20,21 @@ from core.backend.providers.websocket_provider import WebsocketProvider
 logger = logging.getLogger(__name__)
 
 
-def _create_tool_registry(provider_config) -> ToolRegistry:
+def _create_tool_registry(provider_config, working_dir: "Path | None" = None) -> ToolRegistry:
     """Create a ToolRegistry for an API provider based on its config.
 
-    Includes: nkrdn (always), MCP tools (if configured), agent spawner (if enabled).
+    Includes: nkrdn (always), file tools (if working_dir provided),
+    MCP tools (if configured), agent spawner (if enabled).
     """
+    from pathlib import Path as _Path
     registry = ToolRegistry()
+
+    # File read/write/edit/delete tools — only wired when we have a project root
+    if working_dir is not None:
+        from backend.tools.file_tools import FileToolExecutor, _ALL_DEFINITIONS
+        file_executor = FileToolExecutor(_Path(working_dir))
+        for defn in _ALL_DEFINITIONS:
+            registry.register(file_executor, defn.name)
 
     # Add MCP tools if configured via "mcp_servers" or "mcp-servers"
     mcp_servers = provider_config.extra.get("mcp_servers") or provider_config.extra.get("mcp-servers")
@@ -108,7 +117,7 @@ class ProviderRegistry:
         return result
 
     @classmethod
-    def from_config(cls, config: ProvidersConfig) -> ProviderRegistry:
+    def from_config(cls, config: ProvidersConfig, working_dir=None) -> ProviderRegistry:
         """Create a registry from configuration.
 
         Two-pass approach: first registers all non-failover providers,
@@ -121,7 +130,7 @@ class ProviderRegistry:
         # Pass 1: register all non-failover providers
         for name, provider_config in config.providers.items():
             if provider_config.type == "api":
-                tool_registry = _create_tool_registry(provider_config)
+                tool_registry = _create_tool_registry(provider_config, working_dir)
                 if not provider_config.system_prompt:
                     mode = provider_config.extra.get("mode", "code")
                     provider_config.system_prompt = compose_prompt(mode)

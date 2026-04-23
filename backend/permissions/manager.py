@@ -28,11 +28,47 @@ class PermissionRequest:
 
 
 class PermissionManager:
-    """Manages permission prompt lifecycle."""
+    """Manages permission prompt lifecycle, mode state, and edit approval."""
 
     def __init__(self) -> None:
         self._pending: dict[str, PermissionRequest] = {}
         self._broadcast_fns: list[BroadcastFn] = []
+        self._current_mode: str = "code"
+        self.accept_edits: bool = True
+        # Approved directory prefixes outside the project root (persists per session)
+        self._approved_paths: set[str] = set()
+
+    # ------------------------------------------------------------------
+    # Mode state
+    # ------------------------------------------------------------------
+
+    def set_mode(self, mode: str) -> None:
+        self._current_mode = mode
+
+    def get_mode(self) -> str:
+        return self._current_mode
+
+    # ------------------------------------------------------------------
+    # Accept-edits toggle
+    # ------------------------------------------------------------------
+
+    def set_accept_edits(self, enabled: bool) -> None:
+        self.accept_edits = enabled
+
+    # ------------------------------------------------------------------
+    # Path scope cache
+    # ------------------------------------------------------------------
+
+    def is_path_approved(self, path: "Path") -> bool:  # noqa: F821
+        path_str = str(path)
+        return any(
+            path_str == p or path_str.startswith(p + "/")
+            for p in self._approved_paths
+        )
+
+    def approve_path(self, path: "Path") -> None:  # noqa: F821
+        # Cache at directory level so sibling files don't re-prompt
+        self._approved_paths.add(str(path.parent))
 
     def register_broadcast(self, fn: BroadcastFn) -> None:
         self._broadcast_fns.append(fn)
