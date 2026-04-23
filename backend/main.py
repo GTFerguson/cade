@@ -676,6 +676,48 @@ def create_app(config: Config | None = None) -> FastAPI:
                 pass
         return JSONResponse({"status": "ok", "panelId": body.id})
 
+    class FixDiagramRequest(BaseModel):
+        code: str
+        format: str
+        error: str
+
+    @app.post("/api/fix-diagram")
+    async def fix_diagram(body: FixDiagramRequest) -> JSONResponse:
+        """Use the configured adaptive provider to fix a broken diagram."""
+        from core.backend.providers.config import get_providers_config
+        from core.backend.providers.types import ChatMessage
+        from backend.providers.registry import ProviderRegistry
+
+        prompt = (
+            f"Fix the following broken {body.format} diagram. "
+            f"Return ONLY the corrected diagram code with no explanation, "
+            f"no markdown fences, no preamble.\n\n"
+            f"Error: {body.error}\n\n"
+            f"Broken code:\n{body.code}"
+        )
+        try:
+            providers_config = get_providers_config()
+            registry = ProviderRegistry.from_config(providers_config)
+            provider = registry.get_default()
+            if provider is None:
+                return JSONResponse({"error": "No provider configured"}, status_code=503)
+
+            from core.backend.providers.types import TextDelta
+            text_chunks: list[str] = []
+            async for event in provider.stream_chat([ChatMessage(role="user", content=prompt)]):
+                if isinstance(event, TextDelta):
+                    text_chunks.append(event.content)
+
+            fixed = "".join(text_chunks).strip()
+            # Strip markdown fences if the model added them anyway
+            if fixed.startswith("```"):
+                lines = fixed.split("\n")
+                fixed = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+            return JSONResponse({"code": fixed})
+        except Exception as e:
+            logger.error("fix-diagram failed: %s", e)
+            return JSONResponse({"error": str(e)}, status_code=500)
+
     @app.post("/api/ui/notify")
     async def ui_notify(body: NotifyRequest) -> JSONResponse:
         """Send a notification to all connected clients."""

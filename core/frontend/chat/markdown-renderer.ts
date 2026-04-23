@@ -57,6 +57,16 @@ export interface MarkdownRendererOptions {
    * `{ breaks: true, gfm: true, highlight: true, katex: true, sanitize: false }`.
    */
   mertexOptions?: ConstructorParameters<typeof MertexMD>[0];
+
+  /**
+   * Self-correct hook: called when a diagram fails to render. `fix` receives
+   * the broken code, the format ("mermaid"), and the error message, and should
+   * return corrected code. If omitted, broken diagrams show an error message.
+   */
+  selfCorrect?: {
+    fix: (code: string, format: string, error: string) => Promise<string>;
+    maxRetries?: number;
+  };
 }
 
 const DEFAULT_MERTEX_OPTIONS: ConstructorParameters<typeof MertexMD>[0] = {
@@ -77,7 +87,11 @@ export class MarkdownRenderer {
         ...options.mermaidConfig,
       });
     }
-    this.mertex = new MertexMD(options?.mertexOptions ?? DEFAULT_MERTEX_OPTIONS);
+    const mertexOpts = {
+      ...(options?.mertexOptions ?? DEFAULT_MERTEX_OPTIONS),
+      ...(options?.selfCorrect ? { selfCorrect: options.selfCorrect } : {}),
+    };
+    this.mertex = new MertexMD(mertexOpts);
   }
 
   createStream(target: HTMLElement): StreamRenderer {

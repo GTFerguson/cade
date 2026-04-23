@@ -131,6 +131,20 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.readOnly = options?.readOnly ?? false;
     this.renderer = new MarkdownRenderer({
       mermaidConfig: CADE_MERMAID_CONFIG,
+      selfCorrect: {
+        fix: async (code: string, format: string, error: string): Promise<string> => {
+          const res = await fetch("/api/fix-diagram", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code, format, error }),
+          });
+          if (!res.ok) throw new Error(`fix-diagram ${res.status}`);
+          const data = await res.json() as { code?: string; error?: string };
+          if (!data.code) throw new Error(data.error ?? "no code returned");
+          return data.code;
+        },
+        maxRetries: 2,
+      },
     });
 
     const pane = document.createElement("div");
