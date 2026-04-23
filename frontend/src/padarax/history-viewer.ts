@@ -307,7 +307,7 @@ export class HistoryViewer {
   }
 
   private refPath(_type: string, id: string): string {
-    return `content/knowledge/history/enriched/${id}.json`;
+    return `content/knowledge/generated/enriched/${id}.json`;
   }
 
   private makeRefBadge(type: string, id: string): HTMLElement {
