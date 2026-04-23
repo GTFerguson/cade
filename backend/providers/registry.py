@@ -7,9 +7,10 @@ import logging
 from core.backend.providers.api_provider import APIProvider
 from core.backend.providers.base import BaseProvider
 from core.backend.providers.failover_provider import FailoverProvider
-from core.backend.providers.tool_executor import NkrdnExecutor, ToolRegistry
+from core.backend.providers.tool_executor import ToolRegistry
 from backend.providers.claude_code_provider import ClaudeCodeProvider
 from backend.providers.handoff_compactor import HandoffCompactor
+from backend.prompts import compose_prompt
 from core.backend.providers.config import ProvidersConfig
 from core.backend.providers.mcp_tools import MCPToolAdapter
 from core.backend.providers.agent_spawner import AgentSpawnerTool
@@ -25,10 +26,6 @@ def _create_tool_registry(provider_config) -> ToolRegistry:
     Includes: nkrdn (always), MCP tools (if configured), agent spawner (if enabled).
     """
     registry = ToolRegistry()
-
-    # Always include nkrdn for code intelligence
-    nkrdn = NkrdnExecutor()
-    registry.register(nkrdn, "nkrdn")
 
     # Add MCP tools if configured via "mcp_servers" or "mcp-servers"
     mcp_servers = provider_config.extra.get("mcp_servers") or provider_config.extra.get("mcp-servers")
@@ -125,6 +122,9 @@ class ProviderRegistry:
         for name, provider_config in config.providers.items():
             if provider_config.type == "api":
                 tool_registry = _create_tool_registry(provider_config)
+                if not provider_config.system_prompt:
+                    mode = provider_config.extra.get("mode", "code")
+                    provider_config.system_prompt = compose_prompt(mode)
                 provider = APIProvider(provider_config, tool_registry)
                 registry.register(name, provider)
             elif provider_config.type == "claude-code":

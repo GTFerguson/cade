@@ -1,7 +1,7 @@
 ---
 title: Agent Lifecycle & Orchestration
 created: 2026-01-31
-updated: 2026-03-24
+updated: 2026-04-23
 status: implemented
 tags: [agents, orchestration, lifecycle, architecture]
 ---
@@ -18,6 +18,7 @@ Multi-agent coordination system enabling multiple Claude Code instances to work 
 - MCP server provides `spawn_agent` and `list_agents` tools to the orchestrator CC instance
 - Blocking lifecycle: MCP tool blocks until agent report is approved/rejected, then returns the result
 - Agent overview pane with state indicators and management controls
+- Modular prompt system — all mode-specific and capability instructions composed from `backend/prompts/modules/*.md`
 
 ## Original Design
 

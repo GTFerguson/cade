@@ -41,7 +41,8 @@ from backend.neovim.manager import get_neovim_manager
 from backend.protocol import ErrorCode, MessageType, SessionKey
 from core.backend.providers.config import get_providers_config
 from backend.providers.registry import ProviderRegistry
-from backend.providers.claude_code_provider import ClaudeCodeProvider, MODE_PROMPTS
+from backend.providers.claude_code_provider import ClaudeCodeProvider
+from backend.prompts import compose_prompt
 from core.backend.providers.types import ChatDone, ChatError, ChatMessage, SystemInfo, TextDelta, ThinkingDelta, ToolResult, ToolUseStart
 from backend.session import load_session, save_session
 from backend.terminal.pty import PTYManager
@@ -1388,7 +1389,7 @@ class ConnectionHandler:
 
         try:
             messages = self._chat_session.get_messages()
-            system_prompt = None if isinstance(provider, ClaudeCodeProvider) else MODE_PROMPTS.get(self._current_mode)
+            system_prompt = None if isinstance(provider, ClaudeCodeProvider) else compose_prompt(self._current_mode)
             async for event in provider.stream_chat(messages, system_prompt):
                 if self._closed:
                     break

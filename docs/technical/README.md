@@ -19,6 +19,7 @@ Architecture and essential developer documentation.
 - [[core/development-setup|Development Setup]] - Running CADE for development
 - [[core/frontend-architecture|Frontend Architecture]] - Component architecture and mobile support
 - [[core/agent-orchestration|Agent Orchestration]] - Multi-agent coordination, MCP tools, two-gate approval flow
+- [[core/prompt-composition|Prompt Composition]] - Modular system prompt assembly from markdown modules
 
 ### Reference
 

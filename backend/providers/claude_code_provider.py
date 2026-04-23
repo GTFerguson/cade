@@ -27,33 +27,9 @@ from core.backend.providers.types import (
     ToolUseStart,
 )
 
+from backend.prompts import compose_prompt
+
 logger = logging.getLogger(__name__)
-
-ARCHITECT_PROMPT = """You are in ARCHITECT mode (read-only).
-Explore, analyze, and create implementation plans.
-You can read files, search code, and browse the web.
-You cannot edit, write, or delete files.
-When your plan is ready, suggest switching to Code mode with /code."""
-
-CODE_PROMPT = """You are in CODE mode with full tool access.
-Implement changes as needed. If you need to step back and plan, suggest /plan."""
-
-REVIEW_PROMPT = """You are in REVIEW mode (read-only).
-Review code for bugs, security issues, and improvements.
-You can read files and search code but cannot make changes.
-Provide clear, actionable feedback."""
-
-ORCHESTRATOR_PROMPT = """You are in ORCHESTRATOR mode.
-You can spawn and manage worker agents to parallelize tasks.
-Use the orchestrator MCP tools to create agents, monitor their progress,
-and collect their results. Coordinate multi-agent workflows."""
-
-MODE_PROMPTS = {
-    "architect": ARCHITECT_PROMPT,
-    "code": CODE_PROMPT,
-    "review": REVIEW_PROMPT,
-    "orchestrator": ORCHESTRATOR_PROMPT,
-}
 
 
 class ClaudeCodeProvider(BaseProvider):
@@ -176,15 +152,13 @@ class ClaudeCodeProvider(BaseProvider):
         if self._mode in ("architect", "review"):
             cmd.extend(["--permission-mode", "plan"])
 
-        # Orchestrator mode: inject prompt and pre-approve MCP tools
+        # Pre-approve orchestrator MCP tools in orchestrator mode
         if self._mode == "orchestrator" and self._mcp_config_path:
-            from backend.orchestrator.prompts import ORCHESTRATOR_ARCHITECT_PROMPT
-            cmd.extend(["--append-system-prompt", ORCHESTRATOR_ARCHITECT_PROMPT])
             cmd.extend(["--allowedTools", "mcp__cade-orchestrator__spawn_agent,mcp__cade-orchestrator__list_agents"])
-        else:
-            system_prompt = MODE_PROMPTS.get(self._mode)
-            if system_prompt:
-                cmd.extend(["--append-system-prompt", system_prompt])
+
+        prompt = compose_prompt(self._mode)
+        if prompt:
+            cmd.extend(["--append-system-prompt", prompt])
 
         if self._mcp_config_path and self._mcp_config_path.exists():
             cmd.extend(["--mcp-config", str(self._mcp_config_path)])
