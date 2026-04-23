@@ -83,8 +83,7 @@ class APIProvider(BaseProvider):
     def _build_kwargs(self, messages: list[dict]) -> dict:
         """Build litellm kwargs from config and current messages.
 
-        Handles: api_key, region, extra config, tools from registry.
-        Note: system_prompt is passed separately to _build_litellm_messages.
+        Tools are injected separately via definitions_async() in stream_chat.
         """
         kwargs: dict = {
             "model": self._model,
@@ -98,16 +97,8 @@ class APIProvider(BaseProvider):
         if self._config.region:
             kwargs["aws_region_name"] = self._config.region
 
-        # Pass through extra config
         for key, value in self._config.extra.items():
             kwargs[key] = value
-
-        # Add tool definitions if registry is configured
-        if self._tool_registry:
-            defs = self._tool_registry.definitions()
-            if defs:
-                kwargs["tools"] = [_tool_def_to_litellm(d) for d in defs]
-                kwargs["tool_choice"] = "auto"
 
         return kwargs
 
@@ -129,6 +120,12 @@ class APIProvider(BaseProvider):
 
         litellm_messages = _build_litellm_messages(messages, system_prompt)
         kwargs = self._build_kwargs(litellm_messages)
+
+        if self._tool_registry:
+            defs = await self._tool_registry.definitions_async()
+            if defs:
+                kwargs["tools"] = [_tool_def_to_litellm(d) for d in defs]
+                kwargs["tool_choice"] = "auto"
 
         tool_turn_count = 0
 
@@ -221,7 +218,7 @@ class APIProvider(BaseProvider):
                         tool_input=args_dict,
                     )
 
-                    result_content = self._tool_registry.execute(tc["name"], args_dict)
+                    result_content = await self._tool_registry.execute_async(tc["name"], args_dict)
                     status = "error" if result_content.startswith("Error:") else "success"
 
                     yield ToolResult(

@@ -59,6 +59,41 @@ class ToolRegistry:
         except Exception as e:
             return f"Error: {e}"
 
+    async def definitions_async(self) -> list[ToolDefinition]:
+        """Async version of definitions() — resolves MCP adapters properly.
+
+        Also registers discovered MCP tool names so execute_async can route
+        to the right adapter by name after this call.
+        """
+        seen: set[int] = set()
+        result: list[ToolDefinition] = []
+        for executor in list(self._executors.values()):
+            executor_id = id(executor)
+            if executor_id in seen:
+                continue
+            seen.add(executor_id)
+            if hasattr(executor, "_list_tools"):
+                tools: dict = await executor._list_tools()
+                for tool_name, tool_def in tools.items():
+                    if tool_name not in self._executors:
+                        self._executors[tool_name] = executor
+                result.extend(tools.values())
+            elif hasattr(executor, "tool_definitions"):
+                result.extend(executor.tool_definitions())
+        return result
+
+    async def execute_async(self, name: str, arguments: dict) -> str:
+        """Async version of execute() — delegates to execute_async if available."""
+        executor = self._executors.get(name)
+        if executor is None:
+            return f"Error: unknown tool '{name}'"
+        try:
+            if hasattr(executor, "execute_async"):
+                return await executor.execute_async(name, arguments)
+            return executor.execute(name, arguments)
+        except Exception as e:
+            return f"Error: {e}"
+
 
 _NKRDN_SCHEMA = {
     "type": "object",

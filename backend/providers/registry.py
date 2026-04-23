@@ -42,11 +42,20 @@ def _create_tool_registry(provider_config) -> ToolRegistry:
                     adapter = MCPToolAdapter(command, args, env)
                     registry.register(adapter, f"mcp_{server_name}")
 
-    # Add agent spawner if enabled
-    enable_agent_spawner = provider_config.extra.get("enable_agent_spawner", False)
-    if enable_agent_spawner:
-        spawner = AgentSpawnerTool()
-        registry.register(spawner, "spawn_agent")
+    # Always wire the orchestrator MCP server so API providers can spawn agents,
+    # push to dashboard, etc. Tools are discovered lazily on first stream_chat call.
+    try:
+        from backend.config import get_config
+        from backend.orchestrator.mcp_config import MCP_SERVER_SCRIPT, _get_python
+        cfg = get_config()
+        orchestrator_adapter = MCPToolAdapter(
+            command=_get_python(),
+            args=[str(MCP_SERVER_SCRIPT)],
+            env={"CADE_BACKEND_PORT": str(cfg.port), "CADE_BACKEND_HOST": "localhost"},
+        )
+        registry.register(orchestrator_adapter, "__orchestrator__")
+    except Exception as e:
+        logger.debug("Could not wire orchestrator MCP server: %s", e)
 
     return registry
 

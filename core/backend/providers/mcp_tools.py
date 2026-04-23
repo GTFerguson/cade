@@ -53,6 +53,7 @@ class MCPToolAdapter:
         read_stream, write_stream = await self._stdio_ctx.__aenter__()
         self._session = ClientSession(read_stream, write_stream)
         await self._session.__aenter__()
+        await self._session.initialize()
 
     async def _list_tools(self) -> dict[str, ToolDefinition]:
         """List tools from the MCP server and convert to ToolDefinitions."""

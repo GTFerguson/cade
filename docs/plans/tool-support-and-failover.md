@@ -17,6 +17,13 @@ tags: [cade, providers, tools, litellm]
 - Registry integration for tool wiring
 - **61 tests passing**
 
+**Phase 2g: Shipped** ✓
+- `ToolRegistry.definitions_async()` + `execute_async()` — MCP adapters now work properly from async context
+- `APIProvider` fetches tool defs async at stream start; uses `execute_async` for tool calls
+- Orchestrator MCP server auto-wired into all API provider tool registries (lazy-connect, tools discovered on first call)
+- Mode system prompt passed to API providers (fixes "what mode are you in")
+- Adaptive failover provider chain: Mistral → Cerebras → Groq → Google Gemma (via `~/.cade/providers.toml`)
+
 **Phase 2e: Pending**
 - Auto-trigger handoff on context budget threshold
 

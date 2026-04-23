@@ -41,7 +41,7 @@ from backend.neovim.manager import get_neovim_manager
 from backend.protocol import ErrorCode, MessageType, SessionKey
 from core.backend.providers.config import get_providers_config
 from backend.providers.registry import ProviderRegistry
-from backend.providers.claude_code_provider import ClaudeCodeProvider
+from backend.providers.claude_code_provider import ClaudeCodeProvider, MODE_PROMPTS
 from core.backend.providers.types import ChatDone, ChatError, ChatMessage, SystemInfo, TextDelta, ThinkingDelta, ToolResult, ToolUseStart
 from backend.session import load_session, save_session
 from backend.terminal.pty import PTYManager
@@ -341,6 +341,7 @@ class ConnectionHandler:
         # opening an authoring/admin view of a game-mode project.
         self._launch_yaml: dict = load_launch_preset(self._working_dir)
         self._kiosk_mode: bool = bool(self._launch_yaml.get("kiosk_mode", False))
+        self._current_mode: str = "code"
         if self._kiosk_mode:
             logger.info("Kiosk mode enabled — PTY, file watcher, and CC features disabled")
         provider_config_dict = extract_provider_config(self._launch_yaml)
@@ -1298,6 +1299,8 @@ class ConnectionHandler:
 
     async def _handle_mode_switch(self, mode: str) -> None:
         """Switch the active Claude Code provider's mode and notify the client."""
+        self._current_mode = mode
+
         provider = None
         if self._provider_registry is not None:
             provider = self._provider_registry.get_default()
@@ -1385,7 +1388,8 @@ class ConnectionHandler:
 
         try:
             messages = self._chat_session.get_messages()
-            async for event in provider.stream_chat(messages):
+            system_prompt = None if isinstance(provider, ClaudeCodeProvider) else MODE_PROMPTS.get(self._current_mode)
+            async for event in provider.stream_chat(messages, system_prompt):
                 if self._closed:
                     break
 
