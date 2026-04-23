@@ -55,6 +55,10 @@ echo "  • Python 3.8+"
 echo "  • PyInstaller"
 echo "  • Platform-specific dependencies"
 echo ""
+echo "You will also need Neovim (not installed by this script):"
+echo "  Linux:  sudo apt install neovim"
+echo "  macOS:  brew install neovim"
+echo ""
 
 if ! confirm "Continue with installation?"; then
     echo "Setup cancelled."
@@ -326,6 +330,16 @@ if python3 -c "import PyInstaller" 2>/dev/null; then
 else
     echo -e "${RED}✗${NC} PyInstaller not found"
     ALL_GOOD=false
+fi
+
+# Check Neovim (required for editor integration — install manually)
+if command_exists nvim; then
+    NVIM_VERSION=$(nvim --version | head -1)
+    echo -e "${GREEN}✓${NC} $NVIM_VERSION"
+else
+    echo -e "${YELLOW}⚠${NC} Neovim not found — install it for editor integration:"
+    echo "     Linux:  sudo apt install neovim"
+    echo "     macOS:  brew install neovim"
 fi
 
 echo ""
