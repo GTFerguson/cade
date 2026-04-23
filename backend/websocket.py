@@ -42,7 +42,7 @@ from backend.protocol import ErrorCode, MessageType, SessionKey
 from core.backend.providers.config import get_providers_config
 from backend.providers.registry import ProviderRegistry
 from backend.providers.claude_code_provider import ClaudeCodeProvider
-from backend.prompts import compose_prompt
+from backend.prompts import BUNDLED_SKILLS_DIR, compose_prompt, get_rules
 from core.backend.providers.types import ChatDone, ChatError, ChatMessage, SystemInfo, TextDelta, ThinkingDelta, ToolResult, ToolUseStart
 from backend.session import load_session, save_session
 from backend.terminal.pty import PTYManager
@@ -677,6 +677,61 @@ class ConnectionHandler:
         if session is not None:
             message["session"] = session
 
+        # Build slashCommands from rules (skill descriptions) + CADE native commands
+        from pathlib import Path
+        rules = get_rules()
+        skill_commands = [
+            {"name": name, "description": desc}
+            for name, _content, desc in rules
+            if desc
+        ]
+        native_commands = [
+            {"name": "plan", "description": "Switch to Architect mode (read-only)"},
+            {"name": "code", "description": "Switch to Code mode (full access)"},
+            {"name": "review", "description": "Switch to Review mode (read-only)"},
+            {"name": "orchestrator", "description": "Switch to Orchestrator mode"},
+            {"name": "compact", "description": "Compact conversation context"},
+            {"name": "cost", "description": "Show token usage and cost"},
+            {"name": "context", "description": "Show context window usage"},
+        ]
+        # Skills from bundled + ~/.claude/skills/ (read from SKILL.md frontmatter)
+        # Bundled skills load first; user skills with same name are ignored
+        import re
+        seen_skill_names: set[str] = set()
+
+        def _add_skill_commands_from_dir(skills_dir: Path) -> None:
+            if not skills_dir.exists():
+                return
+            for skill_dir in sorted(skills_dir.iterdir()):
+                if not skill_dir.is_dir():
+                    continue
+                skill_md = skill_dir / "SKILL.md"
+                if not skill_md.exists():
+                    continue
+                text = skill_md.read_text()
+                fm_match = re.match(r"^---\n(.*?)\n---", text, re.DOTALL)
+                if not fm_match:
+                    continue
+                name_val, desc_val = None, None
+                for line in fm_match.group(1).split("\n"):
+                    if ":" in line:
+                        k, v = line.split(":", 1)
+                        k = k.strip()
+                        v = v.strip()
+                        if k == "name":
+                            name_val = v
+                        elif k == "description":
+                            desc_val = v
+                if name_val and desc_val and name_val not in seen_skill_names:
+                    seen_skill_names.add(name_val)
+                    native_commands.append({"name": name_val, "description": desc_val})
+
+        # Bundled skills first, then user skills (user skills with same name ignored)
+        _add_skill_commands_from_dir(BUNDLED_SKILLS_DIR)
+        _add_skill_commands_from_dir(Path.home() / ".claude" / "skills")
+
+        message["slashCommands"] = native_commands
+
         await self._send(message)
 
         # Replay chat history on reconnect
@@ -1300,6 +1355,39 @@ class ConnectionHandler:
         "/orchestrator": "orchestrator",
     }
 
+    def _try_load_skill(self, content: str) -> tuple[str, str]:
+        """Check if content starts with /<skillname> and load the skill.
+
+        Returns (remaining_message, skill_content) if skill found, else (original, "").
+        The remaining_message is the part after the /<skillname> prefix (stripped of leading space).
+        Checks bundled skills first, then user skills.
+        """
+        if not content.startswith("/"):
+            return ("", "")
+
+        # Extract skill name: /handoff → "handoff", /handoff arg → "handoff"
+        parts = content[1:].split(maxsplit=1)
+        skill_name = parts[0].lower()
+        remaining = parts[1] if len(parts) > 1 else ""
+
+        # Check bundled first, then user (bundled takes precedence)
+        skill_path = BUNDLED_SKILLS_DIR / skill_name / "SKILL.md"
+        if not skill_path.exists():
+            skill_path = Path.home() / ".claude" / "skills" / skill_name / "SKILL.md"
+            if not skill_path.exists():
+                return (remaining, "")
+
+        try:
+            skill_text = skill_path.read_text()
+            # Strip frontmatter (--- ... ---) if present
+            import re
+            fm_match = re.match(r"^---\n.*?\n---\n", skill_text, re.DOTALL)
+            if fm_match:
+                skill_text = skill_text[fm_match.end():]
+            return (remaining, skill_text.strip())
+        except Exception:
+            return ("", "")
+
     async def _handle_mode_switch(self, mode: str) -> None:
         """Switch the active Claude Code provider's mode and notify the client."""
         self._current_mode = mode
@@ -1333,6 +1421,14 @@ class ConnectionHandler:
         if content in self.CADE_MODE_COMMANDS:
             await self._handle_mode_switch(self.CADE_MODE_COMMANDS[content])
             return
+
+        # Intercept skill invocations: /<skillname> ... → load SKILL.md, prepend content
+        remaining, skill_content = self._try_load_skill(content)
+        if skill_content:
+            content = skill_content + ("\n\n" + remaining if remaining else "")
+        elif content.startswith("/"):
+            # Unknown slash command — pass through as-is (LLM handles it)
+            pass
 
         provider_id = data.get("providerId")
 

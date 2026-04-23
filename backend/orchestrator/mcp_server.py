@@ -1,8 +1,7 @@
 """MCP server for CADE — stdio transport.
 
-Provides tools for agent orchestration and UI interaction.
-Claude Code calls these tools via MCP to interact with the
-CADE frontend (dashboard, viewer, notifications).
+Provides tools for agent orchestration and file viewing.
+Claude Code calls these tools via MCP to interact with CADE.
 """
 
 from __future__ import annotations
@@ -90,72 +89,6 @@ async def view_file(path: str) -> str:
         response = await client.post(
             f"{BASE_URL}/api/ui/view-file",
             json={"path": path},
-            headers=_get_headers(),
-        )
-        response.raise_for_status()
-        return response.text
-
-
-@mcp.tool()
-async def push_to_dashboard(
-    title: str,
-    component: str,
-    data: list[dict],
-    panel_id: str = "",
-) -> str:
-    """Push a panel to the CADE dashboard for the user to see.
-
-    Use this when you want to show the user structured information —
-    search results, file lists, status summaries, choices. The panel
-    appears in the dashboard immediately.
-
-    Components: "cards", "checklist", "table", "timeline", "key_value", "markdown"
-
-    Args:
-        title: Panel title (shown as uppercase header)
-        component: Component type to render the data
-        data: List of data records. Each record is a dict with fields relevant to the component.
-              Cards: [{"title": "...", "status": "...", "_file": "path/to/open"}]
-              Checklist: [{"text": "...", "done": false, "priority": "high"}]
-              Table: [{"name": "...", "value": "..."}]
-              Key-value: [{"label": "...", "value": "..."}]
-        panel_id: Optional panel ID. If a panel with this ID exists, it replaces it.
-
-    Returns:
-        Confirmation message
-    """
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.post(
-            f"{BASE_URL}/api/ui/push-panel",
-            json={
-                "id": panel_id or f"agent-{title.lower().replace(' ', '-')}",
-                "title": title,
-                "component": component,
-                "data": data,
-            },
-            headers=_get_headers(),
-        )
-        response.raise_for_status()
-        return response.text
-
-
-@mcp.tool()
-async def notify(message: str, style: str = "info") -> str:
-    """Show a notification to the user in the CADE UI.
-
-    Use for brief status updates, confirmations, or alerts.
-
-    Args:
-        message: The notification text
-        style: Visual style — "info" (blue), "success" (green), "warning" (orange), "error" (red)
-
-    Returns:
-        Confirmation
-    """
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.post(
-            f"{BASE_URL}/api/ui/notify",
-            json={"message": message, "style": style},
             headers=_get_headers(),
         )
         response.raise_for_status()

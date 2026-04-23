@@ -17,6 +17,7 @@ from core.backend.providers.types import (
     ChatEvent,
     ChatMessage,
     ProviderCapabilities,
+    SystemInfo,
     TextDelta,
     ToolDefinition,
     ToolResult,
@@ -114,6 +115,15 @@ class APIProvider(BaseProvider):
 
         If system_prompt is None, uses the default from provider config.
         """
+        # Emit SystemInfo at the start so the frontend knows the model
+        yield SystemInfo(
+            model=self._model,
+            session_id="",
+            tools=[],
+            slash_commands=[],
+            version="1.0",
+        )
+
         # Use config default if no system_prompt provided
         if system_prompt is None and self._config.system_prompt:
             system_prompt = self._config.system_prompt
