@@ -23,24 +23,6 @@ import { ChatInput } from "@core/chat/chat-input";
 import { DiagramViewer } from "@core/chat/diagram-viewer";
 import { ContextBudgetIndicator } from "../components/context-budget-indicator";
 
-/** Descriptions for well-known Claude Code slash commands */
-const SLASH_DESCRIPTIONS: Record<string, string> = {
-  plan: "Switch to Architect mode (read-only)",
-  code: "Switch to Code mode (full access)",
-  review: "Switch to Review mode (read-only)",
-  compact: "Compact conversation context",
-  cost: "Show token usage and cost",
-  context: "Show context window usage",
-  init: "Initialize project CLAUDE.md",
-  "pr-comments": "Address PR review comments",
-  "release-notes": "Generate release notes",
-  "security-review": "Security review of changes",
-  simplify: "Simplify and improve code",
-  debug: "Debug an issue",
-  batch: "Run batch operations",
-  insights: "Show session insights",
-};
-
 const CADE_MERMAID_CONFIG = {
   securityLevel: "loose" as const,
   theme: "base" as const,
@@ -104,9 +86,10 @@ export class ChatPane implements Component, PaneKeyHandler {
   private costEl: HTMLElement;
   private totalCost = 0;
   private contextBudget: ContextBudgetIndicator | null = null;
-  private systemInfo: { model?: string; slashCommands?: string[] } = {
-    slashCommands: Object.keys(SLASH_DESCRIPTIONS),
+  private systemInfo: { model?: string; slashCommands: Array<{ name: string; description: string }> } = {
+    slashCommands: [],
   };
+  private onModelNameChange: (() => void) | null = null;
   private slashHintEl: HTMLElement | null = null;
   private isStreaming = false;
   private readonly autoSubscribe: boolean;
@@ -227,6 +210,14 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.providerEl.textContent = name;
   }
 
+  getModelName(): string | undefined {
+    return this.systemInfo.model;
+  }
+
+  onModelChange(cb: () => void): void {
+    this.onModelNameChange = cb;
+  }
+
   setModeLabel(label: string): void {
     this.modeEl.textContent = label;
   }
@@ -269,7 +260,7 @@ export class ChatPane implements Component, PaneKeyHandler {
 
     if (text.startsWith("/") && !text.includes(" ")) {
       const query = text.slice(1).toLowerCase();
-      const matches = commands.filter((c) => c.toLowerCase().startsWith(query));
+      const matches = commands.filter((c) => c.name.toLowerCase().startsWith(query));
       if (matches.length > 0) {
         this.showSlashHints(matches);
         return;
@@ -279,7 +270,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.hideSlashHints();
   }
 
-  private showSlashHints(commands: string[]): void {
+  private showSlashHints(commands: Array<{ name: string; description: string }>): void {
     if (!this.slashHintEl) {
       this.slashHintEl = document.createElement("div");
       this.slashHintEl.className = "chat-slash-hints";
@@ -293,17 +284,17 @@ export class ChatPane implements Component, PaneKeyHandler {
 
       const name = document.createElement("span");
       name.className = "chat-slash-name";
-      name.textContent = `/${cmd}`;
+      name.textContent = `/${cmd.name}`;
 
       const desc = document.createElement("span");
       desc.className = "chat-slash-desc";
-      desc.textContent = SLASH_DESCRIPTIONS[cmd] ?? "";
+      desc.textContent = cmd.description ?? "";
 
       row.appendChild(name);
       if (desc.textContent) row.appendChild(desc);
 
       row.addEventListener("click", () => {
-        this.chatInput?.setValue(`/${cmd}`);
+        this.chatInput?.setValue(`/${cmd.name}`);
         this.hideSlashHints();
         this.chatInput?.focus();
       });
@@ -402,12 +393,16 @@ export class ChatPane implements Component, PaneKeyHandler {
   }
 
   private handleSystemInfo(msg: ChatStreamMessage): void {
+    const modelChanged = !!msg.model && msg.model !== this.systemInfo.model;
     if (msg.model) this.systemInfo.model = msg.model;
     if (msg.slashCommands) this.systemInfo.slashCommands = msg.slashCommands;
     if (msg.model) {
       this.providerEl.textContent = msg.model;
       this.contextBudget?.setModel(msg.model);
       this.contextBudget?.reset();
+      if (modelChanged && this.onModelNameChange) {
+        this.onModelNameChange();
+      }
     }
   }
 

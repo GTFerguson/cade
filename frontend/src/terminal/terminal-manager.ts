@@ -123,6 +123,8 @@ export class TerminalManager implements Component {
       if (!this.chatPane) {
         this.chatPane = new ChatPane(this.chatContainer, this.ws);
         this.chatPane.initialize();
+        // Re-render status indicator when model name changes
+        this.chatPane.onModelChange(() => this.updateStatusIndicator());
       }
 
       this.chatPane.focus();
@@ -419,8 +421,15 @@ export class TerminalManager implements Component {
         if (this.mode === "chat") {
           const isChatVisible = this.chatContainer.style.display !== "none";
           if (isChatVisible) {
-            this.statusIndicator.textContent = this.enhanced ? "[claude code]" : "[chat]";
-            this.statusIndicator.classList.add("claude");
+            if (this.enhanced) {
+              // Show model name from last system-info event (fallback aware)
+              const modelName = this.chatPane?.getModelName();
+              this.statusIndicator.textContent = modelName ? `[${modelName}]` : "[enhanced]";
+              this.statusIndicator.classList.add("claude");
+            } else {
+              this.statusIndicator.textContent = "[chat]";
+              this.statusIndicator.classList.add("claude");
+            }
           } else {
             this.statusIndicator.textContent = "[shell]";
             this.statusIndicator.classList.add("shell");
@@ -439,9 +448,17 @@ export class TerminalManager implements Component {
       if (this.mode === "chat") {
         const isChatVisible = this.chatContainer.style.display !== "none";
         if (isChatVisible) {
-          this.statusIndicator.textContent = this.enhanced ? "[claude code]" : "[chat]";
-          this.statusIndicator.classList.remove("shell");
-          this.statusIndicator.classList.add("claude");
+          if (this.enhanced) {
+            // Show model name from last system-info event (fallback aware)
+            const modelName = this.chatPane?.getModelName();
+            this.statusIndicator.textContent = modelName ? `[${modelName}]` : "[enhanced]";
+            this.statusIndicator.classList.remove("shell");
+            this.statusIndicator.classList.add("claude");
+          } else {
+            this.statusIndicator.textContent = "[chat]";
+            this.statusIndicator.classList.remove("shell");
+            this.statusIndicator.classList.add("claude");
+          }
         } else {
           this.statusIndicator.textContent = "[shell]";
           this.statusIndicator.classList.remove("claude");
