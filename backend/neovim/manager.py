@@ -208,6 +208,11 @@ class NeovimManager:
 
         instance = self._find_for_project(project_path)
         if instance is None:
+            logger.info(
+                "record_edit: no live Neovim instance for project %s (instances: %s)",
+                project_path,
+                [str(i.project_path) for i in self._instances.values()],
+            )
             return
 
         hunks = compute_hunks(old_content, new_content)
@@ -295,7 +300,7 @@ class NeovimManager:
                 finally:
                     nvim.close()
             except Exception as exc:
-                logger.debug("Neovim highlight skipped: %s", exc)
+                logger.warning("Neovim highlight failed (socket: %s): %s", socket_path, exc)
 
         await loop.run_in_executor(None, _run)
 
@@ -320,13 +325,15 @@ class NeovimManager:
                 finally:
                     nvim.close()
             except Exception as exc:
-                logger.debug("Neovim diff open skipped: %s", exc)
+                logger.warning("Neovim diff open failed (socket: %s): %s", socket_path, exc)
 
         await loop.run_in_executor(None, _run)
 
     def _find_for_project(self, project_path: Path) -> NeovimInstance | None:
+        # Resolve both sides — config.working_dir uses Path.cwd() (unresolved)
+        # while FileToolExecutor uses .resolve(), so they diverge on symlink paths.
         for instance in self._instances.values():
-            if instance.project_path == project_path and instance.is_alive():
+            if instance.project_path.resolve() == project_path and instance.is_alive():
                 return instance
         return None
 
