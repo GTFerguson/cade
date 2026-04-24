@@ -13,6 +13,7 @@ import type {
   AgentKilledMessage,
   AgentSpawnedMessage,
   AgentStateChangedMessage,
+  ChatCompactMessage,
   ChatHistoryMessage,
   ChatModeChangeMessage,
   ChatStreamMessage,
@@ -66,6 +67,7 @@ interface WebSocketEvents {
   "chat-stream": ChatStreamMessage;
   "chat-history": ChatHistoryMessage;
   "chat-mode-change": ChatModeChangeMessage;
+  "chat-compact": ChatCompactMessage;
   "provider-list": ProviderListMessage;
   "agent-spawned": AgentSpawnedMessage;
   "agent-killed": AgentKilledMessage;

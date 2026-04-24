@@ -13,6 +13,7 @@ import {
 import type { PaneKeyHandler } from "../input/keybindings";
 import { MessageType } from "@core/platform/protocol";
 import type {
+  ChatCompactMessage,
   ChatHistoryMessage,
   ChatModeChangeMessage,
   ChatStreamMessage,
@@ -108,6 +109,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     },
     chatHistory: (msg: ChatHistoryMessage) => this.handleChatHistory(msg),
     chatModeChange: (msg: ChatModeChangeMessage) => this.handleModeChange(msg),
+    chatCompact: (msg: ChatCompactMessage) => this.handleCompact(msg),
   };
 
   constructor(
@@ -209,6 +211,7 @@ export class ChatPane implements Component, PaneKeyHandler {
       this.ws.on("chat-stream", this.boundHandlers.chatStream);
       this.ws.on("chat-history", this.boundHandlers.chatHistory);
       this.ws.on("chat-mode-change", this.boundHandlers.chatModeChange);
+      this.ws.on("chat-compact", this.boundHandlers.chatCompact);
     }
   }
 
@@ -321,6 +324,12 @@ export class ChatPane implements Component, PaneKeyHandler {
     if (this.slashHintEl) {
       this.slashHintEl.style.display = "none";
     }
+  }
+
+  setSlashCommands(
+    commands: Array<{ name: string; description: string }>,
+  ): void {
+    this.systemInfo.slashCommands = commands;
   }
 
   private cancelStream(): void {
@@ -1222,11 +1231,33 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.chatInput?.focus();
   }
 
+  private handleCompact(_msg: ChatCompactMessage): void {
+    // Clear the message list — the handoff context is preserved server-side
+    // as the first message of the new session.
+    this.messagesEl.innerHTML = "";
+    this.streamRenderer = null;
+    this.currentAssistantEl = null;
+    this.totalTokens = 0;
+    this.totalCost = 0;
+    this.tokensEl.textContent = "";
+    this.costEl.textContent = "";
+
+    const marker = document.createElement("div");
+    marker.className = "chat-compact-marker";
+    marker.textContent = "Session compacted";
+    this.messagesEl.appendChild(marker);
+
+    this.isStreaming = false;
+    this.chatInput?.setDisabled(false);
+    this.chatInput?.focus();
+  }
+
   dispose(): void {
     if (this.autoSubscribe) {
       this.ws.off("chat-stream", this.boundHandlers.chatStream);
       this.ws.off("chat-history", this.boundHandlers.chatHistory);
       this.ws.off("chat-mode-change", this.boundHandlers.chatModeChange);
+      this.ws.off("chat-compact", this.boundHandlers.chatCompact);
     }
     this.chatInput?.dispose();
     this.diagramViewer?.dispose();

@@ -47,6 +47,7 @@ class MessageType:
     CHAT_STREAM = "chat-stream"  # Streaming event: { type, event: str, content?: str, usage?: dict, message?: str }
     CHAT_HISTORY = "chat-history"  # Chat history replay: { type, messages: list[dict] }
     CHAT_MODE_CHANGE = "chat-mode-change"  # Mode switched: { type, mode: str }
+    CHAT_COMPACT = "chat-compact"  # Session compacted: { type, context: str } — UI clears, new session seeded with context
     PROVIDER_LIST = "provider-list"  # Available providers: { type, providers: list, default?: str }
 
     # Orchestrator - Client -> Server

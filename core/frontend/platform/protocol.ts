@@ -53,6 +53,7 @@ export const MessageType = {
   CHAT_STREAM: "chat-stream",
   CHAT_HISTORY: "chat-history",
   CHAT_MODE_CHANGE: "chat-mode-change",
+  CHAT_COMPACT: "chat-compact",
   PROVIDER_LIST: "provider-list",
 
   // Orchestrator - Client -> Server

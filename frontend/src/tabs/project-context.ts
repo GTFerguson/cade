@@ -69,6 +69,13 @@ export class ProjectContextImpl implements IProjectContext {
           this.terminalManager?.setMode("chat");
         }
       }
+
+      // Seed the chat `/` completion list before the first chat turn.
+      // The provider's SystemInfo event refreshes this on stream start,
+      // but without seeding here there would be no hints until then.
+      if (msg.slashCommands) {
+        this.terminalManager?.getChatPane()?.setSlashCommands(msg.slashCommands);
+      }
     },
     fileTree: () => {
       if (this.pendingSession != null) {
@@ -219,6 +226,7 @@ export class ProjectContextImpl implements IProjectContext {
 
     this.rightPane = new RightPaneManager(viewerEl, this.ws);
     this.rightPane.initialize();
+    this.rightPane.getViewer().setProjectPath(this.projectPath);
 
     // Wire agent overview pane in the right pane
     this.rightPane.setAgentManager(this.agentManager);

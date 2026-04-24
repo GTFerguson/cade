@@ -262,6 +262,7 @@ export interface ConnectedMessage extends BaseMessage {
   defaultProvider?: string;
   chatMode?: string;
   launchPreset?: LaunchPreset;
+  slashCommands?: Array<{ name: string; description: string }>;
 }
 
 /**
@@ -499,6 +500,11 @@ export interface ChatModeChangeMessage extends BaseMessage {
   mode: string;
 }
 
+export interface ChatCompactMessage extends BaseMessage {
+  type: "chat-compact";
+  context: string;
+}
+
 /**
  * Agent spawned (server -> client).
  */
@@ -611,6 +617,7 @@ export type ServerMessage =
   | ChatStreamMessage
   | ChatHistoryMessage
   | ChatModeChangeMessage
+  | ChatCompactMessage
   | ProviderListMessage
   | NeovimReadyMessage
   | NeovimOutputMessage

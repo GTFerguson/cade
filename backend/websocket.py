@@ -43,7 +43,7 @@ from backend.protocol import ErrorCode, MessageType, SessionKey
 from core.backend.providers.config import get_providers_config
 from backend.providers.registry import ProviderRegistry
 from backend.providers.claude_code_provider import ClaudeCodeProvider
-from backend.prompts import BUNDLED_SKILLS_DIR, compose_prompt, get_rules
+from backend.prompts import BUNDLED_SKILLS_DIR, build_slash_commands, compose_prompt
 from core.backend.providers.types import ChatDone, ChatError, ChatMessage, SystemInfo, TextDelta, ThinkingDelta, ToolResult, ToolUseStart
 from backend.session import load_session, save_session
 from backend.terminal.pty import PTYManager
@@ -110,6 +110,7 @@ class ConnectionHandler:
         self._nkrdn: "NkrdnService | None" = None
         self._chat_session: ChatSession | None = None
         self._chat_task: asyncio.Task | None = None
+        self._compact_pending = False
         self._provider_registry: ProviderRegistry | None = None
         self._dashboard: "DashboardHandler | None" = None
         # Google id_token extracted from the WS query string; forwarded to the
@@ -381,6 +382,16 @@ class ConnectionHandler:
                     )
             except Exception as e:  # noqa: BLE001
                 logger.warning("Failed to register project-local provider: %s", e)
+
+        # Tell PermissionManager which provider path is active so the frontend
+        # can show the right permissions UI (single toggle for CC, full panel for API).
+        if self._provider_registry is not None:
+            default_provider = self._provider_registry.get_default()
+            from backend.providers.claude_code_provider import ClaudeCodeProvider
+            from backend.permissions.manager import get_permission_manager
+            get_permission_manager().provider_type = (
+                "cc" if isinstance(default_provider, ClaudeCodeProvider) else "api"
+            )
 
         registry = get_registry()
 
@@ -689,60 +700,7 @@ class ConnectionHandler:
         if session is not None:
             message["session"] = session
 
-        # Build slashCommands from rules (skill descriptions) + CADE native commands
-        from pathlib import Path
-        rules = get_rules()
-        skill_commands = [
-            {"name": name, "description": desc}
-            for name, _content, desc in rules
-            if desc
-        ]
-        native_commands = [
-            {"name": "plan", "description": "Switch to Architect mode (read-only)"},
-            {"name": "code", "description": "Switch to Code mode (full access)"},
-            {"name": "review", "description": "Switch to Review mode (read-only)"},
-            {"name": "orchestrator", "description": "Switch to Orchestrator mode"},
-            {"name": "compact", "description": "Compact conversation context"},
-            {"name": "cost", "description": "Show token usage and cost"},
-            {"name": "context", "description": "Show context window usage"},
-        ]
-        # Skills from bundled + ~/.claude/skills/ (read from SKILL.md frontmatter)
-        # Bundled skills load first; user skills with same name are ignored
-        import re
-        seen_skill_names: set[str] = set()
-
-        def _add_skill_commands_from_dir(skills_dir: Path) -> None:
-            if not skills_dir.exists():
-                return
-            for skill_dir in sorted(skills_dir.iterdir()):
-                if not skill_dir.is_dir():
-                    continue
-                skill_md = skill_dir / "SKILL.md"
-                if not skill_md.exists():
-                    continue
-                text = skill_md.read_text()
-                fm_match = re.match(r"^---\n(.*?)\n---", text, re.DOTALL)
-                if not fm_match:
-                    continue
-                name_val, desc_val = None, None
-                for line in fm_match.group(1).split("\n"):
-                    if ":" in line:
-                        k, v = line.split(":", 1)
-                        k = k.strip()
-                        v = v.strip()
-                        if k == "name":
-                            name_val = v
-                        elif k == "description":
-                            desc_val = v
-                if name_val and desc_val and name_val not in seen_skill_names:
-                    seen_skill_names.add(name_val)
-                    native_commands.append({"name": name_val, "description": desc_val})
-
-        # Bundled skills first, then user skills (user skills with same name ignored)
-        _add_skill_commands_from_dir(BUNDLED_SKILLS_DIR)
-        _add_skill_commands_from_dir(Path.home() / ".claude" / "skills")
-
-        message["slashCommands"] = native_commands
+        message["slashCommands"] = build_slash_commands()
 
         await self._send(message)
 
@@ -1417,6 +1375,8 @@ class ConnectionHandler:
             # so MCP tools load fresh (resumed sessions remember stale MCP state)
             if mode == "orchestrator" or old_mode == "orchestrator":
                 provider._has_session = False
+        elif hasattr(provider, "set_mode"):
+            provider.set_mode(mode)
 
         await self._send({
             "type": MessageType.CHAT_MODE_CHANGE,
@@ -1434,13 +1394,18 @@ class ConnectionHandler:
             await self._handle_mode_switch(self.CADE_MODE_COMMANDS[content])
             return
 
+        # /compact: generate handoff summary then reset session
+        if content == "/compact":
+            _, skill_content = self._try_load_skill("/handoff")
+            content = skill_content if skill_content else "Summarise this session concisely as a handoff so another agent can continue."
+            self._compact_pending = True
+
         # Intercept skill invocations: /<skillname> ... → load SKILL.md, prepend content
-        remaining, skill_content = self._try_load_skill(content)
-        if skill_content:
-            content = skill_content + ("\n\n" + remaining if remaining else "")
         elif content.startswith("/"):
+            remaining, skill_content = self._try_load_skill(content)
+            if skill_content:
+                content = skill_content + ("\n\n" + remaining if remaining else "")
             # Unknown slash command — pass through as-is (LLM handles it)
-            pass
 
         provider_id = data.get("providerId")
 
@@ -1511,13 +1476,16 @@ class ConnectionHandler:
                     break
 
                 if isinstance(event, SystemInfo):
+                    # CADE owns the slash-command list (rules + native + bundled
+                    # + ~/.claude/skills/). The provider's own list is ignored so
+                    # LiteLLM and Claude Code paths show the same options.
                     await self._send({
                         "type": MessageType.CHAT_STREAM,
                         "event": "system-info",
                         "model": event.model,
                         "sessionId": event.session_id,
                         "tools": event.tools,
-                        "slashCommands": event.slash_commands,
+                        "slashCommands": build_slash_commands(),
                         "version": event.version,
                     })
                 elif isinstance(event, TextDelta):
@@ -1566,11 +1534,12 @@ class ConnectionHandler:
 
         except asyncio.CancelledError:
             logger.debug("Chat stream cancelled")
-            # Terminate subprocess if running
+            self._compact_pending = False
             if isinstance(provider, ClaudeCodeProvider):
                 await provider.cancel()
         except Exception as e:
             logger.exception("Chat stream error: %s", e)
+            self._compact_pending = False
             await self._send({
                 "type": MessageType.CHAT_STREAM,
                 "event": "error",
@@ -1578,6 +1547,36 @@ class ConnectionHandler:
             })
         finally:
             self._chat_session.finish_response()
+            if self._compact_pending:
+                await self._do_compact()
+
+    async def _do_compact(self) -> None:
+        """Reset the session after /compact, seeding the new one with the handoff."""
+        self._compact_pending = False
+        if self._chat_session is None:
+            return
+
+        # Pull the just-generated handoff text
+        handoff_text = ""
+        for msg in reversed(self._chat_session.get_messages()):
+            if msg.role == "assistant":
+                handoff_text = msg.content
+                break
+
+        # Replace session with a fresh one seeded with the handoff as context
+        registry = get_chat_registry()
+        session_key = str(self._session_id or id(self))
+        provider_name = self._chat_session.provider_name
+        registry.remove(session_key)
+        new_session = registry.get_or_create(session_key, provider_name=provider_name)
+        if handoff_text:
+            new_session.add_assistant_message(handoff_text)
+        self._chat_session = new_session
+
+        await self._send({
+            "type": MessageType.CHAT_COMPACT,
+            "context": handoff_text,
+        })
 
     async def _handle_provider_switch(self, data: dict) -> None:
         """Handle provider switch request."""
