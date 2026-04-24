@@ -1,8 +1,9 @@
 """File editing tool executor for LLM agents.
 
-Tools: read_file, write_file, edit_file, delete_file.
+Tools: read_file, read_files, list_directory, write_file, edit_file,
+       multi_edit, delete_file, move_file.
 
-Write/edit/delete operations enforce:
+Write/edit/delete/move operations enforce:
   1. Mode permissions — architect/review modes block writes.
   2. Project scope  — paths outside the project root require explicit user approval,
                       which is then cached at directory level for the session.
@@ -33,6 +34,20 @@ _READ_SCHEMA: dict[str, Any] = {
     "required": ["path"],
 }
 
+_READ_FILES_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "paths": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "List of file paths (absolute or relative to project root). Preferred over read_file when reading 2+ files.",
+        },
+        "offset": {"type": "integer", "description": "Start line number applied to each file, 1-indexed (optional)"},
+        "limit": {"type": "integer", "description": "Maximum lines returned per file (optional)"},
+    },
+    "required": ["paths"],
+}
+
 _WRITE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -52,12 +67,44 @@ _EDIT_SCHEMA: dict[str, Any] = {
     "required": ["path", "old_str", "new_str"],
 }
 
+_MULTI_EDIT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "path": {"type": "string", "description": "File path (absolute or relative to project root)"},
+        "edits": {
+            "type": "array",
+            "description": (
+                "Ordered list of edits to apply. Each old_str must be unique at the time "
+                "its edit runs (i.e. after preceding edits have been applied)."
+            ),
+            "items": {
+                "type": "object",
+                "properties": {
+                    "old_str": {"type": "string", "description": "Exact string to replace"},
+                    "new_str": {"type": "string", "description": "Replacement string"},
+                },
+                "required": ["old_str", "new_str"],
+            },
+        },
+    },
+    "required": ["path", "edits"],
+}
+
 _DELETE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "path": {"type": "string", "description": "File path to delete (absolute or relative to project root)"},
     },
     "required": ["path"],
+}
+
+_MOVE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "src": {"type": "string", "description": "Source file path (absolute or relative to project root)"},
+        "dst": {"type": "string", "description": "Destination file path (absolute or relative to project root). Parent directories are created if needed."},
+    },
+    "required": ["src", "dst"],
 }
 
 _LIST_SCHEMA: dict[str, Any] = {
@@ -72,10 +119,21 @@ _ALL_DEFINITIONS = [
     ToolDefinition(
         name="read_file",
         description=(
-            "Read a file's contents. Use offset/limit to read a specific range of lines. "
-            "Returns content with 1-indexed line numbers prefixed."
+            "Read a single file's contents. Use offset/limit to read a specific range of lines. "
+            "Returns content with 1-indexed line numbers prefixed. "
+            "Prefer read_files when you need to read more than one file."
         ),
         parameters_schema=_READ_SCHEMA,
+    ),
+    ToolDefinition(
+        name="read_files",
+        description=(
+            "Read multiple files in a single call. Returns each file's content separated by "
+            "'===== {path} =====' delimiters, with 1-indexed line numbers. Missing files are "
+            "reported in a trailing '=== missing ===' section. Use this instead of calling "
+            "read_file repeatedly — it saves turns and tokens. Total output is capped at ~256KB."
+        ),
+        parameters_schema=_READ_FILES_SCHEMA,
     ),
     ToolDefinition(
         name="list_directory",
@@ -94,19 +152,43 @@ _ALL_DEFINITIONS = [
         name="edit_file",
         description=(
             "Replace a unique string in a file. old_str must appear exactly once. "
-            "Use more surrounding context to disambiguate if there are multiple matches."
+            "Use more surrounding context to disambiguate if there are multiple matches. "
+            "Prefer multi_edit when making several changes to the same file."
         ),
         parameters_schema=_EDIT_SCHEMA,
     ),
     ToolDefinition(
+        name="multi_edit",
+        description=(
+            "Apply multiple string replacements to a single file in one call. "
+            "Edits are applied in order; each old_str must be unique in the file as it "
+            "exists after previous edits. All-or-nothing: if any edit fails, none are "
+            "applied. Prefer this over repeated edit_file calls on the same file."
+        ),
+        parameters_schema=_MULTI_EDIT_SCHEMA,
+    ),
+    ToolDefinition(
         name="delete_file",
-        description="Delete a file from disk.",
+        description=(
+            "Permanently delete a file from disk. Use this when you need to remove a file — "
+            "don't use write_file to blank it out. Requires write permission."
+        ),
         parameters_schema=_DELETE_SCHEMA,
+    ),
+    ToolDefinition(
+        name="move_file",
+        description=(
+            "Move or rename a file. Use instead of read_file + write_file + delete_file, "
+            "which wastes three tool calls and three permission prompts for one operation. "
+            "Creates parent directories at the destination if needed."
+        ),
+        parameters_schema=_MOVE_SCHEMA,
     ),
 ]
 
-_READ_ONLY_COUNT = 2  # read_file + list_directory are always available
-_WRITE_TOOL_NAMES = {"write_file", "edit_file", "delete_file"}
+_READ_ONLY_COUNT = 3  # read_file + read_files + list_directory are always available
+_READ_FILES_TOTAL_CAP = 256 * 1024  # 256KB total response cap
+_WRITE_TOOL_NAMES = {"write_file", "edit_file", "multi_edit", "delete_file", "move_file"}
 
 
 class FileToolExecutor:
@@ -136,14 +218,20 @@ class FileToolExecutor:
         try:
             if name == "read_file":
                 return self._read_file(arguments)
+            if name == "read_files":
+                return self._read_files(arguments)
             if name == "list_directory":
                 return self._list_directory(arguments)
             if name == "write_file":
                 return await self._write_file(arguments)
             if name == "edit_file":
                 return await self._edit_file(arguments)
+            if name == "multi_edit":
+                return await self._multi_edit(arguments)
             if name == "delete_file":
                 return await self._delete_file(arguments)
+            if name == "move_file":
+                return await self._move_file(arguments)
             return f"Error: unknown tool '{name}'"
         except Exception as e:
             logger.error("file tool %s failed: %s", name, e)
@@ -258,6 +346,58 @@ class FileToolExecutor:
 
         return "\n".join(f"{start + i + 1}\t{line}" for i, line in enumerate(selected))
 
+    def _read_files(self, args: dict) -> str:
+        raw_paths = args.get("paths") or []
+        if not isinstance(raw_paths, list) or not raw_paths:
+            return "Error: paths must be a non-empty list of file paths"
+
+        offset = args.get("offset")
+        limit = args.get("limit")
+        start = (offset - 1) if offset and offset > 0 else 0
+
+        sections: list[str] = []
+        missing: list[str] = []
+        total_size = 0
+        truncated = False
+
+        for raw in raw_paths:
+            path = self._resolve(str(raw))
+
+            if not path.exists() or not path.is_file():
+                missing.append(str(path))
+                continue
+
+            try:
+                lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            except Exception as e:
+                missing.append(f"{path} (read error: {e})")
+                continue
+
+            end = (start + limit) if limit and limit > 0 else len(lines)
+            selected = lines[start:end]
+            body = "\n".join(f"{start + i + 1}\t{line}" for i, line in enumerate(selected))
+            section = f"===== {path} =====\n{body}"
+
+            if total_size + len(section) > _READ_FILES_TOTAL_CAP:
+                remaining = len(raw_paths) - len(sections) - len(missing)
+                sections.append(
+                    f"===== (truncated) =====\n"
+                    f"Output cap reached ({_READ_FILES_TOTAL_CAP} bytes). "
+                    f"{remaining} file(s) not read. Request them in a follow-up call."
+                )
+                truncated = True
+                break
+
+            sections.append(section)
+            total_size += len(section) + 1
+
+        result = "\n".join(sections)
+        if missing:
+            result += "\n=== missing ===\n" + "\n".join(missing)
+        if truncated and not sections:
+            result = "Error: first file exceeds output cap — use read_file with offset/limit"
+        return result
+
     async def _write_file(self, args: dict) -> str:
         path = self._resolve(args["path"])
         content: str = args.get("content", "")
@@ -311,6 +451,45 @@ class FileToolExecutor:
         await self._nvim_record_edit(path, content, new_content)
         return f"Edited {path}"
 
+    async def _multi_edit(self, args: dict) -> str:
+        path = self._resolve(args["path"])
+        edits: list[dict] = args.get("edits") or []
+
+        if not edits:
+            return "Error: edits list is required and must be non-empty"
+        if not path.exists():
+            return f"Error: file not found: {path}"
+
+        err = await self._check_write_permission(path, "multi_edit", args)
+        if err:
+            return err
+
+        try:
+            original = path.read_text(encoding="utf-8")
+        except Exception as e:
+            return f"Error reading file: {e}"
+
+        # Apply edits on a working copy; bail on first failure (atomic)
+        working = original
+        for i, edit in enumerate(edits):
+            old_str = edit.get("old_str", "")
+            new_str = edit.get("new_str", "")
+            if not old_str:
+                return f"Error: edit {i + 1} is missing old_str"
+            count = working.count(old_str)
+            if count == 0:
+                return f"Error: edit {i + 1} — old_str not found in file (after {i} previous edits applied)"
+            if count > 1:
+                return (
+                    f"Error: edit {i + 1} — old_str is ambiguous ({count} occurrences). "
+                    "Add more surrounding context to make it unique."
+                )
+            working = working.replace(old_str, new_str, 1)
+
+        path.write_text(working, encoding="utf-8")
+        await self._nvim_record_edit(path, original, working)
+        return f"Applied {len(edits)} edit(s) to {path}"
+
     async def _delete_file(self, args: dict) -> str:
         path = self._resolve(args["path"])
 
@@ -325,3 +504,28 @@ class FileToolExecutor:
 
         path.unlink()
         return f"Deleted {path}"
+
+    async def _move_file(self, args: dict) -> str:
+        import shutil
+        src = self._resolve(args["src"])
+        dst = self._resolve(args["dst"])
+
+        if not src.exists():
+            return f"Error: source not found: {src}"
+        if not src.is_file():
+            return f"Error: source is not a file: {src}"
+        if dst.is_dir():
+            return f"Error: destination is a directory: {dst}"
+
+        # Permission check on both paths — moving is effectively a write at dst and delete at src
+        err = await self._check_write_permission(src, "move_file", args)
+        if err:
+            return err
+        if dst != src:
+            err = await self._check_write_permission(dst, "move_file", args)
+            if err:
+                return err
+
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(dst))
+        return f"Moved {src} → {dst}"

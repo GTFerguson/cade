@@ -1023,7 +1023,10 @@ class ConnectionHandler:
                     await self._dashboard.handle_action(data)
             elif msg_type == MessageType.PERMISSION_APPROVE:
                 from backend.permissions.manager import get_permission_manager
-                await get_permission_manager().approve(data.get("requestId", ""))
+                await get_permission_manager().approve(
+                    data.get("requestId", ""),
+                    approve_for_session=bool(data.get("approveForSession", False)),
+                )
             elif msg_type == MessageType.PERMISSION_DENY:
                 from backend.permissions.manager import get_permission_manager
                 await get_permission_manager().deny(data.get("requestId", ""))

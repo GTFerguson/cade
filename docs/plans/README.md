@@ -9,7 +9,20 @@ tags: [index, plans]
 
 Intent before code exists. Plans are ephemeral — once the work ships and design knowledge graduates to architecture docs, the plan is deleted.
 
-## Active Plans
+## Active WIP
 
-- [[tool-support-and-failover]] — APIProvider tool support, FailoverProvider routing, Phase 2 skills + handoff compaction
-- [[agent-ui-system]] — Config-driven dashboard framework for agent-built interactive interfaces
+Work in active progress, tracked in [[handoff/]].
+
+## Planning
+
+Feature designs in [[planning/]].
+
+## Shipped
+
+Completed work in [[shipped/]].
+
+## Design
+
+Active designs and mockups in [[design/]].
+
+- [[design/dashboard-schema-overhaul|Dashboard Schema Overhaul]] — agent-authored, project-specific UI layer

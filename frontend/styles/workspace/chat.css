@@ -542,6 +542,16 @@
   border-color: var(--accent-green);
 }
 
+.chat-tool-approval-btn--session {
+  color: var(--accent-blue, var(--text-muted));
+  border-color: color-mix(in srgb, var(--accent-blue, var(--text-muted)) 30%, var(--border-color));
+  font-size: 10px;
+}
+.chat-tool-approval-btn--session:hover {
+  background: color-mix(in srgb, var(--accent-blue, var(--text-muted)) 8%, transparent);
+  border-color: var(--accent-blue, var(--text-muted));
+}
+
 .chat-tool-approval-btn--deny {
   color: var(--text-muted);
 }

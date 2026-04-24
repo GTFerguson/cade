@@ -8,10 +8,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
+
+
+def _default_approved_paths() -> set[str]:
+    """Scratch locations that are pre-approved for writes without prompting."""
+    paths = {"/tmp"}
+    tmpdir = os.environ.get("TMPDIR")
+    if tmpdir:
+        paths.add(tmpdir.rstrip("/"))
+    return paths
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +48,8 @@ class ConnectionState:
     allow_tools: bool = True
     allow_subagents: bool = True
     auto_approve_reports: bool = False
-    approved_paths: set[str] = field(default_factory=set)
+    approved_paths: set[str] = field(default_factory=_default_approved_paths)
+    approved_commands: set[str] = field(default_factory=set)
 
 
 class PermissionManager:
@@ -140,6 +151,12 @@ class PermissionManager:
     def approve_path(self, path: "Path", connection_id: str = "") -> None:  # noqa: F821
         self._state(connection_id).approved_paths.add(str(path.parent))
 
+    def is_command_approved(self, token: str, connection_id: str = "") -> bool:
+        return token in self._state(connection_id).approved_commands
+
+    def approve_command(self, token: str, connection_id: str = "") -> None:
+        self._state(connection_id).approved_commands.add(token)
+
     def register_broadcast(self, connection_id: str, fn: BroadcastFn) -> None:
         self._send_fns[connection_id] = fn
 
@@ -201,11 +218,23 @@ class PermissionManager:
 
         return result
 
-    async def approve(self, request_id: str) -> bool:
-        """Approve a pending permission request."""
+    async def approve(self, request_id: str, approve_for_session: bool = False) -> bool:
+        """Approve a pending permission request.
+
+        If approve_for_session is True and the request carries a _session_key
+        in its tool_input, that key is cached so future identical commands
+        skip the prompt for this connection.
+        """
         request = self._pending.get(request_id)
         if request is None:
             return False
+
+        if approve_for_session:
+            session_key = request.tool_input.get("_session_key", "")
+            if session_key:
+                self.approve_command(session_key, request.connection_id)
+                logger.info("Session-approved command token '%s' for connection %s",
+                            session_key, request.connection_id)
 
         if not request.result.done():
             request.result.set_result({"decision": "allow"})

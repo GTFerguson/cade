@@ -36,6 +36,15 @@ def _create_tool_registry(provider_config, working_dir: "Path | None" = None, co
         for defn in _ALL_DEFINITIONS:
             registry.register(file_executor, defn.name)
 
+        from backend.tools.discovery_tools import DiscoveryToolExecutor, _ALL_DEFINITIONS as _DISC_DEFS
+        discovery_executor = DiscoveryToolExecutor(_Path(working_dir))
+        for defn in _DISC_DEFS:
+            registry.register(discovery_executor, defn.name)
+
+        from backend.tools.bash_tool import BashToolExecutor
+        bash_executor = BashToolExecutor(_Path(working_dir), connection_id=connection_id)
+        registry.register(bash_executor, "bash")
+
     # Add MCP tools if configured via "mcp_servers" or "mcp-servers"
     mcp_servers = provider_config.extra.get("mcp_servers") or provider_config.extra.get("mcp-servers")
     if mcp_servers and isinstance(mcp_servers, dict):

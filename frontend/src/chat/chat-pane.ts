@@ -1046,6 +1046,34 @@ export class ChatPane implements Component, PaneKeyHandler {
     hint.className = "chat-tool-approval-hint";
     hint.textContent = "y / n";
 
+    // "Allow for session" — only shown for bash, caches the command token
+    if (msg.toolName === "bash") {
+      const firstToken = (msg.description ?? "").split(/\s+/)[0] ?? "";
+      const sessionBtn = document.createElement("button");
+      sessionBtn.className = "chat-tool-approval-btn chat-tool-approval-btn--session";
+      sessionBtn.textContent = firstToken ? `Allow '${firstToken}' for session` : "Allow for session";
+      sessionBtn.title = "Run now and skip approval for this command in future turns";
+      sessionBtn.addEventListener("click", () => {
+        if (requestId) {
+          this.ws.send({
+            type: MessageType.PERMISSION_APPROVE,
+            requestId,
+            approveForSession: true,
+          } as any);
+        }
+        block.classList.remove("chat-tool-use--approval");
+        block.classList.add("chat-tool-use--running");
+        icon.className = "chat-tool-icon running";
+        icon.textContent = "▸"; // ▸
+        approval.remove();
+        const status = document.createElement("span");
+        status.className = "chat-tool-status";
+        status.textContent = "running…";
+        header.appendChild(status);
+      });
+      actions.appendChild(sessionBtn);
+    }
+
     actions.appendChild(allowBtn);
     actions.appendChild(denyBtn);
     actions.appendChild(hint);
