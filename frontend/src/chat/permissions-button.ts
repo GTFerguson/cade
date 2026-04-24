@@ -37,6 +37,10 @@ export class PermissionsButton {
   };
   private open = false;
 
+  private repositionHandler = (): void => {
+    if (this.open) this.positionFlyout();
+  };
+
   constructor() {
     this.el = document.createElement("div");
     this.el.className = "permissions-widget";
@@ -44,13 +48,16 @@ export class PermissionsButton {
     this.flyout = this.buildFlyout();
     this.btn = this.buildButton();
 
-    this.el.appendChild(this.flyout);
     this.el.appendChild(this.btn);
+    // Portal the flyout to <body> so it escapes any ancestor stacking context
+    // or overflow clipping created by the chat/terminal pane hierarchy.
+    document.body.appendChild(this.flyout);
 
     document.addEventListener("click", (e) => {
-      if (this.open && !this.el.contains(e.target as Node)) {
-        this.closeFlyout();
-      }
+      if (!this.open) return;
+      const target = e.target as Node;
+      if (this.el.contains(target) || this.flyout.contains(target)) return;
+      this.closeFlyout();
     });
 
     this.loadState();
@@ -102,6 +109,11 @@ export class PermissionsButton {
     const row = document.createElement("div");
     row.className = "permissions-row";
     row.dataset["key"] = key;
+    row.style.cursor = "pointer";
+    row.addEventListener("click", () => {
+      const val = this.state[key];
+      void this.setPermission(key, !(typeof val === "boolean" ? val : true));
+    });
 
     const labelEl = document.createElement("span");
     labelEl.className = "permissions-row-label";
@@ -110,10 +122,8 @@ export class PermissionsButton {
     const toggle = document.createElement("button");
     toggle.className = "permissions-toggle";
     toggle.dataset["key"] = key;
-    toggle.addEventListener("click", () => {
-      const val = this.state[key];
-      void this.setPermission(key, !(typeof val === "boolean" ? val : true));
-    });
+    // Row click handles toggle; stop propagation to avoid double-firing
+    toggle.addEventListener("click", (e) => e.stopPropagation());
 
     row.appendChild(labelEl);
     row.appendChild(toggle);
@@ -165,6 +175,9 @@ export class PermissionsButton {
     this.flyout.classList.add("permissions-flyout--open");
     this.flyout.setAttribute("aria-hidden", "false");
     this.btn.classList.add("permissions-btn--active");
+    this.positionFlyout();
+    window.addEventListener("resize", this.repositionHandler);
+    window.addEventListener("scroll", this.repositionHandler, true);
   }
 
   private closeFlyout(): void {
@@ -172,6 +185,16 @@ export class PermissionsButton {
     this.flyout.classList.remove("permissions-flyout--open");
     this.flyout.setAttribute("aria-hidden", "true");
     this.btn.classList.remove("permissions-btn--active");
+    window.removeEventListener("resize", this.repositionHandler);
+    window.removeEventListener("scroll", this.repositionHandler, true);
+  }
+
+  private positionFlyout(): void {
+    const rect = this.btn.getBoundingClientRect();
+    // Anchor flyout's bottom-right to the button's top-right, opening upward
+    // and leftward. 6px gap matches the original design.
+    this.flyout.style.right = `${window.innerWidth - rect.right}px`;
+    this.flyout.style.bottom = `${window.innerHeight - rect.top + 6}px`;
   }
 
   private async loadState(): Promise<void> {

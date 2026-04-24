@@ -106,6 +106,13 @@
   overflow: hidden;
 }
 
+/* Right-pane viewer container — needs relative for flyout positioning */
+.right-pane-viewer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Resize handles */
 .resize-handle {
   background: var(--border-color);

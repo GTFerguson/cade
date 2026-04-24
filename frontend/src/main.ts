@@ -303,7 +303,12 @@ class App {
     // Check for ?project= URL param to skip splash (used in demo/testing)
     const urlParams = new URLSearchParams(window.location.search);
     const autoProject = urlParams.get("project");
-    if (autoProject) {
+    const isDemoMode = import.meta.env.DEV && urlParams.has("demo");
+    if (isDemoMode) {
+      // Demo mode: skip splash entirely, create a tab with a fake path
+      const tab = this.tabManager.createTab("/demo");
+      this.tabManager.switchTab(tab.id);
+    } else if (autoProject) {
       // Mount the splash even on auto-project so the Google Sign-In flow
       // (fired from `google-auth-required`) has a host to render its button.
       // Splash hides itself on first shell output, exactly as the manual flow.

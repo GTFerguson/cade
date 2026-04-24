@@ -94,7 +94,33 @@ interface Scenario {
   walk?: { payloads: unknown[]; intervalMs: number };
 }
 
+const VIEWER_MD = `# The Dockside Inn
+
+A low fire mutters in the hearth. Rex Halverson sits at the bar nursing something dark.
+
+## Recent Events
+
+- The crate in the alley was moved overnight
+- Someone has been watching the market lane
+- Rex won't talk about the Crossing
+
+## Notes
+
+> "There are questions that don't get asked twice in Niverport."
+
+\`\`\`python
+def solve_mystery():
+    clues = gather_clues()
+    return interrogate(clues)
+\`\`\`
+`;
+
 const SCENARIOS: Record<string, Scenario> = {
+  "viewer": {
+    initial: {
+      sources: {},
+    },
+  },
   "mobile-npc": {
     initial: dashboardPayload("room-inn", [REX]),
   },
@@ -152,16 +178,24 @@ export function activateDemoMode(ws: WebSocketClient): void {
   setTimeout(() => {
     ws.injectEvent("connected", {
       type: "connected",
-      workingDir: "",
+      workingDir: "/demo",
       resumed: true,
-      // Tells project-context to call terminalManager.setMode("chat") so the
-      // ChatPane is created before we inject chat-history below.
       providers: [{ name: "padarax", type: "api", model: "demo", capabilities: { streaming: false, tool_use: false, vision: false } }],
       defaultProvider: "padarax",
     });
 
     ws.injectEvent("dashboard-data", scenario.initial);
     ws.injectEvent("chat-history", { type: "chat-history", messages: DEMO_CHAT });
+
+    if (key === "viewer") {
+      ws.injectEvent("file-tree", { type: "file-tree", data: [] });
+      ws.injectEvent("file-content", {
+        type: "file-content",
+        path: "docs/dockside-inn.md",
+        content: VIEWER_MD,
+        fileType: "markdown",
+      });
+    }
 
     if (scenario.walk) {
       const { payloads, intervalMs } = scenario.walk;

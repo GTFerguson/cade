@@ -70,6 +70,10 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   private editorState: EditorModeState = createEditorModeState();
   private dashboardReturnCallback: (() => void) | null = null;
   private previewEl: HTMLElement | null = null;
+  private locked = false;
+  private projectPath: string | null = null;
+  private filterFlyoutEl: HTMLElement | null = null;
+  private cfgClickListener: ((e: MouseEvent) => void) | null = null;
   private boundHandlers = {
     fileContent: (message: any) => {
       this.currentPath = message.path;
@@ -78,6 +82,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       this.render();
     },
     viewFile: (message: any) => {
+      if (this.locked) return;
       if (message.isPlan) {
         if (!this.isPlanOverlayActive && this.currentPath !== null) {
           this.mainView = this.captureCurrentView();
@@ -95,6 +100,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       }
     },
     fileChange: (message: any) => {
+      if (this.locked) return;
       if (message.path === this.currentPath) {
         this.refresh();
       }
@@ -121,6 +127,19 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     this.ws.on("view-file", this.boundHandlers.viewFile);
     this.ws.on("file-change", this.boundHandlers.fileChange);
     this.renderEmpty();
+  }
+
+  setProjectPath(path: string): void {
+    this.projectPath = path;
+  }
+
+  isLocked(): boolean {
+    return this.locked;
+  }
+
+  toggleLock(): void {
+    this.locked = !this.locked;
+    void this.render();
   }
 
   on<K extends keyof MarkdownEvents>(
@@ -246,11 +265,46 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   }
 
   private renderEmpty(): void {
-    this.container.innerHTML = `
-      <div class="viewer-empty">
-        <p>Select a file to view</p>
-      </div>
-    `;
+    const header = document.createElement("div");
+    header.className = "viewer-header";
+
+    const headerLeft = document.createElement("div");
+    headerLeft.className = "viewer-header-left";
+    header.appendChild(headerLeft);
+
+    const filenameEl = document.createElement("span");
+    filenameEl.className = "viewer-filename";
+    filenameEl.textContent = "viewer";
+    header.appendChild(filenameEl);
+
+    const headerRight = document.createElement("div");
+    headerRight.className = "viewer-header-right";
+    headerRight.appendChild(this.buildLockButton());
+    header.appendChild(headerRight);
+
+    const content = document.createElement("div");
+    content.className = "viewer-empty";
+    const p = document.createElement("p");
+    p.textContent = "Select a file to view";
+    content.appendChild(p);
+
+    this.container.innerHTML = "";
+    this.container.appendChild(header);
+    this.container.appendChild(content);
+    if (this.filterFlyoutEl) this.container.appendChild(this.filterFlyoutEl);
+  }
+
+  private buildLockButton(): HTMLButtonElement {
+    const btn = document.createElement("button");
+    btn.className = "viewer-lock-btn" + (this.locked ? " viewer-lock-btn--locked" : "");
+    btn.title = this.locked
+      ? "Viewer locked — hooks cannot change it (click to unlock)"
+      : "Lock viewer to prevent hooks from changing it";
+    btn.innerHTML = this.locked
+      ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm0 2a3 3 0 0 1 3 3v3H9V7a3 3 0 0 1 3-3z"/></svg>'
+      : '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2H9V7a3 3 0 0 1 5.83-1 1 1 0 1 0 1.78-.92A5 5 0 0 0 12 2z"/></svg>';
+    btn.addEventListener("click", () => this.toggleLock());
+    return btn;
   }
 
   private async render(): Promise<void> {
@@ -264,27 +318,38 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     const header = document.createElement("div");
     header.className = "viewer-header";
 
+    // Left section: optional JSON toggle
+    const headerLeft = document.createElement("div");
+    headerLeft.className = "viewer-header-left";
+    header.appendChild(headerLeft);
+
+    // Center: filename
     const filename = document.createElement("span");
     filename.className = "viewer-filename";
     const displayName = this.currentPath.split("/").pop() ?? this.currentPath;
     filename.textContent = displayName;
     header.appendChild(filename);
 
+    // Right section: lock button + close/back button
+    const headerRight = document.createElement("div");
+    headerRight.className = "viewer-header-right";
+    headerRight.appendChild(this.buildLockButton());
     if (this.isPlanOverlayActive) {
       const closeBtn = document.createElement("button");
       closeBtn.className = "viewer-close-btn";
       closeBtn.textContent = "[x]";
       closeBtn.title = "Close plan (Esc)";
       closeBtn.addEventListener("click", () => this.closePlanOverlay());
-      header.appendChild(closeBtn);
+      headerRight.appendChild(closeBtn);
     } else if (this.dashboardReturnCallback) {
       const backBtn = document.createElement("button");
       backBtn.className = "viewer-close-btn";
       backBtn.textContent = "[← dash]";
       backBtn.title = "Return to dashboard (Esc)";
       backBtn.addEventListener("click", () => this.dashboardReturnCallback?.());
-      header.appendChild(backBtn);
+      headerRight.appendChild(backBtn);
     }
+    header.appendChild(headerRight);
 
     const content = document.createElement("div");
     content.className = "viewer-content";
@@ -314,22 +379,23 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     } else if (this.currentFileType === "json") {
       const viewerFactory = this.detectJsonViewerFactory();
       if (viewerFactory) {
+        // JSON mode toggle goes in the header's left section
         const toggleEl = document.createElement("span");
         toggleEl.className = "viewer-json-toggle";
 
         const rawBtn = document.createElement("button");
         rawBtn.className = "viewer-json-btn" + (!this.parsedMode ? " viewer-json-btn--active" : "");
         rawBtn.textContent = "[raw]";
-        rawBtn.addEventListener("click", () => { this.parsedMode = false; this.render(); });
+        rawBtn.addEventListener("click", () => { this.parsedMode = false; void this.render(); });
 
         const parsedBtn = document.createElement("button");
         parsedBtn.className = "viewer-json-btn" + (this.parsedMode ? " viewer-json-btn--active" : "");
         parsedBtn.textContent = "[parsed]";
-        parsedBtn.addEventListener("click", () => { this.parsedMode = true; this.render(); });
+        parsedBtn.addEventListener("click", () => { this.parsedMode = true; void this.render(); });
 
         toggleEl.appendChild(rawBtn);
         toggleEl.appendChild(parsedBtn);
-        header.appendChild(toggleEl);
+        headerLeft.appendChild(toggleEl);
 
         if (this.parsedMode) {
           this.renderParsedContent(content, viewerFactory);
@@ -354,7 +420,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
     const statusMode = document.createElement("span");
     statusMode.className = "status-mode";
-    statusMode.textContent = "VIEW";
+    statusMode.textContent = this.locked ? "LOCK" : "VIEW";
 
     const statusFilename = document.createElement("span");
     statusFilename.className = "status-filename";
@@ -375,11 +441,28 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       statusline.appendChild(statusLines);
     }
 
+    if (this.projectPath) {
+      const cfgBtn = document.createElement("button");
+      cfgBtn.className = "viewer-cfg-btn" + (this.filterFlyoutEl ? " viewer-cfg-btn--active" : "");
+      cfgBtn.textContent = "[filter]";
+      cfgBtn.title = "Manage viewer ignore patterns for this project";
+      cfgBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        void this.openFilterFlyout();
+      });
+      statusline.appendChild(cfgBtn);
+    }
+
     this.container.innerHTML = "";
     this.container.appendChild(header);
     this.container.appendChild(content);
     this.container.appendChild(statusline);
     this.contentContainer = content;
+
+    // Re-attach flyout if open (innerHTML clear removes it from DOM)
+    if (this.filterFlyoutEl) {
+      this.container.appendChild(this.filterFlyoutEl);
+    }
 
     if (scrollTop > 0) {
       requestAnimationFrame(() => {
@@ -388,6 +471,106 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
         }
       });
     }
+  }
+
+  private async openFilterFlyout(): Promise<void> {
+    if (this.filterFlyoutEl) {
+      this.closeFilterFlyout();
+      void this.render();
+      return;
+    }
+
+    const flyout = document.createElement("div");
+    flyout.className = "viewer-cfg-flyout";
+
+    const title = document.createElement("div");
+    title.className = "viewer-cfg-flyout-title";
+    title.textContent = "ignore patterns";
+    flyout.appendChild(title);
+
+    const desc = document.createElement("div");
+    desc.className = "viewer-cfg-flyout-desc";
+    desc.textContent = "Files matching these globs won't open in the viewer (one per line):";
+    flyout.appendChild(desc);
+
+    const textarea = document.createElement("textarea");
+    textarea.className = "viewer-cfg-flyout-input";
+    textarea.placeholder = "*.lock\nnode_modules/**\ndist/**";
+    textarea.rows = 5;
+    textarea.spellcheck = false;
+    flyout.appendChild(textarea);
+
+    if (this.projectPath) {
+      try {
+        const res = await fetch(`/api/project/filters?project=${encodeURIComponent(this.projectPath)}`);
+        if (res.ok) {
+          const data = await res.json() as { exclude?: string[] };
+          textarea.value = (data.exclude ?? []).join("\n");
+        }
+      } catch { /* keep empty */ }
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "viewer-cfg-flyout-actions";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "viewer-cfg-flyout-btn";
+    saveBtn.textContent = "[save]";
+    saveBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!this.projectPath) return;
+      const patterns = textarea.value.split("\n").map((p) => p.trim()).filter(Boolean);
+      try {
+        await fetch("/api/project/filters", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project: this.projectPath, exclude: patterns }),
+        });
+      } catch { /* best-effort */ }
+      this.closeFilterFlyout();
+      void this.render();
+    });
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "viewer-cfg-flyout-btn";
+    cancelBtn.textContent = "[cancel]";
+    cancelBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.closeFilterFlyout();
+      void this.render();
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    flyout.appendChild(actions);
+
+    this.container.appendChild(flyout);
+    this.filterFlyoutEl = flyout;
+
+    textarea.focus();
+
+    this.cfgClickListener = (e: MouseEvent) => {
+      if (this.filterFlyoutEl && !this.filterFlyoutEl.contains(e.target as Node)) {
+        this.closeFilterFlyout();
+        void this.render();
+      }
+    };
+    setTimeout(() => {
+      if (this.cfgClickListener) {
+        document.addEventListener("click", this.cfgClickListener);
+      }
+    }, 0);
+
+    void this.render();
+  }
+
+  private closeFilterFlyout(): void {
+    if (this.cfgClickListener) {
+      document.removeEventListener("click", this.cfgClickListener);
+      this.cfgClickListener = null;
+    }
+    this.filterFlyoutEl?.remove();
+    this.filterFlyoutEl = null;
   }
 
   private detectJsonViewerFactory(): ReturnType<typeof viewerRegistry.detect> {
@@ -446,6 +629,10 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
     // View mode: 'i' enters Normal mode (markdown) or opens Neovim (other files)
     if (this.editorState.mode === "view") {
+      if (e.key === "l" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        this.toggleLock();
+        return true;
+      }
       if (e.key === "i" && this.currentPath !== null) {
         if (this.currentFileType === "markdown") {
           enterNormalMode(this.editorState, this.editorCallbacks(), this.ws);
@@ -513,6 +700,8 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
     this.activeParsedComponent?.dispose();
     this.activeParsedComponent = null;
+
+    this.closeFilterFlyout();
 
     this.ws.off("file-content", this.boundHandlers.fileContent);
     this.ws.off("view-file", this.boundHandlers.viewFile);

@@ -125,10 +125,10 @@ def find_project_root(start_dir):
 
 
 def read_project_filters(project_root):
-    """Read include globs from <project_root>/.cade/hook-filters.json.
+    """Read filters from <project_root>/.cade/hook-filters.json.
 
-    Expected shape: {"include": ["plans/*.md", "content/*.json"]}
-    Returns the include list, or None if not present / unreadable.
+    Expected shape: {"include": ["plans/*.md"], "exclude": ["*.lock"]}
+    Returns {"include": [...], "exclude": [...]} or None if not present.
     """
     if not project_root:
         return None
@@ -138,16 +138,21 @@ def read_project_filters(project_root):
     try:
         with open(filters_path) as f:
             data = json.load(f)
+        result = {}
         include = data.get("include")
         if isinstance(include, list) and all(isinstance(p, str) for p in include):
-            return include
+            result["include"] = include
+        exclude = data.get("exclude")
+        if isinstance(exclude, list) and all(isinstance(p, str) for p in exclude):
+            result["exclude"] = exclude
+        return result if result else None
     except Exception as e:
         log("Failed to read project filters %s: %s" % (filters_path, e))
     return None
 
 
 def matches_project_filters(file_path, project_root, patterns):
-    """Match file_path (absolute) against project-relative include globs.
+    """Match file_path (absolute) against project-relative globs.
 
     Patterns are fnmatch-style ('*' matches anything including '/').
     """
@@ -159,15 +164,22 @@ def matches_project_filters(file_path, project_root, patterns):
 
 
 def matches_filter(file_path, cwd):
-    """Return True if the file passes the configured filter.
+    """Return True if the file should be sent to the CADE viewer.
 
-    Filter layers (any match → True):
-      1. Global FILTER_MODE — 'plans_only' (default) matches plans/*.md
-         anywhere; 'all_files' matches everything.
-      2. Per-project filters — <project_root>/.cade/hook-filters.json
-         adds project-specific include globs (e.g. content/*.json for
-         a game world repo). Layered on top of global, never replaces it.
+    Filter layers applied in order:
+      1. Exclude patterns in hook-filters.json block the file (highest priority).
+      2. Global FILTER_MODE — 'plans_only' matches plans/*.md; 'all_files' passes all.
+      3. Per-project include globs add extra files on top of the global mode.
     """
+    project_root = find_project_root(cwd)
+    project_filters = read_project_filters(project_root)
+
+    # Exclude patterns override everything — if matched, never send to viewer
+    if project_filters and project_root:
+        exclude = project_filters.get("exclude", [])
+        if exclude and matches_project_filters(file_path, project_root, exclude):
+            return False
+
     if FILTER_MODE == "all_files":
         return True
 
@@ -175,11 +187,11 @@ def matches_filter(file_path, cwd):
     if "plans/" in file_path and file_path.endswith(".md"):
         return True
 
-    # Project-specific additions
-    project_root = find_project_root(cwd)
-    project_patterns = read_project_filters(project_root)
-    if project_patterns and matches_project_filters(file_path, project_root, project_patterns):
-        return True
+    # Project-specific include additions
+    if project_filters and project_root:
+        include = project_filters.get("include", [])
+        if include and matches_project_filters(file_path, project_root, include):
+            return True
 
     return False
 

@@ -592,6 +592,10 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     # --- Permission Prompt API ---
 
+    # Tool name sets for auto-classification at the MCP permission boundary
+    _READ_TOOLS = frozenset({"Read", "Glob", "Grep", "LS", "list_directory", "View", "Cat"})
+    _WRITE_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "Create", "Delete", "Move", "Rename"})
+
     class PermissionPromptRequest(BaseModel):
         tool_name: str
         description: str
@@ -599,9 +603,33 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.post("/api/permissions/prompt-and-wait")
     async def permission_prompt_and_wait(body: PermissionPromptRequest) -> JSONResponse:
-        """Request user permission for a tool use. Blocks until user decides."""
+        """Request user permission for a tool use.
+
+        - Category ON  → auto-approve (no prompt)
+        - Category OFF → interactive prompt so the user can allow/deny per-request
+        - allow_tools OFF → interactive prompt for all tool calls
+        """
         from backend.permissions.manager import get_permission_manager
         manager = get_permission_manager()
+
+        tool = body.tool_name
+
+        if tool in _READ_TOOLS:
+            if manager.allow_read:
+                return JSONResponse({"decision": "allow"})
+            # Read is off — fall through to interactive prompt below
+
+        elif tool in _WRITE_TOOLS:
+            if manager.allow_write:
+                return JSONResponse({"decision": "allow"})
+            # Write is off — fall through to interactive prompt below
+
+        elif manager.allow_tools:
+            # Unclassified tool and tools are enabled — auto-approve
+            return JSONResponse({"decision": "allow"})
+        # else: tools off — fall through to interactive prompt below
+
+        # Interactive prompt: blocks until the user approves or denies in the UI
         result = await manager.request_permission(
             tool_name=body.tool_name,
             description=body.description,
@@ -632,10 +660,23 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     @app.post("/api/permissions/accept-edits")
     async def set_accept_edits(body: AcceptEditsRequest) -> JSONResponse:
-        """Toggle accept-edits mode — when enabled, agent writes auto-approve within scope."""
+        """Toggle accept-edits (alias for allow_write)."""
         from backend.permissions.manager import get_permission_manager
         get_permission_manager().set_accept_edits(body.enabled)
         return JSONResponse({"acceptEdits": body.enabled})
+
+    class SetPermissionRequest(BaseModel):
+        name: str
+        value: bool
+
+    @app.post("/api/permissions/set")
+    async def set_permission(body: SetPermissionRequest) -> JSONResponse:
+        """Set a named permission toggle."""
+        from backend.permissions.manager import get_permission_manager
+        ok = get_permission_manager().set_permission(body.name, body.value)
+        if not ok:
+            return JSONResponse({"error": f"Unknown permission: {body.name}"}, status_code=400)
+        return JSONResponse(get_permission_manager().get_permissions())
 
     @app.get("/api/permissions/state")
     async def get_permissions_state() -> JSONResponse:
@@ -644,8 +685,55 @@ def create_app(config: Config | None = None) -> FastAPI:
         perms = get_permission_manager()
         return JSONResponse({
             "mode": perms.get_mode(),
-            "acceptEdits": perms.accept_edits,
+            **perms.get_permissions(),
         })
+
+    # --- Project config API ---
+
+    class ProjectFiltersResponse(BaseModel):
+        include: list[str] = []
+        exclude: list[str] = []
+
+    class ProjectFiltersRequest(BaseModel):
+        project: str
+        include: list[str] = []
+        exclude: list[str] = []
+
+    @app.get("/api/project/filters")
+    async def get_project_filters(project: str) -> JSONResponse:
+        """Read .cade/hook-filters.json for the given project directory."""
+        import json as _json
+        project_path = Path(project).expanduser().resolve()
+        filters_file = project_path / ".cade" / "hook-filters.json"
+        if not filters_file.exists():
+            return JSONResponse({"include": [], "exclude": []})
+        try:
+            data = _json.loads(filters_file.read_text(encoding="utf-8"))
+            return JSONResponse({
+                "include": data.get("include", []),
+                "exclude": data.get("exclude", []),
+            })
+        except Exception as e:
+            return JSONResponse({"error": str(e), "include": [], "exclude": []}, status_code=500)
+
+    @app.post("/api/project/filters")
+    async def set_project_filters(body: ProjectFiltersRequest) -> JSONResponse:
+        """Write .cade/hook-filters.json for the given project directory."""
+        import json as _json
+        project_path = Path(body.project).expanduser().resolve()
+        cade_dir = project_path / ".cade"
+        filters_file = cade_dir / "hook-filters.json"
+        try:
+            cade_dir.mkdir(parents=True, exist_ok=True)
+            data: dict = {}
+            if body.include:
+                data["include"] = body.include
+            if body.exclude:
+                data["exclude"] = body.exclude
+            filters_file.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+            return JSONResponse({"success": True})
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
 
     # --- UI Tools API (called by MCP tools) ---
 

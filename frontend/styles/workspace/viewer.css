@@ -2,8 +2,8 @@
 
 /* Viewer styles */
 .viewer-header {
-  display: flex;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   padding: 6px 12px;
   background: var(--bg-secondary);
@@ -16,15 +16,52 @@
   position: relative;
 }
 
+.viewer-header-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.viewer-header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
 .viewer-filename {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: center;
+  padding: 0 8px;
+}
+
+.viewer-lock-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent-red);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 0;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.8;
+  transition: opacity 0.15s;
+}
+
+.viewer-lock-btn:hover {
+  opacity: 1;
+}
+
+.viewer-lock-btn--locked {
+  color: var(--accent-green);
 }
 
 .viewer-close-btn {
-  position: absolute;
-  right: 8px;
   background: transparent;
   border: none;
   color: var(--text-muted);
@@ -33,6 +70,8 @@
   cursor: pointer;
   padding: 0 4px;
   line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .viewer-close-btn:hover {
@@ -40,10 +79,9 @@
 }
 
 .viewer-json-toggle {
-  position: absolute;
-  left: 8px;
   display: flex;
   gap: 4px;
+  align-items: center;
 }
 
 .viewer-json-btn {
@@ -64,6 +102,108 @@
 }
 
 .viewer-json-btn--active {
+  color: var(--accent-green);
+}
+
+/* Filter config button in statusline */
+.viewer-cfg-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  margin-left: 8px;
+  text-transform: lowercase;
+  letter-spacing: 0;
+  flex-shrink: 0;
+}
+
+.viewer-cfg-btn:hover {
+  color: var(--text-primary);
+}
+
+.viewer-cfg-btn--active {
+  color: var(--accent-cyan);
+}
+
+/* Project filter flyout panel */
+.viewer-cfg-flyout {
+  position: absolute;
+  bottom: 32px;
+  right: 0;
+  width: 320px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  z-index: 200;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.viewer-cfg-flyout-title {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 8px;
+}
+
+.viewer-cfg-flyout-desc {
+  color: var(--text-secondary);
+  font-size: 11px;
+  margin-bottom: 8px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.viewer-cfg-flyout-input {
+  width: 100%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 8px;
+  resize: vertical;
+  box-sizing: border-box;
+  outline: none;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.viewer-cfg-flyout-input:focus {
+  border-color: var(--border-focus);
+}
+
+.viewer-cfg-flyout-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.viewer-cfg-flyout-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.viewer-cfg-flyout-btn:hover {
+  color: var(--text-primary);
+}
+
+.viewer-cfg-flyout-btn:first-child:hover {
   color: var(--accent-green);
 }
 
@@ -566,9 +706,7 @@
 }
 
 .mode-indicator {
-  position: absolute;
-  right: 8px;
-  padding: 2px 8px;
+  padding: 2px 4px;
   background: transparent;
   color: var(--accent-green);
   border-radius: 0;
@@ -576,6 +714,7 @@
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 
 .mode-indicator.mode-normal {
@@ -589,11 +728,10 @@
 }
 
 .viewer-dirty-indicator {
-  position: absolute;
-  left: 8px;
   color: var(--accent-orange);
   font-size: 11px;
   font-family: var(--font-mono);
+  white-space: nowrap;
 }
 
 /* ─── NPC viewer (flat, viewer-native) ─────────────────────────────────── */

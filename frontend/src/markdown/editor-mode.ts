@@ -442,22 +442,28 @@ export async function enterNormalMode(
   const header = document.createElement("div");
   header.className = "viewer-header normal-mode";
 
+  const headerLeft = document.createElement("div");
+  headerLeft.className = "viewer-header-left";
+  const dirtyIndicator = document.createElement("span");
+  dirtyIndicator.className = "viewer-dirty-indicator";
+  dirtyIndicator.textContent = "[+]";
+  dirtyIndicator.style.display = "none";
+  headerLeft.appendChild(dirtyIndicator);
+  header.appendChild(headerLeft);
+
   const filename = document.createElement("span");
   filename.className = "viewer-filename";
   const displayName = currentPath.split("/").pop() ?? currentPath;
   filename.textContent = displayName;
   header.appendChild(filename);
 
+  const headerRight = document.createElement("div");
+  headerRight.className = "viewer-header-right";
   const modeIndicator = document.createElement("span");
   modeIndicator.className = "mode-indicator mode-normal";
   modeIndicator.textContent = "[NORMAL]";
-  header.appendChild(modeIndicator);
-
-  const dirtyIndicator = document.createElement("span");
-  dirtyIndicator.className = "viewer-dirty-indicator";
-  dirtyIndicator.textContent = "[+]";
-  dirtyIndicator.style.display = "none";
-  header.appendChild(dirtyIndicator);
+  headerRight.appendChild(modeIndicator);
+  header.appendChild(headerRight);
 
   editorState.editorContainer = document.createElement("div");
   editorState.editorContainer.className = "milkdown-editor mode-normal";
