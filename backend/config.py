@@ -66,7 +66,7 @@ class Config:
 
     port: int = 3000
     host: str = "0.0.0.0"  # Listen on all interfaces for WSL connectivity
-    working_dir: Path = field(default_factory=Path.cwd)
+    working_dir: Path = field(default_factory=Path.home)
     shell_command: str = "bash"  # Default, overridden by detect_default_shell() in from_env()
     auto_start_claude: bool = True
     auto_open_browser: bool = True
@@ -101,7 +101,7 @@ class Config:
         return cls(
             port=int(os.getenv("CADE_PORT", "3000")),
             host=os.getenv("CADE_HOST", "0.0.0.0"),
-            working_dir=Path(os.getenv("CADE_WORKING_DIR", str(Path.cwd()))),
+            working_dir=Path(os.getenv("CADE_WORKING_DIR", str(Path.home()))),
             shell_command=os.getenv("CADE_SHELL_COMMAND", detect_default_shell()),
             auto_start_claude=os.getenv("CADE_AUTO_START_CLAUDE", "true").lower() == "true",
             auto_open_browser=os.getenv("CADE_AUTO_OPEN_BROWSER", "true").lower() == "true",

@@ -513,7 +513,11 @@ class App {
 
     tab.ws.on("connected", (message) => {
       this.tabManager.setConnected(tab.id, true);
-      if (message.workingDir) {
+      // Only accept the server's workingDir if this tab had no saved path.
+      // The server echoes back whatever the frontend sent — letting it
+      // overwrite an existing tab path causes drift when the backend
+      // defaults to a different cwd (e.g. started from a different project).
+      if (message.workingDir && !tab.projectPath) {
         this.tabManager.updateTabPath(tab.id, message.workingDir);
       }
       // Apply user config from server (keybindings, behavior, fonts, etc.)

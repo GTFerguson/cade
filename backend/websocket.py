@@ -400,6 +400,15 @@ class ConnectionHandler:
                 network_timeout=self._user_config.behavior.session.network_timeout,
             )
             self._session.connected_clients.add(self._ws)
+            # On resume, restore the session's original working directory if the
+            # incoming path differs (e.g. tab localStorage drifted to wrong project).
+            if not self._is_new_session and self._session.project_path != self._working_dir:
+                logger.warning(
+                    "Working dir mismatch on resume: incoming=%s, session=%s — restoring session path",
+                    self._working_dir,
+                    self._session.project_path,
+                )
+                self._working_dir = self._session.project_path
         else:
             from backend.terminal.pty import PTYManager
             pty = PTYManager()
