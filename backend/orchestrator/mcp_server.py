@@ -17,14 +17,16 @@ BACKEND_PORT = int(os.environ.get("CADE_BACKEND_PORT", "3000"))
 BACKEND_HOST = os.environ.get("CADE_BACKEND_HOST", "localhost")
 BASE_URL = f"http://{BACKEND_HOST}:{BACKEND_PORT}"
 
-# Auth token for API calls (optional, used in remote deployments)
 AUTH_TOKEN = os.environ.get("CADE_AUTH_TOKEN", "")
+CONNECTION_ID = os.environ.get("CADE_CONNECTION_ID", "")
 
 
 def _get_headers() -> dict[str, str]:
     headers: dict[str, str] = {}
     if AUTH_TOKEN:
         headers["Cookie"] = f"cade_session={AUTH_TOKEN}"
+    if CONNECTION_ID:
+        headers["X-Connection-Id"] = CONNECTION_ID
     return headers
 
 

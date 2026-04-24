@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import uvicorn
-from fastapi import Cookie, FastAPI, WebSocket
+from fastapi import Cookie, FastAPI, Request, WebSocket
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
@@ -488,14 +488,15 @@ def create_app(config: Config | None = None) -> FastAPI:
     # --- Orchestrator API ---
 
     @app.post("/api/orchestrator/spawn")
-    async def orchestrator_spawn(body: SpawnAgentRequest) -> JSONResponse:
+    async def orchestrator_spawn(request: Request, body: SpawnAgentRequest) -> JSONResponse:
         """Spawn an orchestrator agent."""
         from backend.orchestrator.manager import get_orchestrator_manager
         from backend.orchestrator.models import AgentSpec
 
+        connection_id = request.headers.get("X-Connection-Id", "")
         manager = get_orchestrator_manager()
         spec = AgentSpec(name=body.name, task=body.task, mode=body.mode)
-        record = await manager.spawn_agent(spec)
+        record = await manager.spawn_agent(spec, connection_id=connection_id)
         return JSONResponse({
             "agent_id": record.agent_id,
             "name": record.name,
@@ -555,14 +556,15 @@ def create_app(config: Config | None = None) -> FastAPI:
         return JSONResponse({"status": "rejected"})
 
     @app.post("/api/orchestrator/spawn-and-wait")
-    async def orchestrator_spawn_and_wait(body: SpawnAgentRequest) -> JSONResponse:
+    async def orchestrator_spawn_and_wait(request: Request, body: SpawnAgentRequest) -> JSONResponse:
         """Spawn an agent and block until its full lifecycle completes."""
         from backend.orchestrator.manager import get_orchestrator_manager
         from backend.orchestrator.models import AgentSpec
 
+        connection_id = request.headers.get("X-Connection-Id", "")
         manager = get_orchestrator_manager()
         spec = AgentSpec(name=body.name, task=body.task, mode=body.mode)
-        record = await manager.spawn_agent(spec)
+        record = await manager.spawn_agent(spec, connection_id=connection_id)
         result = await manager.await_completion(record.agent_id, timeout=3600.0)
         return JSONResponse(result)
 

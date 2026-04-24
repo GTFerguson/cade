@@ -6,6 +6,7 @@ import asyncio
 import logging
 import uuid
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -29,43 +30,72 @@ logger = logging.getLogger(__name__)
 BroadcastFn = Callable[[dict], Coroutine[Any, Any, None]]
 
 
+@dataclass
+class _ConnectionEntry:
+    send_fn: BroadcastFn
+    working_dir: Path | None = None
+
+
 class OrchestratorManager:
-    """Manages orchestrator agent lifecycle and output streaming."""
+    """Manages orchestrator agent lifecycle and output streaming.
+
+    Each agent is owned by the connection that spawned it. All broadcasts
+    are routed only to that connection's send function, preventing bleed-through
+    to other tabs/projects.
+    """
 
     def __init__(self) -> None:
         self._agents: dict[str, AgentRecord] = {}
         self._tasks: dict[str, asyncio.Task] = {}
         self._providers: dict[str, ClaudeCodeProvider] = {}
-        self._broadcast_fns: list[BroadcastFn] = []
-        self._working_dir: Path | None = None
+        self._connections: dict[str, _ConnectionEntry] = {}
 
-    def set_working_dir(self, path: Path) -> None:
-        self._working_dir = path
+    def register_connection(
+        self,
+        connection_id: str,
+        fn: BroadcastFn,
+        working_dir: Path | None = None,
+    ) -> None:
+        self._connections[connection_id] = _ConnectionEntry(
+            send_fn=fn, working_dir=working_dir
+        )
 
-    def register_broadcast(self, fn: BroadcastFn) -> None:
-        if fn not in self._broadcast_fns:
-            self._broadcast_fns.append(fn)
+    def unregister_connection(self, connection_id: str) -> None:
+        self._connections.pop(connection_id, None)
 
-    def unregister_broadcast(self, fn: BroadcastFn) -> None:
-        try:
-            self._broadcast_fns.remove(fn)
-        except ValueError:
-            pass
-
-    async def _broadcast(self, message: dict) -> None:
-        for fn in list(self._broadcast_fns):
+    async def _send_to(self, connection_id: str, message: dict) -> None:
+        """Send a message to one specific connection."""
+        entry = self._connections.get(connection_id)
+        if entry:
             try:
-                await fn(message)
+                await entry.send_fn(message)
             except Exception:
-                logger.debug("Broadcast callback failed", exc_info=True)
+                logger.debug("Send callback failed for connection %s", connection_id, exc_info=True)
+        elif not connection_id:
+            # No owner — fall back to broadcasting to all connections (legacy path)
+            for e in list(self._connections.values()):
+                try:
+                    await e.send_fn(message)
+                except Exception:
+                    logger.debug("Broadcast callback failed", exc_info=True)
+
+    async def _send_to_agent(self, agent_id: str, message: dict) -> None:
+        """Send a message to the connection that owns this agent."""
+        record = self._agents.get(agent_id)
+        if record:
+            await self._send_to(record.owner_connection_id, message)
 
     # ── Public API ──────────────────────────────────────────────────
 
-    async def spawn_agent(self, spec: AgentSpec) -> AgentRecord:
-        """Create a new agent in PENDING state and broadcast approval request."""
+    async def spawn_agent(
+        self, spec: AgentSpec, connection_id: str = ""
+    ) -> AgentRecord:
+        """Create a new agent in PENDING state and send approval request to its owner."""
         short_id = uuid.uuid4().hex[:6]
         agent_id = f"agent-{spec.name}-{short_id}"
-        logger.info("spawn_agent called: id=%s name=%s, broadcast_fns=%d", agent_id, spec.name, len(self._broadcast_fns))
+        logger.info(
+            "spawn_agent: id=%s name=%s connection=%s", agent_id, spec.name, connection_id
+        )
 
         record = AgentRecord(
             agent_id=agent_id,
@@ -73,21 +103,18 @@ class OrchestratorManager:
             task=spec.task,
             mode=spec.mode,
             state=AgentState.PENDING,
+            owner_connection_id=connection_id,
         )
         self._agents[agent_id] = record
 
-        # Broadcast inline approval to orchestrator's primary ChatPane (no agentId!)
-        msg = {
+        await self._send_to(connection_id, {
             "type": MessageType.CHAT_STREAM,
             "event": "agent-approval-request",
             "targetAgentId": agent_id,
             "name": spec.name,
             "task": spec.task,
             "mode": spec.mode,
-        }
-        logger.info("Broadcasting agent-approval-request: %s", msg)
-        await self._broadcast(msg)
-        logger.info("Broadcast complete, returning record in PENDING state")
+        })
 
         return record
 
@@ -98,6 +125,10 @@ class OrchestratorManager:
             return False
 
         record.spawn_approved = True
+        connection_id = record.owner_connection_id
+
+        entry = self._connections.get(connection_id)
+        working_dir = entry.working_dir if entry else None
 
         config = ProviderConfig(
             name=f"agent-{record.name}",
@@ -106,12 +137,11 @@ class OrchestratorManager:
         )
         provider = ClaudeCodeProvider(config)
         provider.set_mode(record.mode)
-        if self._working_dir:
-            provider.set_working_dir(self._working_dir)
+        if working_dir:
+            provider.set_working_dir(working_dir)
         self._providers[agent_id] = provider
 
-        # Broadcast AGENT_SPAWNED (triggers tab creation in frontend)
-        await self._broadcast({
+        await self._send_to(connection_id, {
             "type": MessageType.AGENT_SPAWNED,
             "agentId": agent_id,
             "name": record.name,
@@ -119,8 +149,7 @@ class OrchestratorManager:
             "mode": record.mode,
         })
 
-        # Broadcast resolution update to orchestrator's primary ChatPane
-        await self._broadcast({
+        await self._send_to(connection_id, {
             "type": MessageType.CHAT_STREAM,
             "event": "agent-approval-resolved",
             "targetAgentId": agent_id,
@@ -143,8 +172,7 @@ class OrchestratorManager:
         record.final_result = "Agent spawn was rejected by user."
         record.completion_event.set()
 
-        # Broadcast resolution update to orchestrator's primary ChatPane
-        await self._broadcast({
+        await self._send_to(record.owner_connection_id, {
             "type": MessageType.CHAT_STREAM,
             "event": "agent-approval-resolved",
             "targetAgentId": agent_id,
@@ -165,8 +193,7 @@ class OrchestratorManager:
         await self._set_state(agent_id, AgentState.CLOSED)
         record.completion_event.set()
 
-        # Close the agent tab
-        await self._broadcast({
+        await self._send_to_agent(agent_id, {
             "type": MessageType.AGENT_KILLED,
             "agentId": agent_id,
         })
@@ -185,8 +212,7 @@ class OrchestratorManager:
         await self._set_state(agent_id, AgentState.CLOSED)
         record.completion_event.set()
 
-        # Close the agent tab
-        await self._broadcast({
+        await self._send_to_agent(agent_id, {
             "type": MessageType.AGENT_KILLED,
             "agentId": agent_id,
         })
@@ -252,7 +278,7 @@ class OrchestratorManager:
         record.final_result = "Agent was killed by user."
         record.completion_event.set()
 
-        await self._broadcast({
+        await self._send_to_agent(agent_id, {
             "type": MessageType.AGENT_KILLED,
             "agentId": agent_id,
         })
@@ -278,14 +304,13 @@ class OrchestratorManager:
         provider: ClaudeCodeProvider,
         task: str,
     ) -> None:
-        """Run an agent subprocess, stream chat events to frontend ChatPanes."""
+        """Run an agent subprocess, stream chat events to the owning connection."""
         record = self._agents[agent_id]
         record.state = AgentState.STARTING
         await self._set_state(agent_id, AgentState.STARTING)
 
         try:
-            # Send the task as a user-message so the frontend can display it
-            await self._broadcast({
+            await self._send_to_agent(agent_id, {
                 "type": MessageType.CHAT_STREAM,
                 "agentId": agent_id,
                 "event": "user-message",
@@ -297,7 +322,7 @@ class OrchestratorManager:
             async for event in provider.stream_chat(messages):
                 if isinstance(event, SystemInfo):
                     record.session_id = event.session_id
-                    await self._broadcast({
+                    await self._send_to_agent(agent_id, {
                         "type": MessageType.CHAT_STREAM,
                         "agentId": agent_id,
                         "event": "system-info",
@@ -313,7 +338,7 @@ class OrchestratorManager:
                     if record.state != AgentState.BUSY:
                         record.state = AgentState.BUSY
                         await self._set_state(agent_id, AgentState.BUSY)
-                    await self._broadcast({
+                    await self._send_to_agent(agent_id, {
                         "type": MessageType.CHAT_STREAM,
                         "agentId": agent_id,
                         "event": "text-delta",
@@ -321,7 +346,7 @@ class OrchestratorManager:
                     })
 
                 elif isinstance(event, ThinkingDelta):
-                    await self._broadcast({
+                    await self._send_to_agent(agent_id, {
                         "type": MessageType.CHAT_STREAM,
                         "agentId": agent_id,
                         "event": "thinking-delta",
@@ -329,7 +354,7 @@ class OrchestratorManager:
                     })
 
                 elif isinstance(event, ToolUseStart):
-                    await self._broadcast({
+                    await self._send_to_agent(agent_id, {
                         "type": MessageType.CHAT_STREAM,
                         "agentId": agent_id,
                         "event": "tool-use-start",
@@ -338,7 +363,7 @@ class OrchestratorManager:
                     })
 
                 elif isinstance(event, ToolResult):
-                    await self._broadcast({
+                    await self._send_to_agent(agent_id, {
                         "type": MessageType.CHAT_STREAM,
                         "agentId": agent_id,
                         "event": "tool-result",
@@ -350,18 +375,16 @@ class OrchestratorManager:
                 elif isinstance(event, ChatDone):
                     record.cost = event.cost
                     record.usage = event.usage
-                    # Transition to REVIEW — awaiting report approval
                     record.state = AgentState.REVIEW
                     await self._set_state(agent_id, AgentState.REVIEW)
-                    await self._broadcast({
+                    await self._send_to_agent(agent_id, {
                         "type": MessageType.CHAT_STREAM,
                         "agentId": agent_id,
                         "event": "done",
                         "usage": event.usage,
                         "cost": event.cost,
                     })
-                    # Broadcast report review request to agent's ChatPane
-                    await self._broadcast({
+                    await self._send_to_agent(agent_id, {
                         "type": MessageType.CHAT_STREAM,
                         "agentId": agent_id,
                         "event": "report-review-request",
@@ -375,7 +398,7 @@ class OrchestratorManager:
                     record.final_result = f"Agent error: {event.message}"
                     await self._set_state(agent_id, AgentState.ERROR)
                     record.completion_event.set()
-                    await self._broadcast({
+                    await self._send_to_agent(agent_id, {
                         "type": MessageType.CHAT_STREAM,
                         "agentId": agent_id,
                         "event": "error",
@@ -397,12 +420,11 @@ class OrchestratorManager:
             record.completion_event.set()
 
     async def _set_state(self, agent_id: str, state: AgentState) -> None:
-        await self._broadcast({
+        await self._send_to_agent(agent_id, {
             "type": MessageType.AGENT_STATE_CHANGED,
             "agentId": agent_id,
             "state": state.value,
         })
-
 
 
 # ── Singleton ───────────────────────────────────────────────────────

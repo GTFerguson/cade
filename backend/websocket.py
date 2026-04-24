@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -82,6 +83,7 @@ class ConnectionHandler:
         self._ws = websocket
         self._config = config
         self._working_dir: Path = config.working_dir
+        self._connection_id: str = uuid.uuid4().hex
         self._session: PTYSession | None = None
         self._session_id: str | None = None
         # Optional override for launch.yml's dashboard_file, sent by the
@@ -183,11 +185,12 @@ class ConnectionHandler:
             await self._send_status("Connected")
             await self._send_connected()
 
-            # Register orchestrator broadcast so agent events reach this client
+            # Register this connection so orchestrator events are scoped to it
             from backend.orchestrator.manager import get_orchestrator_manager
             orchestrator = get_orchestrator_manager()
-            orchestrator.set_working_dir(self._working_dir)
-            orchestrator.register_broadcast(self._send)
+            orchestrator.register_connection(
+                self._connection_id, self._send, self._working_dir
+            )
 
             # Register permission prompt broadcast
             from backend.permissions.manager import get_permission_manager
@@ -494,9 +497,9 @@ class ConnectionHandler:
         get_connection_manager().unregister(self._ws)
         get_connection_registry().unregister(self._ws)
 
-        # Unregister orchestrator broadcast
+        # Unregister this connection from the orchestrator
         from backend.orchestrator.manager import get_orchestrator_manager
-        get_orchestrator_manager().unregister_broadcast(self._send)
+        get_orchestrator_manager().unregister_connection(self._connection_id)
 
         # Unregister permission broadcast
         from backend.permissions.manager import get_permission_manager
@@ -1482,7 +1485,11 @@ class ConnectionHandler:
             provider.set_working_dir(self._working_dir)
             if provider._mcp_config_path is None:
                 from backend.orchestrator.mcp_config import create_mcp_config
-                mcp_path = create_mcp_config(self._config.port)
+                mcp_path = create_mcp_config(
+                    self._config.port,
+                    auth_token=self._config.auth_token,
+                    connection_id=self._connection_id,
+                )
                 provider.set_mcp_config(mcp_path)
 
         self._chat_session.start_response()

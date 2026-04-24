@@ -22,7 +22,9 @@ def _get_python() -> str:
     return sys.executable
 
 
-def create_mcp_config(backend_port: int, auth_token: str = "") -> Path:
+def create_mcp_config(
+    backend_port: int, auth_token: str = "", connection_id: str = ""
+) -> Path:
     """Create a temp MCP config JSON pointing to the orchestrator server.
 
     Returns the path to the temp file (caller should not delete it
@@ -35,6 +37,8 @@ def create_mcp_config(backend_port: int, auth_token: str = "") -> Path:
     }
     if auth_token:
         env["CADE_AUTH_TOKEN"] = auth_token
+    if connection_id:
+        env["CADE_CONNECTION_ID"] = connection_id
 
     config = {
         "mcpServers": {

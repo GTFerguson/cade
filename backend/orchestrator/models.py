@@ -29,6 +29,7 @@ class AgentRecord:
     task: str
     mode: str
     state: AgentState
+    owner_connection_id: str = ""
     session_id: str | None = None
     report: str = ""
     error: str = ""
