@@ -93,7 +93,14 @@ export class FileTree implements Component, PaneKeyHandler {
   /**
    * Initialize the file tree.
    */
+  focus(): void {
+    this.container.focus();
+  }
+
   initialize(): void {
+    // tabIndex=-1 lets us call focus() programmatically without entering tab order
+    this.container.tabIndex = -1;
+
     this.ws.on("file-tree", this.boundHandlers.fileTree);
     this.ws.on("file-children", this.boundHandlers.fileChildren);
     this.ws.on("file-change", this.boundHandlers.fileChange);
@@ -230,12 +237,21 @@ export class FileTree implements Component, PaneKeyHandler {
     this.treeRoot = ul;
 
     if (this.searchMode && this.searchQuery) {
-      // Render filtered results flat (no hierarchy during search)
+      // Render search results flat at depth 0; show parent path as context
       for (const item of this.flatList) {
         const li = document.createElement("li");
         li.className = "file-tree-item";
         li.dataset["path"] = item.node.path;
-        const row = this.createRowElement(item.node, item.depth);
+        const row = this.createRowElement(item.node, 0);
+        // Add parent path hint for context
+        if (item.parentPath) {
+          const hint = document.createElement("span");
+          hint.className = "file-tree-search-hint";
+          // Show only the last two path segments to keep it compact
+          const parts = item.parentPath.split("/").filter(Boolean);
+          hint.textContent = parts.slice(-2).join("/");
+          row.appendChild(hint);
+        }
         li.appendChild(row);
         ul.appendChild(li);
       }
@@ -436,6 +452,12 @@ export class FileTree implements Component, PaneKeyHandler {
    */
   onExpandChange(callback: () => void): void {
     this.onExpandChangeCallback = callback;
+  }
+
+  getFilePaths(): string[] {
+    return this.flatList
+      .filter((n) => n.node.type === "file")
+      .map((n) => n.node.path);
   }
 
   /**
@@ -722,10 +744,12 @@ export class FileTree implements Component, PaneKeyHandler {
         this.jumpToPrevFolder();
         return true;
       case "l":
+      case "ArrowRight":
       case "Enter":
         this.expandOrOpen();
         return true;
       case "h":
+      case "ArrowLeft":
         this.collapseOrParent();
         return true;
       case "c":
@@ -792,13 +816,27 @@ export class FileTree implements Component, PaneKeyHandler {
     }
 
     if (item.node.type === "directory") {
+      // In search mode, clear the search so the folder's contents are visible
+      if (this.searchMode) {
+        this.searchMode = false;
+        this.searchQuery = "";
+        this.searchInputFocused = false;
+      }
       if (!this.expandedPaths.has(item.node.path)) {
         this.expandedPaths.add(item.node.path);
         this.requestChildrenIfNeeded(item.node.path);
-        this.render();
         this.onExpandChangeCallback?.();
       }
+      this.selectedPath = item.node.path;
+      this.render();
+      this.scrollSelectedIntoView();
     } else {
+      // In search mode, clear search so the tree reflects the opened file's location
+      if (this.searchMode) {
+        this.searchMode = false;
+        this.searchQuery = "";
+        this.searchInputFocused = false;
+      }
       this.openPath = item.node.path;
       this.render();
       this.emit("file-select", item.node.path);
@@ -910,12 +948,28 @@ export class FileTree implements Component, PaneKeyHandler {
     if (item) {
       this.selectedPath = item.node.path;
       if (item.node.type === "file") {
+        this.searchMode = false;
+        this.searchQuery = "";
+        this.searchInputFocused = false;
         this.openPath = item.node.path;
+        this.render();
         this.emit("file-select", item.node.path);
+        return;
+      } else {
+        // Directory: clear search and expand it
+        this.searchMode = false;
+        this.searchQuery = "";
+        this.searchInputFocused = false;
+        if (!this.expandedPaths.has(item.node.path)) {
+          this.expandedPaths.add(item.node.path);
+          this.requestChildrenIfNeeded(item.node.path);
+          this.onExpandChangeCallback?.();
+        }
       }
     }
     this.searchInputFocused = false;
     this.render();
+    this.scrollSelectedIntoView();
   }
 
   /**

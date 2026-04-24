@@ -91,3 +91,17 @@
 .file-tree-search-input::placeholder {
   color: var(--text-muted);
 }
+
+/* Parent path hint shown next to search results */
+.file-tree-search-hint {
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  opacity: 0.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+}
