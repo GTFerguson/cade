@@ -289,6 +289,17 @@ export class ProjectContextImpl implements IProjectContext {
       this.scheduleSave();
     });
 
+    this.terminalManager.setOnOpenFile((rawPath) => {
+      const path = this.resolveAndFindFile(rawPath);
+      this.rightPane?.setMode("markdown");
+      const viewer = this.rightPane?.getViewer();
+      if (viewer) {
+        viewer.setDashboardReturn(null);
+        viewer.loadFile(path);
+        this.fileTree?.revealFile(path);
+      }
+    });
+
     this.rightPane.getViewer().on("link-click", async (path) => {
       this.rightPane?.setMode("markdown");
       let meta: Record<string, unknown> | undefined;
@@ -436,8 +447,12 @@ export class ProjectContextImpl implements IProjectContext {
     if (pane === "terminal" || pane === "chat") {
       this.terminalManager?.focus();
     } else {
-      // Blur chat input so keystrokes go to the newly focused pane
+      // Blur terminal and chat so keystrokes reach the newly focused pane
+      this.terminalManager?.blurTerminal();
       this.terminalManager?.blurChat();
+      if (pane === "file-tree") {
+        this.fileTree?.focus();
+      }
     }
   }
 
@@ -699,6 +714,47 @@ export class ProjectContextImpl implements IProjectContext {
       viewerPath: this.rightPane?.getViewer().getCurrentPath() ?? null,
       layout: this.layout?.getProportions() ?? null,
     };
+  }
+
+  /**
+   * Resolve a raw file path from a chat link to the best loadable path.
+   *
+   * Handles: absolute paths within the project (strips prefix), relative paths,
+   * and fuzzy recovery when the file isn't in the known file tree.
+   */
+  private resolveAndFindFile(rawPath: string): string {
+    // Normalize: strip projectPath prefix from absolute paths
+    let normalized = rawPath;
+    const base = this.projectPath.endsWith("/")
+      ? this.projectPath
+      : this.projectPath + "/";
+    if (rawPath.startsWith(base)) {
+      normalized = rawPath.slice(base.length);
+    } else if (rawPath.startsWith("./")) {
+      normalized = rawPath.slice(2);
+    }
+
+    const knownPaths = this.fileTree?.getFilePaths() ?? [];
+    if (knownPaths.length === 0) return normalized;
+
+    // Exact match first
+    if (knownPaths.some((p) => p === normalized || p === rawPath)) {
+      return knownPaths.find((p) => p === normalized || p === rawPath)!;
+    }
+
+    // Fuzzy: find paths that end with the normalized suffix
+    const matches = knownPaths.filter((p) => {
+      const rel = p.startsWith(base) ? p.slice(base.length) : p;
+      return rel === normalized || rel.endsWith("/" + normalized);
+    });
+
+    if (matches.length === 1) return matches[0]!;
+    if (matches.length > 1) {
+      // Prefer the shortest path (fewest extra parent dirs)
+      return matches.reduce((a, b) => (a.length <= b.length ? a : b));
+    }
+
+    return normalized;
   }
 
   /**

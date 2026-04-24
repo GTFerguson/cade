@@ -22,6 +22,8 @@ import type { WebSocketClient } from "../platform/websocket";
 import { ChatInput } from "@core/chat/chat-input";
 import { DiagramViewer } from "@core/chat/diagram-viewer";
 import { ContextBudgetIndicator } from "../components/context-budget-indicator";
+import { PermissionsButton } from "./permissions-button";
+import { linkifyElement } from "@core/chat/linkify";
 
 const CADE_MERMAID_CONFIG = {
   securityLevel: "loose" as const,
@@ -65,6 +67,7 @@ const CADE_MERMAID_CONFIG = {
 export interface ChatPaneOptions {
   autoSubscribe?: boolean;
   readOnly?: boolean;
+  onOpenFile?: (path: string) => void;
 }
 
 export class ChatPane implements Component, PaneKeyHandler {
@@ -86,6 +89,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   private costEl: HTMLElement;
   private totalCost = 0;
   private contextBudget: ContextBudgetIndicator | null = null;
+  private permissionsButton: PermissionsButton | null = null;
   private systemInfo: { model?: string; slashCommands: Array<{ name: string; description: string }> } = {
     slashCommands: [],
   };
@@ -94,6 +98,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   private isStreaming = false;
   private readonly autoSubscribe: boolean;
   private readonly readOnly: boolean;
+  private readonly onOpenFile: ((path: string) => void) | null;
 
   private boundHandlers = {
     chatStream: (msg: ChatStreamMessage) => {
@@ -112,6 +117,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   ) {
     this.autoSubscribe = options?.autoSubscribe ?? true;
     this.readOnly = options?.readOnly ?? false;
+    this.onOpenFile = options?.onOpenFile ?? null;
     this.renderer = new MarkdownRenderer({
       mermaidConfig: CADE_MERMAID_CONFIG,
       selfCorrect: {
@@ -160,12 +166,19 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.costEl.textContent = "";
 
     this.contextBudget = new ContextBudgetIndicator();
+    this.permissionsButton = new PermissionsButton();
+
+    // Right-side group pushed to the end of the statusline
+    const statusRight = document.createElement("div");
+    statusRight.className = "statusline-right";
+    statusRight.appendChild(this.permissionsButton.getElement());
+    statusRight.appendChild(this.contextBudget.getElement());
 
     this.statuslineEl.appendChild(this.modeEl);
     this.statuslineEl.appendChild(this.providerEl);
     this.statuslineEl.appendChild(this.tokensEl);
     this.statuslineEl.appendChild(this.costEl);
-    this.statuslineEl.appendChild(this.contextBudget.getElement());
+    this.statuslineEl.appendChild(statusRight);
 
     if (!this.readOnly) {
       this.chatInput = new ChatInput(this.inputArea, (text) =>
@@ -386,6 +399,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     const textEl = document.createElement("div");
     textEl.className = "chat-message-text";
     textEl.textContent = content;
+    if (this.onOpenFile) linkifyElement(textEl, this.onOpenFile);
 
     userEl.appendChild(textEl);
     this.messagesEl.appendChild(userEl);
@@ -718,6 +732,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.activeToolEls.clear();
     this.currentAssistantEl = null;
     if (targetEl && content) await this.renderer.renderRemainingDiagrams(targetEl, content);
+    if (targetEl && this.onOpenFile) linkifyElement(targetEl, this.onOpenFile);
 
     if (!msg.cancelled) {
       this.updateTokenCount(msg.usage);
@@ -765,10 +780,12 @@ export class ChatPane implements Component, PaneKeyHandler {
         this.messagesEl.appendChild(el);
         await this.renderer.render(contentEl, message.content);
         await this.renderer.renderRemainingDiagrams(contentEl, message.content);
+        if (this.onOpenFile) linkifyElement(contentEl, this.onOpenFile);
       } else if (message.role === "user") {
         const textEl = document.createElement("div");
         textEl.className = "chat-message-text";
         textEl.textContent = message.content;
+        if (this.onOpenFile) linkifyElement(textEl, this.onOpenFile);
         el.appendChild(textEl);
         this.messagesEl.appendChild(el);
       } else {

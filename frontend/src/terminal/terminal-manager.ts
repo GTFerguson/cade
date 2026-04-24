@@ -5,7 +5,7 @@
  * switching between terminals with visual status indicators.
  */
 
-import { ChatPane } from "../chat/chat-pane";
+import { ChatPane, type ChatPaneOptions } from "../chat/chat-pane";
 import { SessionKey, type SessionKeyValue, type AnySessionKey } from "@core/platform/protocol";
 import { Terminal, type CustomKeyHandler } from "./terminal";
 import type { ChatStreamMessage, Component, OutputMessage, SessionRestoredMessage } from "../types";
@@ -24,6 +24,7 @@ export class TerminalManager implements Component {
   private chatPane: ChatPane | null = null;
   private mode: TerminalMode = "terminal";
   private enhanced = false;
+  private onOpenFile: ((path: string) => void) | null = null;
   private statusIndicator: HTMLElement;
   private customKeyHandler: CustomKeyHandler | null = null;
   private agentManager: AgentManager | null = null;
@@ -121,7 +122,9 @@ export class TerminalManager implements Component {
 
       // Lazy-create the chat pane
       if (!this.chatPane) {
-        this.chatPane = new ChatPane(this.chatContainer, this.ws);
+        const chatPaneOpts: ChatPaneOptions = {};
+        if (this.onOpenFile) chatPaneOpts.onOpenFile = this.onOpenFile;
+        this.chatPane = new ChatPane(this.chatContainer, this.ws, chatPaneOpts);
         this.chatPane.initialize();
         // Re-render status indicator when model name changes
         this.chatPane.onModelChange(() => this.updateStatusIndicator());
@@ -187,11 +190,23 @@ export class TerminalManager implements Component {
     this.chatPane?.blur();
   }
 
+  blurTerminal(): void {
+    // Blur the active xterm so DOM focus leaves the terminal when switching panes
+    const active = document.activeElement as HTMLElement | null;
+    if (active?.classList.contains("xterm-helper-textarea")) {
+      active.blur();
+    }
+  }
+
   /**
    * Get the chat pane instance (null if not yet created).
    */
   getChatPane(): ChatPane | null {
     return this.chatPane;
+  }
+
+  setOnOpenFile(callback: (path: string) => void): void {
+    this.onOpenFile = callback;
   }
 
   /**
