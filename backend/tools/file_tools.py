@@ -112,8 +112,9 @@ _WRITE_TOOL_NAMES = {"write_file", "edit_file", "delete_file"}
 class FileToolExecutor:
     """Executes file read/write tools with permission and scope enforcement."""
 
-    def __init__(self, project_root: Path) -> None:
+    def __init__(self, project_root: Path, connection_id: str = "") -> None:
         self._root = project_root.resolve()
+        self._connection_id = connection_id
 
     # ------------------------------------------------------------------
     # ToolExecutor protocol
@@ -190,6 +191,7 @@ class FileToolExecutor:
                 tool_name=tool_name,
                 description=f"Write outside project root: {path}",
                 tool_input=tool_input,
+                connection_id=self._connection_id,
             )
             if result["decision"] != "allow":
                 return f"Error: {result.get('message', 'Permission denied')}"
@@ -200,6 +202,7 @@ class FileToolExecutor:
                 tool_name=tool_name,
                 description=str(path),
                 tool_input=tool_input,
+                connection_id=self._connection_id,
             )
             if result["decision"] != "allow":
                 return f"Error: {result.get('message', 'User denied write')}"

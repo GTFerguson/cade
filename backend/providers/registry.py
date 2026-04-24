@@ -20,7 +20,7 @@ from core.backend.providers.websocket_provider import WebsocketProvider
 logger = logging.getLogger(__name__)
 
 
-def _create_tool_registry(provider_config, working_dir: "Path | None" = None) -> ToolRegistry:
+def _create_tool_registry(provider_config, working_dir: "Path | None" = None, connection_id: str = "") -> ToolRegistry:
     """Create a ToolRegistry for an API provider based on its config.
 
     Includes: nkrdn (always), file tools (if working_dir provided),
@@ -32,7 +32,7 @@ def _create_tool_registry(provider_config, working_dir: "Path | None" = None) ->
     # File read/write/edit/delete tools — only wired when we have a project root
     if working_dir is not None:
         from backend.tools.file_tools import FileToolExecutor, _ALL_DEFINITIONS
-        file_executor = FileToolExecutor(_Path(working_dir))
+        file_executor = FileToolExecutor(_Path(working_dir), connection_id=connection_id)
         for defn in _ALL_DEFINITIONS:
             registry.register(file_executor, defn.name)
 
@@ -117,7 +117,7 @@ class ProviderRegistry:
         return result
 
     @classmethod
-    def from_config(cls, config: ProvidersConfig, working_dir=None) -> ProviderRegistry:
+    def from_config(cls, config: ProvidersConfig, working_dir=None, connection_id: str = "") -> ProviderRegistry:
         """Create a registry from configuration.
 
         Two-pass approach: first registers all non-failover providers,
@@ -130,7 +130,7 @@ class ProviderRegistry:
         # Pass 1: register all non-failover providers
         for name, provider_config in config.providers.items():
             if provider_config.type == "api":
-                tool_registry = _create_tool_registry(provider_config, working_dir)
+                tool_registry = _create_tool_registry(provider_config, working_dir, connection_id=connection_id)
                 if not provider_config.system_prompt:
                     mode = provider_config.extra.get("mode", "code")
                     provider_config.system_prompt = compose_prompt(mode)

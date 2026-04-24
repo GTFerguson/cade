@@ -24,6 +24,7 @@ class PermissionRequest:
     tool_name: str
     description: str
     tool_input: dict[str, Any]
+    connection_id: str = ""
     result: asyncio.Future[dict[str, Any]] = field(default_factory=lambda: asyncio.get_event_loop().create_future())
 
 
@@ -32,7 +33,7 @@ class PermissionManager:
 
     def __init__(self) -> None:
         self._pending: dict[str, PermissionRequest] = {}
-        self._broadcast_fns: list[BroadcastFn] = []
+        self._send_fns: dict[str, BroadcastFn] = {}
         self._current_mode: str = "code"
         # "cc" when the active session uses ClaudeCodeProvider; "api" otherwise
         self.provider_type: str = "api"
@@ -109,26 +110,34 @@ class PermissionManager:
         # Cache at directory level so sibling files don't re-prompt
         self._approved_paths.add(str(path.parent))
 
-    def register_broadcast(self, fn: BroadcastFn) -> None:
-        self._broadcast_fns.append(fn)
+    def register_broadcast(self, connection_id: str, fn: BroadcastFn) -> None:
+        self._send_fns[connection_id] = fn
 
-    def unregister_broadcast(self, fn: BroadcastFn) -> None:
-        self._broadcast_fns = [f for f in self._broadcast_fns if f is not fn]
+    def unregister_broadcast(self, connection_id: str) -> None:
+        self._send_fns.pop(connection_id, None)
 
-    async def _broadcast(self, msg: dict[str, Any]) -> None:
-        for fn in self._broadcast_fns:
+    async def _send_to(self, connection_id: str, msg: dict[str, Any]) -> None:
+        """Send to one connection, or broadcast to all if connection_id is empty."""
+        if connection_id and connection_id in self._send_fns:
             try:
-                await fn(msg)
+                await self._send_fns[connection_id](msg)
             except Exception:
                 pass
+        elif not connection_id:
+            for fn in self._send_fns.values():
+                try:
+                    await fn(msg)
+                except Exception:
+                    pass
 
     async def request_permission(
         self,
         tool_name: str,
         description: str,
         tool_input: dict[str, Any],
+        connection_id: str = "",
     ) -> dict[str, Any]:
-        """Create a permission request, broadcast to frontend, block until resolved.
+        """Create a permission request, send to the requesting connection, block until resolved.
 
         Returns the user's decision dict.
         """
@@ -138,11 +147,11 @@ class PermissionManager:
             tool_name=tool_name,
             description=description,
             tool_input=tool_input,
+            connection_id=connection_id,
         )
         self._pending[request_id] = request
 
-        # Broadcast to frontend
-        await self._broadcast({
+        await self._send_to(connection_id, {
             "type": "chat-stream",
             "event": "permission-request",
             "requestId": request_id,
@@ -171,7 +180,7 @@ class PermissionManager:
         if not request.result.done():
             request.result.set_result({"decision": "allow"})
 
-        await self._broadcast({
+        await self._send_to(request.connection_id, {
             "type": "chat-stream",
             "event": "permission-resolved",
             "requestId": request_id,
@@ -193,7 +202,7 @@ class PermissionManager:
                 "message": message or "User denied permission",
             })
 
-        await self._broadcast({
+        await self._send_to(request.connection_id, {
             "type": "chat-stream",
             "event": "permission-resolved",
             "requestId": request_id,

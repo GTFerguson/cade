@@ -195,7 +195,7 @@ class ConnectionHandler:
 
             # Register permission prompt broadcast
             from backend.permissions.manager import get_permission_manager
-            get_permission_manager().register_broadcast(self._send)
+            get_permission_manager().register_broadcast(self._connection_id, self._send)
 
             # Start output loop for claude terminal
             self._start_output_loop(SessionKey.CLAUDE)
@@ -332,7 +332,7 @@ class ConnectionHandler:
         # Initialize provider registry from global config (~/.cade/providers.toml)
         try:
             providers_config = get_providers_config()
-            self._provider_registry = ProviderRegistry.from_config(providers_config, self._working_dir)
+            self._provider_registry = ProviderRegistry.from_config(providers_config, self._working_dir, connection_id=self._connection_id)
         except Exception as e:
             logger.warning("Failed to initialize provider registry: %s", e)
             self._provider_registry = ProviderRegistry()
@@ -523,7 +523,7 @@ class ConnectionHandler:
 
         # Unregister permission broadcast
         from backend.permissions.manager import get_permission_manager
-        get_permission_manager().unregister_broadcast(self._send)
+        get_permission_manager().unregister_broadcast(self._connection_id)
 
         # Stop dashboard watcher
         if self._dashboard:

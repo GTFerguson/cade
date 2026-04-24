@@ -602,7 +602,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         tool_input: dict = {}
 
     @app.post("/api/permissions/prompt-and-wait")
-    async def permission_prompt_and_wait(body: PermissionPromptRequest) -> JSONResponse:
+    async def permission_prompt_and_wait(request: Request, body: PermissionPromptRequest) -> JSONResponse:
         """Request user permission for a tool use.
 
         - Category ON  → auto-approve (no prompt)
@@ -629,11 +629,13 @@ def create_app(config: Config | None = None) -> FastAPI:
             return JSONResponse({"decision": "allow"})
         # else: tools off — fall through to interactive prompt below
 
+        connection_id = request.headers.get("X-Connection-Id", "")
         # Interactive prompt: blocks until the user approves or denies in the UI
         result = await manager.request_permission(
             tool_name=body.tool_name,
             description=body.description,
             tool_input=body.tool_input,
+            connection_id=connection_id,
         )
         return JSONResponse(result)
 
