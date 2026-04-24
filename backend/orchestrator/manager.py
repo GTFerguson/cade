@@ -90,9 +90,27 @@ class OrchestratorManager:
     async def spawn_agent(
         self, spec: AgentSpec, connection_id: str = ""
     ) -> AgentRecord:
-        """Create a new agent in PENDING state and send approval request to its owner."""
+        """Create a new agent in PENDING state and send approval request to its owner.
+
+        Only available in orchestrator mode. Blocked when allow_subagents is False.
+        """
+        from backend.permissions.manager import get_permission_manager
+        perms = get_permission_manager()
+
         short_id = uuid.uuid4().hex[:6]
         agent_id = f"agent-{spec.name}-{short_id}"
+
+        if perms.get_mode() != "orchestrator":
+            logger.warning(
+                "spawn_agent blocked: mode=%s is not orchestrator (agent_id=%s)",
+                perms.get_mode(), agent_id,
+            )
+            raise ValueError("Subagents can only be spawned in orchestrator mode")
+
+        if not perms.allow_subagents:
+            logger.warning("spawn_agent blocked: allow_subagents=False (agent_id=%s)", agent_id)
+            raise ValueError("Subagent spawning is disabled")
+
         logger.info(
             "spawn_agent: id=%s name=%s connection=%s", agent_id, spec.name, connection_id
         )
@@ -391,6 +409,10 @@ class OrchestratorManager:
                         "report": record.report[:500],
                         "cost": record.cost,
                     })
+
+                    from backend.permissions.manager import get_permission_manager
+                    if get_permission_manager().auto_approve_reports:
+                        await self.approve_report(agent_id)
 
                 elif isinstance(event, ChatError):
                     record.error = event.message

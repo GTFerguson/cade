@@ -195,15 +195,14 @@ class FileToolExecutor:
                 return f"Error: {result.get('message', 'Permission denied')}"
             perms.approve_path(path)
 
-        # When accept_edits is off, every write needs explicit approval
-        if not perms.accept_edits:
+        if not perms.allow_write:
             result = await perms.request_permission(
                 tool_name=tool_name,
                 description=str(path),
                 tool_input=tool_input,
             )
             if result["decision"] != "allow":
-                return f"Error: {result.get('message', 'User denied edit')}"
+                return f"Error: {result.get('message', 'User denied write')}"
 
         return None
 
@@ -212,6 +211,7 @@ class FileToolExecutor:
     # ------------------------------------------------------------------
 
     def _list_directory(self, args: dict) -> str:
+
         raw = args.get("path", "")
         path = self._resolve(raw) if raw else self._root
 

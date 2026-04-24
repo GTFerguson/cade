@@ -28,13 +28,20 @@ class PermissionRequest:
 
 
 class PermissionManager:
-    """Manages permission prompt lifecycle, mode state, and edit approval."""
+    """Manages permission prompt lifecycle, mode state, and per-category permissions."""
 
     def __init__(self) -> None:
         self._pending: dict[str, PermissionRequest] = {}
         self._broadcast_fns: list[BroadcastFn] = []
         self._current_mode: str = "code"
-        self.accept_edits: bool = True
+        # "cc" when the active session uses ClaudeCodeProvider; "api" otherwise
+        self.provider_type: str = "api"
+        # Per-category permissions — True means auto-approve, False means deny
+        self.allow_read: bool = True
+        self.allow_write: bool = True
+        self.allow_tools: bool = True
+        self.allow_subagents: bool = True
+        self.auto_approve_reports: bool = False
         # Approved directory prefixes outside the project root (persists per session)
         self._approved_paths: set[str] = set()
 
@@ -49,11 +56,43 @@ class PermissionManager:
         return self._current_mode
 
     # ------------------------------------------------------------------
-    # Accept-edits toggle
+    # Permission toggles
     # ------------------------------------------------------------------
 
+    @property
+    def accept_edits(self) -> bool:
+        return self.allow_write
+
+    @accept_edits.setter
+    def accept_edits(self, value: bool) -> None:
+        self.allow_write = value
+
     def set_accept_edits(self, enabled: bool) -> None:
-        self.accept_edits = enabled
+        self.allow_write = enabled
+
+    def get_permissions(self) -> dict:
+        return {
+            "providerType": self.provider_type,
+            "allowRead": self.allow_read,
+            "allowWrite": self.allow_write,
+            "allowTools": self.allow_tools,
+            "allowSubagents": self.allow_subagents,
+            "autoApproveReports": self.auto_approve_reports,
+        }
+
+    def set_permission(self, name: str, value: bool) -> bool:
+        mapping = {
+            "allowRead": "allow_read",
+            "allowWrite": "allow_write",
+            "allowTools": "allow_tools",
+            "allowSubagents": "allow_subagents",
+            "autoApproveReports": "auto_approve_reports",
+        }
+        attr = mapping.get(name)
+        if attr is None:
+            return False
+        setattr(self, attr, value)
+        return True
 
     # ------------------------------------------------------------------
     # Path scope cache
