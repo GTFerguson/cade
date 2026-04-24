@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Suppress litellm's verbose logging
 litellm.suppress_debug_info = True
 
-_MAX_TOOL_TURNS = 10
+_DEFAULT_MAX_TOOL_TURNS = 100
 
 
 def _build_litellm_messages(messages: list[ChatMessage], system_prompt: str | None) -> list[dict]:
@@ -67,11 +67,19 @@ def _extract_usage(last_chunk) -> dict:
 class APIProvider(BaseProvider):
     """Provider that calls LLM APIs via LiteLLM."""
 
+    # Tools restricted to orchestrator mode — hidden from all other modes
+    _ORCHESTRATOR_ONLY_TOOLS = frozenset({"spawn_agent", "list_agents"})
+
     def __init__(self, config: ProviderConfig, tool_registry: ToolRegistry | None = None) -> None:
         self._config = config
         self._name = config.name
         self._model = config.model
         self._tool_registry = tool_registry
+        self._mode: str = config.extra.get("mode", "code")
+        self._max_tool_turns: int = int(config.extra.get("max_tool_turns", _DEFAULT_MAX_TOOL_TURNS))
+
+    def set_mode(self, mode: str) -> None:
+        self._mode = mode
 
     @property
     def name(self) -> str:
@@ -133,6 +141,8 @@ class APIProvider(BaseProvider):
 
         if self._tool_registry:
             defs = await self._tool_registry.definitions_async()
+            if self._mode != "orchestrator":
+                defs = [d for d in defs if d.name not in self._ORCHESTRATOR_ONLY_TOOLS]
             if defs:
                 kwargs["tools"] = [_tool_def_to_litellm(d) for d in defs]
                 kwargs["tool_choice"] = "auto"
@@ -187,9 +197,9 @@ class APIProvider(BaseProvider):
             # Handle tool calls or finish
             if finish_reason == "tool_calls" and self._tool_registry and pending_tool_calls:
                 tool_turn_count += 1
-                if tool_turn_count > _MAX_TOOL_TURNS:
+                if tool_turn_count > self._max_tool_turns:
                     yield ChatError(
-                        message=f"Tool loop exceeded maximum {_MAX_TOOL_TURNS} turns",
+                        message=f"Tool loop exceeded maximum {self._max_tool_turns} turns",
                         code="tool-loop-max-turns",
                     )
                     return

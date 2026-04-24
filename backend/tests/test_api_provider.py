@@ -472,11 +472,12 @@ async def test_max_tool_turns_guard():
     registry.register(executor, "dummy")
 
     provider = APIProvider(config, tool_registry=registry)
+    provider._max_tool_turns = 5  # Override for test — no need to run 100 iterations
 
-    # Create a chain of tool_calls responses that exceeds _MAX_TOOL_TURNS
+    # Create a chain of tool_calls responses that exceeds the limit
     chunks_list = [
         [MockToolChunk(index=0, tool_id=f"call_{i}", name="dummy", arguments="{}", finish_reason="tool_calls")]
-        for i in range(15)  # More than _MAX_TOOL_TURNS (10)
+        for i in range(8)
     ]
 
     with patch("core.backend.providers.api_provider.litellm") as mock_litellm:

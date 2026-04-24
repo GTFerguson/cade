@@ -149,8 +149,11 @@ class ClaudeCodeProvider(BaseProvider):
         if max_turns:
             cmd.extend(["--max-turns", str(max_turns)])
 
-        if self._mode in ("architect", "review"):
-            cmd.extend(["--permission-mode", "plan"])
+        # Map CADE's allow_write toggle to CC's permission mode.
+        # CADE owns the plan/read-only constraint via can_write() — CC doesn't need plan mode.
+        from backend.permissions.manager import get_permission_manager
+        cc_perm_mode = "acceptEdits" if get_permission_manager().allow_write else "default"
+        cmd.extend(["--permission-mode", cc_perm_mode])
 
         # Pre-approve orchestrator MCP tools in orchestrator mode
         if self._mode == "orchestrator" and self._mcp_config_path:
