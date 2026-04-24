@@ -7,7 +7,7 @@
 
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { CanvasAddon } from "@xterm/addon-canvas";
+import { WebglAddon } from "@xterm/addon-webgl";
 import type { PaneKeyHandler } from "../input/keybindings";
 import type { Component, ErrorMessage, NeovimDiffAvailableMessage, NeovimExitedMessage, NeovimOutputMessage, NeovimReadyMessage } from "../types";
 import { ErrorCode } from "@core/platform/protocol";
@@ -108,9 +108,11 @@ export class NeovimPane implements Component, PaneKeyHandler {
     this.terminal.open(this.terminalContainer);
 
     try {
-      this.terminal.loadAddon(new CanvasAddon());
+      const webgl = new WebglAddon(true);
+      webgl.onContextLoss(() => webgl.dispose());
+      this.terminal.loadAddon(webgl);
     } catch {
-      // Canvas renderer unavailable, DOM fallback
+      // WebGL unavailable — xterm falls back to canvas renderer
     }
 
     // Forward terminal data to backend Neovim process
