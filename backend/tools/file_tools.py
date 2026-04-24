@@ -60,6 +60,14 @@ _DELETE_SCHEMA: dict[str, Any] = {
     "required": ["path"],
 }
 
+_LIST_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "path": {"type": "string", "description": "Directory path (absolute or relative to project root). Defaults to project root."},
+    },
+    "required": [],
+}
+
 _ALL_DEFINITIONS = [
     ToolDefinition(
         name="read_file",
@@ -68,6 +76,14 @@ _ALL_DEFINITIONS = [
             "Returns content with 1-indexed line numbers prefixed."
         ),
         parameters_schema=_READ_SCHEMA,
+    ),
+    ToolDefinition(
+        name="list_directory",
+        description=(
+            "List the contents of a directory. Directories are shown with a trailing '/'. "
+            "Defaults to the project root if no path is given."
+        ),
+        parameters_schema=_LIST_SCHEMA,
     ),
     ToolDefinition(
         name="write_file",
@@ -89,6 +105,7 @@ _ALL_DEFINITIONS = [
     ),
 ]
 
+_READ_ONLY_COUNT = 2  # read_file + list_directory are always available
 _WRITE_TOOL_NAMES = {"write_file", "edit_file", "delete_file"}
 
 
@@ -107,8 +124,8 @@ class FileToolExecutor:
         from backend.permissions.mode_permissions import can_write
         if can_write(get_permission_manager().get_mode()):
             return _ALL_DEFINITIONS
-        # Read-only modes: only expose read_file
-        return [_ALL_DEFINITIONS[0]]
+        # Read-only modes: expose read_file + list_directory
+        return _ALL_DEFINITIONS[:_READ_ONLY_COUNT]
 
     def execute(self, name: str, arguments: dict) -> str:
         # Sync path not used — execute_async always takes precedence in ToolRegistry
@@ -118,6 +135,8 @@ class FileToolExecutor:
         try:
             if name == "read_file":
                 return self._read_file(arguments)
+            if name == "list_directory":
+                return self._list_directory(arguments)
             if name == "write_file":
                 return await self._write_file(arguments)
             if name == "edit_file":
@@ -191,6 +210,28 @@ class FileToolExecutor:
     # ------------------------------------------------------------------
     # Tool implementations
     # ------------------------------------------------------------------
+
+    def _list_directory(self, args: dict) -> str:
+        raw = args.get("path", "")
+        path = self._resolve(raw) if raw else self._root
+
+        if not path.exists():
+            return f"Error: path not found: {path}"
+        if not path.is_dir():
+            return f"Error: not a directory: {path}"
+
+        try:
+            entries = sorted(path.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower()))
+        except PermissionError:
+            return f"Error: permission denied: {path}"
+
+        if not entries:
+            return f"{path}/\n(empty)"
+
+        lines = [f"{path}/"]
+        for entry in entries:
+            lines.append(entry.name + "/" if entry.is_dir() else entry.name)
+        return "\n".join(lines)
 
     def _read_file(self, args: dict) -> str:
         path = self._resolve(args["path"])
