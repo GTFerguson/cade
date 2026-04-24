@@ -661,10 +661,11 @@ def create_app(config: Config | None = None) -> FastAPI:
         enabled: bool
 
     @app.post("/api/permissions/accept-edits")
-    async def set_accept_edits(body: AcceptEditsRequest) -> JSONResponse:
+    async def set_accept_edits(request: Request, body: AcceptEditsRequest) -> JSONResponse:
         """Toggle accept-edits (alias for allow_write)."""
         from backend.permissions.manager import get_permission_manager
-        get_permission_manager().set_accept_edits(body.enabled)
+        connection_id = request.headers.get("X-Connection-Id", "")
+        get_permission_manager().set_accept_edits(body.enabled, connection_id=connection_id)
         return JSONResponse({"acceptEdits": body.enabled})
 
     class SetPermissionRequest(BaseModel):
@@ -672,22 +673,25 @@ def create_app(config: Config | None = None) -> FastAPI:
         value: bool
 
     @app.post("/api/permissions/set")
-    async def set_permission(body: SetPermissionRequest) -> JSONResponse:
+    async def set_permission(request: Request, body: SetPermissionRequest) -> JSONResponse:
         """Set a named permission toggle."""
         from backend.permissions.manager import get_permission_manager
-        ok = get_permission_manager().set_permission(body.name, body.value)
+        connection_id = request.headers.get("X-Connection-Id", "")
+        pm = get_permission_manager()
+        ok = pm.set_permission(body.name, body.value, connection_id=connection_id)
         if not ok:
             return JSONResponse({"error": f"Unknown permission: {body.name}"}, status_code=400)
-        return JSONResponse(get_permission_manager().get_permissions())
+        return JSONResponse(pm.get_permissions(connection_id=connection_id))
 
     @app.get("/api/permissions/state")
-    async def get_permissions_state() -> JSONResponse:
+    async def get_permissions_state(request: Request) -> JSONResponse:
         """Return current permission state."""
         from backend.permissions.manager import get_permission_manager
+        connection_id = request.headers.get("X-Connection-Id", "")
         perms = get_permission_manager()
         return JSONResponse({
-            "mode": perms.get_mode(),
-            **perms.get_permissions(),
+            "mode": perms.get_mode(connection_id),
+            **perms.get_permissions(connection_id),
         })
 
     # --- Project config API ---

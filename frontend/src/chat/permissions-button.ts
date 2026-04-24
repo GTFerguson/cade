@@ -37,9 +37,16 @@ export class PermissionsButton {
   };
   private open = false;
 
+  private connectionId = "";
   private repositionHandler = (): void => {
     if (this.open) this.positionFlyout();
   };
+
+  setConnectionId(id: string): void {
+    this.connectionId = id;
+    // Refresh state so the button reflects the correct per-connection values
+    void this.loadState();
+  }
 
   constructor() {
     this.el = document.createElement("div");
@@ -199,13 +206,19 @@ export class PermissionsButton {
 
   private async loadState(): Promise<void> {
     try {
-      const res = await fetch("/api/permissions/state");
+      const res = await fetch("/api/permissions/state", {
+        headers: this._connectionHeaders(),
+      });
       if (!res.ok) return;
       const data = await res.json() as Partial<PermissionState>;
       this.applyState(data);
     } catch {
       // Backend unavailable — keep defaults
     }
+  }
+
+  private _connectionHeaders(): Record<string, string> {
+    return this.connectionId ? { "X-Connection-Id": this.connectionId } : {};
   }
 
   private applyState(data: Partial<PermissionState>): void {
@@ -230,7 +243,7 @@ export class PermissionsButton {
     try {
       await fetch("/api/permissions/set", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...this._connectionHeaders() },
         body: JSON.stringify({ name: key, value }),
       });
     } catch {

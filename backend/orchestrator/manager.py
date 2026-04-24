@@ -100,14 +100,14 @@ class OrchestratorManager:
         short_id = uuid.uuid4().hex[:6]
         agent_id = f"agent-{spec.name}-{short_id}"
 
-        if perms.get_mode() != "orchestrator":
+        if perms.get_mode(connection_id) != "orchestrator":
             logger.warning(
                 "spawn_agent blocked: mode=%s is not orchestrator (agent_id=%s)",
-                perms.get_mode(), agent_id,
+                perms.get_mode(connection_id), agent_id,
             )
             raise ValueError("Subagents can only be spawned in orchestrator mode")
 
-        if not perms.allow_subagents:
+        if not perms.get_allow_subagents(connection_id):
             logger.warning("spawn_agent blocked: allow_subagents=False (agent_id=%s)", agent_id)
             raise ValueError("Subagent spawning is disabled")
 
@@ -411,7 +411,7 @@ class OrchestratorManager:
                     })
 
                     from backend.permissions.manager import get_permission_manager
-                    if get_permission_manager().auto_approve_reports:
+                    if get_permission_manager().get_auto_approve_reports(record.owner_connection_id):
                         await self.approve_report(agent_id)
 
                 elif isinstance(event, ChatError):

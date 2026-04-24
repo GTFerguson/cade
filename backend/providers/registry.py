@@ -137,7 +137,7 @@ class ProviderRegistry:
                 provider = APIProvider(provider_config, tool_registry)
                 registry.register(name, provider)
             elif provider_config.type == "claude-code":
-                provider = ClaudeCodeProvider(provider_config)
+                provider = ClaudeCodeProvider(provider_config, connection_id=connection_id)
                 registry.register(name, provider)
             elif provider_config.type == "cli":
                 # CLI providers are not managed through the registry —

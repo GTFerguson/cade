@@ -389,8 +389,9 @@ class ConnectionHandler:
             default_provider = self._provider_registry.get_default()
             from backend.providers.claude_code_provider import ClaudeCodeProvider
             from backend.permissions.manager import get_permission_manager
-            get_permission_manager().provider_type = (
-                "cc" if isinstance(default_provider, ClaudeCodeProvider) else "api"
+            get_permission_manager().set_provider_type(
+                "cc" if isinstance(default_provider, ClaudeCodeProvider) else "api",
+                connection_id=self._connection_id,
             )
 
         registry = get_registry()
@@ -523,7 +524,9 @@ class ConnectionHandler:
 
         # Unregister permission broadcast
         from backend.permissions.manager import get_permission_manager
-        get_permission_manager().unregister_broadcast(self._connection_id)
+        pm = get_permission_manager()
+        pm.unregister_broadcast(self._connection_id)
+        pm.drop_connection(self._connection_id)
 
         # Stop dashboard watcher
         if self._dashboard:
@@ -670,6 +673,7 @@ class ConnectionHandler:
             "sessionRestored": session_restored,
             "idleSeconds": idle_seconds,
             "wslHealthy": wsl_healthy,
+            "connectionId": self._connection_id,
         }
 
         # Frontend-visible subset of the project-local launch preset.
@@ -1362,7 +1366,7 @@ class ConnectionHandler:
         """Switch the active Claude Code provider's mode and notify the client."""
         self._current_mode = mode
         from backend.permissions.manager import get_permission_manager
-        get_permission_manager().set_mode(mode)
+        get_permission_manager().set_mode(mode, connection_id=self._connection_id)
 
         provider = None
         if self._provider_registry is not None:

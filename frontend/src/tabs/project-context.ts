@@ -38,6 +38,7 @@ export class ProjectContextImpl implements IProjectContext {
   private isVisible = false;
   private focusedPane: PaneType = "terminal";
   private viewMode: TabViewMode = "workspace";
+  connectionId = "";
   private dashboardFullContainer: HTMLElement | null = null;
   private dashboardFullPane: import("../dashboard").DashboardPane | null = null;
   private boundHandlers = {
@@ -49,6 +50,10 @@ export class ProjectContextImpl implements IProjectContext {
     },
     connected: (msg: ConnectedMessage) => {
       console.log(`[${this.name}] Connected to server:`, msg.workingDir);
+      if (msg.connectionId) {
+        this.connectionId = msg.connectionId;
+        this.terminalManager?.getChatPane()?.setConnectionId(msg.connectionId);
+      }
       if (msg.session != null) {
         this.pendingSession = msg.session;
       }

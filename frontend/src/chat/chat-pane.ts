@@ -332,6 +332,10 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.systemInfo.slashCommands = commands;
   }
 
+  setConnectionId(id: string): void {
+    this.permissionsButton?.setConnectionId(id);
+  }
+
   private cancelStream(): void {
     if (this.isStreaming) {
       this.ws.sendChatCancel();

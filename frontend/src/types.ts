@@ -263,6 +263,7 @@ export interface ConnectedMessage extends BaseMessage {
   chatMode?: string;
   launchPreset?: LaunchPreset;
   slashCommands?: Array<{ name: string; description: string }>;
+  connectionId?: string;
 }
 
 /**

@@ -28,33 +28,50 @@ class PermissionRequest:
     result: asyncio.Future[dict[str, Any]] = field(default_factory=lambda: asyncio.get_event_loop().create_future())
 
 
+@dataclass
+class ConnectionState:
+    """Per-connection permission and mode state."""
+    mode: str = "code"
+    provider_type: str = "api"
+    allow_read: bool = True
+    allow_write: bool = True
+    allow_tools: bool = True
+    allow_subagents: bool = True
+    auto_approve_reports: bool = False
+    approved_paths: set[str] = field(default_factory=set)
+
+
 class PermissionManager:
-    """Manages permission prompt lifecycle, mode state, and per-category permissions."""
+    """Manages permission prompt lifecycle, mode state, and per-category permissions.
+
+    All state is scoped to connection_id so multiple project tabs don't bleed
+    into each other.
+    """
 
     def __init__(self) -> None:
         self._pending: dict[str, PermissionRequest] = {}
         self._send_fns: dict[str, BroadcastFn] = {}
-        self._current_mode: str = "code"
-        # "cc" when the active session uses ClaudeCodeProvider; "api" otherwise
-        self.provider_type: str = "api"
-        # Per-category permissions — True means auto-approve, False means deny
-        self.allow_read: bool = True
-        self.allow_write: bool = True
-        self.allow_tools: bool = True
-        self.allow_subagents: bool = True
-        self.auto_approve_reports: bool = False
-        # Approved directory prefixes outside the project root (persists per session)
-        self._approved_paths: set[str] = set()
+        self._states: dict[str, ConnectionState] = {}
+
+    def _state(self, connection_id: str) -> ConnectionState:
+        """Return (creating if needed) the state for a connection."""
+        if connection_id not in self._states:
+            self._states[connection_id] = ConnectionState()
+        return self._states[connection_id]
+
+    def drop_connection(self, connection_id: str) -> None:
+        """Remove per-connection state when a tab disconnects."""
+        self._states.pop(connection_id, None)
 
     # ------------------------------------------------------------------
     # Mode state
     # ------------------------------------------------------------------
 
-    def set_mode(self, mode: str) -> None:
-        self._current_mode = mode
+    def set_mode(self, mode: str, connection_id: str = "") -> None:
+        self._state(connection_id).mode = mode
 
-    def get_mode(self) -> str:
-        return self._current_mode
+    def get_mode(self, connection_id: str = "") -> str:
+        return self._state(connection_id).mode
 
     # ------------------------------------------------------------------
     # Permission toggles
@@ -62,26 +79,28 @@ class PermissionManager:
 
     @property
     def accept_edits(self) -> bool:
-        return self.allow_write
+        return self._state("").allow_write
 
     @accept_edits.setter
     def accept_edits(self, value: bool) -> None:
-        self.allow_write = value
+        self._state("").allow_write = value
 
-    def set_accept_edits(self, enabled: bool) -> None:
-        self.allow_write = enabled
+    def set_accept_edits(self, enabled: bool, connection_id: str = "") -> None:
+        self._state(connection_id).allow_write = enabled
 
-    def get_permissions(self) -> dict:
+    def get_permissions(self, connection_id: str = "") -> dict:
+        s = self._state(connection_id)
         return {
-            "providerType": self.provider_type,
-            "allowRead": self.allow_read,
-            "allowWrite": self.allow_write,
-            "allowTools": self.allow_tools,
-            "allowSubagents": self.allow_subagents,
-            "autoApproveReports": self.auto_approve_reports,
+            "providerType": s.provider_type,
+            "allowRead": s.allow_read,
+            "allowWrite": s.allow_write,
+            "allowTools": s.allow_tools,
+            "allowSubagents": s.allow_subagents,
+            "autoApproveReports": s.auto_approve_reports,
         }
 
-    def set_permission(self, name: str, value: bool) -> bool:
+    def set_permission(self, name: str, value: bool, connection_id: str = "") -> bool:
+        s = self._state(connection_id)
         mapping = {
             "allowRead": "allow_read",
             "allowWrite": "allow_write",
@@ -92,23 +111,34 @@ class PermissionManager:
         attr = mapping.get(name)
         if attr is None:
             return False
-        setattr(self, attr, value)
+        setattr(s, attr, value)
         return True
 
+    def get_allow_write(self, connection_id: str = "") -> bool:
+        return self._state(connection_id).allow_write
+
+    def get_allow_subagents(self, connection_id: str = "") -> bool:
+        return self._state(connection_id).allow_subagents
+
+    def get_auto_approve_reports(self, connection_id: str = "") -> bool:
+        return self._state(connection_id).auto_approve_reports
+
+    def set_provider_type(self, provider_type: str, connection_id: str = "") -> None:
+        self._state(connection_id).provider_type = provider_type
+
     # ------------------------------------------------------------------
-    # Path scope cache
+    # Path scope cache (per-connection)
     # ------------------------------------------------------------------
 
-    def is_path_approved(self, path: "Path") -> bool:  # noqa: F821
+    def is_path_approved(self, path: "Path", connection_id: str = "") -> bool:  # noqa: F821
         path_str = str(path)
         return any(
             path_str == p or path_str.startswith(p + "/")
-            for p in self._approved_paths
+            for p in self._state(connection_id).approved_paths
         )
 
-    def approve_path(self, path: "Path") -> None:  # noqa: F821
-        # Cache at directory level so sibling files don't re-prompt
-        self._approved_paths.add(str(path.parent))
+    def approve_path(self, path: "Path", connection_id: str = "") -> None:  # noqa: F821
+        self._state(connection_id).approved_paths.add(str(path.parent))
 
     def register_broadcast(self, connection_id: str, fn: BroadcastFn) -> None:
         self._send_fns[connection_id] = fn

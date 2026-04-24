@@ -123,7 +123,7 @@ class FileToolExecutor:
     def tool_definitions(self) -> list[ToolDefinition]:
         from backend.permissions.manager import get_permission_manager
         from backend.permissions.mode_permissions import can_write
-        if can_write(get_permission_manager().get_mode()):
+        if can_write(get_permission_manager().get_mode(self._connection_id)):
             return _ALL_DEFINITIONS
         # Read-only modes: expose read_file + list_directory
         return _ALL_DEFINITIONS[:_READ_ONLY_COUNT]
@@ -182,11 +182,12 @@ class FileToolExecutor:
 
         perms = get_permission_manager()
 
-        if not can_write(perms.get_mode()):
-            return f"Error: {perms.get_mode()} mode does not allow file writes"
+        mode = perms.get_mode(self._connection_id)
+        if not can_write(mode):
+            return f"Error: {mode} mode does not allow file writes"
 
         # Out-of-scope paths need explicit one-time approval
-        if not self._in_scope(path) and not perms.is_path_approved(path):
+        if not self._in_scope(path) and not perms.is_path_approved(path, self._connection_id):
             result = await perms.request_permission(
                 tool_name=tool_name,
                 description=f"Write outside project root: {path}",
@@ -195,9 +196,9 @@ class FileToolExecutor:
             )
             if result["decision"] != "allow":
                 return f"Error: {result.get('message', 'Permission denied')}"
-            perms.approve_path(path)
+            perms.approve_path(path, self._connection_id)
 
-        if not perms.allow_write:
+        if not perms.get_allow_write(self._connection_id):
             result = await perms.request_permission(
                 tool_name=tool_name,
                 description=str(path),
