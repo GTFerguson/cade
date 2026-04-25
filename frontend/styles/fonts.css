@@ -1,13 +1,22 @@
 /*
- * Bundled JetBrains Mono. Self-hosted so the terminal renders against
- * known, byte-identical glyph metrics on every machine — eliminating the
- * OS-font-availability variable that drives xterm.js WebGL atlas corruption
- * (the "black blocks" symptom) when the requested family resolves to a
- * fallback at first paint.
+ * Bundled JetBrains Mono. Self-hosted so the terminal and chat render
+ * against known, byte-identical glyph metrics on every machine —
+ * eliminating the OS-font-availability variable that drives xterm.js
+ * WebGL atlas corruption (the "black blocks" symptom) and chat
+ * fallback rendering on platforms without JetBrains Mono installed
+ * (e.g. fresh Ubuntu, Windows without JetBrains IDEs).
  *
- * font-display: block holds the first paint for up to ~3s while the font
- * fetches, so xterm measures the correct face on init rather than measuring
- * a fallback and re-rasterising later.
+ * font-display: block holds the first paint for up to ~3s while the
+ * font fetches, so xterm measures the correct face on init rather than
+ * measuring a fallback and re-rasterising later. The chat path uses
+ * the same family — the app calls preloadMonoFonts() at startup so the
+ * fetch begins before chat has a chance to render.
+ *
+ * Weights bundled: 400 (Regular), 500 (Medium), 600 (SemiBold),
+ * 700 (Bold), each with an italic. CSS rules in chat.css and viewer.css
+ * use weights 400/500/600/700 and italics — synthesising any of these
+ * from a partial set produces the malformed glyphs seen on WebKitGTK +
+ * Mesa (Linux desktop).
  */
 
 @font-face {
@@ -20,8 +29,56 @@
 
 @font-face {
   font-family: "JetBrains Mono";
+  font-style: italic;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/JetBrainsMono-Italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url("/fonts/JetBrainsMono-Medium.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: italic;
+  font-weight: 500;
+  font-display: block;
+  src: url("/fonts/JetBrainsMono-MediumItalic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
   font-style: normal;
   font-weight: 600;
   font-display: block;
   src: url("/fonts/JetBrainsMono-SemiBold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: italic;
+  font-weight: 600;
+  font-display: block;
+  src: url("/fonts/JetBrainsMono-SemiBoldItalic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("/fonts/JetBrainsMono-Bold.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: italic;
+  font-weight: 700;
+  font-display: block;
+  src: url("/fonts/JetBrainsMono-BoldItalic.woff2") format("woff2");
 }

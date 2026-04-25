@@ -6,6 +6,14 @@ import "@xterm/xterm/css/xterm.css";
 import "highlight.js/styles/vs2015.css";
 import "../styles/main.css";
 
+import { preloadMonoFonts } from "./terminal/font-loader";
+
+// Kick the bundled monospace fetch immediately so chat and terminal
+// have glyphs when they mount. fonts.css uses font-display: block, so
+// any code path that renders before this fetch completes shows blanks
+// or — on WebKitGTK + Mesa — malformed fallback glyphs.
+preloadMonoFonts();
+
 import { basePath, config, isRemoteBrowserAccess } from "./config/config";
 import { HelpOverlay } from "./ui/help-overlay";
 import { ThemeSelector } from "./ui/theme-selector";
