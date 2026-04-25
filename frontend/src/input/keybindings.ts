@@ -57,6 +57,7 @@ export interface KeybindingCallbacks {
   approveAgent: () => void;
   rejectAgent: () => void;
   showThemeSelector: () => void;
+  focusChatInput: () => void;
   getFocusedPane: () => PaneType;
   getPaneHandler: (pane: PaneType) => PaneKeyHandler | null;
 }
@@ -219,6 +220,127 @@ export class KeybindingManager implements Component {
       if (key === "q") {
         e.preventDefault();
         this.callbacks?.toggleDashboard();
+        return;
+      }
+
+      // Alt+h/l: focus pane left/right
+      // Note: Alt+H may conflict with Firefox Help menu on Linux
+      if (e.key === "h") {
+        e.preventDefault();
+        this.callbacks?.focusPane("left");
+        return;
+      }
+      if (e.key === "l") {
+        e.preventDefault();
+        this.callbacks?.focusPane("right");
+        return;
+      }
+
+      // Alt+H/L: resize pane left/right
+      if (e.key === "H") {
+        e.preventDefault();
+        this.callbacks?.resizePane("left");
+        return;
+      }
+      if (e.key === "L") {
+        e.preventDefault();
+        this.callbacks?.resizePane("right");
+        return;
+      }
+
+      // Alt+s: toggle terminal
+      if (key === "s") {
+        e.preventDefault();
+        this.callbacks?.toggleTerminal();
+        return;
+      }
+
+      // Alt+v: toggle viewer
+      // Note: Alt+V may conflict with Firefox View menu on Linux
+      if (key === "v") {
+        e.preventDefault();
+        this.callbacks?.toggleViewerCycle();
+        return;
+      }
+
+      // Alt+e: toggle enhanced mode
+      // Note: Alt+E may conflict with Firefox Edit menu on Linux
+      if (key === "e") {
+        e.preventDefault();
+        this.callbacks?.toggleEnhanced();
+        return;
+      }
+
+      // Alt+[/]: cycle agent prev/next
+      if (e.key === "[") {
+        e.preventDefault();
+        this.callbacks?.cycleAgentPrev();
+        return;
+      }
+      if (e.key === "]") {
+        e.preventDefault();
+        this.callbacks?.cycleAgentNext();
+        return;
+      }
+
+      // Alt+m/M: cycle mode next/prev
+      if (e.key === "m") {
+        e.preventDefault();
+        this.callbacks?.cycleModeNext();
+        return;
+      }
+      if (e.key === "M") {
+        e.preventDefault();
+        this.callbacks?.cycleModePrev();
+        return;
+      }
+
+      // Alt+y/n: approve/reject agent
+      if (key === "y") {
+        e.preventDefault();
+        this.callbacks?.approveAgent();
+        return;
+      }
+      if (key === "n") {
+        e.preventDefault();
+        this.callbacks?.rejectAgent();
+        return;
+      }
+
+      // Alt+r: create remote tab
+      if (key === "r") {
+        e.preventDefault();
+        this.callbacks?.createRemoteTab();
+        return;
+      }
+
+      // Alt+p: theme selector (palette)
+      if (key === "p") {
+        e.preventDefault();
+        this.callbacks?.showThemeSelector();
+        return;
+      }
+
+      // Alt+i: focus chat input from any pane
+      if (key === "i") {
+        e.preventDefault();
+        this.callbacks?.focusChatInput();
+        return;
+      }
+    }
+
+    // Alt+navigation keys delegate to chat pane even when textarea is focused
+    if (e.altKey && !e.ctrlKey && !e.metaKey && isInput) {
+      const altNavKeys = ["j", "k", "g", "G", "PageUp", "PageDown"];
+      if (altNavKeys.includes(e.key)) {
+        const focusedPane = this.callbacks?.getFocusedPane();
+        if (focusedPane === "chat") {
+          const handler = this.callbacks?.getPaneHandler("chat");
+          if (handler?.handleKeydown(e)) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }
         return;
       }
     }

@@ -105,6 +105,14 @@ export class ChatPane implements Component, PaneKeyHandler {
   private readonly readOnly: boolean;
   private readonly onOpenFile: ((path: string) => void) | null;
 
+  // Scroll-lock: track whether new content should auto-scroll to bottom.
+  // Disabled when the user manually scrolls up; re-enabled when they scroll
+  // back near the bottom, or when new content arrives after 60s of no scrolling.
+  private autoScroll = true;
+  private lastUserScrollAt = 0;
+  private static readonly NEAR_BOTTOM_PX = 100;
+  private static readonly REATTACH_AFTER_MS = 60_000;
+
   private boundHandlers = {
     chatStream: (msg: ChatStreamMessage) => {
       // When auto-subscribed, ignore events meant for agents
@@ -204,6 +212,9 @@ export class ChatPane implements Component, PaneKeyHandler {
         return false;
       });
     }
+
+    // Track user scroll position to manage auto-scroll lock
+    this.messagesEl.addEventListener("scroll", () => this.onMessagesScroll(), { passive: true });
 
     // Open fullscreen viewer when clicking a mermaid diagram
     this.messagesEl.addEventListener("click", (e) => {
@@ -751,6 +762,65 @@ export class ChatPane implements Component, PaneKeyHandler {
 
     this.activeToolEls.delete(toolId);
     this.scrollToBottom();
+    this.collapseOldToolCalls();
+  }
+
+  private collapseOldToolCalls(): void {
+    const contentEl = this.currentAssistantEl?.querySelector(".chat-message-content");
+    if (!contentEl) return;
+
+    const completed = Array.from(
+      contentEl.querySelectorAll(
+        ":scope > .chat-tool-use--success, :scope > .chat-tool-use--error",
+      ),
+    ) as HTMLElement[];
+
+    const maxVisible = 5;
+    let group = contentEl.querySelector(":scope > .chat-tool-group") as HTMLElement | null;
+    const currentGrouped = group
+      ? (group.querySelector(".chat-tool-group-body")?.children.length ?? 0)
+      : 0;
+    const totalCompleted = completed.length + currentGrouped;
+
+    if (totalCompleted <= maxVisible) return;
+
+    if (!group) {
+      group = document.createElement("div");
+      group.className = "chat-tool-group";
+
+      const header = document.createElement("div");
+      header.className = "chat-tool-group-header";
+      header.addEventListener("click", () => {
+        group!.classList.toggle("chat-tool-group--expanded");
+        this.updateToolGroupHeader(group!);
+      });
+      group.appendChild(header);
+
+      const body = document.createElement("div");
+      body.className = "chat-tool-group-body";
+      group.appendChild(body);
+
+      contentEl.insertBefore(group, completed[0] ?? null);
+    }
+
+    const body = group.querySelector(".chat-tool-group-body")!;
+    const targetGrouped = totalCompleted - maxVisible;
+    const toMove = targetGrouped - currentGrouped;
+
+    for (let i = 0; i < toMove; i++) {
+      const el = completed[i];
+      if (el) body.appendChild(el);
+    }
+
+    this.updateToolGroupHeader(group);
+  }
+
+  private updateToolGroupHeader(group: HTMLElement): void {
+    const header = group.querySelector(".chat-tool-group-header")!;
+    const body = group.querySelector(".chat-tool-group-body")!;
+    const count = body.children.length;
+    const chevron = group.classList.contains("chat-tool-group--expanded") ? "▾" : "›";
+    header.innerHTML = `<span class="chat-tool-group-chevron">${chevron}</span> ${count} tool call${count !== 1 ? "s" : ""}`;
   }
 
   /**
@@ -1282,10 +1352,36 @@ export class ChatPane implements Component, PaneKeyHandler {
     btn?.click();
   }
 
+  private onMessagesScroll(): void {
+    const el = this.messagesEl;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distFromBottom < ChatPane.NEAR_BOTTOM_PX) {
+      this.autoScroll = true;
+    } else {
+      this.autoScroll = false;
+      this.lastUserScrollAt = Date.now();
+    }
+  }
+
+  // Called by all streaming/content events. Only scrolls if the user hasn't
+  // manually scrolled away, or if they've been idle for long enough that we
+  // assume they're done reading. Does nothing if there's no new content (so
+  // a static chat stays wherever the user left it).
   private scrollToBottom(): void {
+    if (!this.autoScroll) {
+      if (Date.now() - this.lastUserScrollAt < ChatPane.REATTACH_AFTER_MS) return;
+      this.autoScroll = true;
+    }
     requestAnimationFrame(() => {
+      if (!this.autoScroll) return; // user may have scrolled up during rAF
       this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
     });
+  }
+
+  // Used by explicit "go to bottom" key bindings — always scrolls and re-pins.
+  private jumpToBottom(): void {
+    this.autoScroll = true;
+    this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
   }
 
   // --- PaneKeyHandler interface ---
@@ -1294,8 +1390,18 @@ export class ChatPane implements Component, PaneKeyHandler {
   private lastKey = "";
 
   handleKeydown(e: KeyboardEvent): boolean {
-    // Only handle keys when chat input is blurred (normal mode)
     if (this.chatInput?.isFocused()) {
+      // Alt+navigation while focused — scroll without leaving insert mode
+      if (e.altKey) {
+        switch (e.key) {
+          case "j": this.messagesEl.scrollBy({ top: 60 }); return true;
+          case "k": this.messagesEl.scrollBy({ top: -60 }); return true;
+          case "g": this.messagesEl.scrollTop = 0; return true;
+          case "G": this.jumpToBottom(); return true;
+          case "PageUp": this.messagesEl.scrollBy({ top: -this.messagesEl.clientHeight * 0.8 }); return true;
+          case "PageDown": this.messagesEl.scrollBy({ top: this.messagesEl.clientHeight * 0.8 }); return true;
+        }
+      }
       return false;
     }
 
@@ -1310,7 +1416,13 @@ export class ChatPane implements Component, PaneKeyHandler {
         this.messagesEl.scrollBy({ top: -60 });
         return true;
       case "G":
-        this.scrollToBottom();
+        this.jumpToBottom();
+        return true;
+      case "PageUp":
+        this.messagesEl.scrollBy({ top: -this.messagesEl.clientHeight * 0.8 });
+        return true;
+      case "PageDown":
+        this.messagesEl.scrollBy({ top: this.messagesEl.clientHeight * 0.8 });
         return true;
       case "g": {
         const now = Date.now();

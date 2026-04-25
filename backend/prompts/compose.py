@@ -20,6 +20,7 @@ Add a new .md file to modules/ and wire it in ALWAYS or MODE_MODULES or ADDITION
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 MODULES_DIR = Path(__file__).parent / "modules"
@@ -112,9 +113,13 @@ RULES = _load_rules()
 def compose_prompt(mode: str) -> str:
     """Return the assembled system prompt for the given mode.
 
-    Compose order: base → rules → always → mode → additional
+    Compose order: datetime → base → rules → always → mode → additional
     """
     parts = []
+
+    # DATETIME — injected fresh each call so the agent always knows the current time
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    parts.append(f"Current date and time: {now}")
 
     # BASE
     base = _load_file("base")

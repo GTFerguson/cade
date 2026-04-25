@@ -475,6 +475,10 @@ class App {
       showThemeSelector: () => {
         this.themeSelector.toggle();
       },
+      focusChatInput: () => {
+        const activeTab = this.tabManager.getActiveTab();
+        activeTab?.context?.getTerminalManager()?.getChatPane()?.focus();
+      },
       getFocusedPane: () => {
         const activeTab = this.tabManager.getActiveTab();
         return activeTab?.context?.getFocusedPane() ?? "terminal";

@@ -103,6 +103,44 @@ class TestComposePromptStructure:
         prompt = compose_prompt("code")
         assert "nkrdn" in prompt.lower() or len(prompt) > 0
 
+    def test_compose_includes_current_datetime(self):
+        """System prompt must include current date so the agent is not time-blind."""
+        import re
+        from datetime import datetime, timezone
+        from backend.prompts.compose import compose_prompt
+
+        prompt = compose_prompt("code")
+        # Must contain a date string in YYYY-MM-DD format
+        assert re.search(r"\d{4}-\d{2}-\d{2}", prompt), "No date found in system prompt"
+        # The year must be current
+        current_year = str(datetime.now(timezone.utc).year)
+        assert current_year in prompt, f"Current year {current_year} not in system prompt"
+
+    def test_compose_datetime_is_first_content(self):
+        """Datetime line must appear before any other module content."""
+        from backend.prompts.compose import compose_prompt
+
+        prompt = compose_prompt("code")
+        dt_pos = prompt.find("Current date and time:")
+        assert dt_pos != -1, "Datetime header not found in system prompt"
+        assert dt_pos == 0, "Datetime must be the very first line of the system prompt"
+
+    def test_compose_datetime_refreshes_each_call(self):
+        """Each compose_prompt call should reflect the time at call time."""
+        import re
+        from unittest.mock import patch
+        from datetime import datetime, timezone
+        from backend.prompts.compose import compose_prompt
+
+        # Patch datetime to return a fixed time and verify it appears
+        fixed_dt = datetime(2025, 3, 15, 10, 30, tzinfo=timezone.utc)
+        with patch("backend.prompts.compose.datetime") as mock_dt:
+            mock_dt.now.return_value = fixed_dt
+            prompt = compose_prompt("code")
+
+        assert "2025-03-15" in prompt, "Fixed date not found in prompt"
+        assert "10:30" in prompt, "Fixed time not found in prompt"
+
 
 class TestGetRules:
     """Test get_rules() returns the merged rule list."""
