@@ -224,6 +224,20 @@ export class CardsComponent extends BaseDashboardComponent {
       );
     }
 
+    // ── Sort ─────────────────────────────────────────────────────────
+    const sortCfg = panel.extra?.["sort"] as
+      | { field?: string; order?: string }
+      | undefined;
+    if (sortCfg?.field) {
+      const sf = sortCfg.field;
+      const asc = sortCfg.order !== "desc";
+      filtered = [...filtered].sort((a, b) => {
+        const av = String(a[sf] ?? "");
+        const bv = String(b[sf] ?? "");
+        return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+      });
+    }
+
     // ── Paginate ──────────────────────────────────────────────────────
     const visible =
       pageSize > 0 ? filtered.slice(0, this.visibleCount) : filtered;
