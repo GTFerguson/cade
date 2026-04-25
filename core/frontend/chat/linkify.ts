@@ -7,7 +7,11 @@
  */
 
 const URL_PATTERN = /https?:\/\/[^\s<>"'()\[\]{}]+/;
-const FILE_PATH_PATTERN = /(?:\.{1,2}\/[\w.\-/]+|\/[\w.\-/]+)\.[a-zA-Z]{1,10}(?::\d+(?::\d+)?)?/;
+// Three alternatives in priority order:
+//   1. bare relative: word-char prefix + slash (e.g. docs/plans/file.md, src/index.ts)
+//   2. explicit relative: ./path or ../path
+//   3. absolute: /path
+const FILE_PATH_PATTERN = /(?:[a-zA-Z][\w.\-]*\/[\w.\-/]+|\.{1,2}\/[\w.\-/]+|\/[\w.\-/]+)\.[a-zA-Z]{1,10}(?::\d+(?::\d+)?)?/;
 const COMBINED_RE = new RegExp(
   `(${URL_PATTERN.source}|${FILE_PATH_PATTERN.source})`,
   "g",
@@ -65,6 +69,42 @@ function tokenize(
   }
 
   return nodes;
+}
+
+/**
+ * Patches existing <a> tags rendered inside a container (e.g. from mertex markdown).
+ *
+ * - External URLs get target="_blank" + rel="noopener noreferrer" so they never
+ *   navigate the CADE tab away.
+ * - Non-URL, non-anchor hrefs are intercepted and routed to onOpenFile so they
+ *   open in the right-pane viewer instead of navigating the browser.
+ *
+ * Skips .wiki-link elements (already handled by attachWikiLinkHandlers).
+ */
+export function patchLinks(
+  container: HTMLElement,
+  onOpenFile?: (path: string) => void,
+): void {
+  const links = container.querySelectorAll<HTMLAnchorElement>("a:not(.wiki-link)");
+  for (const a of links) {
+    const href = a.getAttribute("href");
+    if (!href) continue;
+
+    if (/^https?:\/\//.test(href)) {
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+    } else if (
+      onOpenFile &&
+      !href.startsWith("#") &&
+      !href.startsWith("javascript:") &&
+      !href.startsWith("mailto:")
+    ) {
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        onOpenFile(href);
+      });
+    }
+  }
 }
 
 export function linkifyElement(

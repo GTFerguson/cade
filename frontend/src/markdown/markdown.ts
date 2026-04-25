@@ -19,7 +19,8 @@ import type { MarkdownEvents, ViewState, MarkdownEventHandlers } from "./types";
 import { extractFrontmatter, renderFrontmatter } from "./frontmatter";
 import { renderCode } from "./code-highlight";
 import { renderJsonTree } from "./json-tree";
-import { wikiLinkExtension, attachWikiLinkHandlers } from "./wiki-links";
+import { wikiLinkExtension, attachWikiLinkHandlers, resolveMarkdownLinkHref } from "./wiki-links";
+import { patchLinks } from "@core/chat/linkify";
 import { handleViewModeScroll, scrollCodeBlocksHorizontally, createScrollState } from "./scroll";
 import type { ScrollState } from "./scroll";
 import { getUserConfig } from "../config/user-config";
@@ -375,6 +376,9 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
       attachWikiLinkHandlers(content, this.currentPath, (targetPath) => {
         this.emit("link-click", targetPath);
+      });
+      patchLinks(content, (href) => {
+        this.emit("link-click", resolveMarkdownLinkHref(href, this.currentPath));
       });
     } else if (this.currentFileType === "json") {
       const viewerFactory = this.detectJsonViewerFactory();

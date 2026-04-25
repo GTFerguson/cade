@@ -80,6 +80,26 @@ export function resolveWikiLink(linkPath: string, currentPath: string | null): s
 }
 
 /**
+ * Resolve a standard markdown link href relative to the current file.
+ *
+ * Unlike resolveWikiLink (which treats all paths containing / as vault-relative),
+ * this respects the conventional markdown semantics:
+ *   - /abs/path  → strip leading slash, treat as project-root-relative
+ *   - ./rel or ../rel → resolve relative to the current file's directory
+ *   - bare/path  → treat as project-root-relative (vault-relative)
+ */
+export function resolveMarkdownLinkHref(href: string, currentPath: string | null): string {
+  if (href.startsWith("/")) {
+    return normalizePath(href.slice(1));
+  }
+  if ((href.startsWith("./") || href.startsWith("../")) && currentPath !== null) {
+    const dir = currentPath.slice(0, currentPath.lastIndexOf("/") + 1);
+    return normalizePath(dir + href);
+  }
+  return normalizePath(href);
+}
+
+/**
  * Normalize a path by resolving . and .. segments.
  */
 export function normalizePath(path: string): string {

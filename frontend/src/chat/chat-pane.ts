@@ -24,7 +24,7 @@ import { ChatInput } from "@core/chat/chat-input";
 import { DiagramViewer } from "@core/chat/diagram-viewer";
 import { ContextBudgetIndicator } from "../components/context-budget-indicator";
 import { PermissionsButton } from "./permissions-button";
-import { linkifyElement } from "@core/chat/linkify";
+import { linkifyElement, patchLinks } from "@core/chat/linkify";
 
 const CADE_MERMAID_CONFIG = {
   securityLevel: "loose" as const,
@@ -413,6 +413,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     textEl.className = "chat-message-text";
     textEl.textContent = content;
     if (this.onOpenFile) linkifyElement(textEl, this.onOpenFile);
+    patchLinks(textEl, this.onOpenFile ?? undefined);
 
     userEl.appendChild(textEl);
     this.messagesEl.appendChild(userEl);
@@ -746,6 +747,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.currentAssistantEl = null;
     if (targetEl && content) await this.renderer.renderRemainingDiagrams(targetEl, content);
     if (targetEl && this.onOpenFile) linkifyElement(targetEl, this.onOpenFile);
+    if (targetEl) patchLinks(targetEl, this.onOpenFile ?? undefined);
 
     if (!msg.cancelled) {
       this.updateTokenCount(msg.usage);
@@ -794,11 +796,13 @@ export class ChatPane implements Component, PaneKeyHandler {
         await this.renderer.render(contentEl, message.content);
         await this.renderer.renderRemainingDiagrams(contentEl, message.content);
         if (this.onOpenFile) linkifyElement(contentEl, this.onOpenFile);
+        patchLinks(contentEl, this.onOpenFile ?? undefined);
       } else if (message.role === "user") {
         const textEl = document.createElement("div");
         textEl.className = "chat-message-text";
         textEl.textContent = message.content;
         if (this.onOpenFile) linkifyElement(textEl, this.onOpenFile);
+        patchLinks(textEl, this.onOpenFile ?? undefined);
         el.appendChild(textEl);
         this.messagesEl.appendChild(el);
       } else {
