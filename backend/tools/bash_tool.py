@@ -1,9 +1,7 @@
 """Gated bash tool for LiteLLM agents.
 
-Commands are classified into four buckets before execution:
+Commands are classified into three buckets before execution:
 
-  COMPOUND  — shell operators detected (&&, ||, ;, |, backticks, $(...))
-               → rejected; agent must issue separate calls
   HARD_DENY — catastrophic or irreversible commands (sudo, rm /, shutdown…)
                → refused without prompting
   AUTO      — known-safe read-only commands
@@ -23,7 +21,6 @@ import asyncio
 import logging
 import re
 import shlex
-import shutil
 from pathlib import Path
 from typing import Any
 
@@ -65,10 +62,7 @@ _HARD_DENY_FIRST_TOKENS: frozenset[str] = frozenset({
     "crontab",
 })
 
-# Regex that detects unquoted shell operators in the raw command string.
-# We strip obvious quoted regions first to reduce false positives.
 _QUOTED_REGION_RE = re.compile(r'"[^"\\]*(?:\\.[^"\\]*)*"|\'[^\']*\'')
-_SHELL_OP_RE = re.compile(r"&&|\|\||;;|[|;&`]|\$\(|<\(|>\(")
 
 # Hard-deny patterns checked against the full command string (post-strip).
 # These catch the really bad stuff that first-token checks miss.
@@ -102,8 +96,7 @@ _BASH_SCHEMA: dict[str, Any] = {
         "command": {
             "type": "string",
             "description": (
-                "Shell command to run. Compound commands (&&, ||, |, ;) are not "
-                "supported — issue each step as a separate bash() call. "
+                "Shell command to run. Supports &&, ||, |, and ; operators. "
                 "Runs in the project root by default."
             ),
         },
@@ -131,21 +124,16 @@ def _strip_quotes(s: str) -> str:
 def _classify(command: str) -> tuple[str, str]:
     """Return (bucket, reason).
 
-    Buckets: "compound", "hard_deny", "auto", "prompt"
+    Buckets: "hard_deny", "auto", "prompt"
     """
     stripped = _strip_quotes(command)
 
-    # 1. Compound check — must be first so operators in hard-deny cmds are caught
-    m = _SHELL_OP_RE.search(stripped)
-    if m:
-        return "compound", f"shell operator '{m.group()}' detected"
-
-    # 2. Hard-deny patterns on the full stripped command
+    # 1. Hard-deny patterns on the full stripped command
     for pat in _HARD_DENY_PATTERNS:
         if pat.search(stripped):
             return "hard_deny", f"matches dangerous pattern: {pat.pattern}"
 
-    # 3. Parse first token
+    # 2. Parse first token from the command (ignoring shell operators)
     try:
         tokens = shlex.split(command)
     except ValueError as e:
@@ -159,25 +147,25 @@ def _classify(command: str) -> tuple[str, str]:
     if first in _HARD_DENY_FIRST_TOKENS or first.startswith("mkfs"):
         return "hard_deny", f"'{first}' is never permitted"
 
-    # 4. sed: deny if -i flag present (in-place edit)
+    # 3. sed: deny if -i flag present (in-place edit)
     if first == "sed" and any(t.startswith("-") and "i" in t.lstrip("-") for t in tokens[1:]):
         return "prompt", "sed -i modifies files in-place"
 
-    # 5. python/node/ruby: auto-approve only for --version / -V / -c "..." patterns
+    # 4. python/node/ruby: auto-approve only for --version / -V / -c "..." patterns
     if first in {"python3", "python", "node", "ruby", "perl"}:
         flags = [t for t in tokens[1:] if t.startswith("-")]
         if any(f in {"-V", "--version", "-v"} for f in flags) and len(tokens) <= 2:
             return "auto", "version check"
         return "prompt", f"{first} can execute arbitrary code"
 
-    # 6. git: check subcommand
+    # 5. git: check subcommand
     if first == "git":
         sub = next((t for t in tokens[1:] if not t.startswith("-")), None)
         if sub in _AUTO_GIT_SUBCOMMANDS:
             return "auto", f"git {sub} is read-only"
         return "prompt", f"git {sub or '(unknown)'} is not on the auto-approve list"
 
-    # 7. General auto-approve list
+    # 6. General auto-approve list
     if first in _AUTO_FIRST_TOKENS:
         return "auto", f"'{first}' is on the auto-approve list"
 
@@ -203,7 +191,7 @@ class BashToolExecutor:
                     "Run a shell command. Common read-only commands (ls, cat, grep, rg, "
                     "git status/log/diff, etc.) run immediately. Other commands prompt for "
                     "approval; once approved, the token is remembered for the session. "
-                    "Compound commands (&&, |, ;) are not supported — issue each step separately."
+                    "Shell operators (&&, ||, |, ;) are supported."
                 ),
                 parameters_schema=_BASH_SCHEMA,
             )
@@ -225,13 +213,6 @@ class BashToolExecutor:
         cwd = self._resolve_cwd(raw_cwd)
 
         bucket, reason = _classify(command)
-
-        if bucket == "compound":
-            op = reason.split("'")[1] if "'" in reason else ""
-            return (
-                f"Error: compound shell commands are not supported "
-                f"(detected: `{op}`). Issue each command as a separate bash() call."
-            )
 
         if bucket == "hard_deny":
             return f"Error: command refused — {reason}"

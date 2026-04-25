@@ -96,6 +96,10 @@ export class ChatPane implements Component, PaneKeyHandler {
   };
   private onModelNameChange: (() => void) | null = null;
   private slashHintEl: HTMLElement | null = null;
+  private slashMenu: {
+    items: Array<{ name: string; description: string }>;
+    selectedName: string | null;
+  } = { items: [], selectedName: null };
   private isStreaming = false;
   private readonly autoSubscribe: boolean;
   private readonly readOnly: boolean;
@@ -188,6 +192,17 @@ export class ChatPane implements Component, PaneKeyHandler {
       );
       this.chatInput.setOnCancel(() => this.cancelStream());
       this.chatInput.setOnSlashInput((text) => this.handleSlashInput(text));
+      this.chatInput.setOnArrowUp(() => this._slashMenuNavigate("up"));
+      this.chatInput.setOnArrowDown(() => this._slashMenuNavigate("down"));
+      this.chatInput.setOnTabComplete(() => this._slashMenuComplete(false));
+      // Enter with selection: fill the command then let send() fire (return false)
+      this.chatInput.setOnEnterIntercept(() => {
+        if (this.slashMenu.selectedName) {
+          this._slashMenuComplete(false);
+          return false;
+        }
+        return false;
+      });
     }
 
     // Open fullscreen viewer when clicking a mermaid diagram
@@ -270,7 +285,7 @@ export class ChatPane implements Component, PaneKeyHandler {
 
     const commands = this.systemInfo.slashCommands;
     if (!commands || commands.length === 0) {
-      this.hideSlashHints();
+      this._slashMenuClose();
       return;
     }
 
@@ -278,15 +293,29 @@ export class ChatPane implements Component, PaneKeyHandler {
       const query = text.slice(1).toLowerCase();
       const matches = commands.filter((c) => c.name.toLowerCase().startsWith(query));
       if (matches.length > 0) {
-        this.showSlashHints(matches);
+        // Take up to 8 matches in original order (native first), then reverse so
+        // closest/first match sits at the bottom nearest the input.
+        const displayed = [...matches.slice(0, 8)].reverse();
+
+        // Maintain current selection if it's still visible.
+        const stillSelected =
+          this.slashMenu.selectedName !== null &&
+          displayed.some((i) => i.name === this.slashMenu.selectedName);
+        if (!stillSelected) this.slashMenu.selectedName = null;
+
+        this._slashMenuShow(displayed, text);
         return;
       }
     }
 
-    this.hideSlashHints();
+    this._slashMenuClose();
   }
 
-  private showSlashHints(commands: Array<{ name: string; description: string }>): void {
+  private _slashMenuShow(items: Array<{ name: string; description: string }>, typedText?: string): void {
+    this.slashMenu.items = items;
+    // The typed text is the whole token to highlight (e.g. "/proven-r")
+    if (typedText) this.chatInput?.setSkillHighlight(typedText, typedText);
+
     if (!this.slashHintEl) {
       this.slashHintEl = document.createElement("div");
       this.slashHintEl.className = "chat-slash-hints";
@@ -294,9 +323,12 @@ export class ChatPane implements Component, PaneKeyHandler {
     }
 
     this.slashHintEl.innerHTML = "";
-    for (const cmd of commands.slice(0, 8)) {
+    for (const cmd of items) {
       const row = document.createElement("div");
       row.className = "chat-slash-row";
+      if (cmd.name === this.slashMenu.selectedName) {
+        row.classList.add("chat-slash-row--selected");
+      }
 
       const name = document.createElement("span");
       name.className = "chat-slash-name";
@@ -310,8 +342,8 @@ export class ChatPane implements Component, PaneKeyHandler {
       if (desc.textContent) row.appendChild(desc);
 
       row.addEventListener("click", () => {
-        this.chatInput?.setValue(`/${cmd.name}`);
-        this.hideSlashHints();
+        this.slashMenu.selectedName = cmd.name;
+        this._slashMenuComplete(false);
         this.chatInput?.focus();
       });
 
@@ -320,11 +352,62 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.slashHintEl.style.display = "block";
   }
 
-  private hideSlashHints(): void {
+  /** Navigate the menu. Up → toward bottom (most relevant). Down → toward top. */
+  private _slashMenuNavigate(dir: "up" | "down"): boolean {
+    const { items, selectedName } = this.slashMenu;
+    if (!items.length || this.slashHintEl?.style.display === "none") return false;
+
+    const last = items.length - 1;
+    let idx = selectedName !== null ? items.findIndex((i) => i.name === selectedName) : -1;
+
+    if (dir === "up") {
+      // Up: no selection → last (bottom/closest); otherwise move toward index 0, wrap at top
+      idx = idx === -1 ? last : idx === 0 ? last : idx - 1;
+    } else {
+      // Down: no selection → first (top/furthest); otherwise move toward last, wrap at bottom
+      idx = idx === -1 ? 0 : idx === last ? 0 : idx + 1;
+    }
+
+    this.slashMenu.selectedName = items[idx]!.name;
+    this._slashMenuShow(items); // re-render to update highlight
+    return true;
+  }
+
+  /**
+   * Complete input with selected (or bottom/closest) item.
+   * suppressSend=true means Tab-only (don't want send after completion).
+   */
+  private _slashMenuComplete(suppressSend: boolean): void {
+    const { items, selectedName } = this.slashMenu;
+    if (!items.length) return;
+
+    const target = selectedName
+      ? items.find((i) => i.name === selectedName)
+      : items[items.length - 1]; // default: bottom = closest match
+
+    this._slashMenuClose();
+    if (target) {
+      const completed = `/${target.name}`;
+      this.chatInput?.setValue(completed);
+      // Highlight the completed skill name in the input
+      this.chatInput?.setSkillHighlight(completed, completed);
+    }
+
+    if (suppressSend) {
+      // Fire slash input so the menu re-evaluates the exact match (may re-open with single item)
+      this.handleSlashInput(`/${target?.name ?? ""}`);
+    }
+  }
+
+  private _slashMenuClose(): void {
+    this.slashMenu.items = [];
+    this.slashMenu.selectedName = null;
     if (this.slashHintEl) {
       this.slashHintEl.style.display = "none";
     }
+    this.chatInput?.clearSkillHighlight();
   }
+
 
   setSlashCommands(
     commands: Array<{ name: string; description: string }>,
@@ -343,7 +426,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   }
 
   private sendMessage(text: string): void {
-    this.hideSlashHints();
+    this._slashMenuClose();
 
     const userEl = document.createElement("div");
     userEl.className = "chat-message user";

@@ -21,25 +21,35 @@ from backend.tools.bash_tool import (
 # ---------------------------------------------------------------------------
 
 class TestClassify:
-    def test_compound_pipe(self):
+    def test_pipe_classified_by_first_token(self):
+        # "ls | grep" — first token "ls" is auto-approved
         bucket, _ = _classify("ls | grep foo")
-        assert bucket == "compound"
+        assert bucket == "auto"
 
-    def test_compound_and(self):
+    def test_and_classified_by_first_token(self):
+        # "cd && ls" — first token "cd" is not auto-approved
         bucket, _ = _classify("cd /tmp && ls")
-        assert bucket == "compound"
+        assert bucket == "prompt"
 
-    def test_compound_semicolon(self):
+    def test_semicolon_classified_by_first_token(self):
+        # "echo a; echo b" — first token "echo" is auto-approved
         bucket, _ = _classify("echo a; echo b")
-        assert bucket == "compound"
+        assert bucket == "auto"
 
-    def test_compound_subshell(self):
+    def test_subshell_classified_by_first_token(self):
+        # "echo $(pwd)" — first token "echo" is auto-approved
         bucket, _ = _classify("echo $(pwd)")
-        assert bucket == "compound"
+        assert bucket == "auto"
 
-    def test_compound_backtick(self):
+    def test_backtick_classified_by_first_token(self):
+        # "echo `pwd`" — first token "echo" is auto-approved
         bucket, _ = _classify("echo `pwd`")
-        assert bucket == "compound"
+        assert bucket == "auto"
+
+    def test_pipe_with_dangerous_pattern_hard_denied(self):
+        # rm -rf anywhere in the command is still caught by pattern check
+        bucket, _ = _classify("ls / | rm -rf /tmp/foo")
+        assert bucket == "hard_deny"
 
     def test_hard_deny_sudo(self):
         bucket, _ = _classify("sudo rm /etc/passwd")
@@ -180,10 +190,12 @@ class TestBashExecution:
         out = await executor.execute_async("bash", {"command": "grep ZZZNOMATCH /dev/null"})
         assert "exit: 1" in out
 
-    async def test_compound_command_rejected(self, executor):
-        out = await executor.execute_async("bash", {"command": "ls && pwd"})
-        assert "compound" in out.lower()
-        assert "Error" in out
+    async def test_compound_command_runs(self, executor):
+        # Shell operators are now allowed; "ls && pwd" should execute
+        out = await executor.execute_async("bash", {"command": "echo first && echo second"})
+        assert "first" in out
+        assert "second" in out
+        assert "exit: 0" in out
 
     async def test_hard_deny_rejected(self, executor):
         out = await executor.execute_async("bash", {"command": "sudo ls"})

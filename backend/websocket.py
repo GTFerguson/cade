@@ -1407,11 +1407,23 @@ class ConnectionHandler:
             content = skill_content if skill_content else "Summarise this session concisely as a handoff so another agent can continue."
             self._compact_pending = True
 
-        # Intercept skill invocations: /<skillname> ... → load SKILL.md, prepend content
-        elif content.startswith("/"):
-            remaining, skill_content = self._try_load_skill(content)
-            if skill_content:
-                content = skill_content + ("\n\n" + remaining if remaining else "")
+        # Intercept skill invocations: /<skillname> anywhere in the message
+        # Supports both "/skill-name args" at the start and inline "use /skill-name to ..."
+        elif "/" in content:
+            import re
+            if content.startswith("/"):
+                remaining, skill_content = self._try_load_skill(content)
+                if skill_content:
+                    content = skill_content + ("\n\n" + remaining if remaining else "")
+            else:
+                # Inline invocation: extract the first /word pattern that matches a skill
+                m = re.search(r"(?<!\S)/(\w[\w-]*)", content)
+                if m:
+                    candidate = "/" + m.group(1)
+                    surrounding = (content[:m.start()] + " " + content[m.end():]).strip()
+                    _, skill_content = self._try_load_skill(candidate)
+                    if skill_content:
+                        content = skill_content + ("\n\n" + surrounding if surrounding else "")
             # Unknown slash command — pass through as-is (LLM handles it)
 
         provider_id = data.get("providerId")

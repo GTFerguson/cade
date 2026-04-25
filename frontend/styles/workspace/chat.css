@@ -593,6 +593,12 @@
   gap: 8px;
 }
 
+.chat-input-wrapper {
+  position: relative;
+  flex: 1;
+  min-height: 18px;
+}
+
 .chat-input-prompt {
   color: var(--accent-green);
   font-family: var(--font-mono);
@@ -602,8 +608,33 @@
   line-height: 18px;
 }
 
+.chat-input-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+  color: var(--text-primary);
+  /* hidden until a skill match is active */
+  display: none;
+}
+
+.chat-input-backdrop--active {
+  display: block;
+}
+
+.chat-input-skill {
+  color: var(--accent-blue);
+  font-weight: 500;
+}
+
 .chat-input {
-  flex: 1;
+  position: relative;
+  width: 100%;
   background: transparent;
   border: none;
   color: var(--text-primary);
@@ -620,6 +651,12 @@
   box-sizing: border-box;
   scrollbar-width: thin;
   scrollbar-color: var(--bg-tertiary) transparent;
+}
+
+/* Make textarea text transparent when skill highlight is active so backdrop shows through */
+.chat-input--skill-active {
+  color: transparent;
+  caret-color: var(--text-primary);
 }
 
 .chat-input::-webkit-scrollbar {
@@ -852,8 +889,14 @@
   cursor: pointer;
 }
 
-.chat-slash-row:hover {
+.chat-slash-row:hover,
+.chat-slash-row--selected {
   background: var(--bg-hover);
+}
+
+.chat-slash-row--selected .chat-slash-name {
+  color: var(--accent-blue);
+  opacity: 1;
 }
 
 .chat-slash-name {
