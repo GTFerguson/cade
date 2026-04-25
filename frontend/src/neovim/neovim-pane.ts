@@ -7,7 +7,8 @@
 
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { WebglAddon } from "@xterm/addon-webgl";
+import { WebglRenderer } from "../terminal/webgl-renderer";
+import { kickFontLoad } from "../terminal/font-loader";
 import type { PaneKeyHandler } from "../input/keybindings";
 import type { Component, ErrorMessage, NeovimDiffAvailableMessage, NeovimExitedMessage, NeovimOutputMessage, NeovimReadyMessage } from "../types";
 import { ErrorCode } from "@core/platform/protocol";
@@ -18,6 +19,7 @@ type NeovimPaneState = "idle" | "starting" | "ready" | "exited" | "error";
 export class NeovimPane implements Component, PaneKeyHandler {
   private terminal: XTerm | null = null;
   private fitAddon: FitAddon | null = null;
+  private webglRenderer: WebglRenderer | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private resizeDebounceTimer: number | null = null;
   private state: NeovimPaneState = "idle";
@@ -66,6 +68,8 @@ export class NeovimPane implements Component, PaneKeyHandler {
   }
 
   initialize(): void {
+    kickFontLoad();
+
     this.terminal = new XTerm({
       cursorBlink: true,
       cursorStyle: "block",
@@ -107,13 +111,7 @@ export class NeovimPane implements Component, PaneKeyHandler {
 
     this.terminal.open(this.terminalContainer);
 
-    try {
-      const webgl = new WebglAddon(true);
-      webgl.onContextLoss(() => webgl.dispose());
-      this.terminal.loadAddon(webgl);
-    } catch {
-      // WebGL unavailable — xterm falls back to canvas renderer
-    }
+    this.webglRenderer = new WebglRenderer(this.terminal);
 
     // Forward terminal data to backend Neovim process
     this.terminal.onData((data) => {
@@ -434,6 +432,9 @@ export class NeovimPane implements Component, PaneKeyHandler {
     if (this.state === "ready" || this.state === "starting") {
       this.kill();
     }
+
+    this.webglRenderer?.dispose();
+    this.webglRenderer = null;
 
     this.terminal?.dispose();
     this.terminal = null;

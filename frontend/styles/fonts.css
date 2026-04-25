@@ -1,0 +1,27 @@
+/*
+ * Bundled JetBrains Mono. Self-hosted so the terminal renders against
+ * known, byte-identical glyph metrics on every machine — eliminating the
+ * OS-font-availability variable that drives xterm.js WebGL atlas corruption
+ * (the "black blocks" symptom) when the requested family resolves to a
+ * fallback at first paint.
+ *
+ * font-display: block holds the first paint for up to ~3s while the font
+ * fetches, so xterm measures the correct face on init rather than measuring
+ * a fallback and re-rasterising later.
+ */
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: block;
+  src: url("/fonts/JetBrainsMono-SemiBold.woff2") format("woff2");
+}

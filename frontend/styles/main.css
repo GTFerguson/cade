@@ -4,6 +4,9 @@
  * Vite inlines @import at build time — no runtime cost.
  */
 
+/* Bundled fonts — must come before any rules that consume them */
+@import "./fonts.css";
+
 /* Foundation (shared with other @core consumers) */
 @import "../../core/frontend/styles/base/variables.css";
 @import "../../core/frontend/styles/base/reset.css";

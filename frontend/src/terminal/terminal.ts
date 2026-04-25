@@ -5,11 +5,12 @@
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { WebglAddon } from "@xterm/addon-webgl";
 import { SessionKey, type AnySessionKey } from "@core/platform/protocol";
 import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 import { getSavedThemeId, getThemeById } from "../config/themes";
+import { WebglRenderer } from "./webgl-renderer";
+import { kickFontLoad } from "./font-loader";
 
 /**
  * Build an xterm.js theme from the current CADE theme.
@@ -69,6 +70,7 @@ export interface TerminalOptions {
 export class Terminal implements Component {
   private terminal: XTerm | null = null;
   private fitAddon: FitAddon | null = null;
+  private webglRenderer: WebglRenderer | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private resizeDebounceTimer: number | null = null;
   private customKeyHandler: CustomKeyHandler | null = null;
@@ -106,6 +108,11 @@ export class Terminal implements Component {
    * Initialize the terminal.
    */
   initialize(): void {
+    // Prompt the browser to fetch terminal fonts before xterm measures glyphs.
+    // The WebglRenderer below will rebuild the atlas if fonts arrive later,
+    // but pre-fetching avoids the brief flash of fallback-font corruption.
+    kickFontLoad();
+
     const xtermTheme = buildXtermTheme();
     const theme = this.hideCursor
       ? { ...xtermTheme, cursor: "transparent", cursorAccent: "transparent" }
@@ -132,14 +139,7 @@ export class Terminal implements Component {
 
     this.terminal.open(this.container);
 
-    try {
-      const webgl = new WebglAddon(true);
-      // Dispose on context loss so xterm falls back to canvas rather than leaving artifacts
-      webgl.onContextLoss(() => webgl.dispose());
-      this.terminal.loadAddon(webgl);
-    } catch {
-      // WebGL unavailable — xterm falls back to canvas renderer
-    }
+    this.webglRenderer = new WebglRenderer(this.terminal);
 
     // Allow external key interception (e.g., for prefix key)
     this.terminal.attachCustomKeyEventHandler((e) => {
@@ -284,6 +284,9 @@ export class Terminal implements Component {
     this.terminal.options.theme = this.hideCursor
       ? { ...xtermTheme, cursor: "transparent", cursorAccent: "transparent" }
       : xtermTheme;
+    // The WebGL atlas bakes theme colors into rasterised glyphs; rebuild it
+    // so updated colors take effect instead of serving stale cached cells.
+    this.webglRenderer?.refresh();
   }
 
   /**
@@ -485,6 +488,9 @@ export class Terminal implements Component {
 
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+
+    this.webglRenderer?.dispose();
+    this.webglRenderer = null;
 
     this.terminal?.dispose();
     this.terminal = null;
