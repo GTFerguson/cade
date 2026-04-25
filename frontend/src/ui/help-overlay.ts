@@ -1,59 +1,13 @@
 /**
  * Full-pane TUI help overlay displaying keybinding guide.
  *
- * Auto-generates binding display from getUserConfig().keybindings so
- * the help screen always reflects current configuration. Laid out as
- * two rows: general+tabs side-by-side, then terminal|tree|viewer in
- * three columns matching the workspace panes.
+ * Laid out as two rows:
+ *   Row 1 — PANES + TABS (workspace navigation)
+ *   Row 2 — CHAT + FILE TREE + MISC (pane-specific bindings)
  */
 
 import type { Component } from "./types";
-import { getUserConfig, parseKeybinding } from "../config/user-config";
 import { renderHelpBar } from "@core/ui/menu-nav";
-
-// ─── Label Maps ──────────────────────────────────────────────────────
-
-const PANE_LABELS: Record<string, string> = {
-  focusLeft: "focus left",
-  focusRight: "focus right",
-  resizeLeft: "resize left",
-  resizeRight: "resize right",
-};
-
-const TAB_LABELS: Record<string, string> = {
-  next: "next tab",
-  previous: "prev tab",
-  create: "new tab",
-  createRemote: "new remote",
-  close: "close tab",
-};
-
-const MISC_LABELS: Record<string, string> = {
-  toggleTerminal: "toggle agent",
-  cycleAgentNext: "next agent",
-  cycleAgentPrev: "prev agent",
-  cycleModeNext: "next mode",
-  cycleModePrev: "prev mode",
-  toggleViewer: "toggle viewer",
-  toggleEnhanced: "enhanced mode",
-};
-
-// ─── Formatting Utilities ────────────────────────────────────────────
-
-function formatBinding(binding: string): string {
-  const parsed = parseKeybinding(binding);
-  const parts: string[] = [];
-  if (parsed.ctrl) parts.push("Ctrl");
-  if (parsed.alt) parts.push("Alt");
-  if (parsed.shift) parts.push("Shift");
-  if (parsed.meta) parts.push("Meta");
-  parts.push(parsed.key);
-  return parts.join("+");
-}
-
-function formatPrefixed(binding: string): string {
-  return `prefix ${formatBinding(binding)}`;
-}
 
 // ─── DOM Helpers ─────────────────────────────────────────────────────
 
@@ -176,107 +130,96 @@ export class HelpOverlay implements Component {
   // ─── Render ──────────────────────────────────────────────────────
 
   private render(): void {
-    const kb = getUserConfig().keybindings;
-
     this.overlay = document.createElement("div");
     this.overlay.className = "help-overlay";
 
     const panel = document.createElement("div");
     panel.className = "help-panel";
 
-    // Header
     const header = document.createElement("div");
     header.className = "help-header";
     header.textContent = "[ KEYBINDINGS ]";
     panel.appendChild(header);
 
-    // Divider
     const divider = document.createElement("div");
     divider.className = "help-divider";
     panel.appendChild(divider);
 
-    // Scrollable body
     this.body = document.createElement("div");
     this.body.className = "help-body";
 
-    // ── Row 1: General + Tabs ──
+    // ── Row 1: Panes + Tabs ──
 
-    const generalBindings: Binding[] = Object.entries(PANE_LABELS).map(
-      ([key, label]) => ({
-        label,
-        key: formatPrefixed(kb.pane[key as keyof typeof kb.pane]),
-      })
-    );
+    const paneBindings: Binding[] = [
+      { label: "focus left / right", key: "Alt+h / Alt+l" },
+      { label: "resize left / right", key: "Alt+H / Alt+L" },
+      { label: "toggle terminal", key: "Alt+s" },
+      { label: "toggle viewer", key: "Alt+v" },
+      { label: "toggle enhanced", key: "Alt+e" },
+      { label: "focus chat input", key: "Alt+i" },
+      { label: "theme selector", key: "Alt+p" },
+      { label: "view latest plan", key: "Ctrl+g" },
+    ];
 
-    const tabBindings: Binding[] = Object.entries(TAB_LABELS).map(
-      ([key, label]) => ({
-        label,
-        key: formatPrefixed(kb.tab[key as keyof typeof kb.tab]),
-      })
-    );
-    tabBindings.push({ label: "go to 1-9", key: "prefix 1-9" });
+    const tabBindings: Binding[] = [
+      { label: "prev / next tab", key: "Alt+d / Alt+f" },
+      { label: "new tab", key: "Alt+t" },
+      { label: "close tab", key: "Alt+w" },
+      { label: "new remote tab", key: "Alt+r" },
+      { label: "toggle dashboard", key: "Alt+q" },
+      { label: "go to tab 1-9", key: "Alt+1-9" },
+    ];
 
     this.body.appendChild(
       buildRow("help-row-general", [
-        buildSection("GENERAL", generalBindings),
+        buildSection("WORKSPACE", paneBindings),
         buildSection("TABS", tabBindings),
       ])
     );
 
-    // ── Row 2: Terminal + File Tree + Viewer ──
+    // ── Row 2: Chat + File Tree + Agents ──
 
-    const terminalBindings: Binding[] = Object.entries(MISC_LABELS).map(
-      ([key, label]) => ({
-        label,
-        key: formatPrefixed(kb.misc[key as keyof typeof kb.misc]),
-      })
-    );
-    terminalBindings.push({
-      label: "scroll top",
-      key: formatPrefixed(kb.navigation.scrollToTop),
-    });
-    terminalBindings.push({
-      label: "scroll bottom",
-      key: formatPrefixed(kb.navigation.scrollToBottom),
-    });
-    terminalBindings.push({ label: "theme", key: "prefix t" });
+    const chatBindings: Binding[] = [
+      { label: "focus input", key: "i  (or Alt+i global)" },
+      { label: "blur input", key: "Esc" },
+      { label: "scroll up / down", key: "k / j" },
+      { label: "page up / down", key: "PgUp / PgDn" },
+      { label: "jump top / bottom", key: "gg / G" },
+      { label: "scroll while typing", key: "Alt+k/j/g/G" },
+      { label: "approve agent", key: "Alt+y" },
+      { label: "reject agent", key: "Alt+n" },
+    ];
 
     const treeBindings: Binding[] = [
-      { label: "navigate", key: "j/k" },
-      { label: "open/expand", key: "l" },
+      { label: "navigate", key: "j / k" },
+      { label: "open / expand", key: "l" },
       { label: "collapse", key: "h" },
-      { label: "jump top", key: "gg" },
-      { label: "jump bottom", key: "G" },
+      { label: "jump top / bottom", key: "gg / G" },
       { label: "search", key: "/" },
       { label: "clear search", key: "Esc" },
     ];
 
-    const viewerBindings: Binding[] = [
-      { label: "scroll", key: "j/k" },
-      { label: "top", key: "gg" },
-      { label: "bottom", key: "G" },
-      { label: "page down", key: "Ctrl+d" },
-      { label: "page up", key: "Ctrl+u" },
-      { label: "edit mode", key: "i" },
+    const agentBindings: Binding[] = [
+      { label: "next / prev agent", key: "Alt+] / Alt+[" },
+      { label: "next / prev mode", key: "Alt+m / Alt+M" },
+      { label: "scroll top / bottom", key: "prefix g / G" },
     ];
 
     this.body.appendChild(
       buildRow("help-row-panes", [
+        buildSection("CHAT", chatBindings),
         buildSection("FILE TREE", treeBindings),
-        buildSection("TERMINAL", terminalBindings),
-        buildSection("VIEWER", viewerBindings),
+        buildSection("AGENTS", agentBindings),
       ])
     );
 
     panel.appendChild(this.body);
 
-    // Footer
     const footer = document.createElement("div");
     footer.className = "help-footer";
     footer.innerHTML = renderHelpBar([
       { key: "j/k", label: "scroll" },
-      { key: "q", label: "close" },
-      { key: "Esc", label: "close" },
+      { key: "q / Esc", label: "close" },
     ]);
     panel.appendChild(footer);
 
