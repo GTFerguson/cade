@@ -135,9 +135,9 @@ async def test_stream_chat_handles_error(provider: APIProvider):
         async for event in provider.stream_chat(messages):
             events.append(event)
 
-    assert len(events) == 1
-    assert isinstance(events[0], ChatError)
-    assert "rate limited" in events[0].message
+    errors = [e for e in events if isinstance(e, ChatError)]
+    assert len(errors) == 1
+    assert "rate limited" in errors[0].message
 
 
 @pytest.mark.asyncio
@@ -494,3 +494,78 @@ async def test_max_tool_turns_guard():
         errors = [e for e in events if isinstance(e, ChatError)]
         assert len(errors) == 1
         assert "maximum" in errors[0].message.lower() or "exceed" in errors[0].message.lower()
+
+
+# --- Usage accumulation regression tests ---
+#
+# Anthropic-format providers emit prompt_tokens in the FIRST streaming chunk
+# (message_start event), not the last. The earlier implementation only read
+# usage from the final chunk, so prompt_tokens were always zero and the
+# context budget indicator never appeared.
+
+class MockUsage:
+    def __init__(self, prompt_tokens=0, completion_tokens=0):
+        self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
+
+
+@pytest.mark.asyncio
+async def test_usage_from_first_chunk_captured(provider: APIProvider):
+    """Prompt tokens in the first chunk (Anthropic message_start) are captured."""
+    first_chunk = MockChunk(None, usage=MockUsage(prompt_tokens=150, completion_tokens=0))
+    first_chunk.choices = []  # message_start has no choices
+    text_chunk = MockChunk("Hello", finish_reason=None)
+    last_chunk = MockChunk(None, usage=MockUsage(prompt_tokens=0, completion_tokens=25))
+    last_chunk.choices = []  # usage-only final chunk
+
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm:
+        mock_litellm.acompletion = AsyncMock(
+            return_value=MockStreamResponse([first_chunk, text_chunk, last_chunk])
+        )
+
+        events = []
+        async for event in provider.stream_chat([ChatMessage(role="user", content="Hi")]):
+            events.append(event)
+
+    done = next(e for e in events if isinstance(e, ChatDone))
+    assert done.usage["prompt_tokens"] == 150
+    assert done.usage["completion_tokens"] == 25
+
+
+@pytest.mark.asyncio
+async def test_usage_from_last_chunk_only(provider: APIProvider):
+    """OpenAI-style providers put full usage only in the last chunk — still works."""
+    text_chunk = MockChunk("Hi", finish_reason=None)
+    last_chunk = MockChunk(None, usage=MockUsage(prompt_tokens=80, completion_tokens=10))
+
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm:
+        mock_litellm.acompletion = AsyncMock(
+            return_value=MockStreamResponse([text_chunk, last_chunk])
+        )
+
+        events = []
+        async for event in provider.stream_chat([ChatMessage(role="user", content="Hi")]):
+            events.append(event)
+
+    done = next(e for e in events if isinstance(e, ChatDone))
+    assert done.usage["prompt_tokens"] == 80
+    assert done.usage["completion_tokens"] == 10
+
+
+@pytest.mark.asyncio
+async def test_usage_empty_when_provider_omits_it(provider: APIProvider):
+    """When provider returns no usage at all, ChatDone has an empty usage dict."""
+    text_chunk = MockChunk("Hi", finish_reason=None)
+    last_chunk = MockChunk(None)  # no usage attribute set
+
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm:
+        mock_litellm.acompletion = AsyncMock(
+            return_value=MockStreamResponse([text_chunk, last_chunk])
+        )
+
+        events = []
+        async for event in provider.stream_chat([ChatMessage(role="user", content="Hi")]):
+            events.append(event)
+
+    done = next(e for e in events if isinstance(e, ChatDone))
+    assert done.usage == {}

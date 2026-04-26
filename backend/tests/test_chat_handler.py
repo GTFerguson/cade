@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -78,6 +77,7 @@ async def test_chat_stream_sends_text_deltas():
     handler._closed = False
     handler._provider_registry = registry
     handler._session_id = "test-session"
+    handler._current_mode = "code"
 
     # Simulate chat-message
     await handler._handle_chat_message({
@@ -127,6 +127,7 @@ async def test_chat_stream_sends_error():
     handler._closed = False
     handler._provider_registry = registry
     handler._session_id = "test-session"
+    handler._current_mode = "code"
 
     await handler._handle_chat_message({
         "type": "chat-message",
@@ -153,6 +154,7 @@ async def test_no_provider_returns_error():
     handler._closed = False
     handler._provider_registry = ProviderRegistry()
     handler._session_id = "test-session"
+    handler._current_mode = "code"
 
     await handler._handle_chat_message({
         "type": "chat-message",
@@ -163,3 +165,144 @@ async def test_no_provider_returns_error():
     assert len(stream_msgs) == 1
     assert stream_msgs[0]["event"] == "error"
     assert "No provider configured" in stream_msgs[0]["message"]
+
+
+# --- /clear and /compact regression tests ---
+
+def _make_handler(ws, working_dir: str = "/tmp") -> "ConnectionHandler":
+    from backend.websocket import ConnectionHandler
+    config = MagicMock()
+    config.working_dir = working_dir
+    handler = ConnectionHandler(ws, config)
+    handler._closed = False
+    handler._session_id = "test-session"
+    handler._current_mode = "code"
+    return handler
+
+
+@pytest.mark.asyncio
+async def test_clear_wipes_session_and_sends_compact(tmp_path):
+    """/clear resets the session and sends chat-compact with empty context."""
+    ws = MockWebSocket()
+    handler = _make_handler(ws, str(tmp_path))
+
+    # Seed a session with some history first
+    from core.backend.chat.session import get_chat_registry
+    registry = get_chat_registry()
+    session = registry.get_or_create("test-session", provider_name="test")
+    session.add_user_message("hello")
+    session.add_assistant_message("hi there")
+    handler._chat_session = session
+
+    await handler._do_clear()
+
+    compact_msgs = [m for m in ws.sent if m.get("type") == "chat-compact"]
+    assert len(compact_msgs) == 1
+    assert compact_msgs[0]["context"] == ""
+
+    # Session should be fresh — no history
+    assert len(handler._chat_session.get_messages()) == 0
+
+
+@pytest.mark.asyncio
+async def test_compact_approved_resets_session_and_sends_opening(tmp_path):
+    """/compact: approved preview resets session and sends opening message with file path."""
+    ws = MockWebSocket()
+    handler = _make_handler(ws, str(tmp_path))
+
+    # Seed a session with an assistant message (the generated handoff)
+    from core.backend.chat.session import get_chat_registry
+    registry = get_chat_registry()
+    session = registry.get_or_create("test-session-compact", provider_name="test")
+    session.add_user_message("please compact")
+    session.add_assistant_message("# Handoff\nWe built the context bar.")
+    handler._chat_session = session
+    handler._session_id = "test-session-compact"
+
+    # Run _do_compact as a task, then approve it
+    task = asyncio.create_task(handler._do_compact())
+    await asyncio.sleep(0)  # let it reach the future await
+
+    assert handler._compact_preview_future is not None
+    preview_msgs = [m for m in ws.sent if m.get("type") == "compact-preview"]
+    assert len(preview_msgs) == 1
+    assert "context bar" in preview_msgs[0]["content"]
+    assert preview_msgs[0]["filePath"] is not None
+
+    # Approve
+    handler._compact_preview_future.set_result(True)
+    await task
+
+    compact_msgs = [m for m in ws.sent if m.get("type") == "chat-compact"]
+    assert len(compact_msgs) == 1
+    assert compact_msgs[0]["filePath"] is not None
+    # Opening message mentions the file path
+    assert compact_msgs[0]["filePath"] in compact_msgs[0]["context"]
+
+    # Old session replaced — fresh history
+    assert len(handler._chat_session.get_messages()) == 1  # seeded assistant message
+
+    # Handoff file exists on disk
+    handoff_files = list((tmp_path / "docs" / "plans" / "handoff").glob("*.md"))
+    assert len(handoff_files) == 1
+    assert "context bar" in handoff_files[0].read_text()
+
+
+@pytest.mark.asyncio
+async def test_compact_rejected_leaves_session_intact(tmp_path):
+    """/compact: rejected preview does not reset the session."""
+    ws = MockWebSocket()
+    handler = _make_handler(ws, str(tmp_path))
+
+    from core.backend.chat.session import get_chat_registry
+    registry = get_chat_registry()
+    session = registry.get_or_create("test-session-reject", provider_name="test")
+    session.add_user_message("compact please")
+    session.add_assistant_message("# Handoff\nSome work done.")
+    handler._chat_session = session
+    handler._session_id = "test-session-reject"
+
+    task = asyncio.create_task(handler._do_compact())
+    await asyncio.sleep(0)
+
+    # Reject
+    handler._compact_preview_future.set_result(False)
+    await task
+
+    # No chat-compact should have been sent
+    compact_msgs = [m for m in ws.sent if m.get("type") == "chat-compact"]
+    assert len(compact_msgs) == 0
+
+    # Session unchanged — original messages still there
+    assert len(handler._chat_session.get_messages()) == 2
+
+
+@pytest.mark.asyncio
+async def test_compact_preview_resolved_routes_to_future():
+    """compact-preview-resolved message resolves the pending future."""
+    ws = MockWebSocket()
+    handler = _make_handler(ws)
+
+    fut: asyncio.Future = asyncio.get_event_loop().create_future()
+    handler._compact_preview_future = fut
+
+    await handler._handle_message({"type": "compact-preview-resolved", "approved": True})
+
+    assert fut.done()
+    assert fut.result() is True
+
+
+@pytest.mark.asyncio
+async def test_chat_clear_message_triggers_clear():
+    """chat-clear message from client triggers _do_clear."""
+    ws = MockWebSocket()
+    handler = _make_handler(ws)
+
+    handler._closed = False
+    handler._provider_registry = ProviderRegistry()
+
+    await handler._handle_message({"type": "chat-clear"})
+
+    compact_msgs = [m for m in ws.sent if m.get("type") == "chat-compact"]
+    assert len(compact_msgs) == 1
+    assert compact_msgs[0]["context"] == ""
