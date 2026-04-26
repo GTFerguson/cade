@@ -81,7 +81,7 @@ class TestValidateShellCommand:
 
     def test_valid_command_unchanged(self):
         """A command that exists on PATH should not be changed."""
-        config = Config(shell_command="python")
+        config = Config(shell_command="bash")
         original = config.shell_command
         config.validate_shell_command()
         assert config.shell_command == original
@@ -94,9 +94,9 @@ class TestValidateShellCommand:
 
     def test_command_with_valid_base_and_args(self):
         """A command with arguments whose base binary exists should pass."""
-        config = Config(shell_command="python --version")
+        config = Config(shell_command="bash --norc")
         config.validate_shell_command()
-        assert config.shell_command == "python --version"
+        assert config.shell_command == "bash --norc"
 
     def test_command_with_invalid_base_and_args(self):
         """A command with arguments whose base binary is missing should be corrected."""

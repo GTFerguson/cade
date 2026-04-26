@@ -119,6 +119,9 @@ class ConnectionHandler:
         # Google id_token extracted from the WS query string; forwarded to the
         # game server in the hello frame via WebsocketProvider.set_auth_token().
         self._google_token: str | None = None
+        self._launch_yaml: dict = {}
+        self._kiosk_mode: bool = False
+        self._current_mode: str = "code"
 
     async def _send_status(self, message: str) -> None:
         """Send a startup status message."""
@@ -1035,6 +1038,18 @@ class ConnectionHandler:
                 await self._handle_agent_approve_report(data)
             elif msg_type == MessageType.AGENT_REJECT_REPORT:
                 await self._handle_agent_reject_report(data)
+            elif msg_type == MessageType.AGENT_MESSAGE:
+                from backend.orchestrator.manager import get_orchestrator_manager
+                await get_orchestrator_manager().send_message_to_agent(
+                    data.get("agentId", ""),
+                    data.get("content", ""),
+                )
+            elif msg_type == MessageType.AGENT_GUIDANCE_RESPOND:
+                from backend.orchestrator.manager import get_orchestrator_manager
+                await get_orchestrator_manager().respond_guidance(
+                    data.get("agentId", ""),
+                    data.get("response", ""),
+                )
             elif msg_type == MessageType.DASHBOARD_GET_CONFIG:
                 if self._dashboard:
                     await self._dashboard.load_and_send_config()

@@ -76,10 +76,19 @@ def _create_tool_registry(provider_config, working_dir: "Path | None" = None, co
         from backend.config import get_config
         from backend.orchestrator.mcp_config import MCP_SERVER_SCRIPT, _get_python
         cfg = get_config()
+        mcp_env: dict[str, str] = {
+            "CADE_BACKEND_PORT": str(cfg.port),
+            "CADE_BACKEND_HOST": "localhost",
+        }
+        if connection_id:
+            mcp_env["CADE_CONNECTION_ID"] = connection_id
+            mcp_env["CADE_AGENT_ID"] = connection_id
+        if cfg.auth_token:
+            mcp_env["CADE_AUTH_TOKEN"] = cfg.auth_token
         orchestrator_adapter = MCPToolAdapter(
             command=_get_python(),
             args=[str(MCP_SERVER_SCRIPT)],
-            env={"CADE_BACKEND_PORT": str(cfg.port), "CADE_BACKEND_HOST": "localhost"},
+            env=mcp_env,
         )
         registry.register(orchestrator_adapter, "__orchestrator__")
     except Exception as e:

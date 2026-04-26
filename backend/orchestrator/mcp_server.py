@@ -19,6 +19,7 @@ BASE_URL = f"http://{BACKEND_HOST}:{BACKEND_PORT}"
 
 AUTH_TOKEN = os.environ.get("CADE_AUTH_TOKEN", "")
 CONNECTION_ID = os.environ.get("CADE_CONNECTION_ID", "")
+AGENT_ID = os.environ.get("CADE_AGENT_ID", "")
 
 
 def _get_headers() -> dict[str, str]:
@@ -66,6 +67,32 @@ async def list_agents() -> str:
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.get(
             f"{BASE_URL}/api/orchestrator/agents",
+            headers=_get_headers(),
+        )
+        response.raise_for_status()
+        return response.text
+
+
+@mcp.tool()
+async def request_guidance(question: str) -> str:
+    """Ask the user for guidance. Blocks until they respond.
+
+    Use when you hit a decision point you cannot resolve alone, need clarification,
+    or lack information only the user can provide. Returns their response directly.
+
+    Args:
+        question: What you need help with — be specific about what you've tried
+                  and what decision you're stuck on.
+
+    Returns:
+        The user's response.
+    """
+    if not AGENT_ID:
+        return "Error: agent ID not set — cannot request guidance"
+    async with httpx.AsyncClient(timeout=3700.0) as client:
+        response = await client.post(
+            f"{BASE_URL}/api/orchestrator/guidance-request",
+            json={"agent_id": AGENT_ID, "question": question},
             headers=_get_headers(),
         )
         response.raise_for_status()

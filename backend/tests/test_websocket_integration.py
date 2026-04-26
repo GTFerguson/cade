@@ -468,6 +468,7 @@ class TestWebsocketProviderIntegration:
         handler._chat_session = ChatSession(provider_name="ws-test")
         handler._session_id = "sess-1"
         handler._provider_registry = None
+        handler._google_token = None
         sent: list[dict] = []
 
         async def _send(msg: dict) -> None:

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 import uvicorn
 from fastapi import Cookie, FastAPI, Request, WebSocket
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from pydantic import BaseModel
 
 from backend.auth import create_session_value, validate_session_cookie
@@ -302,6 +302,19 @@ class SpawnAgentRequest(BaseModel):
     name: str
     task: str
     mode: str = "code"
+
+
+class GuidanceRequest(BaseModel):
+    agent_id: str
+    question: str
+
+
+class GuidanceResponse(BaseModel):
+    response: str
+
+
+class AgentMessageRequest(BaseModel):
+    message: str
 
 
 async def _send_to_connections(connections: list, message: dict) -> int:
@@ -620,11 +633,15 @@ def create_app(config: Config | None = None) -> FastAPI:
         """Spawn an agent and block until its full lifecycle completes."""
         from backend.orchestrator.manager import get_orchestrator_manager
         from backend.orchestrator.models import AgentSpec
+        from backend.permissions.manager import get_permission_manager
 
         connection_id = request.headers.get("X-Connection-Id", "")
         manager = get_orchestrator_manager()
         spec = AgentSpec(name=body.name, task=body.task, mode=body.mode)
         record = await manager.spawn_agent(spec, connection_id=connection_id)
+        # allow_subagents=True means autonomous mode — auto-approve without a dialog
+        if get_permission_manager().get_allow_subagents(connection_id):
+            await manager.approve_agent(record.agent_id)
         result = await manager.await_completion(record.agent_id, timeout=3600.0)
         return JSONResponse(result)
 
@@ -649,6 +666,37 @@ def create_app(config: Config | None = None) -> FastAPI:
         if not ok:
             return JSONResponse({"error": "Agent not found or not in review"}, status_code=400)
         return JSONResponse({"status": "rejected"})
+
+    @app.post("/api/orchestrator/guidance-request")
+    async def orchestrator_guidance_request(body: GuidanceRequest) -> PlainTextResponse:
+        """Called by a worker's request_guidance MCP tool. Blocks until the user responds."""
+        from backend.orchestrator.manager import get_orchestrator_manager
+
+        manager = get_orchestrator_manager()
+        response = await manager.request_guidance(body.agent_id, body.question)
+        return PlainTextResponse(response)
+
+    @app.post("/api/orchestrator/guidance-respond/{agent_id}")
+    async def orchestrator_guidance_respond(agent_id: str, body: GuidanceResponse) -> JSONResponse:
+        """User responds to a pending guidance request from a worker."""
+        from backend.orchestrator.manager import get_orchestrator_manager
+
+        manager = get_orchestrator_manager()
+        ok = await manager.respond_guidance(agent_id, body.response)
+        if not ok:
+            return JSONResponse({"error": "No pending guidance request for this agent"}, status_code=400)
+        return JSONResponse({"status": "ok"})
+
+    @app.post("/api/orchestrator/message/{agent_id}")
+    async def orchestrator_message_agent(agent_id: str, body: AgentMessageRequest) -> JSONResponse:
+        """Send a steering message to a running worker agent."""
+        from backend.orchestrator.manager import get_orchestrator_manager
+
+        manager = get_orchestrator_manager()
+        ok = await manager.send_message_to_agent(agent_id, body.message)
+        if not ok:
+            return JSONResponse({"error": "Agent not running or not available"}, status_code=400)
+        return JSONResponse({"status": "ok"})
 
     # --- Permission Prompt API ---
 

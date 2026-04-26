@@ -60,11 +60,14 @@ class MessageType:
     AGENT_REJECT = "agent-reject"  # Reject pending agent: { type, agentId }
     AGENT_APPROVE_REPORT = "agent-approve-report"  # Approve agent report: { type, agentId }
     AGENT_REJECT_REPORT = "agent-reject-report"  # Reject agent report: { type, agentId }
+    AGENT_MESSAGE = "agent-message"  # Send message to running agent: { type, agentId, content }
+    AGENT_GUIDANCE_RESPOND = "agent-guidance-respond"  # Respond to agent guidance request: { type, agentId, response }
 
     # Orchestrator - Server -> Client
     AGENT_SPAWNED = "agent-spawned"  # Agent created (pending approval): { type, agentId, name, task, mode }
     AGENT_KILLED = "agent-killed"  # Agent terminated: { type, agentId }
     AGENT_STATE_CHANGED = "agent-state-changed"  # Agent state update: { type, agentId, state }
+    AGENT_GUIDANCE_REQUEST = "agent-guidance-request"  # Agent needs user input: { type, agentId, question }
 
     # Neovim - Client -> Server
     NEOVIM_SPAWN = "neovim-spawn"  # Request Neovim instance: { type, sessionId }

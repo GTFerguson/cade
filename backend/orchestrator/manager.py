@@ -86,6 +86,8 @@ class OrchestratorManager:
         self._tasks: dict[str, asyncio.Task] = {}
         self._providers: dict[str, BaseProvider] = {}
         self._connections: dict[str, _ConnectionEntry] = {}
+        self._message_queues: dict[str, asyncio.Queue] = {}
+        self._guidance_futures: dict[str, asyncio.Future] = {}
 
     def register_connection(
         self,
@@ -185,7 +187,22 @@ class OrchestratorManager:
         entry = self._connections.get(connection_id)
         working_dir = entry.working_dir if entry else None
 
-        provider = _make_worker_provider(record.name, record.mode, working_dir, connection_id)
+        # Give the worker its own permission context so its mode is enforced by
+        # tool executors. Route permission prompts to the owner's WS connection.
+        from backend.permissions.manager import get_permission_manager
+        perms = get_permission_manager()
+        perms.set_mode(record.mode, connection_id=agent_id)
+        owner_fn = perms._send_fns.get(connection_id)
+        if owner_fn:
+            perms.register_broadcast(agent_id, owner_fn)
+        if not perms.get_allow_write(connection_id):
+            perms.set_accept_edits(False, connection_id=agent_id)
+
+        self._message_queues[agent_id] = asyncio.Queue()
+
+        # Worker uses agent_id as its connection_id — mode check in file/bash tools
+        # will read the worker's own mode rather than the orchestrator's mode
+        provider = _make_worker_provider(record.name, record.mode, working_dir, agent_id)
         self._providers[agent_id] = provider
 
         await self._send_to(connection_id, {
@@ -265,6 +282,63 @@ class OrchestratorManager:
         })
 
         return True
+
+    async def request_guidance(self, agent_id: str, question: str) -> str:
+        """Called by a worker via its request_guidance MCP tool. Blocks until user responds."""
+        loop = asyncio.get_event_loop()
+        future: asyncio.Future[str] = loop.create_future()
+        self._guidance_futures[agent_id] = future
+
+        await self._send_to_agent(agent_id, {
+            "type": MessageType.AGENT_GUIDANCE_REQUEST,
+            "agentId": agent_id,
+            "question": question,
+        })
+
+        try:
+            return await asyncio.wait_for(asyncio.shield(future), timeout=3600.0)
+        except asyncio.TimeoutError:
+            return "No response received (timeout). Continue with your best judgment."
+        finally:
+            self._guidance_futures.pop(agent_id, None)
+
+    async def respond_guidance(self, agent_id: str, response: str) -> bool:
+        """Resolve a pending guidance request from a worker."""
+        future = self._guidance_futures.get(agent_id)
+        if future is None or future.done():
+            return False
+        future.set_result(response)
+        return True
+
+    async def send_message_to_agent(self, agent_id: str, message: str) -> bool:
+        """Send a message to a running agent.
+
+        If the agent is waiting on request_guidance, the message resolves it.
+        Otherwise it is queued and picked up when the agent finishes its current turn.
+        """
+        record = self._agents.get(agent_id)
+        if record is None or record.state not in (AgentState.BUSY, AgentState.STARTING):
+            return False
+
+        # Resolve a pending guidance request first
+        future = self._guidance_futures.get(agent_id)
+        if future and not future.done():
+            future.set_result(message)
+            return True
+
+        # Queue for pickup at the next turn boundary
+        queue = self._message_queues.get(agent_id)
+        if queue:
+            await queue.put(message)
+            await self._send_to_agent(agent_id, {
+                "type": MessageType.CHAT_STREAM,
+                "agentId": agent_id,
+                "event": "message-queued",
+                "content": message,
+            })
+            return True
+
+        return False
 
     async def await_completion(self, agent_id: str, timeout: float = 3600.0) -> dict:
         """Block until agent lifecycle completes (spawn rejected or report approved/rejected)."""
@@ -351,7 +425,12 @@ class OrchestratorManager:
         provider: BaseProvider,
         task: str,
     ) -> None:
-        """Run an agent subprocess, stream chat events to the owning connection."""
+        """Run a worker agent, streaming events to the owning connection.
+
+        Supports multi-turn: if the user queues a message while the agent is busy,
+        it is injected as a new user turn when the current LLM turn finishes.
+        If the agent calls request_guidance(), it blocks until the user responds.
+        """
         record = self._agents[agent_id]
         record.state = AgentState.STARTING
         await self._set_state(agent_id, AgentState.STARTING)
@@ -364,97 +443,131 @@ class OrchestratorManager:
                 "content": task,
             })
 
-            messages = [ChatMessage(role="user", content=task)]
+            # Outer conversation loop — each iteration is one LLM turn.
+            # Continues when a user message is queued after the current turn ends.
+            conversation = [ChatMessage(role="user", content=task)]
+            accumulated_text = ""
 
-            async for event in provider.stream_chat(messages):
-                if isinstance(event, SystemInfo):
-                    record.session_id = event.session_id
-                    await self._send_to_agent(agent_id, {
-                        "type": MessageType.CHAT_STREAM,
-                        "agentId": agent_id,
-                        "event": "system-info",
-                        "model": event.model,
-                        "sessionId": event.session_id,
-                        "tools": event.tools,
-                        "slashCommands": event.slash_commands,
-                        "version": event.version,
-                    })
+            while True:
+                accumulated_text = ""
+                got_queued_message = False
 
-                elif isinstance(event, TextDelta):
-                    record.report += event.content
-                    if record.state != AgentState.BUSY:
-                        record.state = AgentState.BUSY
-                        await self._set_state(agent_id, AgentState.BUSY)
-                    await self._send_to_agent(agent_id, {
-                        "type": MessageType.CHAT_STREAM,
-                        "agentId": agent_id,
-                        "event": "text-delta",
-                        "content": event.content,
-                    })
+                async for event in provider.stream_chat(conversation):
+                    if isinstance(event, SystemInfo):
+                        record.session_id = event.session_id
+                        await self._send_to_agent(agent_id, {
+                            "type": MessageType.CHAT_STREAM,
+                            "agentId": agent_id,
+                            "event": "system-info",
+                            "model": event.model,
+                            "sessionId": event.session_id,
+                            "tools": event.tools,
+                            "slashCommands": event.slash_commands,
+                            "version": event.version,
+                        })
 
-                elif isinstance(event, ThinkingDelta):
-                    await self._send_to_agent(agent_id, {
-                        "type": MessageType.CHAT_STREAM,
-                        "agentId": agent_id,
-                        "event": "thinking-delta",
-                        "content": event.content,
-                    })
+                    elif isinstance(event, TextDelta):
+                        accumulated_text += event.content
+                        record.report += event.content
+                        if record.state != AgentState.BUSY:
+                            record.state = AgentState.BUSY
+                            await self._set_state(agent_id, AgentState.BUSY)
+                        await self._send_to_agent(agent_id, {
+                            "type": MessageType.CHAT_STREAM,
+                            "agentId": agent_id,
+                            "event": "text-delta",
+                            "content": event.content,
+                        })
 
-                elif isinstance(event, ToolUseStart):
-                    await self._send_to_agent(agent_id, {
-                        "type": MessageType.CHAT_STREAM,
-                        "agentId": agent_id,
-                        "event": "tool-use-start",
-                        "toolId": event.tool_id,
-                        "toolName": event.tool_name,
-                    })
+                    elif isinstance(event, ThinkingDelta):
+                        await self._send_to_agent(agent_id, {
+                            "type": MessageType.CHAT_STREAM,
+                            "agentId": agent_id,
+                            "event": "thinking-delta",
+                            "content": event.content,
+                        })
 
-                elif isinstance(event, ToolResult):
-                    await self._send_to_agent(agent_id, {
-                        "type": MessageType.CHAT_STREAM,
-                        "agentId": agent_id,
-                        "event": "tool-result",
-                        "toolId": event.tool_id,
-                        "toolName": event.tool_name,
-                        "status": event.status,
-                    })
+                    elif isinstance(event, ToolUseStart):
+                        await self._send_to_agent(agent_id, {
+                            "type": MessageType.CHAT_STREAM,
+                            "agentId": agent_id,
+                            "event": "tool-use-start",
+                            "toolId": event.tool_id,
+                            "toolName": event.tool_name,
+                        })
 
-                elif isinstance(event, ChatDone):
-                    record.cost = event.cost
-                    record.usage = event.usage
-                    record.state = AgentState.REVIEW
-                    await self._set_state(agent_id, AgentState.REVIEW)
-                    await self._send_to_agent(agent_id, {
-                        "type": MessageType.CHAT_STREAM,
-                        "agentId": agent_id,
-                        "event": "done",
-                        "usage": event.usage,
-                        "cost": event.cost,
-                    })
-                    await self._send_to_agent(agent_id, {
-                        "type": MessageType.CHAT_STREAM,
-                        "agentId": agent_id,
-                        "event": "report-review-request",
-                        "report": record.report[:500],
-                        "cost": record.cost,
-                    })
+                    elif isinstance(event, ToolResult):
+                        await self._send_to_agent(agent_id, {
+                            "type": MessageType.CHAT_STREAM,
+                            "agentId": agent_id,
+                            "event": "tool-result",
+                            "toolId": event.tool_id,
+                            "toolName": event.tool_name,
+                            "status": event.status,
+                        })
 
-                    from backend.permissions.manager import get_permission_manager
-                    if get_permission_manager().get_auto_approve_reports(record.owner_connection_id):
-                        await self.approve_report(agent_id)
+                    elif isinstance(event, ChatDone):
+                        record.cost = event.cost
+                        record.usage = event.usage
+                        await self._send_to_agent(agent_id, {
+                            "type": MessageType.CHAT_STREAM,
+                            "agentId": agent_id,
+                            "event": "done",
+                            "usage": event.usage,
+                            "cost": event.cost,
+                        })
 
-                elif isinstance(event, ChatError):
-                    record.error = event.message
-                    record.state = AgentState.ERROR
-                    record.final_result = f"Agent error: {event.message}"
-                    await self._set_state(agent_id, AgentState.ERROR)
-                    record.completion_event.set()
-                    await self._send_to_agent(agent_id, {
-                        "type": MessageType.CHAT_STREAM,
-                        "agentId": agent_id,
-                        "event": "error",
-                        "message": event.message,
-                    })
+                        # Check for a queued user message before going to REVIEW
+                        queue = self._message_queues.get(agent_id)
+                        if queue and not queue.empty():
+                            user_msg = queue.get_nowait()
+                            conversation = [
+                                ChatMessage(role="user", content=task),
+                                ChatMessage(role="assistant", content=accumulated_text),
+                                ChatMessage(role="user", content=user_msg),
+                            ]
+                            await self._send_to_agent(agent_id, {
+                                "type": MessageType.CHAT_STREAM,
+                                "agentId": agent_id,
+                                "event": "user-message",
+                                "content": user_msg,
+                            })
+                            got_queued_message = True
+                            break  # restart outer loop with new conversation
+
+                        # No queued messages — agent is done, go to REVIEW
+                        record.state = AgentState.REVIEW
+                        await self._set_state(agent_id, AgentState.REVIEW)
+                        await self._send_to_agent(agent_id, {
+                            "type": MessageType.CHAT_STREAM,
+                            "agentId": agent_id,
+                            "event": "report-review-request",
+                            "report": record.report[:500],
+                            "cost": record.cost,
+                        })
+
+                        from backend.permissions.manager import get_permission_manager
+                        if get_permission_manager().get_auto_approve_reports(record.owner_connection_id):
+                            await self.approve_report(agent_id)
+                        return
+
+                    elif isinstance(event, ChatError):
+                        record.error = event.message
+                        record.state = AgentState.ERROR
+                        record.final_result = f"Agent error: {event.message}"
+                        await self._set_state(agent_id, AgentState.ERROR)
+                        record.completion_event.set()
+                        await self._send_to_agent(agent_id, {
+                            "type": MessageType.CHAT_STREAM,
+                            "agentId": agent_id,
+                            "event": "error",
+                            "message": event.message,
+                        })
+                        return
+
+                if not got_queued_message:
+                    # Stream ended without ChatDone — shouldn't happen normally
+                    break
 
         except asyncio.CancelledError:
             record.state = AgentState.ERROR
@@ -469,6 +582,12 @@ class OrchestratorManager:
             record.final_result = f"Agent error: {e}"
             await self._set_state(agent_id, AgentState.ERROR)
             record.completion_event.set()
+        finally:
+            # Clean up worker's permission context
+            from backend.permissions.manager import get_permission_manager
+            get_permission_manager().drop_connection(agent_id)
+            self._message_queues.pop(agent_id, None)
+            self._guidance_futures.pop(agent_id, None)
 
     async def _set_state(self, agent_id: str, state: AgentState) -> None:
         await self._send_to_agent(agent_id, {

@@ -242,29 +242,35 @@ class APIProvider(BaseProvider):
                 }
                 kwargs["messages"].append(assistant_turn)
 
-                # Execute each tool
+                # Parse args and announce all tool calls before executing
+                parsed: list[tuple[dict, dict]] = []
                 for tc in sorted_calls:
                     try:
                         args_dict = json.loads(tc["arguments"]) if tc["arguments"] else {}
                     except json.JSONDecodeError:
                         args_dict = {}
-
+                    parsed.append((tc, args_dict))
                     yield ToolUseStart(
                         tool_id=tc["id"],
                         tool_name=tc["name"],
                         tool_input=args_dict,
                     )
 
-                    result_content = await self._tool_registry.execute_async(tc["name"], args_dict)
-                    status = "error" if result_content.startswith("Error:") else "success"
+                # Execute all tool calls concurrently so parallel spawns run in parallel
+                import asyncio as _asyncio
+                results = await _asyncio.gather(*[
+                    self._tool_registry.execute_async(tc["name"], args)
+                    for tc, args in parsed
+                ])
 
+                for (tc, _args), result_content in zip(parsed, results):
+                    status = "error" if result_content.startswith("Error:") else "success"
                     yield ToolResult(
                         tool_id=tc["id"],
                         tool_name=tc["name"],
                         status=status,
                         content=result_content,
                     )
-
                     kwargs["messages"].append({
                         "role": "tool",
                         "tool_call_id": tc["id"],
