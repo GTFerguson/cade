@@ -6,13 +6,16 @@ import "@xterm/xterm/css/xterm.css";
 import "highlight.js/styles/vs2015.css";
 import "../styles/main.css";
 
-import { preloadMonoFonts } from "./terminal/font-loader";
+import { loadFonts } from "./terminal/web-fonts";
 
-// Kick the bundled monospace fetch immediately so chat and terminal
-// have glyphs when they mount. fonts.css uses font-display: block, so
-// any code path that renders before this fetch completes shows blanks
-// or — on WebKitGTK + Mesa — malformed fallback glyphs.
-preloadMonoFonts();
+// Kick the bundled monospace fetch immediately so the network request is
+// in flight before any UI mounts. The actual await happens inside
+// DOMContentLoaded below — this top-level call just starts the fetch
+// early. loadFonts is idempotent (FontFace.load() returns the in-flight
+// promise on subsequent calls), so awaiting it later is safe.
+loadFonts(["JetBrains Mono"]).catch(() => {
+  // Fall through — the await in DOMContentLoaded reports the real error.
+});
 
 import { basePath, config, isRemoteBrowserAccess, isTauri } from "./config/config";
 import { HelpOverlay } from "./ui/help-overlay";
@@ -447,7 +450,7 @@ class App {
         const activeTab = this.tabManager.getActiveTab();
         const chatPane = activeTab?.context?.getTerminalManager()?.getChatPane();
         if (chatPane) {
-          const modes = ["plan", "code", "research"];
+          const modes = ["plan", "code", "research", "review", "orchestrator"];
           const current = chatPane.getMode();
           const next = modes[(modes.indexOf(current) + 1) % modes.length]!;
           activeTab?.ws.sendChatMessage(`/${next}`);
@@ -457,7 +460,7 @@ class App {
         const activeTab = this.tabManager.getActiveTab();
         const chatPane = activeTab?.context?.getTerminalManager()?.getChatPane();
         if (chatPane) {
-          const modes = ["plan", "code", "research"];
+          const modes = ["plan", "code", "research", "review", "orchestrator"];
           const current = chatPane.getMode();
           const prev = modes[(modes.indexOf(current) + modes.length - 1) % modes.length]!;
           activeTab?.ws.sendChatMessage(`/${prev}`);
@@ -1140,6 +1143,16 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const authed = await checkAuth();
   if (!authed) return;
+
+  // Block app init until JetBrains Mono is fully loaded into the browser's
+  // FontFaceSet AND its OffscreenCanvas font registry. Without this gate,
+  // xterm's WebGL atlas can bake with system-fallback metrics and render
+  // glyphs as black blocks. See docs/reference/xterm-webfont-loading.md.
+  try {
+    await loadFonts(["JetBrains Mono"]);
+  } catch (e) {
+    console.warn("[main] JetBrains Mono load failed, using fallback:", e);
+  }
 
   app.initialize().catch((e) => {
     console.error("Failed to initialize app:", e);

@@ -10,7 +10,7 @@ import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 import { getSavedThemeId, getThemeById } from "../config/themes";
 import { WebglRenderer } from "./webgl-renderer";
-import { kickFontLoad } from "./font-loader";
+import { WebFontsAddon } from "./web-fonts";
 
 /**
  * Build an xterm.js theme from the current CADE theme.
@@ -108,11 +108,6 @@ export class Terminal implements Component {
    * Initialize the terminal.
    */
   initialize(): void {
-    // Prompt the browser to fetch terminal fonts before xterm measures glyphs.
-    // The WebglRenderer below will rebuild the atlas if fonts arrive later,
-    // but pre-fetching avoids the brief flash of fallback-font corruption.
-    kickFontLoad();
-
     const xtermTheme = buildXtermTheme();
     const theme = this.hideCursor
       ? { ...xtermTheme, cursor: "transparent", cursorAccent: "transparent" }
@@ -141,6 +136,12 @@ export class Terminal implements Component {
     this.fitAddon = new FitAddon();
     this.terminal.loadAddon(this.fitAddon);
     this.terminal.loadAddon(new WebLinksAddon());
+    // WebFontsAddon's initialRelayout fires after document.fonts.ready and
+    // forces a remeasure if the cell was ever baked against a fallback. It
+    // also exposes relayout() as a runtime quickfix the maintainer
+    // explicitly recommends for "webfont related output issue for unknown
+    // reasons" (see addons/addon-web-fonts/README.md upstream).
+    this.terminal.loadAddon(new WebFontsAddon());
 
     this.terminal.open(this.container);
 

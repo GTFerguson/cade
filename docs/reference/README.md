@@ -15,6 +15,7 @@ Evidence base for CADE's design decisions. Each doc covers a single topic with f
 - [[self-improving-agent-systems]] — SICA, Memento-Skills, SkillClaw, EvolveR: memory, skill libraries, and experience evolution
 - [[browser-terminal-emulators]] — xterm.js landscape, WebGL vs canvas vs DOM tradeoffs, documented rendering failures and patches
 - [[xterm-rendering-issue]] — Black-block glyph corruption: full attempt log, confirmed dead-ends, current theory, escalation path
+- [[xterm-webfont-loading]] — Official `@xterm/addon-web-fonts` solution, gap analysis vs our implementation, recommended migration
 
 ## Navigation
 

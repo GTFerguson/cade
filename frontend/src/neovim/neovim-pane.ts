@@ -8,7 +8,7 @@
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglRenderer } from "../terminal/webgl-renderer";
-import { kickFontLoad } from "../terminal/font-loader";
+import { WebFontsAddon } from "../terminal/web-fonts";
 import type { PaneKeyHandler } from "../input/keybindings";
 import type { Component, ErrorMessage, NeovimDiffAvailableMessage, NeovimExitedMessage, NeovimOutputMessage, NeovimReadyMessage } from "../types";
 import { ErrorCode } from "@core/platform/protocol";
@@ -68,8 +68,6 @@ export class NeovimPane implements Component, PaneKeyHandler {
   }
 
   initialize(): void {
-    kickFontLoad();
-
     this.terminal = new XTerm({
       cursorBlink: true,
       cursorStyle: "block",
@@ -108,6 +106,7 @@ export class NeovimPane implements Component, PaneKeyHandler {
 
     this.fitAddon = new FitAddon();
     this.terminal.loadAddon(this.fitAddon);
+    this.terminal.loadAddon(new WebFontsAddon());
 
     this.terminal.open(this.terminalContainer);
 
