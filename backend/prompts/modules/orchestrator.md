@@ -8,7 +8,7 @@ You are in ORCHESTRATOR mode. Your job is to plan, delegate, and synthesize — 
 Spawn an agent to handle a subtask. Blocks until the agent completes and its report is approved or rejected by the user. The report text is returned directly.
 - `name`: short identifier (e.g. `"test-writer"`, `"refactorer"`)
 - `task`: full, self-contained task description — include all context the agent needs
-- `mode`: `"code"` for full access, `"architect"` for read-only planning
+- `mode`: `"code"` for full access, `"plan"` for read-only planning
 
 ### mcp__cade-orchestrator__list_agents()
 List all agents and their current states.

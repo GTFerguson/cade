@@ -4,7 +4,7 @@ Tools: read_file, read_files, list_directory, write_file, edit_file,
        multi_edit, delete_file, move_file.
 
 Write/edit/delete/move operations enforce:
-  1. Mode permissions — architect/review modes block writes.
+  1. Mode permissions — plan/research block all writes; review allows docs/plans/ only.
   2. Project scope  — paths outside the project root require explicit user approval,
                       which is then cached at directory level for the session.
   3. Accept-edits toggle — when off, every write prompts for approval regardless of scope.
@@ -207,7 +207,7 @@ class FileToolExecutor:
         from backend.permissions.mode_permissions import can_write
         if can_write(get_permission_manager().get_mode(self._connection_id)):
             return _ALL_DEFINITIONS
-        # Read-only modes: expose read_file + list_directory
+        # Fully read-only modes: expose read_file + list_directory only
         return _ALL_DEFINITIONS[:_READ_ONLY_COUNT]
 
     def execute(self, name: str, arguments: dict) -> str:
@@ -266,13 +266,13 @@ class FileToolExecutor:
     ) -> str | None:
         """Return an error string if the write should be blocked, else None."""
         from backend.permissions.manager import get_permission_manager
-        from backend.permissions.mode_permissions import can_write
+        from backend.permissions.mode_permissions import can_write_path
 
         perms = get_permission_manager()
 
         mode = perms.get_mode(self._connection_id)
-        if not can_write(mode):
-            return f"Error: {mode} mode does not allow file writes"
+        if not can_write_path(mode, path):
+            return f"Error: {mode} mode does not allow writing to {path}"
 
         # Out-of-scope paths need explicit one-time approval
         if not self._in_scope(path) and not perms.is_path_approved(path, self._connection_id):

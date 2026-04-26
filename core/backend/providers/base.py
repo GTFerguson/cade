@@ -68,6 +68,10 @@ class BaseProvider(ABC):
         providers that don't emit unsolicited events can ignore this."""
         return
 
+    async def cancel(self) -> None:
+        """Cancel any in-progress request. Default: no-op for stateless providers."""
+        return
+
     async def send_frame(self, frame: dict[str, Any]) -> None:
         """Send an arbitrary frame over the provider's persistent channel to
         the server. Used by interactive dashboard panels that need to dispatch

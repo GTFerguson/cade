@@ -698,7 +698,7 @@ class ConnectionHandler:
                 default = self._provider_registry.get_default()
                 if default:
                     message["defaultProvider"] = default.name
-                    if isinstance(default, ClaudeCodeProvider):
+                    if hasattr(default, "mode"):
                         message["chatMode"] = default.mode
 
         session = load_session(
@@ -1363,9 +1363,9 @@ class ConnectionHandler:
         await get_orchestrator_manager().reject_report(agent_id)
 
     CADE_MODE_COMMANDS = {
-        "/plan": "architect",
-        "/architect": "architect",
+        "/plan": "plan",
         "/code": "code",
+        "/research": "research",
         "/review": "review",
         "/orch": "orchestrator",
         "/orchestrator": "orchestrator",
@@ -1533,7 +1533,7 @@ class ConnectionHandler:
 
         try:
             messages = self._chat_session.get_messages()
-            system_prompt = None if isinstance(provider, ClaudeCodeProvider) else compose_prompt(self._current_mode)
+            system_prompt = None if isinstance(provider, ClaudeCodeProvider) else compose_prompt(self._current_mode, self._working_dir)
             async for event in provider.stream_chat(messages, system_prompt):
                 if self._closed:
                     break

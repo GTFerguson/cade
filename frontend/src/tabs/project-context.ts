@@ -72,6 +72,8 @@ export class ProjectContextImpl implements IProjectContext {
           this.terminalManager?.getChatPane()?.setMode(chatMode);
         } else if (defaultProv?.type === "api") {
           this.terminalManager?.setMode("chat");
+          const chatMode = msg.chatMode ?? "code";
+          this.terminalManager?.getChatPane()?.setMode(chatMode);
         }
       }
 

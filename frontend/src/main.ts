@@ -14,7 +14,7 @@ import { preloadMonoFonts } from "./terminal/font-loader";
 // or — on WebKitGTK + Mesa — malformed fallback glyphs.
 preloadMonoFonts();
 
-import { basePath, config, isRemoteBrowserAccess } from "./config/config";
+import { basePath, config, isRemoteBrowserAccess, isTauri } from "./config/config";
 import { HelpOverlay } from "./ui/help-overlay";
 import { ThemeSelector } from "./ui/theme-selector";
 import { KeybindingManager } from "./input/keybindings";
@@ -29,6 +29,7 @@ import { setUserConfig, getUserConfig, matchesKeybinding } from "./config/user-c
 import { applySavedTheme, onThemeChange, getSavedThemeId, themes } from "./config/themes";
 import { RemoteProfileManager } from "./remote/profile-manager";
 import { RemoteProjectSelector } from "./remote/RemoteProjectSelector";
+import { LocalProjectSelector } from "./local/LocalProjectSelector";
 import { Splash } from "./ui/splash";
 import type { RemoteProfile } from "./remote/types";
 import { getAuthToken, setAuthToken } from "./auth/tokenManager";
@@ -446,22 +447,20 @@ class App {
         const activeTab = this.tabManager.getActiveTab();
         const chatPane = activeTab?.context?.getTerminalManager()?.getChatPane();
         if (chatPane) {
-          const modes = ["architect", "code", "review", "orchestrator"];
+          const modes = ["plan", "code", "research"];
           const current = chatPane.getMode();
           const next = modes[(modes.indexOf(current) + 1) % modes.length]!;
-          const cmd = next === "architect" ? "plan" : next === "orchestrator" ? "orch" : next;
-          activeTab?.ws.sendChatMessage(`/${cmd}`);
+          activeTab?.ws.sendChatMessage(`/${next}`);
         }
       },
       cycleModePrev: () => {
         const activeTab = this.tabManager.getActiveTab();
         const chatPane = activeTab?.context?.getTerminalManager()?.getChatPane();
         if (chatPane) {
-          const modes = ["architect", "code", "review", "orchestrator"];
+          const modes = ["plan", "code", "research"];
           const current = chatPane.getMode();
           const prev = modes[(modes.indexOf(current) + modes.length - 1) % modes.length]!;
-          const cmd = prev === "architect" ? "plan" : prev === "orchestrator" ? "orch" : prev;
-          activeTab?.ws.sendChatMessage(`/${cmd}`);
+          activeTab?.ws.sendChatMessage(`/${prev}`);
         }
       },
       approveAgent: () => {
@@ -766,7 +765,21 @@ class App {
    * Handle add tab button click.
    */
   private async handleAddTab(): Promise<void> {
-    const path = await pickProjectFolder(this.defaultProjectPath);
+    let path: string | null;
+
+    if (isTauri()) {
+      path = await pickProjectFolder(this.defaultProjectPath);
+    } else {
+      if (!this.tabContentContainer) return;
+      const activeTabId = this.tabManager.getActiveTabId();
+      const openTabs = this.tabManager.getTabs().map((t) => ({
+        path: t.projectPath,
+        name: t.name,
+        isActive: t.id === activeTabId,
+      }));
+      const selector = new LocalProjectSelector(this.tabContentContainer, openTabs);
+      path = await selector.show();
+    }
 
     if (path) {
       this.startSplash?.setLoading();

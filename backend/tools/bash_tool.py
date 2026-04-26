@@ -38,6 +38,8 @@ _AUTO_FIRST_TOKENS: frozenset[str] = frozenset({
     "ls", "cat", "head", "tail", "wc", "file", "stat", "du", "df",
     "find", "rg", "grep", "awk", "sed",   # sed read-only; -i flag caught below
     "sort", "uniq", "cut", "tr", "diff", "tree",
+    # File/dir creation
+    "mkdir", "touch",
     # Navigation / env
     "pwd", "which", "type", "echo", "env", "printenv", "date", "uname", "hostname",
     # Data tools

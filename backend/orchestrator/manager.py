@@ -1,4 +1,4 @@
-"""Orchestrator manager — spawns and tracks agent CC subprocesses."""
+"""Orchestrator manager — spawns and tracks agent subprocesses."""
 
 from __future__ import annotations
 
@@ -12,8 +12,7 @@ from typing import Any
 
 from backend.orchestrator.models import AgentRecord, AgentSpec, AgentState
 from backend.protocol import MessageType
-from backend.providers.claude_code_provider import ClaudeCodeProvider
-from core.backend.providers.config import ProviderConfig
+from core.backend.providers.base import BaseProvider
 from core.backend.providers.types import (
     ChatDone,
     ChatError,
@@ -28,6 +27,44 @@ from core.backend.providers.types import (
 logger = logging.getLogger(__name__)
 
 BroadcastFn = Callable[[dict], Coroutine[Any, Any, None]]
+
+
+def _make_worker_provider(
+    name: str,
+    mode: str,
+    working_dir: Path | None,
+    connection_id: str,
+) -> BaseProvider:
+    """Create a LiteLLM APIProvider for a worker agent."""
+    import dataclasses
+    from core.backend.providers.api_provider import APIProvider
+    from core.backend.providers.config import get_providers_config
+    from backend.providers.registry import _create_tool_registry
+    from backend.prompts import compose_prompt
+
+    providers_cfg = get_providers_config()
+    base_name = providers_cfg.default_provider
+    base_cfg = providers_cfg.providers.get(base_name)
+
+    # Fall back to first API-type provider if default isn't API
+    if base_cfg is None or base_cfg.type != "api":
+        base_cfg = next(
+            (c for c in providers_cfg.providers.values() if c.type == "api"),
+            None,
+        )
+
+    if base_cfg is None:
+        raise RuntimeError("No API provider configured — cannot spawn LiteLLM worker")
+
+    worker_cfg = dataclasses.replace(
+        base_cfg,
+        name=f"agent-{name}",
+        system_prompt=compose_prompt(mode, working_dir),
+    )
+    tool_registry = _create_tool_registry(worker_cfg, working_dir, connection_id=connection_id)
+    provider = APIProvider(worker_cfg, tool_registry)
+    provider.set_mode(mode)
+    return provider
 
 
 @dataclass
@@ -47,7 +84,7 @@ class OrchestratorManager:
     def __init__(self) -> None:
         self._agents: dict[str, AgentRecord] = {}
         self._tasks: dict[str, asyncio.Task] = {}
-        self._providers: dict[str, ClaudeCodeProvider] = {}
+        self._providers: dict[str, BaseProvider] = {}
         self._connections: dict[str, _ConnectionEntry] = {}
 
     def register_connection(
@@ -148,15 +185,7 @@ class OrchestratorManager:
         entry = self._connections.get(connection_id)
         working_dir = entry.working_dir if entry else None
 
-        config = ProviderConfig(
-            name=f"agent-{record.name}",
-            type="claude-code",
-            model="sonnet",
-        )
-        provider = ClaudeCodeProvider(config)
-        provider.set_mode(record.mode)
-        if working_dir:
-            provider.set_working_dir(working_dir)
+        provider = _make_worker_provider(record.name, record.mode, working_dir, connection_id)
         self._providers[agent_id] = provider
 
         await self._send_to(connection_id, {
@@ -319,7 +348,7 @@ class OrchestratorManager:
     async def _run_agent(
         self,
         agent_id: str,
-        provider: ClaudeCodeProvider,
+        provider: BaseProvider,
         task: str,
     ) -> None:
         """Run an agent subprocess, stream chat events to the owning connection."""

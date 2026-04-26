@@ -19,10 +19,11 @@ from backend.prompts.compose import BUNDLED_SKILLS_DIR
 USER_SKILLS_DIR = Path.home() / ".claude" / "skills"
 
 NATIVE_COMMANDS: list[dict[str, str]] = [
-    {"name": "plan", "description": "Switch to Architect mode (read-only)"},
+    {"name": "plan", "description": "Switch to Plan mode (read-only)"},
     {"name": "code", "description": "Switch to Code mode (full access)"},
-    {"name": "review", "description": "Switch to Review mode (read-only)"},
-    {"name": "orchestrator", "description": "Switch to Orchestrator mode"},
+    {"name": "research", "description": "Switch to Research mode (PROVEN pipeline)"},
+    {"name": "review", "description": "Switch to Review mode (skill orchestrator)"},
+    {"name": "orch", "description": "Switch to Orchestrator mode"},
     {"name": "compact", "description": "Summarise session as handoff and start fresh"},
 ]
 

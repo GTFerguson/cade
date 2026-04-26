@@ -13,6 +13,7 @@ from backend.providers.handoff_compactor import HandoffCompactor
 from backend.prompts import compose_prompt
 from core.backend.providers.config import ProvidersConfig
 from core.backend.providers.mcp_tools import MCPToolAdapter
+from core.backend.providers.http_mcp_tools import HTTPMCPToolAdapter
 from core.backend.providers.agent_spawner import AgentSpawnerTool
 from core.backend.providers.subprocess_provider import SubprocessProvider
 from core.backend.providers.websocket_provider import WebsocketProvider
@@ -50,12 +51,24 @@ def _create_tool_registry(provider_config, working_dir: "Path | None" = None, co
     if mcp_servers and isinstance(mcp_servers, dict):
         for server_name, server_config in mcp_servers.items():
             if isinstance(server_config, dict):
-                command = server_config.get("command")
-                args = server_config.get("args", [])
-                env = server_config.get("env", {})
-                if command:
-                    adapter = MCPToolAdapter(command, args, env)
-                    registry.register(adapter, f"mcp_{server_name}")
+                server_type = server_config.get("type", "stdio")
+                if server_type == "http":
+                    url = server_config.get("url")
+                    if url:
+                        auth = server_config.get("auth")
+                        if auth == "claude-oauth":
+                            adapter = HTTPMCPToolAdapter.from_claude_oauth(url, server_name)
+                        else:
+                            headers = server_config.get("headers", {})
+                            adapter = HTTPMCPToolAdapter(url, headers)
+                        registry.register(adapter, f"mcp_{server_name}")
+                else:
+                    command = server_config.get("command")
+                    args = server_config.get("args", [])
+                    env = server_config.get("env", {})
+                    if command:
+                        adapter = MCPToolAdapter(command, args, env)
+                        registry.register(adapter, f"mcp_{server_name}")
 
     # Always wire the orchestrator MCP server so API providers can spawn agents,
     # push to dashboard, etc. Tools are discovered lazily on first stream_chat call.
@@ -142,7 +155,7 @@ class ProviderRegistry:
                 tool_registry = _create_tool_registry(provider_config, working_dir, connection_id=connection_id)
                 if not provider_config.system_prompt:
                     mode = provider_config.extra.get("mode", "code")
-                    provider_config.system_prompt = compose_prompt(mode)
+                    provider_config.system_prompt = compose_prompt(mode, working_dir)
                 provider = APIProvider(provider_config, tool_registry)
                 registry.register(name, provider)
             elif provider_config.type == "claude-code":

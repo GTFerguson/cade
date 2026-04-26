@@ -38,10 +38,10 @@ class AgentSpawnerTool:
                         },
                         "mode": {
                             "type": "string",
-                            "enum": ["code", "architect"],
+                            "enum": ["code", "plan"],
                             "description": (
                                 "Agent mode. 'code' has full access (default), "
-                                "'architect' is read-only planning"
+                                "'plan' is read-only planning"
                             ),
                         },
                         "context_handoff": {

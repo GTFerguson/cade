@@ -31,42 +31,24 @@ class TestComposeRulesLoading:
         assert rule_dict.get("coding-standards"), "coding-standards missing description"
         assert rule_dict.get("context-management"), "context-management missing description"
 
-    def test_user_rules_extend_bundled(self, tmp_path):
-        """User rules in ~/.claude/rules/ should extend bundled rules."""
+    def test_loads_all_bundled_rules(self):
+        """All bundled rules should load from the bundled rules directory."""
+        from backend.prompts.compose import _load_rules, BUNDLED_RULES_DIR
+
+        rules = _load_rules()
+        rule_names = [name for name, _content, _desc in rules]
+        bundled_stems = {p.stem for p in BUNDLED_RULES_DIR.glob("*.md")}
+        for stem in bundled_stems:
+            assert stem in rule_names, f"Bundled rule '{stem}' not loaded"
+
+    def test_user_claude_rules_not_loaded(self, tmp_path):
+        """~/.claude/rules/ are not loaded — only bundled rules are."""
         from backend.prompts.compose import _load_rules
 
-        with patch("backend.prompts.compose.RULES_DIR", tmp_path / "rules"):
-            # Write a user rule with unique name
-            user_rule = tmp_path / "rules" / "my-custom-rule.md"
-            user_rule.parent.mkdir(parents=True, exist_ok=True)
-            user_rule.write_text(
-                "---\ndescription: My custom rule\n---\n\n# My Custom Rule\n\nThis is a user rule.\n"
-            )
-
-            rules = _load_rules()
-            rule_names = [name for name, _content, _desc in rules]
-            assert "coding-standards" in rule_names
-            assert "context-management" in rule_names
-            assert "my-custom-rule" in rule_names
-
-    def test_user_rule_with_same_name_as_bundled_is_ignored(self, tmp_path):
-        """User rule with same name as bundled should be ignored (bundled wins)."""
-        from backend.prompts.compose import _load_rules
-
-        # Create a user version of coding-standards
-        user_rule = tmp_path / "rules" / "coding-standards.md"
-        user_rule.parent.mkdir(parents=True, exist_ok=True)
-        user_rule.write_text(
-            "---\ndescription: User coding standards (should be ignored)\n---\n\n# User Coding Standards\n\nThis should not appear.\n"
-        )
-
-        with patch("backend.prompts.compose.RULES_DIR", tmp_path / "rules"):
-            rules = _load_rules()
-            rule_dict = {name: content for name, content, _desc in rules}
-            # Bundled version should be present
-            assert "coding-standards" in rule_dict
-            # Bundled content should be in the result (not user content)
-            assert "This should not appear" not in rule_dict["coding-standards"]
+        rules = _load_rules()
+        rule_names = [name for name, _content, _desc in rules]
+        # Rules come only from the bundled dir — no user-home rules
+        assert "my-custom-rule" not in rule_names
 
 
 class TestComposePromptStructure:

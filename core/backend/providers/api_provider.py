@@ -82,6 +82,10 @@ class APIProvider(BaseProvider):
         self._mode = mode
 
     @property
+    def mode(self) -> str:
+        return self._mode
+
+    @property
     def name(self) -> str:
         return self._name
 

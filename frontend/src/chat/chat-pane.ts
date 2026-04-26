@@ -169,8 +169,8 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.statuslineEl.className = "chat-statusline";
 
     this.modeEl = document.createElement("span");
-    this.modeEl.className = "status-mode";
-    this.modeEl.textContent = "CHAT";
+    this.modeEl.className = `status-mode ${this.currentMode}`;
+    this.modeEl.textContent = this.currentMode.toUpperCase();
 
     this.providerEl = document.createElement("span");
     this.providerEl.className = "status-provider";

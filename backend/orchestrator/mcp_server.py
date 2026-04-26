@@ -41,7 +41,7 @@ async def spawn_agent(name: str, task: str, mode: str = "code") -> str:
     Args:
         name: Short identifier for the agent (e.g. "test-writer", "refactor")
         task: Full task description — what the agent should do
-        mode: Agent mode — "code" (full access) or "architect" (read-only planning)
+        mode: Agent mode — "code" (full access) or "plan" (read-only planning)
 
     Returns:
         Agent report text (approved), rejection message, or error
