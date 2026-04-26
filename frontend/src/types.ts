@@ -264,6 +264,7 @@ export interface ConnectedMessage extends BaseMessage {
   launchPreset?: LaunchPreset;
   slashCommands?: Array<{ name: string; description: string }>;
   connectionId?: string;
+  mcpStatus?: Array<{ name: string; authenticated: boolean; authUrl?: string }>;
 }
 
 /**
@@ -504,6 +505,13 @@ export interface ChatModeChangeMessage extends BaseMessage {
 export interface ChatCompactMessage extends BaseMessage {
   type: "chat-compact";
   context: string;
+  filePath?: string | null;
+}
+
+export interface CompactPreviewMessage extends BaseMessage {
+  type: "compact-preview";
+  filePath: string | null;
+  content: string;
 }
 
 /**
@@ -619,6 +627,7 @@ export type ServerMessage =
   | ChatHistoryMessage
   | ChatModeChangeMessage
   | ChatCompactMessage
+  | CompactPreviewMessage
   | ProviderListMessage
   | NeovimReadyMessage
   | NeovimOutputMessage

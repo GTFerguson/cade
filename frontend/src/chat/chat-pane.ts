@@ -14,6 +14,7 @@ import type { PaneKeyHandler } from "../input/keybindings";
 import { MessageType } from "@core/platform/protocol";
 import type {
   ChatCompactMessage,
+  CompactPreviewMessage,
   ChatHistoryMessage,
   ChatModeChangeMessage,
   ChatStreamMessage,
@@ -125,6 +126,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     chatHistory: (msg: ChatHistoryMessage) => this.handleChatHistory(msg),
     chatModeChange: (msg: ChatModeChangeMessage) => this.handleModeChange(msg),
     chatCompact: (msg: ChatCompactMessage) => this.handleCompact(msg),
+    compactPreview: (msg: CompactPreviewMessage) => this.handleCompactPreview(msg),
   };
 
   constructor(
@@ -246,6 +248,7 @@ export class ChatPane implements Component, PaneKeyHandler {
       this.ws.on("chat-history", this.boundHandlers.chatHistory);
       this.ws.on("chat-mode-change", this.boundHandlers.chatModeChange);
       this.ws.on("chat-compact", this.boundHandlers.chatCompact);
+      this.ws.on("compact-preview", this.boundHandlers.compactPreview);
     }
   }
 
@@ -380,11 +383,29 @@ export class ChatPane implements Component, PaneKeyHandler {
     let idx = selectedName !== null ? items.findIndex((i) => i.name === selectedName) : -1;
 
     if (dir === "up") {
-      // Up: no selection → last (bottom/closest); otherwise move toward index 0, wrap at top
-      idx = idx === -1 ? last : idx === 0 ? last : idx - 1;
+      // Up: no selection → last; at top (0) → deselect and return input focus
+      if (idx === -1) {
+        idx = last;
+      } else if (idx === 0) {
+        this.slashMenu.selectedName = null;
+        this._slashMenuShow(items);
+        this.chatInput?.focus();
+        return true;
+      } else {
+        idx = idx - 1;
+      }
     } else {
-      // Down: no selection → first (top/furthest); otherwise move toward last, wrap at bottom
-      idx = idx === -1 ? 0 : idx === last ? 0 : idx + 1;
+      // Down: no selection → first; at bottom → deselect and return input focus
+      if (idx === -1) {
+        idx = 0;
+      } else if (idx === last) {
+        this.slashMenu.selectedName = null;
+        this._slashMenuShow(items);
+        this.chatInput?.focus();
+        return true;
+      } else {
+        idx = idx + 1;
+      }
     }
 
     this.slashMenu.selectedName = items[idx]!.name;
@@ -1489,9 +1510,57 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.flushQueuedMessage();
   }
 
-  private handleCompact(_msg: ChatCompactMessage): void {
-    // Clear the message list — the handoff context is preserved server-side
-    // as the first message of the new session.
+  private handleCompactPreview(msg: CompactPreviewMessage): void {
+    const block = document.createElement("div");
+    block.className = "chat-compact-preview";
+
+    const header = document.createElement("div");
+    header.className = "chat-compact-preview-header";
+    header.textContent = "Session Handoff";
+
+    if (msg.filePath) {
+      const pathEl = document.createElement("div");
+      pathEl.className = "chat-compact-preview-path";
+      pathEl.textContent = msg.filePath;
+      block.appendChild(header);
+      block.appendChild(pathEl);
+    } else {
+      block.appendChild(header);
+    }
+
+    const preview = document.createElement("div");
+    preview.className = "chat-compact-preview-content";
+    preview.textContent = msg.content || "(no content)";
+    block.appendChild(preview);
+
+    const actions = document.createElement("div");
+    actions.className = "chat-agent-approval-actions";
+
+    const approveBtn = document.createElement("button");
+    approveBtn.className = "agent-approval-btn approve";
+    approveBtn.textContent = "Start New Session";
+    approveBtn.addEventListener("click", () => {
+      this.ws.sendCompactApprove();
+      actions.replaceWith(this.makeStatusEl("Starting new session…", "approved"));
+    });
+
+    const rejectBtn = document.createElement("button");
+    rejectBtn.className = "agent-approval-btn reject";
+    rejectBtn.textContent = "Cancel";
+    rejectBtn.addEventListener("click", () => {
+      this.ws.sendCompactReject();
+      actions.replaceWith(this.makeStatusEl("Cancelled", "rejected"));
+    });
+
+    actions.appendChild(approveBtn);
+    actions.appendChild(rejectBtn);
+    block.appendChild(actions);
+
+    this.messagesEl.appendChild(block);
+    this.scrollToBottom();
+  }
+
+  private handleCompact(msg: ChatCompactMessage): void {
     this.messagesEl.innerHTML = "";
     this.streamRenderer = null;
     this.currentAssistantEl = null;
@@ -1499,11 +1568,23 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.totalCost = 0;
     this.tokensEl.textContent = "";
     this.costEl.textContent = "";
+    this.contextBudget?.reset();
 
-    const marker = document.createElement("div");
-    marker.className = "chat-compact-marker";
-    marker.textContent = "Session compacted";
-    this.messagesEl.appendChild(marker);
+    // Show the opening message from the new session if provided
+    if (msg.context) {
+      const assistantEl = document.createElement("div");
+      assistantEl.className = "chat-message assistant";
+      const contentEl = document.createElement("div");
+      contentEl.className = "chat-message-content";
+      contentEl.textContent = msg.context;
+      assistantEl.appendChild(contentEl);
+      this.messagesEl.appendChild(assistantEl);
+    } else {
+      const marker = document.createElement("div");
+      marker.className = "chat-compact-marker";
+      marker.textContent = "Session cleared";
+      this.messagesEl.appendChild(marker);
+    }
 
     this.isStreaming = false;
     this.flushQueuedMessage();
@@ -1515,6 +1596,7 @@ export class ChatPane implements Component, PaneKeyHandler {
       this.ws.off("chat-history", this.boundHandlers.chatHistory);
       this.ws.off("chat-mode-change", this.boundHandlers.chatModeChange);
       this.ws.off("chat-compact", this.boundHandlers.chatCompact);
+      this.ws.off("compact-preview", this.boundHandlers.compactPreview);
     }
     this.chatInput?.dispose();
     this.diagramViewer?.dispose();

@@ -47,8 +47,13 @@ class MessageType:
     CHAT_STREAM = "chat-stream"  # Streaming event: { type, event: str, content?: str, usage?: dict, message?: str }
     CHAT_HISTORY = "chat-history"  # Chat history replay: { type, messages: list[dict] }
     CHAT_MODE_CHANGE = "chat-mode-change"  # Mode switched: { type, mode: str }
-    CHAT_COMPACT = "chat-compact"  # Session compacted: { type, context: str } — UI clears, new session seeded with context
+    CHAT_COMPACT = "chat-compact"  # Session compacted: { type, context: str, filePath?: str }
+    COMPACT_PREVIEW = "compact-preview"  # Handoff ready for approval: { type, filePath?: str, content: str }
     PROVIDER_LIST = "provider-list"  # Available providers: { type, providers: list, default?: str }
+
+    # Chat - Client -> Server
+    COMPACT_PREVIEW_RESOLVED = "compact-preview-resolved"  # User approved/rejected compact: { type, approved: bool }
+    CHAT_CLEAR = "chat-clear"  # Clear session immediately: { type }
 
     # Orchestrator - Client -> Server
     AGENT_APPROVE = "agent-approve"  # Approve pending agent: { type, agentId }

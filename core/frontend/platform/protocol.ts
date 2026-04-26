@@ -54,7 +54,12 @@ export const MessageType = {
   CHAT_HISTORY: "chat-history",
   CHAT_MODE_CHANGE: "chat-mode-change",
   CHAT_COMPACT: "chat-compact",
+  COMPACT_PREVIEW: "compact-preview",
   PROVIDER_LIST: "provider-list",
+
+  // Chat - Client -> Server
+  COMPACT_PREVIEW_RESOLVED: "compact-preview-resolved",
+  CHAT_CLEAR: "chat-clear",
 
   // Orchestrator - Client -> Server
   AGENT_APPROVE: "agent-approve",

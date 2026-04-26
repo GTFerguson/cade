@@ -14,6 +14,7 @@ import type {
   AgentSpawnedMessage,
   AgentStateChangedMessage,
   ChatCompactMessage,
+  CompactPreviewMessage,
   ChatHistoryMessage,
   ChatModeChangeMessage,
   ChatStreamMessage,
@@ -68,6 +69,7 @@ interface WebSocketEvents {
   "chat-history": ChatHistoryMessage;
   "chat-mode-change": ChatModeChangeMessage;
   "chat-compact": ChatCompactMessage;
+  "compact-preview": CompactPreviewMessage;
   "provider-list": ProviderListMessage;
   "agent-spawned": AgentSpawnedMessage;
   "agent-killed": AgentKilledMessage;
@@ -411,23 +413,29 @@ export class WebSocketClient extends BaseWSClient {
     this.send(message);
   }
 
-  requestTree(showIgnored?: boolean): void {
-    const message: { type: string; showIgnored?: boolean } = {
+  requestTree(showIgnored?: boolean, root?: string): void {
+    const message: { type: string; showIgnored?: boolean; root?: string } = {
       type: MessageType.GET_TREE,
     };
     if (showIgnored !== undefined) {
       message.showIgnored = showIgnored;
     }
+    if (root !== undefined) {
+      message.root = root;
+    }
     this.send(message as ClientMessage);
   }
 
-  requestChildren(path: string, showIgnored?: boolean): void {
-    const message: { type: string; path: string; showIgnored?: boolean } = {
+  requestChildren(path: string, showIgnored?: boolean, root?: string): void {
+    const message: { type: string; path: string; showIgnored?: boolean; root?: string } = {
       type: MessageType.GET_CHILDREN,
       path,
     };
     if (showIgnored !== undefined) {
       message.showIgnored = showIgnored;
+    }
+    if (root !== undefined) {
+      message.root = root;
     }
     this.send(message as ClientMessage);
   }
@@ -439,8 +447,8 @@ export class WebSocketClient extends BaseWSClient {
     } as ClientMessage);
   }
 
-  requestFile(path: string): void {
-    this.send({ type: MessageType.GET_FILE, path });
+  requestFile(path: string, root?: string): void {
+    this.send({ type: MessageType.GET_FILE, path, ...(root && { root }) });
   }
 
   readFileAsync(path: string): Promise<string> {
@@ -572,6 +580,18 @@ export class WebSocketClient extends BaseWSClient {
 
   sendAgentRejectReport(agentId: string): void {
     this.send({ type: MessageType.AGENT_REJECT_REPORT, agentId } as any);
+  }
+
+  sendCompactApprove(): void {
+    this.send({ type: MessageType.COMPACT_PREVIEW_RESOLVED, approved: true } as any);
+  }
+
+  sendCompactReject(): void {
+    this.send({ type: MessageType.COMPACT_PREVIEW_RESOLVED, approved: false } as any);
+  }
+
+  sendClear(): void {
+    this.send({ type: MessageType.CHAT_CLEAR } as any);
   }
 
   switchProvider(providerId: string): void {

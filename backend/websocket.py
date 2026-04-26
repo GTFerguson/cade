@@ -111,8 +111,11 @@ class ConnectionHandler:
         self._chat_session: ChatSession | None = None
         self._chat_task: asyncio.Task | None = None
         self._compact_pending = False
+        self._compact_task: asyncio.Task | None = None
+        self._compact_preview_future: asyncio.Future | None = None
         self._provider_registry: ProviderRegistry | None = None
         self._dashboard: "DashboardHandler | None" = None
+        self._extra_roots: dict[str, Path] = {}
         # Google id_token extracted from the WS query string; forwarded to the
         # game server in the hello frame via WebsocketProvider.set_auth_token().
         self._google_token: str | None = None
@@ -706,6 +709,20 @@ class ConnectionHandler:
 
         message["slashCommands"] = build_slash_commands()
 
+        # Include MCP auth status so the frontend can warn if tools are unavailable
+        try:
+            from core.backend.providers.http_mcp_tools import get_mcp_oauth_status
+            alphaxiv_status = get_mcp_oauth_status("alphaxiv")
+            message["mcpStatus"] = [
+                {
+                    "name": "alphaxiv",
+                    "authenticated": alphaxiv_status["authenticated"],
+                    "authUrl": "https://alphaxiv.org",
+                }
+            ]
+        except Exception:
+            pass
+
         await self._send(message)
 
         # Replay chat history on reconnect
@@ -724,6 +741,7 @@ class ConnectionHandler:
         if self._dashboard:
             await self._dashboard.load_and_send_config()
             if self._dashboard.has_config:
+                self._extra_roots = self._dashboard.get_allowed_extra_roots()
                 await self._dashboard.load_and_send_data()
 
         # Bootstrap a fresh chat session by running the provider's
@@ -1003,6 +1021,12 @@ class ConnectionHandler:
                 await self._handle_neovim_resize(data)
             elif msg_type == MessageType.NEOVIM_OPEN_DIFF:
                 await self._handle_neovim_open_diff(data)
+            elif msg_type == MessageType.COMPACT_PREVIEW_RESOLVED:
+                approved = bool(data.get("approved", False))
+                if self._compact_preview_future and not self._compact_preview_future.done():
+                    self._compact_preview_future.set_result(approved)
+            elif msg_type == MessageType.CHAT_CLEAR:
+                await self._do_clear()
             elif msg_type == MessageType.AGENT_APPROVE:
                 await self._handle_agent_approve(data)
             elif msg_type == MessageType.AGENT_REJECT:
@@ -1078,6 +1102,16 @@ class ConnectionHandler:
         if terminal:
             await terminal.pty.resize(cols, rows)
 
+    def _resolve_root(self, root_name: str | None) -> Path:
+        """Return the root path for a tree/file request.
+
+        ``root_name`` must be None (project root) or a key in ``_extra_roots``
+        populated from dashboard config — arbitrary paths are rejected.
+        """
+        if root_name and root_name in self._extra_roots:
+            return self._extra_roots[root_name]
+        return self._working_dir
+
     async def _handle_get_tree(self, data: dict | None = None) -> None:
         """Handle file tree request."""
         # Use client override if provided, otherwise use config
@@ -1086,11 +1120,13 @@ class ConnectionHandler:
         else:
             show_ignored = self._user_config.behavior.file_tree.show_ignored if self._user_config else True
 
+        root = self._resolve_root(data.get("root") if data else None)
+
         # Run in thread pool to avoid blocking the async event loop —
         # scanning large directories (e.g. /home/user with datasets)
         # can take minutes synchronously
         tree = await asyncio.to_thread(
-            build_file_tree_cached, self._working_dir, max_depth=2, respect_gitignore=not show_ignored
+            build_file_tree_cached, root, max_depth=2, respect_gitignore=not show_ignored
         )
         await self._send({
             "type": MessageType.FILE_TREE,
@@ -1105,9 +1141,11 @@ class ConnectionHandler:
         else:
             show_ignored = self._user_config.behavior.file_tree.show_ignored if self._user_config else True
 
+        root = self._resolve_root(data.get("root"))
+
         children = await asyncio.to_thread(
             build_directory_children,
-            self._working_dir,
+            root,
             path,
             max_depth=2,
             respect_gitignore=not show_ignored,
@@ -1161,7 +1199,8 @@ class ConnectionHandler:
         if not path:
             raise ProtocolError.invalid_message("Missing path")
 
-        content = read_file_content(self._working_dir, path)
+        root = self._resolve_root(data.get("root"))
+        content = read_file_content(root, path)
         file_type = get_file_type(path)
 
         await self._send({
@@ -1401,6 +1440,11 @@ class ConnectionHandler:
             await self._handle_mode_switch(self.CADE_MODE_COMMANDS[content])
             return
 
+        # /clear: wipe session immediately, no handoff
+        if content == "/clear":
+            await self._do_clear()
+            return
+
         # /compact: generate handoff summary then reset session
         if content == "/compact":
             _, skill_content = self._try_load_skill("/handoff")
@@ -1567,34 +1611,86 @@ class ConnectionHandler:
         finally:
             self._chat_session.finish_response()
             if self._compact_pending:
-                await self._do_compact()
+                self._compact_pending = False
+                self._compact_task = asyncio.create_task(self._do_compact())
 
     async def _do_compact(self) -> None:
-        """Reset the session after /compact, seeding the new one with the handoff."""
-        self._compact_pending = False
+        """Write handoff to file, show preview for approval, then reset session."""
         if self._chat_session is None:
             return
 
-        # Pull the just-generated handoff text
+        # Pull the just-generated handoff text from the last assistant turn
         handoff_text = ""
         for msg in reversed(self._chat_session.get_messages()):
             if msg.role == "assistant":
                 handoff_text = msg.content
                 break
 
-        # Replace session with a fresh one seeded with the handoff as context
+        # Write handoff file
+        file_path: Path | None = None
+        rel_path: str | None = None
+        if self._working_dir and handoff_text:
+            import datetime
+            slug = datetime.datetime.now().strftime("compact-%Y-%m-%d-%H%M")
+            handoff_dir = Path(self._working_dir) / "docs" / "plans" / "handoff"
+            handoff_dir.mkdir(parents=True, exist_ok=True)
+            file_path = handoff_dir / f"{slug}.md"
+            file_path.write_text(handoff_text)
+            rel_path = str(file_path.relative_to(self._working_dir))
+
+        # Send preview and wait for user approval
+        self._compact_preview_future = asyncio.get_event_loop().create_future()
+        await self._send({
+            "type": MessageType.COMPACT_PREVIEW,
+            "filePath": rel_path,
+            "content": handoff_text,
+        })
+
+        try:
+            approved = await self._compact_preview_future
+        except asyncio.CancelledError:
+            return
+        finally:
+            self._compact_preview_future = None
+
+        if not approved:
+            return
+
+        # Reset session, seed new one with opening message
         registry = get_chat_registry()
         session_key = str(self._session_id or id(self))
         provider_name = self._chat_session.provider_name
         registry.remove(session_key)
         new_session = registry.get_or_create(session_key, provider_name=provider_name)
+
         if handoff_text:
             new_session.add_assistant_message(handoff_text)
+
+        opening = (
+            f"Here's the handoff from the last session — `{rel_path}`. "
+            "Review it, let me know if anything's unclear, and tell me what to tackle first."
+            if rel_path else
+            "Here's the handoff from the last session. Review it, let me know if anything's unclear, and tell me what to tackle first."
+        )
         self._chat_session = new_session
 
         await self._send({
             "type": MessageType.CHAT_COMPACT,
-            "context": handoff_text,
+            "context": opening,
+            "filePath": rel_path,
+        })
+
+    async def _do_clear(self) -> None:
+        """Wipe the current session immediately with no handoff."""
+        registry = get_chat_registry()
+        session_key = str(self._session_id or id(self))
+        provider_name = self._chat_session.provider_name if self._chat_session else ""
+        registry.remove(session_key)
+        self._chat_session = registry.get_or_create(session_key, provider_name=provider_name)
+        await self._send({
+            "type": MessageType.CHAT_COMPACT,
+            "context": "",
+            "filePath": None,
         })
 
     async def _handle_provider_switch(self, data: dict) -> None:
