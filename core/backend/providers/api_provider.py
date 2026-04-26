@@ -163,9 +163,22 @@ class APIProvider(BaseProvider):
             finish_reason = None
             pending_tool_calls: dict[int, dict] = {}
             last_chunk = None
+            accumulated_prompt_tokens = 0
+            accumulated_completion_tokens = 0
 
             async for chunk in response:
                 last_chunk = chunk
+
+                # Accumulate usage across all chunks — Anthropic-format providers
+                # emit prompt_tokens in the first chunk (message_start), not the last.
+                if hasattr(chunk, "usage") and chunk.usage:
+                    pt = getattr(chunk.usage, "prompt_tokens", 0) or 0
+                    ct = getattr(chunk.usage, "completion_tokens", 0) or 0
+                    if pt:
+                        accumulated_prompt_tokens = pt
+                    if ct:
+                        accumulated_completion_tokens = ct
+
                 choice = chunk.choices[0] if chunk.choices else None
                 if not choice:
                     continue
@@ -259,7 +272,13 @@ class APIProvider(BaseProvider):
 
             else:
                 # Non-tool finish
-                usage = _extract_usage(last_chunk)
+                if accumulated_prompt_tokens or accumulated_completion_tokens:
+                    usage = {
+                        "prompt_tokens": accumulated_prompt_tokens,
+                        "completion_tokens": accumulated_completion_tokens,
+                    }
+                else:
+                    usage = _extract_usage(last_chunk)
                 yield ChatDone(usage=usage)
                 return
 

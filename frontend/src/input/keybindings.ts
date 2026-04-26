@@ -264,7 +264,6 @@ export class KeybindingManager implements Component {
       }
 
       // Alt+e: toggle enhanced mode
-      // Note: Alt+E may conflict with Firefox Edit menu on Linux
       if (key === "e") {
         e.preventDefault();
         this.callbacks?.toggleEnhanced();

@@ -17,5 +17,8 @@ export default defineConfig({
       "../core/frontend/**/*.test.ts",
     ],
     environment: "node",
+    environmentMatchGlobs: [
+      ["../core/frontend/chat/**/*.test.ts", "jsdom"],
+    ],
   },
 });

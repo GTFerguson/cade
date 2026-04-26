@@ -17,6 +17,7 @@ export class ChatInput {
   private disabled = false;
   private onSend: (text: string) => void;
   private onCancel: (() => void) | null = null;
+  private lastEscapeTime = 0;
   private onSlashInput: ((text: string) => void) | null = null;
   private onArrowUp: (() => boolean) | null = null;
   private onArrowDown: (() => boolean) | null = null;
@@ -96,9 +97,12 @@ export class ChatInput {
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
-      if (this.disabled) {
+      const now = Date.now();
+      const isDoubleTap = now - this.lastEscapeTime < 400;
+      this.lastEscapeTime = isDoubleTap ? 0 : now;
+      if (isDoubleTap) {
         this.onCancel?.();
-      } else {
+      } else if (!this.disabled) {
         this.textarea.blur();
       }
       return;
@@ -106,8 +110,6 @@ export class ChatInput {
   }
 
   private send(): void {
-    if (this.disabled) return;
-
     const text = this.textarea.value.trim();
     if (!text) return;
 
@@ -186,13 +188,19 @@ export class ChatInput {
     this.autoResize();
   }
 
+  showQueued(text: string): void {
+    this.textarea.value = text;
+    this.autoResize();
+    this.textarea.classList.add("chat-input--queued");
+  }
+
   setDisabled(disabled: boolean): void {
     this.disabled = disabled;
-    this.textarea.disabled = disabled;
     if (!disabled) {
       this.textarea.placeholder = "Send a message...";
+      this.textarea.classList.remove("chat-input--queued");
     } else {
-      this.textarea.placeholder = "Waiting for response...";
+      this.textarea.placeholder = "Queue a message (Esc×2 to stop)...";
     }
   }
 

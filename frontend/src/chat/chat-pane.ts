@@ -24,6 +24,7 @@ import { ChatInput } from "@core/chat/chat-input";
 import { DiagramViewer } from "@core/chat/diagram-viewer";
 import { ContextBudgetIndicator } from "../components/context-budget-indicator";
 import { PermissionsButton } from "./permissions-button";
+import { MCPStatusIcon, type MCPEntry } from "./mcp-status-icon";
 import { linkifyElement, patchLinks } from "@core/chat/linkify";
 
 const CADE_MERMAID_CONFIG = {
@@ -91,6 +92,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   private totalCost = 0;
   private contextBudget: ContextBudgetIndicator | null = null;
   private permissionsButton: PermissionsButton | null = null;
+  private mcpStatusIcon: MCPStatusIcon | null = null;
   private systemInfo: { model?: string; slashCommands: Array<{ name: string; description: string }> } = {
     slashCommands: [],
   };
@@ -101,6 +103,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     selectedName: string | null;
   } = { items: [], selectedName: null };
   private isStreaming = false;
+  private queuedMessage: string | null = null;
   private readonly autoSubscribe: boolean;
   private readonly readOnly: boolean;
   private readonly onOpenFile: ((path: string) => void) | null;
@@ -181,12 +184,13 @@ export class ChatPane implements Component, PaneKeyHandler {
 
     this.contextBudget = new ContextBudgetIndicator();
     this.permissionsButton = new PermissionsButton();
+    this.mcpStatusIcon = new MCPStatusIcon();
 
     // Right-side group pushed to the end of the statusline
     const statusRight = document.createElement("div");
     statusRight.className = "statusline-right";
+    statusRight.appendChild(this.mcpStatusIcon.getElement());
     statusRight.appendChild(this.permissionsButton.getElement());
-    statusRight.appendChild(this.contextBudget.getElement());
 
     this.statuslineEl.appendChild(this.modeEl);
     this.statuslineEl.appendChild(this.providerEl);
@@ -211,6 +215,10 @@ export class ChatPane implements Component, PaneKeyHandler {
         }
         return false;
       });
+
+      // Context budget indicator sits at the right end of the input row
+      const inputRow = this.inputArea.querySelector(".chat-input-row");
+      inputRow?.appendChild(this.contextBudget.getElement());
     }
 
     // Track user scroll position to manage auto-scroll lock
@@ -430,13 +438,35 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.permissionsButton?.setConnectionId(id);
   }
 
+  setMcpStatus(entries: MCPEntry[]): void {
+    this.mcpStatusIcon?.setStatus(entries);
+  }
+
   private cancelStream(): void {
     if (this.isStreaming) {
+      this.queuedMessage = null;
       this.ws.sendChatCancel();
     }
   }
 
+  private flushQueuedMessage(): void {
+    const queued = this.queuedMessage;
+    this.queuedMessage = null;
+    this.chatInput?.setDisabled(false);
+    if (queued) {
+      this.sendMessage(queued);
+    } else {
+      this.chatInput?.focus();
+    }
+  }
+
   private sendMessage(text: string): void {
+    if (this.isStreaming) {
+      this.queuedMessage = text;
+      this.chatInput?.showQueued(text);
+      return;
+    }
+
     this._slashMenuClose();
 
     const userEl = document.createElement("div");
@@ -775,7 +805,7 @@ export class ChatPane implements Component, PaneKeyHandler {
       ),
     ) as HTMLElement[];
 
-    const maxVisible = 5;
+    const maxVisible = 3;
     let group = contentEl.querySelector(":scope > .chat-tool-group") as HTMLElement | null;
     const currentGrouped = group
       ? (group.querySelector(".chat-tool-group-body")?.children.length ?? 0)
@@ -909,8 +939,7 @@ export class ChatPane implements Component, PaneKeyHandler {
       if (promptTokens > 0) this.contextBudget?.update(promptTokens);
     }
 
-    this.chatInput?.setDisabled(false);
-    this.chatInput?.focus();
+    this.flushQueuedMessage();
   }
 
   private handleError(message: string): void {
@@ -930,8 +959,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.activeToolEls.clear();
     this.currentAssistantEl = null;
 
-    this.chatInput?.setDisabled(false);
-    this.chatInput?.focus();
+    this.flushQueuedMessage();
   }
 
   private async handleChatHistory(msg: ChatHistoryMessage): Promise<void> {
@@ -1458,8 +1486,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     // Mode commands (e.g. /orch) are intercepted server-side and never
     // reach the CC subprocess, so no "done" event fires. Re-enable input.
     this.isStreaming = false;
-    this.chatInput?.setDisabled(false);
-    this.chatInput?.focus();
+    this.flushQueuedMessage();
   }
 
   private handleCompact(_msg: ChatCompactMessage): void {
@@ -1479,8 +1506,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.messagesEl.appendChild(marker);
 
     this.isStreaming = false;
-    this.chatInput?.setDisabled(false);
-    this.chatInput?.focus();
+    this.flushQueuedMessage();
   }
 
   dispose(): void {
@@ -1492,5 +1518,6 @@ export class ChatPane implements Component, PaneKeyHandler {
     }
     this.chatInput?.dispose();
     this.diagramViewer?.dispose();
+    this.mcpStatusIcon?.dispose();
   }
 }
