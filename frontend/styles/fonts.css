@@ -6,6 +6,16 @@
  * fallback rendering on platforms without JetBrains Mono installed
  * (e.g. fresh Ubuntu, Windows without JetBrains IDEs).
  *
+ * URLs are RELATIVE on purpose. Fonts live under styles/fonts/ (not
+ * public/) so Vite processes them: hashes them, copies them into
+ * dist/assets/, and rewrites these url() refs with the build-time
+ * base path. Absolute /fonts/* URLs broke on the EC2 deployment where
+ * nginx routes only /cade/* to the backend and 404s everything else —
+ * the browser at /cade/ resolves "/fonts/x.woff2" to /fonts/x.woff2,
+ * not /cade/fonts/x.woff2. Fonts silently 404'd, the WebGL atlas baked
+ * with system-fallback metrics (much narrower cells), and only the
+ * thinnest glyphs (i, j, parens, hyphen) survived.
+ *
  * font-display: block holds the first paint for up to ~3s while the
  * font fetches, so xterm measures the correct face on init rather than
  * measuring a fallback and re-rasterising later. The chat path uses
@@ -24,7 +34,7 @@
   font-style: normal;
   font-weight: 400;
   font-display: block;
-  src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  src: url("./fonts/JetBrainsMono-Regular.woff2") format("woff2");
 }
 
 @font-face {
@@ -32,7 +42,7 @@
   font-style: italic;
   font-weight: 400;
   font-display: block;
-  src: url("/fonts/JetBrainsMono-Italic.woff2") format("woff2");
+  src: url("./fonts/JetBrainsMono-Italic.woff2") format("woff2");
 }
 
 @font-face {
@@ -40,7 +50,7 @@
   font-style: normal;
   font-weight: 500;
   font-display: block;
-  src: url("/fonts/JetBrainsMono-Medium.woff2") format("woff2");
+  src: url("./fonts/JetBrainsMono-Medium.woff2") format("woff2");
 }
 
 @font-face {
@@ -48,7 +58,7 @@
   font-style: italic;
   font-weight: 500;
   font-display: block;
-  src: url("/fonts/JetBrainsMono-MediumItalic.woff2") format("woff2");
+  src: url("./fonts/JetBrainsMono-MediumItalic.woff2") format("woff2");
 }
 
 @font-face {
@@ -56,7 +66,7 @@
   font-style: normal;
   font-weight: 600;
   font-display: block;
-  src: url("/fonts/JetBrainsMono-SemiBold.woff2") format("woff2");
+  src: url("./fonts/JetBrainsMono-SemiBold.woff2") format("woff2");
 }
 
 @font-face {
@@ -64,7 +74,7 @@
   font-style: italic;
   font-weight: 600;
   font-display: block;
-  src: url("/fonts/JetBrainsMono-SemiBoldItalic.woff2") format("woff2");
+  src: url("./fonts/JetBrainsMono-SemiBoldItalic.woff2") format("woff2");
 }
 
 @font-face {
@@ -72,7 +82,7 @@
   font-style: normal;
   font-weight: 700;
   font-display: block;
-  src: url("/fonts/JetBrainsMono-Bold.woff2") format("woff2");
+  src: url("./fonts/JetBrainsMono-Bold.woff2") format("woff2");
 }
 
 @font-face {
@@ -80,5 +90,5 @@
   font-style: italic;
   font-weight: 700;
   font-display: block;
-  src: url("/fonts/JetBrainsMono-BoldItalic.woff2") format("woff2");
+  src: url("./fonts/JetBrainsMono-BoldItalic.woff2") format("woff2");
 }
