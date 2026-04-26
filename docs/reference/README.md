@@ -13,6 +13,8 @@ Evidence base for CADE's design decisions. Each doc covers a single topic with f
 - [[coding-agent-prompts]] — Prompt Alchemy (Ye et al., 2025) and ACE-based prompt patterns for code generation
 - [[agentic-context-engineering]] — ACE framework: itemized context, Generator-Reflector-Curator, self-improving agent contexts
 - [[self-improving-agent-systems]] — SICA, Memento-Skills, SkillClaw, EvolveR: memory, skill libraries, and experience evolution
+- [[browser-terminal-emulators]] — xterm.js landscape, WebGL vs canvas vs DOM tradeoffs, documented rendering failures and patches
+- [[xterm-rendering-issue]] — Black-block glyph corruption: full attempt log, confirmed dead-ends, current theory, escalation path
 
 ## Navigation
 
