@@ -49,3 +49,4 @@ desktop/src-tauri/resources/cade-backend*
 # Local tooling state
 .nkrdn/
 .playwright-mcp/
+.scout-browse/
