@@ -85,6 +85,39 @@ function dashboardPayload(
   };
 }
 
+// ── Mock browse API for LocalProjectSelector ────────────────────────
+// Mirrors what /api/browse returns so the file picker works in demo mode.
+
+const MOCK_FS: Record<string, string[]> = {
+  "/home/gary/projects": [
+    "admin-dash", "business-manager", "cade", "clann", "cognetic-site",
+    "common-knowledge", "cv-site", "dream-decks", "EcoSim", "goodlet",
+    "job-finder", "menshun-site", "misc", "money-printer", "nkrdn",
+    "padarax", "scout-engine", "skillcracked", "socials", "tensyl",
+  ],
+};
+
+const MOCK_TILDE_ROOT = "/home/gary/projects";
+
+function resolveMockPath(path: string): string {
+  if (path === "~" || path === "~/projects" || path === "~/projects/") return MOCK_TILDE_ROOT;
+  if (path.startsWith("~/")) return `/home/gary/${path.slice(2)}`;
+  return path;
+}
+
+(window as any).__MOCK_BROWSE__ = (path: string) => {
+  const resolved = resolveMockPath(path);
+  const names = MOCK_FS[resolved] ?? [];
+  return {
+    path: resolved,
+    children: names.map((name) => ({
+      name,
+      path: `${resolved}/${name}`,
+      type: "directory",
+    })),
+  };
+};
+
 // ── Scenario registry ────────────────────────────────────────────────
 
 interface Scenario {
@@ -188,6 +221,21 @@ export function activateDemoMode(ws: WebSocketClient): void {
     ws.injectEvent("chat-history", { type: "chat-history", messages: DEMO_CHAT });
 
     if (key === "viewer") {
+      ws.injectEvent("dashboard-config", {
+        type: "dashboard-config",
+        config: {
+          dashboard: { title: "Demo" },
+          data_sources: {},
+          views: [],
+          stats: [],
+          extra_roots: [
+            { name: "common-knowledge", path: "../common-knowledge", label: "common-knowledge", default: true },
+            { name: "padarax", path: "../padarax", label: "padarax" },
+            { name: "design-system", path: "../design-system", label: "design-system" },
+            { name: "shared-types", path: "../shared-types", label: "shared-types" },
+          ],
+        },
+      });
       ws.injectEvent("file-tree", { type: "file-tree", data: [] });
       ws.injectEvent("file-content", {
         type: "file-content",

@@ -56,6 +56,7 @@ if (typeof window !== "undefined") {
 
 export class MarkdownViewer implements Component, PaneKeyHandler {
   private currentPath: string | null = null;
+  private currentRoot: string | null = null;
   private currentContent: string = "";
   private currentFileType: string = "plaintext";
   private currentMeta: Record<string, unknown> | undefined = undefined;
@@ -199,15 +200,16 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     }
   }
 
-  loadFile(path: string, meta?: Record<string, unknown>): void {
+  loadFile(path: string, meta?: Record<string, unknown>, root?: string | null): void {
     this.currentMeta = meta;
+    this.currentRoot = root ?? null;
     this.parsedMode = true;
-    this.ws.requestFile(path);
+    this.ws.requestFile(path, root ?? undefined);
   }
 
   refresh(): void {
     if (this.currentPath !== null) {
-      this.ws.requestFile(this.currentPath);
+      this.ws.requestFile(this.currentPath, this.currentRoot ?? undefined);
     }
   }
 

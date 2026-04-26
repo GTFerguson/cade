@@ -1,7 +1,7 @@
 ---
 title: Dashboard Guide
 created: 2026-04-22
-updated: 2026-04-22
+updated: 2026-04-26
 status: active
 tags: [dashboard, yaml, configuration, hot-reload]
 ---
@@ -17,7 +17,6 @@ Create `.cade/dashboard.yml` in your project root:
 ```yaml
 dashboard:
   title: "My Project"
-  theme: terminal-dark
 
 data_sources:
   tasks:
@@ -38,30 +37,106 @@ views:
 
 Open CADE and click the **Dashboard** button (or press `Ctrl-a d`) to open the dashboard panel. Changes to `dashboard.yml` or `docs/tasks.md` will live-reload automatically.
 
+---
+
 ## Config Structure
 
+A dashboard config has five top-level keys:
+
 ```yaml
-dashboard:          # Metadata
-data_sources:       # Where data comes from
-views:              # How data is displayed
+dashboard:      # Required. Metadata (title, subtitle, theme).
+data_sources:   # Required. Where data comes from.
+views:          # Required. How data is displayed.
+extra_roots:    # Optional. Additional directories for the file tree.
+watches:        # Optional. File watchers that trigger shell commands.
 ```
 
 ### `dashboard` block
 
 ```yaml
 dashboard:
-  title: "My Dashboard"     # shown in header
-  subtitle: "optional"      # shown below title
+  title: "My Dashboard"     # shown in the dashboard header
+  subtitle: "optional"      # shown below the title
   theme: terminal-dark       # built-in theme name
 ```
 
 ---
 
+### `extra_roots` block
+
+Defines additional directory roots accessible in the file tree alongside the current project. Useful for shared knowledge bases, monorepo siblings, or any directory you want to browse without switching projects.
+
+```yaml
+extra_roots:
+  - name: common-knowledge      # internal identifier
+    path: "../common-knowledge"  # relative to this project's root
+    label: "common-knowledge"    # display label in the tab bar
+    default: true                # open this root on load
+```
+
+**Fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Unique identifier. Keep it short and slug-like. |
+| `path` | Yes | Path relative to the project root. `..` is fine. |
+| `label` | No | Display name in the tab bar. Defaults to `name`. |
+| `default` | No | If `true`, the file tree opens this root on load. |
+
+**Multiple roots:**
+
+```yaml
+extra_roots:
+  - name: common-knowledge
+    path: "../common-knowledge"
+    label: "common-knowledge"
+    default: true
+  - name: shared-types
+    path: "../shared-types"
+    label: "shared-types"
+```
+
+When more than two roots are configured, the tab bar shows a sliding window of two — the active root and the next — with a `+N` count for the hidden ones. Hold `r` to see all roots in a picker menu.
+
+**Keyboard shortcuts:**
+
+| Key | Action |
+|-----|--------|
+| `r` (tap) | Cycle to next root |
+| `Shift+R` (tap) | Cycle to previous root |
+| `r` (hold ~220 ms) | Open full root picker menu |
+| `j` / `k` in menu | Navigate options |
+| `Enter` or release `r` | Select highlighted root |
+| `Esc` | Cancel |
+
+Only paths explicitly listed in `extra_roots` that exist on disk are accessible — arbitrary paths cannot be requested by the client.
+
+> [!TIP]
+> **For agents:** add `extra_roots` pointing at `../common-knowledge` with `default: true` to make the shared knowledge base the default view in any project's file tree.
+
+---
+
+### `watches` block
+
+Watches are file-glob triggers that run a shell command when matching files change. Useful for regenerating derived files, running validators, or triggering sync scripts.
+
+```yaml
+watches:
+  - name: rebuild-index          # optional label for logs
+    watch: "docs/**/*.md"        # glob relative to project root
+    run: "scripts/rebuild-index.sh"
+    exclude: "docs/drafts/**"    # optional glob to skip
+```
+
+Changes are debounced at 2 seconds, so rapid file writes (e.g. agent edits) only trigger the command once.
+
+---
+
 ## Data Sources
 
-Each data source has a name (used in panels) and a `type`.
+Each source has a name (used in panels) and a `type`. File-based sources are watched automatically — when the file changes, connected dashboards update without polling.
 
-### `markdown` — parse a single markdown file
+### `markdown` — single markdown file
 
 Best for: priority lists, checklists, timelines in a single `.md` file.
 
@@ -70,19 +145,19 @@ data_sources:
   priorities:
     type: markdown
     path: docs/priorities.md
-    parse: ranked_list        # see parse modes below
+    parse: ranked_list
 ```
 
 **Parse modes:**
 
 | Mode | What it does | Typical fields |
 |------|-------------|----------------|
-| `ranked_list` | Numbered/priority lists under section headers | `text`, `priority`, `status`, `done` |
-| `list_items` | Bullet/dash lists, optionally with `- [x]` checkboxes | `text`, `done`, `heading` |
+| `ranked_list` | Numbered / priority lists under section headers | `text`, `priority`, `status`, `done` |
+| `list_items` | Bullet / dash lists, optionally with `- [x]` checkboxes | `text`, `done`, `heading` |
 | `date_entries` | Markdown tables with date columns | `date`, `what`, `product`, `type`, `detail` |
 | `raw` | Entire file as one record | `content` |
 
-### `directory` — scan a folder for frontmatter files
+### `directory` — folder of frontmatter files
 
 Best for: a flat folder of markdown docs where each file is a record.
 
@@ -94,7 +169,7 @@ data_sources:
     parse: frontmatter
 ```
 
-Every `.md` or `.yml` file in the folder becomes one record. For subdirectories, the adapter looks for `index.md` or a file named after the folder — **not** arbitrary filenames. If your files are named `application-guide.md` inside subdirectories, use `vault` instead.
+Every `.md` or `.yml` file in the folder becomes one record. For subdirectories, the adapter looks for `index.md` or a file named after the folder. If your files are arbitrarily named inside subdirectories, use `vault` instead.
 
 **With entity config** (enables kanban drag-drop and status patching):
 
@@ -112,7 +187,7 @@ data_sources:
         blocked: [active]
 ```
 
-### `vault` — recursively scan a directory tree
+### `vault` — recursive directory tree
 
 Best for: nested folder structures where files are not named after their parent folder (e.g. `applications/seedcorn/application-guide.md`).
 
@@ -125,7 +200,7 @@ data_sources:
 
 Walks the entire tree and adds every `.md` file as a record. Skips `README.md` and dotfiles. Exposes `_file`, `_path`, `_folder`, `_filename`, `_body`, plus any frontmatter fields.
 
-### `json_file` — read a JSON file
+### `json_file` — single JSON file
 
 ```yaml
 data_sources:
@@ -136,7 +211,7 @@ data_sources:
 
 Expects a top-level array or object.
 
-### `json_directory` — scan a folder of JSON files
+### `json_directory` — folder of JSON files
 
 ```yaml
 data_sources:
@@ -145,9 +220,18 @@ data_sources:
     path: data/items/
 ```
 
-Each `.json` file = one record. Exposes `_filename`, `_json`.
+Each `.json` file = one record. Exposes `_filename`, `_json`. Optional extras:
 
-### `rest` — call an API endpoint
+```yaml
+data_sources:
+  items:
+    type: json_directory
+    path: data/items/
+    merge_suffix: ".meta.json"   # merge a sidecar file into each record
+    exclude: "data/items/draft*" # glob of files to skip
+```
+
+### `rest` — HTTP endpoint
 
 ```yaml
 data_sources:
@@ -156,7 +240,27 @@ data_sources:
     endpoint: "https://api.github.com/repos/owner/repo/releases"
     headers:
       Authorization: "Bearer ghp_xxx"
+    refresh_interval: 300   # re-fetch every 5 minutes
 ```
+
+`refresh_interval` is in seconds. Omit or set to `0` to disable polling. File-based sources never need this — they update automatically via file watching.
+
+### `model_usage` — LLM call log analytics
+
+Aggregates LLM usage from a server log file into per-model, per-project statistics.
+
+```yaml
+data_sources:
+  llm_stats:
+    type: model_usage
+    path: ../server/logs/server.log
+    parse: plog_llm          # log format: plog_llm or jsonl
+    window: 7d               # rolling time window: 1d, 7d, 30d, etc.
+    static_quotas:           # optional hard limits per model
+      claude-3-5-sonnet: 1000000
+```
+
+Use with the `model_stats` component to render usage dashboards.
 
 ---
 
@@ -168,7 +272,7 @@ A view is a tab in the dashboard. Each view contains one or more panels.
 views:
   - id: overview
     title: "Overview"
-    layout: grid-2col      # optional: grid-2col, grid-3col, or auto
+    layout: grid-2col      # optional layout variant
     panels:
       - id: my-panel
         title: "Panel Title"
@@ -177,9 +281,57 @@ views:
         fields: [text]
 ```
 
-### Components
+### View fields
 
-#### `checklist` — tick-box list
+| Field | Description |
+|-------|-------------|
+| `id` | Unique identifier for the view. |
+| `title` | Tab label. |
+| `layout` | `grid-2col`, `grid-3col`, or omit for single-column. |
+| `hidden` | `true` to hide the tab from the nav bar. Can be revealed programmatically via the `dashboard-focus-view` frame. Useful for detail views opened by card clicks. |
+| `group` | Group name. Views sharing the same `group` are nested under a collapsible section in the tab bar. |
+| `panels` | List of panel configs. |
+
+### Panel filtering
+
+Every panel can filter records before rendering. The `filter` field accepts field-value conditions:
+
+```yaml
+panels:
+  - component: cards
+    source: plans
+    filter:
+      status: active           # exact match
+      tags: ["design"]         # value must appear in list field
+
+  - component: cards
+    source: plans
+    filter:
+      status: {not: archived}  # exclude a value
+```
+
+Multiple filter keys are ANDed together.
+
+### `on_click` — open a file in the viewer
+
+Panels can open a file in the right-pane viewer when a card or row is clicked:
+
+```yaml
+panels:
+  - component: cards
+    source: plans
+    on_click:
+      action: view_file
+      field: _file            # which record field holds the relative path
+```
+
+When the user clicks a card, the file at `record[field]` is loaded into the markdown viewer. Works with any source that exposes a `_file` or `_path` field (`directory`, `vault`).
+
+---
+
+## Components
+
+### `checklist` — tick-box list
 
 ```yaml
 component: checklist
@@ -191,20 +343,20 @@ on_check:
   value: true
 ```
 
-Items with `done: true` render as checked. The `on_check` action patches the source file on click (requires a patchable source type: `directory`, `vault`, or `json_file`).
+Items with `done: true` render as checked. The `on_check` action patches the source file on click (requires a patchable source: `directory`, `vault`, or `json_file`).
 
-#### `timeline` — chronological event list
+### `timeline` — chronological event list
 
 ```yaml
 component: timeline
 source: timeline
 fields: [what, product, type]
-limit: 12           # show only the next N events
+limit: 12
 ```
 
-Sorts by `date` field. Use `date_entries` parse on a markdown table for this.
+Sorts by `date` field. Use `date_entries` parse mode on a markdown table.
 
-#### `cards` — card grid
+### `cards` — card grid
 
 ```yaml
 component: cards
@@ -212,9 +364,48 @@ source: plans
 fields: [title, status, updated]
 badges: [status]
 searchable: [title]
+on_click:
+  action: view_file
+  field: _file
 ```
 
-#### `kanban` — status board with drag-drop
+`badges` renders the named field as a coloured pill. `searchable` adds a live-filter input above the grid.
+
+### `cards_paged` — infinite-scroll card grid
+
+A virtual-windowed variant of `cards` for large datasets. Only renders visible cards, loading more as you scroll.
+
+```yaml
+component: cards_paged
+source: articles
+fields: [title, date, tags]
+badges: [tags]
+extra:
+  page_size: 20         # cards per page load
+  favourite_field: starred  # field to toggle on star click
+```
+
+### `table` — sortable, filterable table
+
+```yaml
+component: table
+source: applications
+columns: [title, status, deadline]
+sortable: true
+filterable: [status]
+searchable: [title]
+```
+
+`columns` can be strings (field names) or dicts for custom headers:
+
+```yaml
+columns:
+  - { field: title, label: "Application" }
+  - { field: status, label: "Stage" }
+  - { field: deadline, label: "Due" }
+```
+
+### `kanban` — status board with drag-drop
 
 ```yaml
 component: kanban
@@ -229,33 +420,63 @@ on_move:
   field: status
 ```
 
-Drag-drop patches the `status` field in the source file. Requires `entity` config on the data source.
+Drag-drop patches the `status` field in the source file. Requires `entity` config on the data source with `statuses` and `transitions`.
 
-#### `table` — sortable, filterable table
-
-```yaml
-component: table
-source: applications
-columns: [title, status, deadline]
-sortable: true
-filterable: [status]
-searchable: [title]
-```
-
-#### `markdown` — rendered markdown doc
+### `markdown` — rendered markdown document
 
 ```yaml
 component: markdown
 source: some_source
 ```
 
-Renders `_body` or `content` field as full markdown with KaTeX and Mermaid support.
+Renders the `_body` or `content` field as full markdown with KaTeX and Mermaid diagram support.
 
-#### `key_value` — key/value pairs
+### `key_value` — key/value pairs
 
 ```yaml
 component: key_value
 source: config
+```
+
+Renders each record field as a labelled value row.
+
+### `model_stats` — LLM usage statistics
+
+Renders call counts, token usage, latency, and quota gauges from a `model_usage` source.
+
+```yaml
+component: model_stats
+source: llm_stats
+options:
+  show_tokens: true
+  show_latency: true
+  show_projects: true
+```
+
+### `basket` — dual-list drag-drop
+
+Two labelled lists (left/right). Items can be dragged between them. Useful for assignment or triaging workflows.
+
+```yaml
+component: basket
+source: candidates
+options:
+  left_label: "Pending"
+  right_label: "Selected"
+on_move:
+  action: patch
+  field: selected
+```
+
+### `graph` — network graph
+
+Renders nodes and edges as an interactive network diagram.
+
+```yaml
+component: graph
+source: relationships
+extra:
+  format: world-map    # optional: "world-map" for geographic layout
 ```
 
 ---
@@ -282,21 +503,25 @@ Some components can write back to source files on user interaction (checkbox tog
 | `json_file` | Yes | The matching entity in the JSON array |
 | `json_directory` | Yes | The individual `.json` file |
 | `markdown` | No | Not supported |
-| `rest` | Yes | PATCH request to `{endpoint}/{id}` |
+| `rest` | Yes | `PATCH {endpoint}/{id}` |
 
-For frontmatter patching to work, the markdown file must have a `---` frontmatter block.
+For frontmatter patching to work, the markdown file must have a valid `---` frontmatter block.
 
 ---
 
 ## Real-World Example
-
-This is the Business Manager dashboard (`business-manager/.cade/dashboard.yml`):
 
 ```yaml
 dashboard:
   title: "Business Manager"
   subtitle: "Cognetic LTD"
   theme: terminal-dark
+
+extra_roots:
+  - name: common-knowledge
+    path: "../common-knowledge"
+    label: "common-knowledge"
+    default: true
 
 data_sources:
   priorities:
@@ -313,16 +538,16 @@ data_sources:
     type: directory
     path: docs/plans/
     parse: frontmatter
+    entity:
+      statuses: [draft, active, complete, blocked]
 
-  products:
-    type: directory
-    path: docs/products/
-    parse: frontmatter
-
-  # vault used (not directory) because files are at applications/<name>/application-guide.md
   applications:
     type: vault
     path: applications/
+
+watches:
+  - watch: "scripts/data/**"
+    run: "scripts/rebuild-stats.sh"
 
 views:
   - id: overview
@@ -341,24 +566,61 @@ views:
         source: timeline
         limit: 12
         fields: [what, product, type]
+
+  - id: plans
+    title: "Plans"
+    panels:
+      - id: plan-board
+        title: "Active Plans"
+        component: kanban
+        source: plans
+        columns:
+          - { status: draft, label: "Draft" }
+          - { status: active, label: "Active" }
+          - { status: complete, label: "Done" }
+        on_move:
+          action: patch
+          field: status
+
+  - id: applications
+    title: "Applications"
+    panels:
+      - id: app-table
+        component: table
+        source: applications
+        columns: [title, status, deadline]
+        sortable: true
+        filterable: [status]
+        searchable: [title]
+        on_click:
+          action: view_file
+          field: _file
 ```
 
 ---
 
 ## Troubleshooting
 
-**Dashboard not showing** — check that `.cade/dashboard.yml` exists at the project root (the path CADE opened, not a subdirectory).
+**Dashboard not showing** — check that `.cade/dashboard.yml` exists and has the required top-level `dashboard:` key with a `title`.
 
-**Data source empty** — for `directory` type with subdirectories, the adapter only finds `index.md` or a file named after the folder. Use `vault` for nested structures.
+**Data source empty** — for `directory` type with subdirectories, the adapter only finds `index.md` or a file named after the folder. Use `vault` for nested structures with arbitrary filenames.
 
-**Kanban drag-drop not working** — the data source needs an `entity` block with `statuses` and `transitions`. The status value must match one of the column `status` keys.
+**Kanban drag-drop not working** — the data source needs an `entity` block with `statuses` and `transitions`. The dragged card's status must match one of the column `status` keys.
 
 **Checklist `on_check` not patching** — `markdown` type sources are read-only. Move the data into a `directory` or `vault` source if you need write-back.
 
-**Parse mode produces unexpected fields** — use the table component first to inspect all fields returned by a source. Add `columns: [_filename, _body, status, title]` to see what's available.
+**Parse mode produces unexpected fields** — use the `table` component first to inspect all fields a source returns. Add `columns: [_filename, _body, status, title]` to see everything.
+
+**Extra root not appearing** — the path must resolve to an existing directory on disk. If the directory doesn't exist, the root is silently excluded from the allowed list.
+
+**`watches` command not running** — changes are debounced at 2 seconds. The command runs in a subprocess with the project root as the working directory.
+
+**REST source not refreshing** — set `refresh_interval: N` (seconds) on the source. Without it, REST sources only load once on connection.
+
+---
 
 ## See Also
 
 - [[README|User Guide]] — CADE overview
-- [[../technical/reference/dashboard-interactive-primitives|Dashboard Interactive Primitives]] — technical reference for component actions
+- [[../technical/reference/dashboard-interactive-primitives|Dashboard Interactive Primitives]] — technical reference for component actions and the `provider_message` action type
 - [[../technical/reference/websocket-protocol|WebSocket Protocol]] — how config and data are pushed to the client

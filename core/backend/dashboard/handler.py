@@ -67,6 +67,17 @@ class DashboardHandler:
     def has_config(self) -> bool:
         return self._config is not None
 
+    def get_allowed_extra_roots(self) -> dict[str, Path]:
+        """Return resolved extra roots from config, keyed by name."""
+        if self._config is None:
+            return {}
+        result: dict[str, Path] = {}
+        for er in self._config.extra_roots:
+            resolved = (self._working_dir / er.path).resolve()
+            if resolved.is_dir():
+                result[er.name] = resolved
+        return result
+
     # ------------------------------------------------------------------
     # Config
     # ------------------------------------------------------------------

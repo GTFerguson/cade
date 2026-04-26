@@ -7,6 +7,7 @@ import type { Component, EventHandler, FileChildrenMessage, FileNode } from "../
 import { getUserConfig, matchesKeybinding } from "../config/user-config";
 import { computeFileCreationBasePath } from "../remote/profile-utils";
 import type { WebSocketClient } from "../platform/websocket";
+import type { ExtraRootConfig } from "../dashboard/types";
 
 interface FileTreeEvents {
   "file-select": string;
@@ -41,6 +42,14 @@ export class FileTree implements Component, PaneKeyHandler {
   private searchInput: HTMLInputElement | null = null;
   private lastGPress = 0;
   private showIgnored = true;
+
+  // Root switching
+  private _currentRoot: string | null = null;
+  private availableRoots: ExtraRootConfig[] = [];
+  private rootMenuActive = false;
+  private rootMenuIndex = 0;
+  private rootMenuHoldTimer: number | null = null;
+  private static readonly ROOT_MENU_HOLD_MS = 220;
 
   // Lazy loading state
   private pendingLoads: Set<string> = new Set();
@@ -78,10 +87,20 @@ export class FileTree implements Component, PaneKeyHandler {
 
       this.recentlyChangedTimers.set(message.path, timerId);
 
-      this.ws.requestTree(this.showIgnored);
+      this.ws.requestTree(this.showIgnored, this._currentRoot ?? undefined);
     },
     connected: () => {
-      this.ws.requestTree(this.showIgnored);
+      this.ws.requestTree(this.showIgnored, this._currentRoot ?? undefined);
+    },
+    dashboardConfig: (message: any) => {
+      const roots: ExtraRootConfig[] = message.config?.extra_roots ?? [];
+      this.availableRoots = roots;
+      const defaultRoot = roots.find((r) => r.default);
+      if (defaultRoot && this._currentRoot === null) {
+        this._currentRoot = defaultRoot.name;
+        this.ws.requestTree(this.showIgnored, this._currentRoot);
+      }
+      this.render();
     },
   };
 
@@ -105,6 +124,7 @@ export class FileTree implements Component, PaneKeyHandler {
     this.ws.on("file-children", this.boundHandlers.fileChildren);
     this.ws.on("file-change", this.boundHandlers.fileChange);
     this.ws.on("connected", this.boundHandlers.connected);
+    this.ws.on("dashboard-config", this.boundHandlers.dashboardConfig);
 
     // Setup delegated click handler once - handles all row clicks via event bubbling
     this.delegatedClickHandler = (e: MouseEvent) => {
@@ -125,7 +145,7 @@ export class FileTree implements Component, PaneKeyHandler {
     };
 
     if (this.ws.isConnected()) {
-      this.ws.requestTree(this.showIgnored);
+      this.ws.requestTree(this.showIgnored, this._currentRoot ?? undefined);
     }
   }
 
@@ -194,6 +214,74 @@ export class FileTree implements Component, PaneKeyHandler {
     // Ensure selectedIndex is valid
     if (this.selectedIndex >= this.flatList.length) {
       this.selectedIndex = Math.max(0, this.flatList.length - 1);
+    }
+
+    // Root switcher — shown when extra roots are configured
+    if (this.availableRoots.length > 0) {
+      const switcher = document.createElement("div");
+      switcher.className = "file-tree-root-switcher";
+
+      const all = this.allRoots();
+      // Windowed display: always show exactly 2 tabs when there are more than 2 roots.
+      // The active root is always first; the next-in-cycle root is second.
+      const visible = all.length > 2
+        ? this.windowedRoots(all)
+        : all;
+
+      const makeTab = (name: string | null, label: string) => {
+        const tab = document.createElement("button");
+        tab.className = "file-tree-root-tab" + (this._currentRoot === name ? " active" : "");
+        tab.textContent = label;
+        tab.title = name === null ? "Project root" : name;
+        tab.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.switchRoot(name);
+        });
+        return tab;
+      };
+
+      for (const root of visible) {
+        switcher.appendChild(makeTab(root.name, root.label));
+      }
+
+      // Overflow indicator when there are hidden roots
+      if (all.length > 2) {
+        const more = document.createElement("span");
+        more.className = "file-tree-root-more";
+        more.textContent = `+${all.length - 2}`;
+        more.title = all.map((r) => r.label).join(", ");
+        switcher.appendChild(more);
+      }
+
+      this.container.appendChild(switcher);
+
+      // Root picker menu — shown while holding r
+      if (this.rootMenuActive) {
+        const menu = document.createElement("div");
+        menu.className = "file-tree-root-menu";
+
+        for (const [i, root] of this.allRoots().entries()) {
+          const item = document.createElement("div");
+          item.className = "file-tree-root-menu-item" + (i === this.rootMenuIndex ? " selected" : "");
+          if (root.name === this._currentRoot) {
+            item.classList.add("current");
+          }
+          item.textContent = root.label;
+          item.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this.rootMenuIndex = i;
+            this.commitRootMenu();
+          });
+          menu.appendChild(item);
+        }
+
+        const hint = document.createElement("div");
+        hint.className = "file-tree-root-menu-hint";
+        hint.textContent = "j/k  navigate · enter/↵ select · esc cancel";
+        menu.appendChild(hint);
+
+        this.container.appendChild(menu);
+      }
     }
 
     // Search input
@@ -411,11 +499,87 @@ export class FileTree implements Component, PaneKeyHandler {
     this.render();
   }
 
+  get currentRoot(): string | null {
+    return this._currentRoot;
+  }
+
+  /**
+   * Switch to a different root directory. Pass null to return to project root.
+   */
+  switchRoot(name: string | null): void {
+    this._currentRoot = name;
+    this.tree = [];
+    this.expandedPaths.clear();
+    this.selectedPath = null;
+    this.openPath = null;
+    this.render();
+    this.ws.requestTree(this.showIgnored, this._currentRoot ?? undefined);
+  }
+
+  private allRoots(): Array<{ name: string | null; label: string }> {
+    return [
+      { name: null, label: "project" },
+      ...this.availableRoots.map((r) => ({ name: r.name, label: r.label ?? r.name })),
+    ];
+  }
+
+  /** Return the 2-item sliding window: [active, next-in-direction]. */
+  private windowedRoots(
+    all: Array<{ name: string | null; label: string }>
+  ): Array<{ name: string | null; label: string }> {
+    const idx = all.findIndex((r) => r.name === this._currentRoot);
+    const cur = idx === -1 ? 0 : idx;
+    const next = (cur + 1) % all.length;
+    return [all[cur]!, all[next]!];
+  }
+
+  private openRootMenu(direction: 1 | -1 = 1): void {
+    const all = this.allRoots();
+    const currentIdx = all.findIndex((r) => r.name === this._currentRoot);
+    const cur = currentIdx === -1 ? 0 : currentIdx;
+    this.rootMenuIndex = (cur + direction + all.length) % all.length;
+
+    // Show the menu only after a hold delay — quick tap just cycles
+    this.rootMenuHoldTimer = window.setTimeout(() => {
+      this.rootMenuHoldTimer = null;
+      this.rootMenuActive = true;
+      this.render();
+    }, FileTree.ROOT_MENU_HOLD_MS);
+  }
+
+  private commitRootMenu(): void {
+    if (this.rootMenuHoldTimer !== null) {
+      window.clearTimeout(this.rootMenuHoldTimer);
+      this.rootMenuHoldTimer = null;
+    }
+    const target = this.allRoots()[this.rootMenuIndex];
+    this.rootMenuActive = false;
+    this.render();
+    if (target && target.name !== this._currentRoot) {
+      this.switchRoot(target.name);
+    }
+  }
+
+  private closeRootMenu(): void {
+    if (this.rootMenuHoldTimer !== null) {
+      window.clearTimeout(this.rootMenuHoldTimer);
+      this.rootMenuHoldTimer = null;
+    }
+    this.rootMenuActive = false;
+    this.render();
+  }
+
+  handleKeyup(e: KeyboardEvent): void {
+    if ((e.key === "r" || e.key === "R") && (this.rootMenuActive || this.rootMenuHoldTimer !== null)) {
+      this.commitRootMenu();
+    }
+  }
+
   /**
    * Refresh the tree.
    */
   refresh(): void {
-    this.ws.requestTree(this.showIgnored);
+    this.ws.requestTree(this.showIgnored, this._currentRoot ?? undefined);
   }
 
   /**
@@ -514,7 +678,7 @@ export class FileTree implements Component, PaneKeyHandler {
    */
   private toggleIgnored(): void {
     this.showIgnored = !this.showIgnored;
-    this.ws.requestTree(this.showIgnored);
+    this.ws.requestTree(this.showIgnored, this._currentRoot ?? undefined);
   }
 
   /**
@@ -592,7 +756,7 @@ export class FileTree implements Component, PaneKeyHandler {
         document.body.removeChild(overlay);
 
         // Request updated tree
-        this.ws.requestTree(this.showIgnored);
+        this.ws.requestTree(this.showIgnored, this._currentRoot ?? undefined);
 
         // Open the new file in the editor
         this.emit("file-select", path);
@@ -652,7 +816,7 @@ export class FileTree implements Component, PaneKeyHandler {
     if (!node) return;
     if (node.hasMore && !node.children && !this.pendingLoads.has(path)) {
       this.pendingLoads.add(path);
-      this.ws.requestChildren(path, this.showIgnored);
+      this.ws.requestChildren(path, this.showIgnored, this._currentRoot ?? undefined);
     }
   }
 
@@ -666,7 +830,7 @@ export class FileTree implements Component, PaneKeyHandler {
       });
     }
     this.pendingLoads.add(path);
-    this.ws.requestChildren(path, this.showIgnored);
+    this.ws.requestChildren(path, this.showIgnored, this._currentRoot ?? undefined);
     return new Promise((resolve) => {
       this.pendingLoadResolvers.set(path, resolve);
     });
@@ -716,6 +880,33 @@ export class FileTree implements Component, PaneKeyHandler {
    * Returns true if the key was handled.
    */
   handleKeydown(e: KeyboardEvent): boolean {
+    // Root menu navigation — intercepts all keys while menu is open
+    if (this.rootMenuActive) {
+      switch (e.key) {
+        case "j":
+        case "ArrowDown":
+          this.rootMenuIndex = (this.rootMenuIndex + 1) % this.allRoots().length;
+          this.render();
+          return true;
+        case "k":
+        case "ArrowUp":
+          this.rootMenuIndex = (this.rootMenuIndex - 1 + this.allRoots().length) % this.allRoots().length;
+          this.render();
+          return true;
+        case "Enter":
+          this.commitRootMenu();
+          return true;
+        case "Escape":
+          this.closeRootMenu();
+          return true;
+        case "r":
+        case "R":
+          // held — autorepeat fires, just absorb it
+          return true;
+      }
+      return true; // swallow all other keys while menu is open
+    }
+
     // In search typing mode - only handle Escape, let input handle all other keys
     if (this.searchMode && this.searchInputFocused) {
       if (e.key === "Escape") {
@@ -761,6 +952,22 @@ export class FileTree implements Component, PaneKeyHandler {
       case "n":
         this.showFileCreationModal();
         return true;
+      case "r":
+        if (this.availableRoots.length > 0) {
+          if (!this.rootMenuActive) {
+            this.openRootMenu(1);
+          }
+          return true;
+        }
+        return false;
+      case "R":
+        if (this.availableRoots.length > 0) {
+          if (!this.rootMenuActive) {
+            this.openRootMenu(-1);
+          }
+          return true;
+        }
+        return false;
       case "/":
         this.enterSearchMode();
         return true;
@@ -1070,6 +1277,7 @@ export class FileTree implements Component, PaneKeyHandler {
     this.ws.off("file-children", this.boundHandlers.fileChildren);
     this.ws.off("file-change", this.boundHandlers.fileChange);
     this.ws.off("connected", this.boundHandlers.connected);
+    this.ws.off("dashboard-config", this.boundHandlers.dashboardConfig);
 
     this.container.innerHTML = "";
     this.handlers.clear();

@@ -64,6 +64,7 @@ export interface KeybindingCallbacks {
 
 export interface PaneKeyHandler {
   handleKeydown(e: KeyboardEvent): boolean;
+  handleKeyup?(e: KeyboardEvent): void;
 }
 
 export class KeybindingManager implements Component {
@@ -575,6 +576,12 @@ export class KeybindingManager implements Component {
   private handleKeyup(e: KeyboardEvent): void {
     if (this.isPrefixKeyRelease(e)) {
       this.prefix.keyReleased();
+    }
+
+    const focusedPane = this.callbacks?.getFocusedPane();
+    if (focusedPane) {
+      const handler = this.callbacks?.getPaneHandler(focusedPane);
+      handler?.handleKeyup?.(e);
     }
   }
 

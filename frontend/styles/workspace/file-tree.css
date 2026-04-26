@@ -70,6 +70,91 @@
   list-style: none;
 }
 
+/* Root switcher tabs */
+.file-tree-root-switcher {
+  display: flex;
+  gap: 1px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.file-tree-root-tab {
+  flex: 1;
+  padding: 3px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 2px;
+}
+
+.file-tree-root-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.file-tree-root-tab.active {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+.file-tree-root-more {
+  padding: 3px 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+/* Root picker menu (hold-r overlay) */
+.file-tree-root-menu {
+  position: relative;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.file-tree-root-menu-item {
+  padding: 5px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.file-tree-root-menu-item.selected {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.file-tree-root-menu-item.selected::before {
+  content: "▸ ";
+  color: var(--accent-green);
+}
+
+.file-tree-root-menu-item.current {
+  color: var(--text-secondary);
+}
+
+.file-tree-root-menu-hint {
+  padding: 4px 12px 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.5;
+  border-top: 1px solid var(--border-color);
+  margin-top: 2px;
+}
+
 /* File tree search input */
 .file-tree-search {
   padding: 8px;

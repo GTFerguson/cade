@@ -126,12 +126,21 @@ class WatchConfig:
 
 
 @dataclass(frozen=True)
+class ExtraRootConfig:
+    name: str
+    path: str
+    label: str | None = None
+    default: bool = False
+
+
+@dataclass(frozen=True)
 class DashboardConfig:
     dashboard: DashboardMeta
     data_sources: dict[str, DataSourceConfig]
     views: list[ViewConfig]
     stats: list[StatConfig] = field(default_factory=list)
     watches: list[WatchConfig] = field(default_factory=list)
+    extra_roots: list[ExtraRootConfig] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -328,12 +337,33 @@ def validate_config(raw: dict[str, Any]) -> DashboardConfig:
             exclude=w.get("exclude"),
         ))
 
+    # Extra roots (optional) — additional directories the file tree can switch to
+    extra_roots_raw = raw.get("extra_roots", [])
+    extra_roots: list[ExtraRootConfig] = []
+    if isinstance(extra_roots_raw, list):
+        for i, er in enumerate(extra_roots_raw):
+            if not isinstance(er, dict):
+                raise DashboardConfigError(f"extra_roots[{i}]: must be a mapping")
+            er_name = er.get("name")
+            er_path = er.get("path")
+            if not er_name:
+                raise DashboardConfigError(f"extra_roots[{i}]: missing 'name'")
+            if not er_path:
+                raise DashboardConfigError(f"extra_roots[{i}]: missing 'path'")
+            extra_roots.append(ExtraRootConfig(
+                name=er_name,
+                path=er_path,
+                label=er.get("label"),
+                default=bool(er.get("default", False)),
+            ))
+
     return DashboardConfig(
         dashboard=dashboard,
         data_sources=data_sources,
         views=views,
         stats=stats,
         watches=watches,
+        extra_roots=extra_roots,
     )
 
 

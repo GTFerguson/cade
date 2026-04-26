@@ -81,6 +81,23 @@ export class ProjectContextImpl implements IProjectContext {
       if (msg.slashCommands) {
         this.terminalManager?.getChatPane()?.setSlashCommands(msg.slashCommands);
       }
+
+      // Push MCP auth state to the statusline icon and warn on first connect
+      if (msg.mcpStatus) {
+        this.terminalManager?.getChatPane()?.setMcpStatus(msg.mcpStatus);
+        if (!msg.sessionRestored) {
+          for (const mcp of msg.mcpStatus) {
+            if (!mcp.authenticated) {
+              this.showNotificationLink(
+                `${mcp.name} research tools not authenticated`,
+                mcp.authUrl ?? null,
+                "Authenticate",
+                "warning",
+              );
+            }
+          }
+        }
+      }
     },
     fileTree: () => {
       if (this.pendingSession != null) {
@@ -293,7 +310,7 @@ export class ProjectContextImpl implements IProjectContext {
       const viewer = this.rightPane?.getViewer();
       if (viewer) {
         viewer.setDashboardReturn(null);
-        viewer.loadFile(path);
+        viewer.loadFile(path, undefined, this.fileTree?.currentRoot ?? null);
       }
       this.scheduleSave();
     });
@@ -598,6 +615,42 @@ export class ProjectContextImpl implements IProjectContext {
       toast.style.opacity = "0";
       setTimeout(() => toast.remove(), 300);
     }, 3000);
+  }
+
+  /**
+   * Show a toast notification with an optional clickable link.
+   */
+  private showNotificationLink(
+    message: string,
+    url: string | null,
+    linkText: string,
+    style: string = "info",
+  ): void {
+    const toast = document.createElement("div");
+    toast.className = `dash-notification dash-notification--${style}`;
+
+    const span = document.createElement("span");
+    span.textContent = message;
+    toast.appendChild(span);
+
+    if (url) {
+      const separator = document.createTextNode(" — ");
+      toast.appendChild(separator);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      anchor.textContent = linkText;
+      anchor.className = "dash-notification__link";
+      toast.appendChild(anchor);
+    }
+
+    this.container.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      setTimeout(() => toast.remove(), 300);
+    }, 6000);
   }
 
   /**

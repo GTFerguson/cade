@@ -68,11 +68,19 @@ export interface DashboardMeta {
   theme?: string;
 }
 
+export interface ExtraRootConfig {
+  name: string;
+  path: string;
+  label?: string;
+  default?: boolean;
+}
+
 export interface DashboardConfig {
   dashboard: DashboardMeta;
   data_sources: Record<string, DataSourceConfig>;
   views: ViewConfig[];
   stats: StatConfig[];
+  extra_roots?: ExtraRootConfig[];
 }
 
 // Component rendering contract
