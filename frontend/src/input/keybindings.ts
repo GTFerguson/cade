@@ -155,6 +155,14 @@ export class KeybindingManager implements Component {
       return;
     }
 
+    // Ctrl+p: theme selector (palette)
+    if (e.ctrlKey && e.key === "p" && !isInput) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.callbacks?.showThemeSelector();
+      return;
+    }
+
     // Prefix key (always intercept, even in terminal and chat input)
     if (this.isPrefixKey(e)) {
       // Don't intercept in input elements, unless they opt in via data attribute
@@ -314,12 +322,6 @@ export class KeybindingManager implements Component {
         return;
       }
 
-      // Alt+p: theme selector (palette)
-      if (key === "p") {
-        e.preventDefault();
-        this.callbacks?.showThemeSelector();
-        return;
-      }
 
       // Alt+i: focus chat input from any pane
       if (key === "i") {

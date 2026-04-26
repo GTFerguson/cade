@@ -156,7 +156,7 @@ export class HelpOverlay implements Component {
       { label: "toggle terminal", key: "Alt+s" },
       { label: "toggle viewer", key: "Alt+v" },
       { label: "focus chat input", key: "Alt+i" },
-      { label: "theme selector", key: "Alt+p" },
+      { label: "theme selector", key: "Ctrl+p" },
       { label: "view latest plan", key: "Ctrl+g" },
     ];
 
