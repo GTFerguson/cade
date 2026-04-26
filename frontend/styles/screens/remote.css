@@ -241,12 +241,13 @@
 }
 
 .remote-project-selector .browser-path {
-  font-size: 11px;
-  color: var(--accent-blue);
-  margin-bottom: 12px;
-  padding: 8px 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--accent-red);
+  color: var(--bg-primary);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  padding: 4px 10px;
+  margin-bottom: 10px;
   text-align: center;
   font-family: var(--font-mono);
 }

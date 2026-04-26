@@ -128,6 +128,11 @@ export class Terminal implements Component {
       letterSpacing: 0,
       lineHeight: 1.0,
       scrollback: this.scrollbackOverride ?? 10000,
+      // Glyphs not in JetBrains Mono (e.g. ✽ U+273D, · U+00B7) fall back to
+      // a system font whose natural width may exceed the cell. Without this,
+      // the overflow corrupts adjacent cells in the WebGL atlas, producing
+      // flickering black blocks on neighbouring chars. Added in xterm v5.5.
+      rescaleOverlappingGlyphs: true,
       ...(this.rowsOverride != null ? { rows: this.rowsOverride } : {}),
       theme,
       disableStdin: this.readOnly,

@@ -274,7 +274,9 @@ Reference: `frontend/src/remote/RemoteProfileEditor.ts`
 
 ### Headers
 
-**Centered with breathing room:**
+Two header levels exist in full-pane selectors:
+
+**Pane header** — the screen title (`[ LOCAL PROJECT ]`, `[ REMOTE CONNECTIONS ]`):
 ```css
 .pane-header {
   font-size: 16px;
@@ -285,6 +287,21 @@ Reference: `frontend/src/remote/RemoteProfileEditor.ts`
   margin-bottom: 24px;
 }
 ```
+
+**Section header** — labels a subsection or shows current context (e.g., the current browse path). Uses the filled red pill from the help overlay:
+```css
+/* matches .help-section-title in screens/overlays.css */
+background: var(--accent-red);
+color: var(--bg-primary);
+font-size: 13px;       /* NOT 11px — must not be smaller than option items */
+font-weight: 600;
+letter-spacing: 1px;
+padding: 4px 10px;
+text-align: center;
+```
+
+> [!IMPORTANT]
+> Section headers must be `13px` — same size as option items. An 11px header below 13px options looks broken.
 
 **Not:**
 - Stuck to viewport top
@@ -603,8 +620,12 @@ Complex features use a screen stack (connections → projects → browse).
 
 **File browser:**
 - j/k: navigate directories + "select current" button
-- l/space/enter: enter directory OR confirm selection (context-aware)
+- `l` / `→`: navigate **into** highlighted directory (explore deeper)
+- `enter` / `space`: **select** highlighted directory as the destination (confirm)
 - h/backspace: parent directory
+
+> [!IMPORTANT]
+> `l` and `enter` have distinct meanings in file browsers. `l` = go deeper (explore), `enter` = pick this (confirm). Do not conflate them. A user drilling into a nested structure with `l` does not want to accidentally select a parent directory.
 
 **Code/markdown viewer:**
 - j/k: scroll vertically
@@ -627,6 +648,48 @@ if ((e.target as HTMLElement).tagName === "INPUT") {
 ```
 
 Always check if user is typing in an input field before handling navigation keys.
+
+**Capture phase for overlays over active terminals:**
+
+When a full-pane selector is shown while a terminal tab is already open, the terminal element holds keyboard focus and will consume keydown events before they bubble to `document`. Any overlay that may appear over an active terminal **must** register with capture phase:
+
+```typescript
+// CORRECT — intercepts before terminal
+document.addEventListener("keydown", this.handler, true);
+document.removeEventListener("keydown", this.handler, true);
+
+// WRONG — terminal eats the events first
+document.addEventListener("keydown", this.handler);
+```
+
+This applies to: `LocalProjectSelector`, `RemoteProjectSelector`, and any full-pane overlay triggered from an existing tab. The `Splash` screen already uses capture phase for the same reason.
+
+**Scrollable lists — 2-item lookahead buffer:**
+
+When a list has `overflow-y: auto`, `scrollIntoView({ block: "nearest" })` is insufficient — it causes the list to flip scroll direction the moment you reverse, with no context visible ahead. Instead, maintain a 2-item buffer manually:
+
+```typescript
+// Save scrollTop before the innerHTML rebuild (rebuilds reset it to 0)
+const prevScrollTop = container.querySelector(".browser-list")?.scrollTop ?? 0;
+
+// ... rebuild innerHTML ...
+
+// Restore, then apply buffer
+list.scrollTop = prevScrollTop;
+const listRect = list.getBoundingClientRect();
+const selRect = selected.getBoundingClientRect();
+const itemH = selRect.height;
+const buffer = itemH * 2;
+const itemTop = selRect.top - listRect.top + list.scrollTop;
+const itemBot = itemTop + itemH;
+if (itemTop - buffer < list.scrollTop) {
+  list.scrollTop = Math.max(0, itemTop - buffer);
+} else if (itemBot + buffer > list.scrollTop + list.clientHeight) {
+  list.scrollTop = itemBot + buffer - list.clientHeight;
+}
+```
+
+Use `getBoundingClientRect()` not `offsetTop` — `offsetTop` is unreliable without `position: relative` on the scroll container.
 
 ## Anti-Patterns
 
@@ -691,6 +754,26 @@ Visual weight should match information value. In a conversation, the response ma
 
 **Why:**
 Users can't build muscle memory. Every screen feels different.
+
+### Don't: Text Inputs in Browse/Navigation Screens
+
+**Bad:**
+```
+[ BROWSE ]
+/home/gary/projects
+
+[cade/]
+[nkrdn/]
+
+path: /home/gary/projects_   ← text input "as fallback"
+[open]
+```
+
+**Instead:**
+Pure keyboard navigation. The browse list IS the interaction. If the user needs to type a path, that's a different screen (new project form), not a browse screen.
+
+**Why:**
+A text input in a browse screen signals that the navigation isn't good enough. Fix the navigation — default path, pre-selection of active project, h/l to go up/down. Don't paper over broken UX with an escape hatch.
 
 ### Don't: Mouse-Required Interactions
 

@@ -155,7 +155,6 @@ export class HelpOverlay implements Component {
       { label: "resize left / right", key: "Alt+H / Alt+L" },
       { label: "toggle terminal", key: "Alt+s" },
       { label: "toggle viewer", key: "Alt+v" },
-      { label: "toggle enhanced", key: "Alt+e" },
       { label: "focus chat input", key: "Alt+i" },
       { label: "theme selector", key: "Alt+p" },
       { label: "view latest plan", key: "Ctrl+g" },

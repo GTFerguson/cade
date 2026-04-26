@@ -1145,6 +1145,12 @@
 .dash-notification--warning { border-left-color: var(--accent-orange); }
 .dash-notification--error { border-left-color: var(--accent-red); }
 
+.dash-notification__link {
+  color: var(--accent-blue);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* ═══════════════════════════════════════════════
    Agent pushed panels
    ═══════════════════════════════════════════════ */
