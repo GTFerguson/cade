@@ -71,8 +71,11 @@ fn main() {
 
                 let backend_url = format!("http://127.0.0.1:{}", port);
 
+                // Resolve Tauri resource directory (contains ms-playwright, usage-rule.md, etc.)
+                let resource_dir = app.path().resource_dir().ok();
+
                 // Start Python backend
-                let mut backend = PythonProcess::start(port)
+                let mut backend = PythonProcess::start(port, resource_dir)
                     .map_err(|e| format!("Failed to start backend: {}", e))?;
 
                 println!("Backend started on port {} (PID: {:?})", port, backend.pid());

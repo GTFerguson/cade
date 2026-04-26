@@ -199,6 +199,7 @@ See [[dashboard|Dashboard Guide]] for the full YAML schema, component reference,
 
 ## See Also
 
+- [[installation|Installation Guide]] - First-time setup, providers.toml, anti-bot browsing
 - [[../README|Documentation Hub]]
 - [[../future/README|Roadmap]] - See what's planned
 - [[mobile-guide|Mobile Guide]] - Using CADE on phones and tablets

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import secrets
 import subprocess
 
@@ -48,11 +49,41 @@ PROJECT_ROOT = BACKEND_DIR.parent
 
 # Check if running as PyInstaller bundle
 if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-    # Running as PyInstaller bundle
     FRONTEND_DIST = Path(sys._MEIPASS) / "frontend" / "dist"
 else:
-    # Running as normal Python script
     FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
+
+# When launched by the Tauri desktop app, CADE_RESOURCE_DIR points to the
+# directory where Tauri placed bundled assets (ms-playwright, usage-rule.md).
+# Set PLAYWRIGHT_BROWSERS_PATH so patchright (used by scout-browse) can find
+# the bundled Chromium without needing it installed system-wide.
+_resource_dir = os.environ.get("CADE_RESOURCE_DIR")
+if _resource_dir:
+    _ms_playwright = Path(_resource_dir) / "ms-playwright"
+    if _ms_playwright.is_dir():
+        os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(_ms_playwright))
+        # Bundled Chromium system libs (libatk, libgtk, libnss, libgbm, etc.)
+        # collected at build time so the bundle works on minimal Linux installs.
+        _chromium_libs = _ms_playwright / "chromium-libs"
+        if _chromium_libs.is_dir():
+            _existing = os.environ.get("LD_LIBRARY_PATH", "")
+            os.environ["LD_LIBRARY_PATH"] = (
+                str(_chromium_libs) + (":" + _existing if _existing else "")
+            )
+
+    # If claude is not installed on the machine, inject the bundled Claude CLI
+    # so all subprocesses (terminal, ClaudeCodeProvider) can find it.
+    import shutil as _shutil
+    if not _shutil.which("claude"):
+        _claude_bundle = Path(_resource_dir) / "claude-bundle"
+        if _claude_bundle.is_dir():
+            _sep = ";" if os.name == "nt" else ":"
+            _existing_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = _sep.join([
+                str(_claude_bundle),                              # node binary
+                str(_claude_bundle / "node_modules" / ".bin"),   # claude script
+                *([_existing_path] if _existing_path else []),
+            ])
 
 
 async def _check_wsl_health_async() -> None:
@@ -484,6 +515,35 @@ def create_app(config: Config | None = None) -> FastAPI:
         if not cfg.auth_enabled or validate_session_cookie(cade_session or "", cfg):
             return JSONResponse({"authenticated": True})
         return JSONResponse({"authenticated": False}, status_code=401)
+
+    @app.get("/api/browse")
+    async def browse_directory(
+        path: str = "~",
+        cade_session: str | None = Cookie(default=None),
+    ) -> JSONResponse:
+        """List directory children for the local project browser."""
+        cfg = get_config()
+        if cfg.auth_enabled and not validate_session_cookie(cade_session or "", cfg):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+        target = Path(path).expanduser().resolve()
+        if not target.is_dir():
+            return JSONResponse({"path": path, "resolved": str(target), "children": []})
+
+        entries = []
+        try:
+            for child in sorted(target.iterdir(), key=lambda p: p.name.lower()):
+                if child.name.startswith("."):
+                    continue
+                entries.append({
+                    "name": child.name,
+                    "path": str(child),
+                    "type": "directory" if child.is_dir() else "file",
+                })
+        except PermissionError:
+            pass
+
+        return JSONResponse({"path": str(target), "resolved": str(target), "children": entries})
 
     # --- Orchestrator API ---
 

@@ -34,17 +34,15 @@ _CODE_EXTENSIONS = frozenset({
 
 def _find_usage_rule() -> Path | None:
     """Locate the nkrdn usage-rule.md from the installed package."""
-    try:
-        result = subprocess.run(
-            [_NKRDN_BIN, "-c",
-             "import nkrdn, os; print(os.path.dirname(nkrdn.__file__))"],
-            capture_output=True, text=True, timeout=5,
-        )
-    except Exception:
-        # _NKRDN_BIN is the nkrdn CLI, not python — use python from same env
-        pass
+    # When running as a Tauri desktop bundle, the build script copies
+    # usage-rule.md into the Tauri resource directory.
+    resource_dir = os.environ.get("CADE_RESOURCE_DIR")
+    if resource_dir:
+        rule = Path(resource_dir) / "nkrdn-usage-rule.md"
+        if rule.exists():
+            return rule
 
-    # Find the python that nkrdn's venv uses
+    # Dev/server mode: find the file from the nkrdn venv via a subprocess.
     nkrdn_bin = Path(_NKRDN_BIN).resolve() if _NKRDN_BIN else None
     if nkrdn_bin is None:
         return None

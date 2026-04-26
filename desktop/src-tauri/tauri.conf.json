@@ -24,8 +24,12 @@
       "digestAlgorithm": "sha256",
       "timestampUrl": ""
     },
-    "resources": ["resources/*"],
-    "externalBin": ["resources/cade-backend"]
+    "resources": ["resources/**"],
+    "externalBin": [
+      "resources/cade-backend",
+      "resources/nkrdn",
+      "resources/scout-browse"
+    ]
   },
   "app": {
     "windows": [

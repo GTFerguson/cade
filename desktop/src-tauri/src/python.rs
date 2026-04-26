@@ -13,13 +13,19 @@ pub struct PythonProcess {
 }
 
 impl PythonProcess {
-    /// Start the Python backend on the specified port
-    pub fn start(port: u16) -> io::Result<Self> {
+    /// Start the Python backend on the specified port.
+    ///
+    /// `resource_dir` is Tauri's resolved resource directory. When provided it is
+    /// forwarded to the backend as `CADE_RESOURCE_DIR` so Python code can locate
+    /// bundled assets (chromium, usage-rule.md, etc.) without knowing the install
+    /// layout. The directory containing the backend binary is prepended to PATH so
+    /// bundled tools (nkrdn, scout-browse) are discoverable by child processes.
+    pub fn start(port: u16, resource_dir: Option<PathBuf>) -> io::Result<Self> {
         let backend_exe = Self::get_backend_path()?;
 
         println!("Starting Python backend: {} on port {}", backend_exe.display(), port);
 
-        let mut cmd = Command::new(backend_exe);
+        let mut cmd = Command::new(&backend_exe);
         cmd.arg("serve")
             .arg("--port")
             .arg(port.to_string())
@@ -28,6 +34,29 @@ impl PythonProcess {
             .arg("--no-browser")
             .arg("--debug")
             .stdout(Stdio::null());
+
+        // Prepend the directory containing the backend (and bundled tools) to PATH
+        // so that nkrdn, scout-browse, etc. are findable by subprocess calls.
+        if let Some(exe_dir) = backend_exe.parent() {
+            #[cfg(unix)]
+            let path_sep = ":";
+            #[cfg(windows)]
+            let path_sep = ";";
+
+            let current_path = std::env::var("PATH").unwrap_or_default();
+            let new_path = if current_path.is_empty() {
+                exe_dir.to_string_lossy().to_string()
+            } else {
+                format!("{}{}{}", exe_dir.display(), path_sep, current_path)
+            };
+            cmd.env("PATH", new_path);
+        }
+
+        // Expose Tauri's resource directory so the Python side can find
+        // ms-playwright, nkrdn-usage-rule.md, and other bundled assets.
+        if let Some(ref rd) = resource_dir {
+            cmd.env("CADE_RESOURCE_DIR", rd);
+        }
 
         // Write stderr to a log file so startup failures are diagnosable
         let log_path = Self::get_log_path();

@@ -141,42 +141,132 @@ Rename-Item "$projectRoot\dist\nvim-win64" $nvimDir
 Write-Host "[OK] Neovim $nvimVersion extracted to $nvimDir" -ForegroundColor Green
 Write-Host ""
 
+# Helper: find the Python executable for a CLI tool by reading its shebang
+function Find-VenvPython {
+    param([string]$CliName)
+    $binPath = Get-Command $CliName -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+    if (-not $binPath) { return $null }
+    $firstLine = (Get-Content $binPath -First 1 -ErrorAction SilentlyContinue)
+    if ($firstLine -and $firstLine.StartsWith("#!")) {
+        $pythonPath = $firstLine.Substring(2).Trim()
+        if (Test-Path $pythonPath) { return $pythonPath }
+    }
+    $pythonCandidate = Join-Path (Split-Path $binPath) "python.exe"
+    if (Test-Path $pythonCandidate) { return $pythonCandidate }
+    return $null
+}
+
+# Helper: copy a built exe to Tauri resources with both plain and triple-suffix names
+function Copy-ToTauriResources {
+    param([string]$ExePath, [string]$ToolName, [string]$Triple)
+    $tauriResources = "$projectRoot\desktop\src-tauri\resources"
+    if (-not (Test-Path $tauriResources)) {
+        New-Item -ItemType Directory -Path $tauriResources -Force | Out-Null
+    }
+    Copy-Item $ExePath -Destination "$tauriResources\$ToolName.exe" -Force
+    if ($Triple) {
+        Copy-Item $ExePath -Destination "$tauriResources\$ToolName-$Triple.exe" -Force
+    }
+    $size = [math]::Round((Get-Item $ExePath).Length / 1MB, 2)
+    Write-Host "[OK] $ToolName copied to Tauri resources ($size MB)" -ForegroundColor Green
+}
+
 # Step 3: Package Python backend with PyInstaller
-Write-Host "Step 3/5: Packaging Python backend..." -ForegroundColor Cyan
+Write-Host "Step 3/7: Packaging Python backend..." -ForegroundColor Cyan
 Set-Location $projectRoot
 
 & $pythonCmd -m PyInstaller "$projectRoot\scripts\pyinstaller.spec" --clean --noconfirm
 
-# Check for the backend executable
 $backendExe = "$projectRoot\dist\cade-backend.exe"
 if (-not (Test-Path $backendExe)) {
     Write-Host "Error: Backend packaging failed - $backendExe not found" -ForegroundColor Red
     exit 1
 }
 
-$backendSize = [math]::Round((Get-Item $backendExe).Length / 1MB, 2)
-Write-Host "[OK] Backend packaged successfully: $backendExe ($backendSize MB)" -ForegroundColor Green
-Write-Host ""
-
-# Step 4: Copy backend to Tauri resources
-Write-Host "Step 4/5: Copying backend to Tauri resources..." -ForegroundColor Cyan
-$tauriResources = "$projectRoot\desktop\src-tauri\resources"
-
-if (-not (Test-Path $tauriResources)) {
-    New-Item -ItemType Directory -Path $tauriResources -Force | Out-Null
-}
-
-# Tauri expects the binary to be named with the target triple
 $targetTriple = "x86_64-pc-windows-msvc"
-$tauriBackendName = "cade-backend-$targetTriple.exe"
-Copy-Item $backendExe -Destination "$tauriResources\$tauriBackendName" -Force
-# Also copy with the plain name so the dev-path lookup in python.rs finds the fresh build
-Copy-Item $backendExe -Destination "$tauriResources\cade-backend.exe" -Force
-Write-Host "[OK] Backend copied to Tauri resources as $tauriBackendName + cade-backend.exe" -ForegroundColor Green
+Copy-ToTauriResources $backendExe "cade-backend" $targetTriple
 Write-Host ""
 
-# Step 5: Build Tauri app
-Write-Host "Step 5/5: Building Tauri desktop app..." -ForegroundColor Cyan
+# Step 4: Package nkrdn with PyInstaller
+Write-Host "Step 4/7: Packaging nkrdn..." -ForegroundColor Cyan
+Set-Location $projectRoot
+
+$nkrdnPython = Find-VenvPython "nkrdn"
+if ($nkrdnPython) {
+    Write-Host "Using nkrdn Python: $nkrdnPython" -ForegroundColor Yellow
+    & $nkrdnPython -m pip install pyinstaller --quiet
+    & $nkrdnPython -m PyInstaller "$projectRoot\scripts\pyinstaller-nkrdn.spec" --noconfirm
+
+    $nkrdnExe = "$projectRoot\dist\nkrdn.exe"
+    if (Test-Path $nkrdnExe) {
+        Copy-ToTauriResources $nkrdnExe "nkrdn" $targetTriple
+
+        # Copy nkrdn usage-rule.md to resources
+        $nkrdnPkgDir = & $nkrdnPython -c "import nkrdn, os; print(os.path.dirname(nkrdn.__file__))" 2>$null
+        if ($nkrdnPkgDir) {
+            $usageRule = Join-Path $nkrdnPkgDir "usage-rule.md"
+            if (Test-Path $usageRule) {
+                Copy-Item $usageRule -Destination "$projectRoot\desktop\src-tauri\resources\nkrdn-usage-rule.md" -Force
+                Write-Host "[OK] nkrdn usage-rule.md copied" -ForegroundColor Green
+            }
+        }
+    } else {
+        Write-Host "Warning: nkrdn packaging failed - skipping" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Warning: nkrdn not found on PATH - skipping" -ForegroundColor Yellow
+}
+Write-Host ""
+
+# Step 5: Package scout-browse with PyInstaller + copy Chromium
+Write-Host "Step 5/7: Packaging scout-browse..." -ForegroundColor Cyan
+Set-Location $projectRoot
+
+$scoutPython = Find-VenvPython "scout-browse"
+if ($scoutPython) {
+    Write-Host "Using scout-browse Python: $scoutPython" -ForegroundColor Yellow
+    & $scoutPython -m pip install pyinstaller --quiet
+    & $scoutPython -m PyInstaller "$projectRoot\scripts\pyinstaller-scout-browse.spec" --noconfirm
+
+    $scoutExe = "$projectRoot\dist\scout-browse.exe"
+    if (Test-Path $scoutExe) {
+        Copy-ToTauriResources $scoutExe "scout-browse" $targetTriple
+
+        # Copy Chromium to resources/ms-playwright/
+        $msPlaywrightCache = Join-Path $env:LOCALAPPDATA "ms-playwright"
+        if (-not (Test-Path $msPlaywrightCache)) {
+            $msPlaywrightCache = Join-Path $env:USERPROFILE ".cache\ms-playwright"
+        }
+        if (Test-Path $msPlaywrightCache) {
+            $chromiumDirs = Get-ChildItem $msPlaywrightCache -Directory | Where-Object { $_.Name -like "chromium-*" -and $_.Name -notlike "*headless*" }
+            foreach ($chromiumDir in $chromiumDirs) {
+                $dest = "$projectRoot\desktop\src-tauri\resources\ms-playwright\$($chromiumDir.Name)"
+                if (-not (Test-Path $dest)) {
+                    Write-Host "Copying $($chromiumDir.Name)..." -ForegroundColor Yellow
+                    Copy-Item $chromiumDir.FullName -Destination $dest -Recurse -Force
+                    $sizeMB = [math]::Round((Get-ChildItem $dest -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB, 0)
+                    Write-Host "[OK] Chromium copied ($sizeMB MB)" -ForegroundColor Green
+                } else {
+                    Write-Host "[OK] Chromium already in resources: $($chromiumDir.Name)" -ForegroundColor Green
+                }
+            }
+        } else {
+            Write-Host "Warning: ms-playwright cache not found - scout-browse will need system Chromium" -ForegroundColor Yellow
+            Write-Host "         Run: python -m patchright install chromium" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "Warning: scout-browse packaging failed - skipping" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Warning: scout-browse not found on PATH - skipping" -ForegroundColor Yellow
+}
+Write-Host ""
+
+# Step 6: Copy backend to Tauri resources (already done in step 3 via helper)
+# (kept for numbering clarity)
+
+# Step 7: Build Tauri app
+Write-Host "Step 7/7: Building Tauri desktop app..." -ForegroundColor Cyan
 Set-Location "$projectRoot\desktop"
 
 if (-not (Test-Path "node_modules")) {
