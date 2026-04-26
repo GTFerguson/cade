@@ -7,7 +7,7 @@
  * GM can see what knowledge gates exist without losing structural context.
  */
 
-import { parseRef, renderProseWithRefs, KNOWLEDGE_ENRICHED_DIR } from "./knowledge-refs";
+import { parseRef, renderProseWithRefs, enrichedDirForPath } from "./knowledge-refs";
 
 const TIER_ORDER = ["common", "informed", "specialist", "secret"] as const;
 
@@ -62,16 +62,19 @@ export class HistoryViewer {
   private ceilingTier = "";
   private filterTag = "";
   private navigateTo: (path: string) => void = () => {};
+  private currentPath: string | null = null;
 
   render(
     container: HTMLElement,
     data: Record<string, unknown>,
     navigateTo?: (path: string) => void,
+    path?: string,
   ): void {
     this.container = container;
     this.data = data;
     this.ceilingTier = "";
     this.filterTag = "";
+    this.currentPath = path ?? null;
     if (navigateTo) this.navigateTo = navigateTo;
     this.rebuild();
   }
@@ -307,7 +310,7 @@ export class HistoryViewer {
   }
 
   private refPath(_type: string, id: string): string {
-    return `${KNOWLEDGE_ENRICHED_DIR}/${id}.json`;
+    return `${enrichedDirForPath(this.currentPath ?? "")}/${id}.json`;
   }
 
   private makeRefBadge(type: string, id: string): HTMLElement {

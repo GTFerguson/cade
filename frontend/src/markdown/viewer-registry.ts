@@ -2,6 +2,7 @@ export type ViewerFactory = (
   container: HTMLElement,
   data: Record<string, unknown>,
   navigateTo: (path: string) => void,
+  path?: string,
 ) => { dispose(): void };
 
 interface ViewerEntry {

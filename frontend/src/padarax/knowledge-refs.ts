@@ -3,17 +3,23 @@
  * Mirrors the REF_RE pattern from tools/validate_knowledge.py.
  */
 
-export const KNOWLEDGE_ENRICHED_DIR = "content/knowledge/generated/enriched";
+/**
+ * Given any path to a knowledge file, return the sibling generated/enriched/
+ * directory. Works regardless of where the knowledge tree is rooted.
+ */
+export function enrichedDirForPath(path: string): string {
+  const m = path.match(/^(.*\/knowledge\/)/);
+  return m ? `${m[1]}generated/enriched` : "content/worlds/padarax/knowledge/generated/enriched";
+}
 
 /**
  * Source knowledge files lack _ref_status metadata; redirect to the enriched
- * version which has it. Passes through paths already pointing at generated/.
+ * version which carries it. Detects any path that contains a knowledge/ segment
+ * outside of generated/, so it works regardless of the tree root.
  */
 export function preferEnrichedPath(path: string): string {
-  if (/^content\/knowledge\/(?!generated\/)(?:[^/]+\/).*\.json$/.test(path)) {
-    const filename = path.split("/").pop()!;
-    return `${KNOWLEDGE_ENRICHED_DIR}/${filename}`;
-  }
+  const m = path.match(/^(.*\/knowledge\/)(?!generated\/).*\/([^/]+\.json)$/);
+  if (m) return `${m[1]}generated/enriched/${m[2]}`;
   return path;
 }
 

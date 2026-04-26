@@ -603,7 +603,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       parsed["_sibling"] = preview["data"];
     }
 
-    this.activeParsedComponent = factory(container, parsed, (path) => this.emit("link-click", path));
+    this.activeParsedComponent = factory(container, parsed, (path) => this.emit("link-click", path), this.currentPath ?? undefined);
   }
 
   // --- Keyboard handling ---
