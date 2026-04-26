@@ -87,6 +87,59 @@ def test_extra_fields(tmp_path: Path):
     assert bedrock.extra["custom_field"] == "custom_value"
 
 
+def test_extra_headers_env_var_resolution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Regression: env vars inside nested extra_headers tables must be resolved.
+
+    Previously _resolve_env_vars was only called on top-level strings, so
+    ${API_KEY} inside [provider.X.extra_headers] was sent as a literal string,
+    causing authentication failures on proxies like MiniMax that require
+    Authorization: Bearer <key>.
+    """
+    monkeypatch.setenv("MY_API_KEY", "sk-real-secret")
+    config_file = tmp_path / "providers.toml"
+    config_file.write_text(dedent("""\
+        [provider.proxy]
+        type = "api"
+        model = "anthropic/model-name"
+        api-key = "${MY_API_KEY}"
+        api_base = "https://api.example.com/v1/messages"
+
+        [provider.proxy.extra_headers]
+        Authorization = "Bearer ${MY_API_KEY}"
+        X-Custom = "static-value"
+    """))
+
+    config = load_providers_config(config_file)
+    proxy = config.providers["proxy"]
+
+    assert proxy.api_key == "sk-real-secret"
+    assert proxy.extra["api_base"] == "https://api.example.com/v1/messages"
+    headers = proxy.extra["extra_headers"]
+    assert headers["Authorization"] == "Bearer sk-real-secret"
+    assert headers["X-Custom"] == "static-value"
+
+
+def test_extra_headers_missing_env_var(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Missing env vars inside nested tables resolve to empty string, not literal placeholder."""
+    monkeypatch.delenv("MISSING_KEY", raising=False)
+    config_file = tmp_path / "providers.toml"
+    config_file.write_text(dedent("""\
+        [provider.proxy]
+        type = "api"
+        model = "anthropic/model"
+        api-key = "${MISSING_KEY}"
+
+        [provider.proxy.extra_headers]
+        Authorization = "Bearer ${MISSING_KEY}"
+    """))
+
+    config = load_providers_config(config_file)
+    proxy = config.providers["proxy"]
+
+    assert proxy.api_key == ""
+    assert proxy.extra["extra_headers"]["Authorization"] == "Bearer "
+
+
 def test_invalid_toml(tmp_path: Path):
     """Test graceful handling of invalid TOML."""
     config_file = tmp_path / "providers.toml"

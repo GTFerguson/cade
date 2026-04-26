@@ -510,6 +510,44 @@ class MockUsage:
 
 
 @pytest.mark.asyncio
+async def test_extra_kwargs_forwarded_to_litellm():
+    """Regression: extra config fields (api_base, extra_headers) reach LiteLLM.
+
+    Providers like MiniMax use a custom api_base and require an Authorization
+    header. If these are silently dropped, authentication fails.
+    """
+    config = ProviderConfig(
+        name="proxy",
+        type="api",
+        model="anthropic/minimax-m2.7",
+        api_key="sk-proxy-key",
+        extra={
+            "api_base": "https://api.example.com/v1/messages",
+            "extra_headers": {"Authorization": "Bearer sk-proxy-key"},
+        },
+    )
+    provider = APIProvider(config)
+    chunks = [MockChunk("OK")]
+
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm:
+        mock_litellm.acompletion = AsyncMock(return_value=MockStreamResponse(chunks))
+
+        async for _ in provider.stream_chat([ChatMessage(role="user", content="Hi")]):
+            pass
+
+        call_kwargs = mock_litellm.acompletion.call_args.kwargs
+        assert call_kwargs["api_base"] == "https://api.example.com/v1/messages"
+        assert call_kwargs["extra_headers"] == {"Authorization": "Bearer sk-proxy-key"}
+
+
+# --- Usage accumulation regression tests ---
+#
+# Anthropic-format providers emit prompt_tokens in the FIRST streaming chunk
+# (message_start event), not the last. The earlier implementation only read
+# usage from the final chunk, so prompt_tokens were always zero and the
+# context budget indicator never appeared.
+
+@pytest.mark.asyncio
 async def test_usage_from_first_chunk_captured(provider: APIProvider):
     """Prompt tokens in the first chunk (Anthropic message_start) are captured."""
     first_chunk = MockChunk(None, usage=MockUsage(prompt_tokens=150, completion_tokens=0))

@@ -20,8 +20,12 @@ logger = logging.getLogger(__name__)
 _ENV_VAR_PATTERN = re.compile(r"\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
 
 
-def _resolve_env_vars(value: str) -> str:
-    """Replace ${ENV_VAR} references with environment variable values."""
+def _resolve_env_vars(value):
+    """Replace ${ENV_VAR} references with environment variable values.
+
+    Recurses into nested dicts and lists so values like extra_headers tables
+    in providers.toml expand env vars on their string leaves.
+    """
     def replacer(match: re.Match) -> str:
         var_name = match.group(1) or match.group(2)
         env_value = os.environ.get(var_name)
@@ -30,7 +34,13 @@ def _resolve_env_vars(value: str) -> str:
             return ""
         return env_value
 
-    return _ENV_VAR_PATTERN.sub(replacer, value)
+    if isinstance(value, str):
+        return _ENV_VAR_PATTERN.sub(replacer, value)
+    if isinstance(value, dict):
+        return {k: _resolve_env_vars(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_resolve_env_vars(v) for v in value]
+    return value
 
 
 @dataclass
@@ -97,8 +107,7 @@ def load_providers_config(path: Path | None = None) -> ProvidersConfig:
         extra = {}
         known_keys = {"type", "model", "region", "api-key", "api_key", "system-prompt", "system_prompt"}
         for key, value in provider_data.items():
-            if isinstance(value, str):
-                value = _resolve_env_vars(value)
+            value = _resolve_env_vars(value)
             if key in known_keys:
                 resolved[key] = value
             else:

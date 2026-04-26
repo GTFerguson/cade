@@ -7,6 +7,17 @@ import logging
 import os
 import secrets
 import subprocess
+from pathlib import Path as _Path
+
+# Load .env from the project root before anything else reads os.environ.
+# This makes API keys work without manually sourcing .env in the shell.
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _env_file = _Path(__file__).parent.parent / ".env"
+    if _env_file.exists():
+        _load_dotenv(_env_file, override=True)
+except ImportError:
+    pass
 
 from backend.subprocess_utils import run_silent
 import sys
