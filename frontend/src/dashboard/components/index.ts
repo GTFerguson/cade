@@ -1,3 +1,4 @@
+export { EntityDetailComponent } from "./entity-detail";
 export { BasketComponent } from "./basket";
 export { CardsPaged } from "./cards-paged";
 export { ClaimsComponent } from "./claims";

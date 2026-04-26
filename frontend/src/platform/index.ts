@@ -1,4 +1,5 @@
 export { WebSocketClient } from "./websocket";
+export { type EntityResolver, setEntityResolver, getEntityResolver } from "./entity-resolver";
 export {
   MessageType,
   ErrorCode,

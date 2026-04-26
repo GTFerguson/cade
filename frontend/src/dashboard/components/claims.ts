@@ -8,6 +8,8 @@
  */
 
 import { BaseDashboardComponent } from "./base-component";
+import { renderProseWithRefs, enrichedDirForPath } from "../../padarax/knowledge-refs";
+import { getEntityResolver } from "../../platform/entity-resolver";
 
 const TIER_ORDER = ["common", "informed", "specialist", "secret"] as const;
 
@@ -250,9 +252,69 @@ export class ClaimsComponent extends BaseDashboardComponent {
     }
 
     claimEl.appendChild(meta);
-    claimEl.appendChild(this.el("div", "dash-claims-prose", claim.prose));
+    if (visible) {
+      const proseEl = this.el("div", "dash-claims-prose");
+      const refSource = String(this.props?.panel.options?.["ref_source"] ?? "");
+      const currentPath = String(this.props?.data[0]?.["_file"] ?? "");
+      for (const para of claim.prose.split(/\n\n+/)) {
+        if (!para.trim()) continue;
+        const p = document.createElement("p");
+        p.appendChild(renderProseWithRefs(para));
+        this.attachClaimRefHandlers(p, refSource, currentPath, this.props?.data[0] ?? {});
+        proseEl.appendChild(p);
+      }
+      claimEl.appendChild(proseEl);
+    } else {
+      claimEl.appendChild(this.el("div", "dash-claims-prose", claim.prose));
+    }
 
     return claimEl;
+  }
+
+  private attachClaimRefHandlers(
+    el: HTMLElement,
+    source: string,
+    currentPath: string,
+    record: Record<string, unknown>,
+  ): void {
+    const refStatus = record["_ref_status"] as Record<string, string> | undefined;
+    const badges = el.querySelectorAll<HTMLElement>(".hv-ref");
+    for (const badge of badges) {
+      const type = badge.dataset["refType"] ?? "";
+      const id   = badge.dataset["refId"] ?? "";
+      if (!id) continue;
+
+      const refKey = `@${type}:${id}`;
+      if (refStatus?.[refKey] === "dead") {
+        badge.classList.add("hv-ref--dead");
+        continue;
+      }
+
+      let path: string | null = null;
+
+      if (source) {
+        const rows = this.props?.allData[source];
+        const found = rows?.find((r) => r["id"] === id);
+        if (found?._file) path = String(found._file);
+      }
+
+      if (!path) {
+        const resolver = getEntityResolver();
+        if (resolver) path = resolver.resolve(type, id);
+      }
+
+      if (!path && currentPath) {
+        path = `${enrichedDirForPath(currentPath)}/${id}.json`;
+      }
+
+      const status = refStatus?.[refKey] ?? (path ? "resolved" : "dead");
+      badge.classList.add(`hv-ref--${status}`);
+      if (path) {
+        badge.addEventListener("click", () => {
+          this.props?.onAction({ action: "view_file", source: "", patch: { path: path! } });
+        });
+      }
+    }
   }
 
   private isVisible(claim: Claim): boolean {

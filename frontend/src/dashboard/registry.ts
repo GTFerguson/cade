@@ -11,6 +11,7 @@ import {
   CardsComponent,
   ClaimsComponent,
   ChecklistComponent,
+  EntityDetailComponent,
   GraphComponent,
   KanbanComponent,
   KeyValueComponent,
@@ -50,6 +51,7 @@ export function createDefaultRegistry(): ComponentRegistry {
   const registry = new ComponentRegistry();
   registry.register("basket", BasketComponent);
   registry.register("claims", ClaimsComponent);
+  registry.register("entity_detail", EntityDetailComponent);
   registry.register("cards", CardsComponent);
   registry.register("cards_paged", CardsPaged);
   registry.register("graph", GraphComponent);

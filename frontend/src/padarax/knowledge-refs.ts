@@ -3,6 +3,8 @@
  * Mirrors the REF_RE pattern from tools/validate_knowledge.py.
  */
 
+import type { EntityResolver } from "../platform/entity-resolver";
+
 /**
  * Given any path to a knowledge file, return the sibling generated/enriched/
  * directory. Works regardless of where the knowledge tree is rooted.
@@ -35,6 +37,24 @@ export function parseRef(raw: string): KnowledgeRef | null {
   const m = /^@([a-z]+):([\w-]+)(\+pl)?$/.exec(raw.trim());
   if (!m) return null;
   return { type: m[1]!, id: m[2]!, plural: m[3] != null };
+}
+
+/**
+ * Resolves @type:id refs to file paths for Padarax content types.
+ * Register via setEntityResolver() at app startup.
+ */
+export class KnowledgeEntityResolver implements EntityResolver {
+  private knowledgeBase: string;
+
+  constructor(knowledgeBase = "content/worlds/padarax/knowledge/generated/enriched") {
+    this.knowledgeBase = knowledgeBase;
+  }
+
+  resolve(type: string, id: string): string | null {
+    if (type === "npc") return `content/worlds/padarax/npcs/${id}.json`;
+    if (type === "location" || type === "room") return null; // resolved via world viewer
+    return `${this.knowledgeBase}/${id}.json`;
+  }
 }
 
 /**

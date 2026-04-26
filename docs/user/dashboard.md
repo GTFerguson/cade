@@ -440,6 +440,38 @@ source: config
 
 Renders each record field as a labelled value row.
 
+### `entity_detail` — composable record viewer
+
+Generic detail view for a single record, configured as a sequence of sections in YAML. Each section type renders a different aspect of the record. Use this for content types where you want a structured view (header + cross-references + prose) without writing a custom component.
+
+```yaml
+component: entity_detail
+options:
+  ref_source: knowledge_enriched   # default source for ref-badge navigation
+  sections:
+    - type: header
+      fields: [name, "{year_start} – {year_end}", type]
+    - type: cross_refs
+      field: cross_refs
+      source: knowledge_enriched
+    - type: claims
+      field: claims
+```
+
+**Section types:**
+
+| Type | Reads | Renders |
+|------|-------|---------|
+| `header` | `fields[]` (template-aware) | Title strip — first field is the name, rest are meta |
+| `key_value` | `fields[]` | Label/value rows |
+| `prose` | `field` (string) | Paragraphs with inline `@type:id` ref badges |
+| `cross_refs` | `field` (object: `{rel: [id, ...]}`) | Grouped clickable badges by relation |
+| `claims` | `field` (defaults to `"claims"`) | Embeds the `claims` component with ref-aware prose |
+
+**Ref navigation:** Badges in `prose` and `cross_refs` sections look up the target entity in `allData[options.ref_source]` (or `section.source` if overridden) by `id`, then fire `view_file` with the target's `_file`. If the project has registered an `EntityResolver` via `setEntityResolver()`, it is consulted as a second-tier fallback. Refs with `_ref_status: "dead"` (pre-computed by an enricher) render unclickable.
+
+**Use as a file viewer:** Adapter code can wrap `EntityDetailComponent` to render a JSON file outside the dashboard — pass a synthetic `DashboardComponentProps` and route `view_file` actions to your file-open callback.
+
 ### `model_stats` — LLM usage statistics
 
 Renders call counts, token usage, latency, and quota gauges from a `model_usage` source.

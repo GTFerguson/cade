@@ -38,6 +38,8 @@ import type { RemoteProfile } from "./remote/types";
 import { getAuthToken, setAuthToken } from "./auth/tokenManager";
 import { setStoredIdToken } from "./auth/googleAuth";
 import { registerParadraxViewers } from "./padarax/register";
+import { KnowledgeEntityResolver } from "./padarax/knowledge-refs";
+import { setEntityResolver } from "./platform/entity-resolver";
 
 class App {
   private tabManager: TabManager;
@@ -268,6 +270,8 @@ class App {
 
     // Initialize keybinding manager and help overlay FIRST
     // This ensures event listeners are ready before any other UI components
+    setEntityResolver(new KnowledgeEntityResolver());
+
     this.keybindingManager.initialize();
     this.helpOverlay.initialize();
 

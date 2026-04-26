@@ -346,7 +346,16 @@ graph TD
 | Field | Value |
 |-------|-------|
 | File | `frontend/src/dashboard/` |
-| Responsibility | Renders dashboard panels from config (cards, table, checklist, kanban, key_value, markdown); hot-reloads on config changes |
+| Responsibility | Renders dashboard panels from config (cards, table, checklist, kanban, key_value, markdown, entity_detail); hot-reloads on config changes |
+
+Components extend `BaseDashboardComponent` and receive `{ panel, data, allData, config, onAction }`. The `entity_detail` component is composition-driven — its layout is declared in YAML via `options.sections`, with each section delegating to either inline renderers (header, key_value, prose, cross_refs) or another registered component (claims). New content types are added by writing YAML, not TypeScript.
+
+### EntityResolver
+
+| Field | Value |
+|-------|-------|
+| File | `frontend/src/platform/entity-resolver.ts` |
+| Responsibility | Pluggable interface for resolving `@type:id` cross-reference tokens to file paths. Projects register an implementation at startup via `setEntityResolver()`; dashboard components call `getEntityResolver()` as a fallback when in-memory `allData` lookups miss |
 
 ---
 
