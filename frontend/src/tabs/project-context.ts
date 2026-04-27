@@ -276,7 +276,7 @@ export class ProjectContextImpl implements IProjectContext {
       this.dashboardFullPane.initialize();
 
       // Click file in dashboard → switch to workspace, open in viewer
-      this.dashboardFullPane.onViewFile((path, meta) => {
+      this.dashboardFullPane.onViewFile(async (path, meta) => {
         this.setViewMode("workspace");
         this.rightPane?.setMode("markdown");
         const viewer = this.rightPane?.getViewer();
@@ -286,14 +286,17 @@ export class ProjectContextImpl implements IProjectContext {
             viewer.setPreview(null);
             this.setViewMode("dashboard");
           });
-          viewer.setPreview(buildPreviewEl(meta));
-          viewer.loadFile(path, meta);
+          const { filePath, viewMeta } = splitRoomFragment(path, meta);
+          const mapMeta = await loadMapSibling(filePath, this.ws);
+          const finalMeta = mapMeta ? { ...viewMeta, ...mapMeta } : viewMeta;
+          viewer.setPreview(buildPreviewEl(finalMeta));
+          viewer.loadFile(filePath, finalMeta);
         }
       });
     }
 
     // Also wire the right-pane dashboard's view-file handler
-    dashboardPane.onViewFile((path, meta) => {
+    dashboardPane.onViewFile(async (path, meta) => {
       this.rightPane?.setMode("markdown");
       const viewer = this.rightPane?.getViewer();
       if (viewer) {
@@ -302,8 +305,11 @@ export class ProjectContextImpl implements IProjectContext {
           viewer.setPreview(null);
           this.rightPane?.setMode("dashboard");
         });
-        viewer.setPreview(buildPreviewEl(meta));
-        viewer.loadFile(path, meta);
+        const { filePath, viewMeta } = splitRoomFragment(path, meta);
+        const mapMeta = await loadMapSibling(filePath, this.ws);
+        const finalMeta = mapMeta ? { ...viewMeta, ...mapMeta } : viewMeta;
+        viewer.setPreview(buildPreviewEl(finalMeta));
+        viewer.loadFile(filePath, finalMeta);
       }
     });
 
@@ -334,16 +340,11 @@ export class ProjectContextImpl implements IProjectContext {
 
     this.rightPane.getViewer().on("link-click", async (path) => {
       this.rightPane?.setMode("markdown");
-      let meta: Record<string, unknown> | undefined;
-      if (/content\/worlds\/(?!.*-map\.json)[^/]+\.json$/.test(path)) {
-        const mapPath = path.replace(/\.json$/, "-map.json");
-        try {
-          const mapContent = await this.ws.readFileAsync(mapPath);
-          meta = { preview: { component: "graph", data: JSON.parse(mapContent) } };
-        } catch { /* no map file — open world without map */ }
-      }
-      this.rightPane?.getViewer().loadFile(path, meta);
-      this.fileTree?.revealFile(path);
+      const { filePath, viewMeta } = splitRoomFragment(path, undefined);
+      const mapMeta = await loadMapSibling(filePath, this.ws);
+      const meta = mapMeta ? { ...viewMeta, ...mapMeta } : viewMeta;
+      this.rightPane?.getViewer().loadFile(filePath, meta);
+      this.fileTree?.revealFile(filePath);
       this.scheduleSave();
     });
 
@@ -884,6 +885,39 @@ export class ProjectContextImpl implements IProjectContext {
 
     this.container.remove();
   }
+}
+
+function splitRoomFragment(
+  path: string,
+  meta: Record<string, unknown> | undefined,
+): { filePath: string; viewMeta: Record<string, unknown> | undefined } {
+  const hashIdx = path.indexOf("#room=");
+  if (hashIdx === -1) return { filePath: path, viewMeta: meta };
+  const roomId = path.slice(hashIdx + 6);
+  const filePath = path.slice(0, hashIdx);
+  return { filePath, viewMeta: { ...meta, room_id: roomId } };
+}
+
+async function loadMapSibling(
+  path: string,
+  ws: WebSocketClient,
+): Promise<Record<string, unknown> | undefined> {
+  // Padarax: .../maps/X.json → .../maps/generated/X-map.json
+  const mapsM = path.match(/^(.*\/maps\/)(?!generated\/)([^/]+)\.json$/);
+  if (mapsM) {
+    try {
+      const data = JSON.parse(await ws.readFileAsync(`${mapsM[1]}generated/${mapsM[2]}-map.json`));
+      return { preview: { component: "graph", data } };
+    } catch { /* no sibling */ }
+  }
+  // Generic: .../worlds/X.json → .../worlds/X-map.json
+  if (/\/worlds\/[^/]+\.json$/.test(path)) {
+    try {
+      const data = JSON.parse(await ws.readFileAsync(path.replace(/\.json$/, "-map.json")));
+      return { preview: { component: "graph", data } };
+    } catch { /* no sibling */ }
+  }
+  return undefined;
 }
 
 /**

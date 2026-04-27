@@ -107,7 +107,7 @@ export class NpcViewer {
       if (worldId) {
         const link = el("span", "ir-relation");
         link.title = `Open ${worldId} — ${locationId}`;
-        link.addEventListener("click", () => this.navigateTo(`content/worlds/padarax/maps/${worldId}.json`));
+        link.addEventListener("click", () => this.navigateTo(`content/worlds/padarax/maps/${worldId}.json#room=${locationId}`));
         link.appendChild(el("span", "target", locationId));
         val.appendChild(link);
       } else {
@@ -366,14 +366,24 @@ function buildRelationsTab(
     }
     row.appendChild(nameLink);
 
-    const typeEl = el("span", "npc-v-rel-type");
-    typeEl.appendChild(renderProseWithRefs(rel.type));
-    attachRefHandlers(typeEl, navigateTo, refStatus);
+    const typeEl = el("div", "npc-v-rel-type");
+    for (const block of rel.type.split(/\n\n+/)) {
+      if (!block.trim()) continue;
+      const p = el("p", "npc-v-rel-para");
+      p.appendChild(renderProseWithRefs(block));
+      attachRefHandlers(p, navigateTo, refStatus);
+      typeEl.appendChild(p);
+    }
     row.appendChild(typeEl);
 
-    const valEl = el("span", "npc-v-rel-valence");
-    valEl.appendChild(renderProseWithRefs(rel.valence));
-    attachRefHandlers(valEl, navigateTo, refStatus);
+    const valEl = el("div", "npc-v-rel-valence");
+    for (const block of rel.valence.split(/\n\n+/)) {
+      if (!block.trim()) continue;
+      const p = el("p", "npc-v-rel-para");
+      p.appendChild(renderProseWithRefs(block));
+      attachRefHandlers(p, navigateTo, refStatus);
+      valEl.appendChild(p);
+    }
     row.appendChild(valEl);
 
     container.appendChild(row);
@@ -429,9 +439,14 @@ function buildReflectionsTab(
     if (ref.year != null) {
       entry.appendChild(el("span", "npc-v-reflection-year", `${ref.year} AE`));
     }
-    const text = el("span", "npc-v-reflection-text");
-    text.appendChild(renderProseWithRefs(ref.text));
-    attachRefHandlers(text, navigateTo, refStatus);
+    const text = el("div", "npc-v-reflection-text");
+    for (const block of ref.text.split(/\n\n+/)) {
+      if (!block.trim()) continue;
+      const p = el("p", "npc-v-reflection-para");
+      p.appendChild(renderProseWithRefs(block));
+      attachRefHandlers(p, navigateTo, refStatus);
+      text.appendChild(p);
+    }
     entry.appendChild(text);
     container.appendChild(entry);
   });
@@ -455,10 +470,15 @@ function para(
   navigateTo?: (path: string) => void,
   refStatus?: Record<string, string>,
 ): HTMLElement {
-  const p = el("p", "npc-v-para");
-  p.appendChild(renderProseWithRefs(text));
-  if (navigateTo) attachRefHandlers(p, navigateTo, refStatus);
-  return p;
+  const wrap = el("div", "npc-v-para-wrap");
+  for (const block of text.split(/\n\n+/)) {
+    if (!block.trim()) continue;
+    const p = el("p", "npc-v-para");
+    p.appendChild(renderProseWithRefs(block));
+    if (navigateTo) attachRefHandlers(p, navigateTo, refStatus);
+    wrap.appendChild(p);
+  }
+  return wrap;
 }
 
 function attachRefHandlers(

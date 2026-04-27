@@ -1608,6 +1608,8 @@
   color: var(--text-secondary);
   line-height: 1.65;
 }
+.dash-claims-prose p { margin: 0 0 10px; }
+.dash-claims-prose p:last-child { margin-bottom: 0; }
 
 .dash-claims-empty {
   font-size: 12px;

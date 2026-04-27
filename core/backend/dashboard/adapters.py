@@ -532,6 +532,129 @@ class JsonDirectoryAdapter(BaseAdapter):
             raise AdapterError(f"JSON directory source '{config.name}': {e}") from e
 
 
+class JsonFileArrayAdapter(BaseAdapter):
+    """Reads a single JSON file and extracts an array from a nested field.
+
+    Use when items live inside a catalogue file rather than as individual
+    files. Extracted records get ``_source_file`` and ``_source_field`` injected.
+
+    Extra options:
+      array_field: str  — dot-separated path into the JSON object. Required.
+    """
+
+    async def fetch(self, config: DataSourceConfig, project_root: Path) -> list[dict[str, Any]]:
+        if not config.path:
+            raise AdapterError(f"JSON file-array source '{config.name}': missing 'path'")
+        array_field: str = config.extra.get("array_field", "")
+        if not array_field:
+            raise AdapterError(f"JSON file-array source '{config.name}': missing 'array_field' in extra")
+
+        file_path = project_root / config.path
+        if not file_path.is_file():
+            logger.warning("JSON file-array source '%s': file not found: %s", config.name, file_path)
+            return []
+
+        def _read():
+            data = json.loads(file_path.read_text(encoding="utf-8"))
+            node: Any = data
+            for key in array_field.split("."):
+                if not isinstance(node, dict):
+                    return []
+                node = node.get(key)
+            if not isinstance(node, list):
+                logger.warning("JSON file-array source '%s': field '%s' is not a list", config.name, array_field)
+                return []
+            rel = str(file_path.relative_to(project_root))
+            results = []
+            for i, item in enumerate(node):
+                if not isinstance(item, dict):
+                    continue
+                entry = dict(item)
+                entry.setdefault("id", f"{array_field.split('.')[-1]}-{i}")
+                entry["_source_file"] = rel
+                entry["_source_field"] = array_field
+                results.append(entry)
+            return results
+
+        try:
+            return await asyncio.to_thread(_read)
+        except Exception as e:
+            raise AdapterError(f"JSON file-array source '{config.name}': {e}") from e
+
+
+class JsonDirectoryExpandAdapter(BaseAdapter):
+    """Reads a directory of JSON files and expands a nested field into rows.
+
+    Use when each file contains a list/dict field whose children are the
+    actual records (e.g. world files where ``rooms`` is the list of room
+    dicts). Each child gets ``_world_id`` (file stem) and ``_source_file``
+    injected.
+
+    Extra options:
+      expand_field: str          — field name to expand (list or dict). Required.
+      exclude: str | list[str]   — filenames to skip (exact match).
+    """
+
+    async def fetch(self, config: DataSourceConfig, project_root: Path) -> list[dict[str, Any]]:
+        if not config.path:
+            raise AdapterError(f"JSON directory-expand source '{config.name}': missing 'path'")
+        expand_field: str = config.extra.get("expand_field", "")
+        if not expand_field:
+            raise AdapterError(f"JSON directory-expand source '{config.name}': missing 'expand_field' in extra")
+
+        dir_path = project_root / config.path
+        if not dir_path.is_dir():
+            logger.warning("JSON directory-expand source '%s': not found: %s", config.name, dir_path)
+            return []
+
+        exclude_raw = config.extra.get("exclude", [])
+        exclude_names: set[str] = (
+            {exclude_raw} if isinstance(exclude_raw, str) else set(exclude_raw)
+        )
+
+        def _scan():
+            results: list[dict[str, Any]] = []
+            for item in sorted(dir_path.glob("*.json")):
+                if item.name.startswith(".") or item.name in exclude_names:
+                    continue
+                try:
+                    data = json.loads(item.read_text(encoding="utf-8"))
+                except Exception as e:
+                    logger.warning("JSON directory-expand '%s': skipping %s: %s", config.name, item.name, e)
+                    continue
+                if not isinstance(data, dict):
+                    continue
+                children = data.get(expand_field)
+                if children is None:
+                    continue
+
+                rel = str(item.relative_to(project_root))
+                world_id = item.stem
+
+                if isinstance(children, list):
+                    items_iter: list[tuple[Any, Any]] = list(enumerate(children))
+                elif isinstance(children, dict):
+                    items_iter = list(children.items())
+                else:
+                    continue
+
+                for key, child in items_iter:
+                    if not isinstance(child, dict):
+                        continue
+                    entry = dict(child)
+                    entry["_world_id"]    = world_id
+                    entry["_source_file"] = rel
+                    entry.setdefault("id", str(key))
+                    entry.setdefault("_file", f"{rel}#room={entry['id']}")
+                    results.append(entry)
+            return results
+
+        try:
+            return await asyncio.to_thread(_scan)
+        except Exception as e:
+            raise AdapterError(f"JSON directory-expand source '{config.name}': {e}") from e
+
+
 def _strip_frontmatter(text: str) -> str:
     """Return the markdown body with any leading YAML frontmatter removed."""
     if not text.startswith("---"):
@@ -834,6 +957,8 @@ _ADAPTERS: dict[str, BaseAdapter] = {
     "rest": RestAdapter(),
     "json_file": JsonFileAdapter(),
     "json_directory": JsonDirectoryAdapter(),
+    "json_file_array": JsonFileArrayAdapter(),
+    "json_directory_expand": JsonDirectoryExpandAdapter(),
     "directory": DirectoryAdapter(),
     "markdown": MarkdownAdapter(),
     "model_usage": ModelUsageAdapter(),
