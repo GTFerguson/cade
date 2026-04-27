@@ -357,6 +357,10 @@ Components extend `BaseDashboardComponent` and receive `{ panel, data, allData, 
 | File | `frontend/src/platform/entity-resolver.ts` |
 | Responsibility | Pluggable interface for resolving `@type:id` cross-reference tokens to file paths. Projects register an implementation at startup via `setEntityResolver()`; dashboard components call `getEntityResolver()` as a fallback when in-memory `allData` lookups miss |
 
+**When to register one:** if your project's content uses `@type:id` cross-reference syntax inside prose fields and you want clicks to navigate. Without a resolver registered, `entity_detail` and `claims` components fall back to `allData` lookup only — fine if every referenced entity is already loaded as a dashboard data source, but it won't navigate to entities outside the dashboard's loaded scope.
+
+**Pre-computed liveness via `_ref_status`:** if you also generate enriched copies of your content with a per-ref `_ref_status` map (`{"@type:id": "resolved" | "stub" | "dead"}`), components prefer that over runtime resolution — a ref marked `"dead"` renders unclickable even if the resolver would build a path for it. This lets a build-time validator (which has full corpus knowledge) drive the viewer's UX without runtime indexing.
+
 ---
 
 ### Type Definitions
