@@ -6,6 +6,9 @@
  * visual language matches the markdown viewer.
  */
 
+import { renderProseWithRefs } from "./knowledge-refs";
+import { getEntityResolver } from "../platform/entity-resolver";
+
 
 interface NpcRelationship {
   target_name: string;
@@ -90,7 +93,7 @@ export class NpcViewer {
       const val = el("div", "frontmatter-value");
       const link = el("span", "ir-relation");
       link.title = `Open ${worldId}`;
-      link.addEventListener("click", () => this.navigateTo(`content/worlds/${worldId}.json`));
+      link.addEventListener("click", () => this.navigateTo(`content/worlds/padarax/maps/${worldId}.json`));
       link.appendChild(el("span", "target", worldId));
       val.appendChild(link);
       row.appendChild(val);
@@ -101,7 +104,15 @@ export class NpcViewer {
       const row = el("div", "frontmatter-row");
       row.appendChild(el("div", "frontmatter-label", "location"));
       const val = el("div", "frontmatter-value");
-      val.appendChild(el("span", "ir-scalar", locationId));
+      if (worldId) {
+        const link = el("span", "ir-relation");
+        link.title = `Open ${worldId} — ${locationId}`;
+        link.addEventListener("click", () => this.navigateTo(`content/worlds/padarax/maps/${worldId}.json`));
+        link.appendChild(el("span", "target", locationId));
+        val.appendChild(link);
+      } else {
+        val.appendChild(el("span", "ir-scalar", locationId));
+      }
       row.appendChild(val);
       fmRows.appendChild(row);
     }
@@ -143,14 +154,15 @@ export class NpcViewer {
     const schedule  = (this.npc["schedule"]            ?? {}) as Record<string, NpcScheduleEntry>;
     const equipment = (this.npc["starting_equipment"]  ?? []) as string[];
     const wealth    = this.npc["wealth"] as number | undefined;
+    const refStatus = (this.npc["_ref_status"] as Record<string, string> | undefined) ?? {};
 
     switch (this.activeTab) {
-      case "persona":     buildPersonaTab(body, persona, this.npc); break;
+      case "persona":     buildPersonaTab(body, persona, this.npc, this.navigateTo, refStatus); break;
       case "stats":       buildStatsTab(body, sheet, drives); break;
       case "inventory":   buildInventoryTab(body, wealth, equipment); break;
-      case "relations":   buildRelationsTab(body, persona, this.navigateTo); break;
+      case "relations":   buildRelationsTab(body, persona, this.navigateTo, refStatus); break;
       case "schedule":    buildScheduleTab(body, schedule); break;
-      case "reflections": buildReflectionsTab(body, persona); break;
+      case "reflections": buildReflectionsTab(body, persona, this.navigateTo, refStatus); break;
     }
   }
 }
@@ -161,6 +173,8 @@ function buildPersonaTab(
   container: HTMLElement,
   persona: NpcPersona,
   npc: Record<string, unknown>,
+  navigateTo: (path: string) => void,
+  refStatus: Record<string, string>,
 ): void {
   const identity: [string, string][] = [];
   if (persona.name)              identity.push(["name",       persona.name]);
@@ -181,37 +195,37 @@ function buildPersonaTab(
 
   if (persona.role) {
     container.appendChild(heading("Role"));
-    container.appendChild(para(persona.role));
+    container.appendChild(para(persona.role, navigateTo, refStatus));
   }
 
   if (persona.want) {
     container.appendChild(heading("Want"));
-    container.appendChild(para(persona.want));
+    container.appendChild(para(persona.want, navigateTo, refStatus));
   }
 
   if (persona.need) {
     container.appendChild(heading("Need"));
-    container.appendChild(para(persona.need));
+    container.appendChild(para(persona.need, navigateTo, refStatus));
   }
 
   if (persona.flaw) {
     container.appendChild(heading("Flaw"));
-    container.appendChild(para(persona.flaw));
+    container.appendChild(para(persona.flaw, navigateTo, refStatus));
   }
 
   if (persona.contradiction) {
     container.appendChild(heading("Contradiction"));
-    container.appendChild(para(persona.contradiction));
+    container.appendChild(para(persona.contradiction, navigateTo, refStatus));
   }
 
   if (persona.voice) {
     container.appendChild(heading("Voice"));
-    container.appendChild(para(persona.voice));
+    container.appendChild(para(persona.voice, navigateTo, refStatus));
   }
 
   if (persona.current_state) {
     container.appendChild(heading("Active State"));
-    container.appendChild(para(persona.current_state));
+    container.appendChild(para(persona.current_state, navigateTo, refStatus));
   }
 
   if (!persona.name && !persona.role && !persona.want && !persona.voice && !persona.current_state) {
@@ -315,6 +329,7 @@ function buildRelationsTab(
   container: HTMLElement,
   persona: NpcPersona,
   navigateTo: (path: string) => void,
+  refStatus: Record<string, string>,
 ): void {
   const rels = persona.relationships ?? [];
   if (rels.length === 0) {
@@ -328,18 +343,39 @@ function buildRelationsTab(
   head.appendChild(el("span", "", "Valence"));
   container.appendChild(head);
 
+  const resolver = getEntityResolver();
   for (const rel of rels) {
     const row = el("div", "npc-v-rel-row");
 
-    const npcFile = "content/npcs/" + rel.target_name.toLowerCase().replace(/\s+/g, "_") + ".json";
-    const nameLink = el("span", "npc-v-rel-name ir-relation");
-    nameLink.title = `Open NPC: ${rel.target_name}`;
-    nameLink.addEventListener("click", () => navigateTo(npcFile));
+    // Enrichment populates _target_id when the relationship resolves to an NPC.
+    // Falls back to slugged name only if the file wasn't enriched (no _ref_status).
+    const enriched = rel as NpcRelationship & { _target_id?: string | null; _target_status?: string };
+    const targetId = enriched._target_id;
+    const isResolved = !!targetId;
+    const npcFile = isResolved
+      ? (resolver?.resolve("npc", targetId!) ?? `content/worlds/padarax/npcs/${targetId}.json`)
+      : null;
+
+    const nameLink = el("span", isResolved ? "npc-v-rel-name ir-relation" : "npc-v-rel-name hv-ref--dead");
     nameLink.appendChild(el("span", "target", rel.target_name));
+    if (isResolved && npcFile) {
+      nameLink.title = `Open NPC: ${rel.target_name}`;
+      nameLink.addEventListener("click", () => navigateTo(npcFile));
+    } else {
+      nameLink.title = `No NPC file found for "${rel.target_name}"`;
+    }
     row.appendChild(nameLink);
 
-    row.appendChild(el("span", "npc-v-rel-type", rel.type));
-    row.appendChild(el("span", "npc-v-rel-valence", rel.valence));
+    const typeEl = el("span", "npc-v-rel-type");
+    typeEl.appendChild(renderProseWithRefs(rel.type));
+    attachRefHandlers(typeEl, navigateTo, refStatus);
+    row.appendChild(typeEl);
+
+    const valEl = el("span", "npc-v-rel-valence");
+    valEl.appendChild(renderProseWithRefs(rel.valence));
+    attachRefHandlers(valEl, navigateTo, refStatus);
+    row.appendChild(valEl);
+
     container.appendChild(row);
   }
 }
@@ -364,7 +400,12 @@ function buildScheduleTab(
   }
 }
 
-function buildReflectionsTab(container: HTMLElement, persona: NpcPersona): void {
+function buildReflectionsTab(
+  container: HTMLElement,
+  persona: NpcPersona,
+  navigateTo: (path: string) => void,
+  refStatus: Record<string, string>,
+): void {
   const raw = persona.seeded_reflections ?? [];
   if (raw.length === 0) {
     container.appendChild(para("No reflections seeded for this NPC."));
@@ -388,7 +429,10 @@ function buildReflectionsTab(container: HTMLElement, persona: NpcPersona): void 
     if (ref.year != null) {
       entry.appendChild(el("span", "npc-v-reflection-year", `${ref.year} AE`));
     }
-    entry.appendChild(el("span", "npc-v-reflection-text", ref.text));
+    const text = el("span", "npc-v-reflection-text");
+    text.appendChild(renderProseWithRefs(ref.text));
+    attachRefHandlers(text, navigateTo, refStatus);
+    entry.appendChild(text);
     container.appendChild(entry);
   });
 }
@@ -406,8 +450,41 @@ function heading(text: string): HTMLElement {
   return el("h4", "npc-v-heading", text);
 }
 
-function para(text: string): HTMLElement {
-  return el("p", "npc-v-para", text);
+function para(
+  text: string,
+  navigateTo?: (path: string) => void,
+  refStatus?: Record<string, string>,
+): HTMLElement {
+  const p = el("p", "npc-v-para");
+  p.appendChild(renderProseWithRefs(text));
+  if (navigateTo) attachRefHandlers(p, navigateTo, refStatus);
+  return p;
+}
+
+function attachRefHandlers(
+  host: HTMLElement,
+  navigateTo: (path: string) => void,
+  refStatus?: Record<string, string>,
+): void {
+  const resolver = getEntityResolver();
+  const badges = host.querySelectorAll<HTMLElement>(".hv-ref");
+  for (const badge of badges) {
+    const type = badge.dataset["refType"] ?? "";
+    const id   = badge.dataset["refId"] ?? "";
+    if (!id) continue;
+    const status = refStatus?.[`@${type}:${id}`];
+    if (status === "dead") {
+      badge.classList.add("hv-ref--dead");
+      continue;
+    }
+    const path = resolver?.resolve(type, id) ?? null;
+    if (path) {
+      badge.classList.add(`hv-ref--${status ?? "resolved"}`);
+      badge.addEventListener("click", () => navigateTo(path));
+    } else {
+      badge.classList.add("hv-ref--dead");
+    }
+  }
 }
 
 

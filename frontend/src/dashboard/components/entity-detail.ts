@@ -12,7 +12,7 @@
 import { BaseDashboardComponent } from "./base-component";
 import { createDefaultRegistry } from "../registry";
 import type { DashboardComponentProps, PanelConfig } from "../types";
-import { renderProseWithRefs } from "../../padarax/knowledge-refs";
+import { renderProseWithRefs, parseRef } from "../../padarax/knowledge-refs";
 import { getEntityResolver } from "../../platform/entity-resolver";
 
 interface SectionConfig {
@@ -29,20 +29,15 @@ export class EntityDetailComponent extends BaseDashboardComponent {
 
     const record = this.props.data[0];
     if (!record) {
-      this.container.appendChild(this.el("div", "ded-empty", "no record selected"));
+      this.container.appendChild(this.el("div", "hv-empty", "no record selected"));
       return;
     }
 
     const sections = (this.props.panel.options["sections"] ?? []) as SectionConfig[];
-    const shell = this.el("div", "ded-shell");
+    const shell = this.el("div", "hv-wrap");
 
     for (const section of sections) {
-      const wrap = this.el("div", `ded-section ded-section--${section.type}`);
-      if (section.title) {
-        wrap.appendChild(this.el("div", "ded-section-title", section.title));
-      }
-      this.renderSection(wrap, section, record);
-      shell.appendChild(wrap);
+      this.renderSection(shell, section, record);
     }
 
     this.container.appendChild(shell);
@@ -70,15 +65,25 @@ export class EntityDetailComponent extends BaseDashboardComponent {
     record: Record<string, unknown>,
   ): void {
     const fields = section.fields ?? (section.field ? [section.field] : []);
-    const strip = this.el("div", "ded-header");
-    let first = true;
-    for (const f of fields) {
-      const val = this.fieldValue(record, f);
-      if (!val) continue;
-      strip.appendChild(this.el("span", first ? "ded-header-name" : "ded-header-meta", val));
-      first = false;
+    if (fields.length === 0) return;
+
+    const header = this.el("div", "hv-header");
+
+    const nameVal = this.fieldValue(record, fields[0]!);
+    if (nameVal) header.appendChild(this.el("div", "hv-name", nameVal));
+
+    const metaVals: string[] = [];
+    for (const f of fields.slice(1)) {
+      const v = this.fieldValue(record, f);
+      if (v) metaVals.push(v);
     }
-    container.appendChild(strip);
+    if (record["stub"] === true) metaVals.push("stub");
+
+    if (metaVals.length > 0) {
+      header.appendChild(this.el("div", "hv-meta", metaVals.join(" · ")));
+    }
+
+    container.appendChild(header);
   }
 
   private renderKeyValue(
@@ -87,16 +92,18 @@ export class EntityDetailComponent extends BaseDashboardComponent {
     record: Record<string, unknown>,
   ): void {
     const fields = section.fields ?? (section.field ? [section.field] : []);
-    const grid = this.el("div", "ded-kv");
+    const grid = this.el("div", "hv-kv");
+    let any = false;
     for (const f of fields) {
       const val = this.fieldValue(record, f);
       if (!val) continue;
-      const row = this.el("div", "ded-kv-row");
-      row.appendChild(this.el("span", "ded-kv-label", f.replace(/_/g, " ")));
-      row.appendChild(this.el("span", "ded-kv-value", val));
+      const row = this.el("div", "hv-kv-row");
+      row.appendChild(this.el("span", "hv-kv-label", f.replace(/_/g, " ")));
+      row.appendChild(this.el("span", "hv-kv-value", val));
       grid.appendChild(row);
+      any = true;
     }
-    container.appendChild(grid);
+    if (any) container.appendChild(grid);
   }
 
   private renderProse(
@@ -108,10 +115,10 @@ export class EntityDetailComponent extends BaseDashboardComponent {
     const text = String(record[section.field] ?? "");
     if (!text) return;
 
-    const wrap = this.el("div", "ded-prose");
+    const wrap = this.el("div", "hv-prose-wrap");
     for (const para of text.split(/\n\n+/)) {
       if (!para.trim()) continue;
-      const p = document.createElement("p");
+      const p = this.el("p", "hv-prose");
       p.appendChild(renderProseWithRefs(para));
       this.attachRefHandlers(p, section, record);
       wrap.appendChild(p);
@@ -125,25 +132,33 @@ export class EntityDetailComponent extends BaseDashboardComponent {
     record: Record<string, unknown>,
   ): void {
     const field = section.field ?? "cross_refs";
-    const crossRefs = record[field] as Record<string, string[]> | null | undefined;
+    const crossRefs = record[field] as Record<string, unknown[]> | null | undefined;
     if (!crossRefs || typeof crossRefs !== "object") return;
 
-    const entries = Object.entries(crossRefs).filter(([, ids]) => ids.length > 0);
+    const entries = Object.entries(crossRefs).filter(([, targets]) => {
+      const arr = Array.isArray(targets) ? targets : [targets];
+      return arr.length > 0;
+    });
     if (entries.length === 0) return;
 
-    const wrap = this.el("div", "ded-crossrefs");
-    for (const [rel, ids] of entries) {
-      const group = this.el("div", "ded-crossrefs-group");
-      group.appendChild(
-        this.el("span", "ded-crossrefs-rel", rel.replace(/_/g, " ")),
+    const wrap = this.el("div", "hv-crossrefs");
+    for (const [rel, rawTargets] of entries) {
+      const arr = Array.isArray(rawTargets) ? rawTargets : [rawTargets];
+      const row = this.el("div", "hv-crossref-row");
+      row.appendChild(
+        this.el("span", "hv-crossref-rel", rel.replace(/_/g, " ")),
       );
-      const badges = this.el("span", "ded-crossrefs-badges");
-      for (const rawId of ids) {
-        const badge = this.makeCrossRefBadge(rawId, section, record);
-        badges.appendChild(badge);
+      const targetsWrap = this.el("span", "hv-crossref-targets");
+      for (const target of arr) {
+        const ref = parseRef(String(target));
+        if (ref) {
+          targetsWrap.appendChild(this.makeRefBadge(ref.type, ref.id, section, record));
+        } else {
+          targetsWrap.appendChild(this.el("span", "hv-ref", String(target)));
+        }
       }
-      group.appendChild(badges);
-      wrap.appendChild(group);
+      row.appendChild(targetsWrap);
+      wrap.appendChild(row);
     }
     container.appendChild(wrap);
   }
@@ -153,10 +168,25 @@ export class EntityDetailComponent extends BaseDashboardComponent {
     section: SectionConfig,
     record: Record<string, unknown>,
   ): void {
+    // Stub records have no claims — render a friendly note instead of an empty viewer.
+    if (record["stub"] === true) {
+      const notes = String(record["stub_notes"] ?? "");
+      const stubEl = this.el("div", "hv-empty", notes || "stub entry — no claims yet");
+      container.appendChild(stubEl);
+      return;
+    }
+
+    const field = section.field ?? "claims";
+    const claimsData = record[field];
+    if (!claimsData || typeof claimsData !== "object") {
+      container.appendChild(this.el("div", "hv-empty", "no claims"));
+      return;
+    }
+
     const effectiveSource = section.source ?? this.defaultRefSource();
     const syntheticPanel: PanelConfig = {
       component: "claims",
-      fields:      [section.field ?? "claims"],
+      fields:      [field],
       columns:     [],
       badges:      [],
       filter:      {},
@@ -164,7 +194,7 @@ export class EntityDetailComponent extends BaseDashboardComponent {
       searchable:  [],
       inline_edit: [],
       sortable:    false,
-      options:     { ref_source: effectiveSource },
+      options:     { ref_source: effectiveSource, render_header: false },
       extra:       {},
     };
 
@@ -176,26 +206,23 @@ export class EntityDetailComponent extends BaseDashboardComponent {
       onAction: this.props!.onAction,
     };
 
+    const claimsHost = this.el("div", "hv-claims-host");
+    container.appendChild(claimsHost);
     const claims = createDefaultRegistry().create("claims");
-    claims.render(container, syntheticProps);
+    claims.render(claimsHost, syntheticProps);
   }
 
-  // --- Ref resolution helpers ---
+  // --- Ref resolution ---
 
-  private makeCrossRefBadge(
-    rawId: string,
+  private makeRefBadge(
+    type: string,
+    id: string,
     section: SectionConfig,
     record: Record<string, unknown>,
   ): HTMLElement {
-    // rawId may be "type:id" or just "id"
-    const colonIdx = rawId.indexOf(":");
-    const type = colonIdx !== -1 ? rawId.slice(0, colonIdx) : "";
-    const id   = colonIdx !== -1 ? rawId.slice(colonIdx + 1) : rawId;
-
     const { path, status } = this.resolveRef(type, id, section, record);
-
-    const badge = this.el("span", `ded-ref ded-ref--${status}`, rawId);
-    if (path) {
+    const badge = this.el("span", `hv-ref hv-ref--${status}`, `@${type}:${id}`);
+    if (path && status !== "dead") {
       badge.addEventListener("click", () => this.fireViewFile(path));
     }
     return badge;
@@ -207,32 +234,29 @@ export class EntityDetailComponent extends BaseDashboardComponent {
     section: SectionConfig,
     record: Record<string, unknown>,
   ): { path: string | null; status: string } {
-    // 1. Pre-computed status from enricher
-    const refKey = type ? `@${type}:${id}` : id;
+    const refKey = `@${type}:${id}`;
     const refStatus = record["_ref_status"] as Record<string, string> | undefined;
-    if (refStatus?.[refKey] === "dead") return { path: null, status: "dead" };
+    const preComputed = refStatus?.[refKey];
+    if (preComputed === "dead") return { path: null, status: "dead" };
 
-    // 2. allData lookup by entity id
     const source = section.source ?? this.defaultRefSource();
     if (source) {
       const rows = this.props!.allData[source];
       if (rows) {
         const found = rows.find((r) => r["id"] === id);
         if (found?._file) {
-          return { path: String(found._file), status: refStatus?.[refKey] ?? "resolved" };
+          return { path: String(found._file), status: preComputed ?? "resolved" };
         }
       }
     }
 
-    // 3. EntityResolver (registered by Padarax at startup)
     const resolver = getEntityResolver();
     if (resolver) {
       const resolved = resolver.resolve(type, id);
-      if (resolved) return { path: resolved, status: "resolved" };
+      if (resolved) return { path: resolved, status: preComputed ?? "resolved" };
     }
 
-    // 4. Dead if nothing found
-    return { path: null, status: "dead" };
+    return { path: null, status: preComputed ?? "dead" };
   }
 
   private attachRefHandlers(
@@ -248,7 +272,7 @@ export class EntityDetailComponent extends BaseDashboardComponent {
 
       const { path, status } = this.resolveRef(type, id, section, record);
       badge.classList.add(`hv-ref--${status}`);
-      if (path) {
+      if (path && status !== "dead") {
         badge.addEventListener("click", () => this.fireViewFile(path));
       }
     }

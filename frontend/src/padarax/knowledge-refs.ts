@@ -15,13 +15,17 @@ export function enrichedDirForPath(path: string): string {
 }
 
 /**
- * Source knowledge files lack _ref_status metadata; redirect to the enriched
- * version which carries it. Detects any path that contains a knowledge/ segment
- * outside of generated/, so it works regardless of the tree root.
+ * Source content files lack _ref_status metadata; redirect to the enriched
+ * version which carries it. Handles both knowledge entities and NPC files.
+ * Path-agnostic — matches any knowledge/ or npcs/ segment outside generated/.
  */
 export function preferEnrichedPath(path: string): string {
-  const m = path.match(/^(.*\/knowledge\/)(?!generated\/).*\/([^/]+\.json)$/);
-  if (m) return `${m[1]}generated/enriched/${m[2]}`;
+  const knowledgeM = path.match(/^(.*\/knowledge\/)(?!generated\/).*\/([^/]+\.json)$/);
+  if (knowledgeM) return `${knowledgeM[1]}generated/enriched/${knowledgeM[2]}`;
+
+  const npcM = path.match(/^(.*\/npcs\/)(?!generated\/)([^/]+\.json)$/);
+  if (npcM) return `${npcM[1]}generated/enriched/${npcM[2]}`;
+
   return path;
 }
 
@@ -51,7 +55,7 @@ export class KnowledgeEntityResolver implements EntityResolver {
   }
 
   resolve(type: string, id: string): string | null {
-    if (type === "npc") return `content/worlds/padarax/npcs/${id}.json`;
+    if (type === "npc") return `content/worlds/padarax/npcs/generated/enriched/${id}.json`;
     if (type === "location" || type === "room") return null; // resolved via world viewer
     return `${this.knowledgeBase}/${id}.json`;
   }

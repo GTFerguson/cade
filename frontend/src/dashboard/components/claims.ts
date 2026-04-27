@@ -75,7 +75,9 @@ export class ClaimsComponent extends BaseDashboardComponent {
     }
 
     const shell = this.el("div", "dash-claims-shell");
-    shell.appendChild(this.buildHeader(record));
+    if (panel.options?.["render_header"] !== false) {
+      shell.appendChild(this.buildHeader(record));
+    }
     shell.appendChild(this.buildFilterBar());
 
     const layersEl = this.el("div", "dash-claims-layers");
