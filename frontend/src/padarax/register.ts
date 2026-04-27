@@ -1,8 +1,18 @@
 import { viewerRegistry } from "../markdown/viewer-registry";
 import type { ViewerFactory } from "../markdown/viewer-registry";
-import { EntityDetailComponent } from "../dashboard/components/entity-detail";
+import { EntityDetailComponent, registerSectionRenderer } from "../dashboard/components/entity-detail";
 import { enrichedDirForPath } from "./knowledge-refs";
 import type { DashboardComponentProps, DashboardConfig, PanelConfig } from "../dashboard/types";
+import {
+  frontmatterStripSection,
+  personaSection,
+  characterSheetSection,
+  attributesBarsSection,
+  relationshipsSection,
+  scheduleSection,
+  reflectionsSection,
+} from "./sections/npc";
+import { worldMapSection, roomDetailSection } from "./sections/world";
 
 interface ViewerSpec {
   pattern: string;
@@ -16,14 +26,13 @@ const HISTORY_SECTIONS = [
 ] as const;
 
 const NPC_SECTIONS = [
-  { type: "header", fields: ["id", "world_id", "occupation"] },
+  { type: "frontmatter_strip" },
   { type: "tabs", tabs: [
     { label: "Persona",     sections: [{ type: "persona" }] },
-    { label: "Sheet",       sections: [{ type: "character_sheet" }, { type: "attributes_bars" }] },
+    { label: "Stats",       sections: [{ type: "character_sheet" }, { type: "attributes_bars" }] },
     { label: "Relations",   sections: [{ type: "relationships" }] },
     { label: "Schedule",    sections: [{ type: "schedule" }] },
     { label: "Reflections", sections: [{ type: "reflections" }] },
-    { label: "Cross-refs",  sections: [{ type: "cross_refs" }] },
   ]},
 ];
 
@@ -112,6 +121,18 @@ const VIEWER_FACTORIES: Record<string, ViewerFactory> = {
     return { dispose: () => comp.dispose() };
   },
 };
+
+export function registerParadraxSections(): void {
+  registerSectionRenderer("frontmatter_strip", frontmatterStripSection);
+  registerSectionRenderer("persona",          personaSection);
+  registerSectionRenderer("character_sheet",  characterSheetSection);
+  registerSectionRenderer("attributes_bars",  attributesBarsSection);
+  registerSectionRenderer("relationships",    relationshipsSection);
+  registerSectionRenderer("schedule",         scheduleSection);
+  registerSectionRenderer("reflections",      reflectionsSection);
+  registerSectionRenderer("world_map",        worldMapSection);
+  registerSectionRenderer("room_detail",      roomDetailSection);
+}
 
 export function registerParadraxViewers(specs: ViewerSpec[]): void {
   for (const { pattern, viewer } of specs) {

@@ -37,7 +37,7 @@ import { Splash } from "./ui/splash";
 import type { RemoteProfile } from "./remote/types";
 import { getAuthToken, setAuthToken } from "./auth/tokenManager";
 import { setStoredIdToken } from "./auth/googleAuth";
-import { registerParadraxViewers } from "./padarax/register";
+import { registerParadraxViewers, registerParadraxSections } from "./padarax/register";
 import { KnowledgeEntityResolver } from "./padarax/knowledge-refs";
 import { setEntityResolver } from "./platform/entity-resolver";
 
@@ -236,6 +236,7 @@ class App {
       }
     }
 
+    registerParadraxSections();
     if (merged.viewers && merged.viewers.length > 0) {
       console.log(`[launch] registering ${merged.viewers.length} viewer(s)`);
       registerParadraxViewers(merged.viewers);

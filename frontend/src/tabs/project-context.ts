@@ -19,7 +19,6 @@ import { ErrorCode } from "@core/platform/protocol";
 import type { ConnectedMessage, PtyExitedMessage, SessionState } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 import type { ProjectContext as IProjectContext } from "./types";
-import { createDefaultRegistry } from "../dashboard/registry";
 
 const PANE_ORDER: PaneType[] = ["file-tree", "terminal", "viewer"];
 
@@ -289,7 +288,6 @@ export class ProjectContextImpl implements IProjectContext {
           const { filePath, viewMeta } = splitRoomFragment(path, meta);
           const mapMeta = await loadMapSibling(filePath, this.ws);
           const finalMeta = mapMeta ? { ...viewMeta, ...mapMeta } : viewMeta;
-          viewer.setPreview(buildPreviewEl(finalMeta));
           viewer.loadFile(filePath, finalMeta);
         }
       });
@@ -308,7 +306,6 @@ export class ProjectContextImpl implements IProjectContext {
         const { filePath, viewMeta } = splitRoomFragment(path, meta);
         const mapMeta = await loadMapSibling(filePath, this.ws);
         const finalMeta = mapMeta ? { ...viewMeta, ...mapMeta } : viewMeta;
-        viewer.setPreview(buildPreviewEl(finalMeta));
         viewer.loadFile(filePath, finalMeta);
       }
     });
@@ -920,50 +917,3 @@ async function loadMapSibling(
   return undefined;
 }
 
-/**
- * Build an HTMLElement preview from view_file meta, if meta carries a
- * `preview: { component, data }` payload. Returns null when absent.
- */
-function buildPreviewEl(meta: Record<string, unknown> | undefined): HTMLElement | null {
-  if (!meta) return null;
-  const preview = meta["preview"] as Record<string, unknown> | undefined;
-  if (!preview) return null;
-
-  const componentName = String(preview["component"] ?? "");
-  const data = preview["data"];
-  if (!componentName || data == null) return null;
-
-  const registry = createDefaultRegistry();
-  if (!registry.has(componentName)) return null;
-
-  const el = document.createElement("div");
-  el.className = "viewer-preview";
-  try {
-    const comp = registry.create(componentName);
-    const rowData = typeof data === "object" && !Array.isArray(data)
-      ? [data as Record<string, unknown>]
-      : [];
-    comp.render(el, {
-      panel: {
-        component: componentName,
-        fields: [],
-        columns: [],
-        badges: [],
-        filter: {},
-        sortable: false,
-        filterable: [],
-        searchable: [],
-        inline_edit: [],
-        options: {},
-        extra: {},
-      },
-      data: rowData,
-      allData: {},
-      config: { dashboard: { title: "" }, data_sources: {}, views: [], stats: [] },
-      onAction: () => {},
-    });
-  } catch {
-    return null;
-  }
-  return el;
-}
