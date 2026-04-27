@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import shutil
 import subprocess
 from typing import Protocol, runtime_checkable
 
 from core.backend.providers.types import ToolDefinition
+
+logger = logging.getLogger(__name__)
 
 
 @runtime_checkable
@@ -73,7 +77,11 @@ class ToolRegistry:
                 continue
             seen.add(executor_id)
             if hasattr(executor, "_list_tools"):
-                tools: dict = await executor._list_tools()
+                try:
+                    tools: dict = await asyncio.wait_for(executor._list_tools(), timeout=10.0)
+                except asyncio.TimeoutError:
+                    logger.warning("MCP tool discovery timed out for %s", type(executor).__name__)
+                    tools = {}
                 for tool_name, tool_def in tools.items():
                     if tool_name not in self._executors:
                         self._executors[tool_name] = executor

@@ -199,21 +199,22 @@ class TestHTTPMCPToolAdapterConnectionFailure:
         assert "Error" in result
 
     @pytest.mark.asyncio
-    async def test_list_tools_returns_empty_on_cancelled_error(self) -> None:
-        """asyncio.CancelledError from anyio cancel scopes must not propagate."""
+    async def test_list_tools_propagates_cancelled_error(self) -> None:
+        """CancelledError must propagate so the owning task can be cancelled."""
         import asyncio
         adapter = HTTPMCPToolAdapter("https://api.example.com/mcp")
         with self._patch_connect(asyncio.CancelledError()):
-            result = await adapter._list_tools()
-        assert result == {}
+            with pytest.raises(asyncio.CancelledError):
+                await adapter._list_tools()
 
     @pytest.mark.asyncio
-    async def test_execute_async_returns_error_on_cancelled_error(self) -> None:
+    async def test_execute_async_propagates_cancelled_error(self) -> None:
+        """CancelledError during connect must propagate from execute_async."""
         import asyncio
         adapter = HTTPMCPToolAdapter("https://api.example.com/mcp")
         with self._patch_connect(asyncio.CancelledError()):
-            result = await adapter.execute_async("tool", {})
-        assert "Error" in result
+            with pytest.raises(asyncio.CancelledError):
+                await adapter.execute_async("tool", {})
 
 
 class TestHTTPMCPToolAdapterWithMockSession:

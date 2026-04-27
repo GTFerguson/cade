@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
+from unittest.mock import patch
 
 from core.backend.providers.mcp_tools import MCPToolAdapter
 from core.backend.providers.types import ToolDefinition
@@ -59,3 +62,14 @@ class TestMCPToolAdapter:
         assert callable(adapter.tool_definitions)
         defs = adapter.tool_definitions()
         assert isinstance(defs, list)
+
+
+class TestMCPToolAdapterCancellation:
+    """CancelledError must propagate through _list_tools so task cancellation works."""
+
+    @pytest.mark.asyncio
+    async def test_list_tools_propagates_cancelled_error(self) -> None:
+        adapter = MCPToolAdapter(command="python")
+        with patch.object(adapter, "_ensure_connected", side_effect=asyncio.CancelledError):
+            with pytest.raises(asyncio.CancelledError):
+                await adapter._list_tools()

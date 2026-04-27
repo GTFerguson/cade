@@ -96,10 +96,12 @@ class HTTPMCPToolAdapter:
         if self._session is not None:
             return
         self._http_ctx = streamablehttp_client(self.url, headers=self.headers)
-        read_stream, write_stream, _ = await self._http_ctx.__aenter__()
+        read_stream, write_stream, _ = await asyncio.wait_for(
+            self._http_ctx.__aenter__(), timeout=8.0
+        )
         self._session = ClientSession(read_stream, write_stream)
         await self._session.__aenter__()
-        await self._session.initialize()
+        await asyncio.wait_for(self._session.initialize(), timeout=8.0)
 
     async def _list_tools(self) -> dict[str, ToolDefinition]:
         if self._tools is not None:
@@ -107,9 +109,7 @@ class HTTPMCPToolAdapter:
         try:
             await self._ensure_connected()
         except (Exception, BaseException) as e:
-            # BaseException covers asyncio.CancelledError raised by anyio on
-            # HTTP transport failure (connect errors propagate via cancel scope).
-            if isinstance(e, (SystemExit, KeyboardInterrupt)):
+            if isinstance(e, (asyncio.CancelledError, SystemExit, KeyboardInterrupt)):
                 raise
             logger.debug("Could not connect to HTTP MCP server %s: %s", self.url, e)
             return {}
@@ -162,7 +162,7 @@ class HTTPMCPToolAdapter:
         try:
             await self._ensure_connected()
         except (Exception, BaseException) as e:
-            if isinstance(e, (SystemExit, KeyboardInterrupt)):
+            if isinstance(e, (asyncio.CancelledError, SystemExit, KeyboardInterrupt)):
                 raise
             return f"Error: HTTP MCP server not connected for tool '{name}': {e}"
         if self._session is None:

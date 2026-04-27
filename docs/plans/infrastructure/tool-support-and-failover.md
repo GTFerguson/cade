@@ -38,6 +38,10 @@ Key code: `backend/providers/registry.py`
 
 Key code: `backend/providers/registry.py`, `core/backend/providers/api_provider.py`
 
+Gotcha: MCP tool discovery runs at stream start with no timeout. An HTTP MCP server that stalls (e.g. returning a 401 OAuth challenge that the MCP library tries to negotiate) blocks the entire chat indefinitely. `definitions_async()` now wraps each `_list_tools()` call in `asyncio.wait_for(..., timeout=10.0)`. `_ensure_connected()` in both `MCPToolAdapter` and `HTTPMCPToolAdapter` similarly has 8s timeouts on the transport handshake.
+
+Gotcha: `except (Exception, BaseException)` in `_list_tools()` and `execute_async()` was swallowing `asyncio.CancelledError`, making task cancellation silently ineffective while a connection was in flight. Both adapters now re-raise `CancelledError` explicitly before the generic except clause.
+
 ## Remaining Work
 
 ### Phase 2e — Auto-trigger Handoff on Context Budget Threshold

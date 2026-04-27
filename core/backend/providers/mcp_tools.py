@@ -62,6 +62,8 @@ class MCPToolAdapter:
 
         try:
             await self._ensure_connected()
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.debug(f"Could not connect to MCP server: {e}")
             return {}

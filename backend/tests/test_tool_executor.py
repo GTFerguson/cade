@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import subprocess
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -213,3 +214,74 @@ class TestMakeNkrdnRegistry:
             mock_which.return_value = None
             result = registry.execute("nkrdn", {"operation": "search", "arg": "test"})
             assert "not found" in result
+
+
+class TestDefinitionsAsyncTimeout:
+    """Tests for the 10-second timeout on MCP tool discovery in definitions_async."""
+
+    @pytest.mark.asyncio
+    async def test_slow_adapter_is_timed_out(self) -> None:
+        """A slow _list_tools() must be aborted after 10 s and return no tools."""
+        registry = ToolRegistry()
+
+        class SlowAdapter:
+            async def _list_tools(self):
+                await asyncio.sleep(60)  # simulates a hung MCP connection
+                return {"tool": MagicMock()}
+
+        registry.register(SlowAdapter(), "slow")
+
+        async def always_timeout(coro, timeout):
+            coro.close()  # consume coroutine to suppress "never awaited" warning
+            raise asyncio.TimeoutError
+
+        with patch("core.backend.providers.tool_executor.asyncio.wait_for", always_timeout):
+            defs = await registry.definitions_async()
+
+        assert defs == []
+
+    @pytest.mark.asyncio
+    async def test_timeout_does_not_affect_other_adapters(self) -> None:
+        """When one adapter times out, others in the registry still contribute."""
+        registry = ToolRegistry()
+
+        timed_out = ToolDefinition(name="__sentinel__", description="", parameters_schema={})
+        fast_tool = ToolDefinition(name="fast_tool", description="", parameters_schema={})
+
+        call_count = 0
+
+        async def patched_wait_for(coro, timeout):
+            nonlocal call_count
+            call_count += 1
+            # Consume the coroutine so it doesn't leak, then decide the outcome
+            coro.close()
+            if call_count == 1:
+                raise asyncio.TimeoutError
+            return {"fast_tool": fast_tool}
+
+        class Adapter:
+            async def _list_tools(self):  # pragma: no cover — body never runs
+                return {}
+
+        registry.register(Adapter(), "slow")
+        registry.register(Adapter(), "fast")
+
+        with patch("core.backend.providers.tool_executor.asyncio.wait_for", patched_wait_for):
+            defs = await registry.definitions_async()
+
+        names = [d.name for d in defs]
+        assert "fast_tool" in names
+
+    @pytest.mark.asyncio
+    async def test_cancelled_error_propagates_through_definitions_async(self) -> None:
+        """CancelledError from the outer task must propagate, not be swallowed."""
+        registry = ToolRegistry()
+
+        class CancellingAdapter:
+            async def _list_tools(self):
+                raise asyncio.CancelledError
+
+        registry.register(CancellingAdapter(), "bad")
+
+        with pytest.raises(asyncio.CancelledError):
+            await registry.definitions_async()
