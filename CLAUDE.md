@@ -51,6 +51,12 @@ Global rules (apply to all projects) are in `~/.claude/rules/`:
 - **markdown-formatting.md** - Obsidian.md compatibility standards
 - **code-comments.md** - Comment quality guidelines (WHY not WHAT)
 
+## Padarax-owned files in frontend/src/padarax/
+
+`frontend/src/padarax/` is a mirror of content owned by the Padarax repo. **Do not edit these files directly in CADE.** Changes must originate in `~/projects/padarax/client/core/frontend/src/padarax/` and flow in via subtree cherry-pick.
+
+Generic platform utilities extracted from this layer live in `frontend/src/platform/refs.ts`. Dashboard components (`entity-detail.ts`, `claims.ts`) should import from there, not from `padarax/`.
+
 ## Demo Mode
 
 When asked to "show something in demo" or "use demo mode":
