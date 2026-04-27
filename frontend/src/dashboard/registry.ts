@@ -18,10 +18,8 @@ import {
   MarkdownPanelComponent,
   ModelStatsComponent,
   SplitMarkdownComponent,
-  NpcDetailComponent,
   TableComponent,
   TimelineComponent,
-  WorldDetailComponent,
 } from "./components";
 import type { DashboardComponent } from "./types";
 
@@ -61,9 +59,7 @@ export function createDefaultRegistry(): ComponentRegistry {
   registry.register("markdown", MarkdownPanelComponent);
   registry.register("model_stats", ModelStatsComponent);
   registry.register("split_markdown", SplitMarkdownComponent);
-  registry.register("npc_detail", NpcDetailComponent);
   registry.register("table", TableComponent);
   registry.register("timeline", TimelineComponent);
-  registry.register("world_detail", WorldDetailComponent);
   return registry;
 }

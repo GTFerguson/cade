@@ -8,7 +8,8 @@
  */
 
 import { BaseDashboardComponent } from "./base-component";
-import { renderProseWithRefs, enrichedDirForPath } from "../../padarax/knowledge-refs";
+import { renderProseWithRefs } from "../../platform/refs";
+import { enrichedDirForPath } from "../../padarax/knowledge-refs";
 import { getEntityResolver } from "../../platform/entity-resolver";
 
 const TIER_ORDER = ["common", "informed", "specialist", "secret"] as const;

@@ -10,7 +10,5 @@ export { KeyValueComponent } from "./key-value";
 export { MarkdownPanelComponent } from "./markdown-panel";
 export { ModelStatsComponent } from "./model-stats";
 export { SplitMarkdownComponent } from "./split-markdown";
-export { NpcDetailComponent } from "./npc-detail";
 export { TableComponent } from "./table";
 export { TimelineComponent } from "./timeline";
-export { WorldDetailComponent } from "./world-detail";

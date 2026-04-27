@@ -1212,3 +1212,46 @@
   cursor: pointer;
   font-weight: 600;
 }
+
+.hv-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+.hv-tab-strip {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  flex-wrap: wrap;
+}
+.hv-tab-button {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  padding: 6px 12px;
+  margin-bottom: -1px;
+}
+.hv-tab-button:hover {
+  color: var(--text-primary);
+}
+.hv-tab-button--active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent-cyan);
+}
+.hv-tab-panel {
+  display: none;
+}
+.hv-tab-panel--active {
+  display: block;
+}
+.hv-unknown-section {
+  color: var(--accent-orange, #d97706);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.85em;
+  font-style: italic;
+  padding: 4px 0;
+}
