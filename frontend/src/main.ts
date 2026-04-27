@@ -1148,12 +1148,22 @@ document.addEventListener("DOMContentLoaded", async () => {
   const authed = await checkAuth();
   if (!authed) return;
 
-  // Block app init until JetBrains Mono is fully loaded into the browser's
-  // FontFaceSet AND its OffscreenCanvas font registry. Without this gate,
-  // xterm's WebGL atlas can bake with system-fallback metrics and render
-  // glyphs as black blocks. See docs/reference/xterm-webfont-loading.md.
+  // Block app init until every JetBrains Mono face is loaded. Iterating
+  // document.fonts directly (rather than loadFonts(['JetBrains Mono'])) is
+  // a deliberate workaround: in production builds the addon-style loader
+  // resolves without actually calling FontFace.load() on 5 of the 8 faces
+  // (verified empirically — only weights the page renders end up loaded,
+  // the rest stay 'unloaded'). When chat then renders a 700-bold token
+  // for the first time, the OffscreenCanvas measures fallback metrics,
+  // the WebGL atlas bakes a wrong cell, and glyphs render as black blocks.
+  // The raw form below loads all 8 faces deterministically.
+  // See docs/reference/xterm-webfont-loading.md.
   try {
-    await loadFonts(["JetBrains Mono"]);
+    await document.fonts.ready;
+    const faces = Array.from(document.fonts).filter(
+      (f) => f.family === "JetBrains Mono",
+    );
+    await Promise.all(faces.map((f) => f.load()));
   } catch (e) {
     console.warn("[main] JetBrains Mono load failed, using fallback:", e);
   }

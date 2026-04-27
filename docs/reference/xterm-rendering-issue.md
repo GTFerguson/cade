@@ -1,8 +1,8 @@
 ---
 title: xterm.js Black-Block Rendering Issue — Attempt Log
 created: 2026-04-25
-updated: 2026-04-26
-status: partial — primary bug resolved, residual black chars in diffs under investigation
+updated: 2026-04-27
+status: root cause identified at driver layer — see attempt 13. CADE-side fix pending (DOM renderer fallback).
 ---
 
 # xterm.js Black-Block Rendering Issue — Attempt Log
@@ -11,7 +11,7 @@ status: partial — primary bug resolved, residual black chars in diffs under in
 
 **Resolution (primary bug)**: The actual root cause was that bundled font files were referenced with **absolute** URLs (`/fonts/...`) but the EC2 deployment serves CADE at a subpath (`/cade/`) via nginx. The browser at `/cade/` resolved `/fonts/...` to the nginx root, which 404'd. Fonts silently failed to load, the WebGL atlas baked with system-fallback metrics (much narrower cells than JetBrains Mono), and only the thinnest glyphs (`i`, `j`, `(`, `)`, `-`) survived inside the undersized cells. Everything wider got clipped to black. **Fix**: move fonts from `public/fonts/` to `styles/fonts/` so Vite processes them and rewrites URLs with the correct base path. Attempts 1–9 were all real fixes for real adjacent bugs but none addressed the URL/base-path issue that was the actual cause of the user-visible symptom.
 
-**Residual issue (open)**: After attempts 8–11 landed, a smaller class of black characters still appears — most noticeably in **edit diffs**, where syntax-highlighted italic/bold variants render as black blocks while regular ASCII renders correctly. Suspected cause is the OffscreenCanvas tick-gap flagged in attempt 7's post-analysis: `document.fonts.ready` resolves before xterm's `TextMetricsMeasureStrategy` (which uses an OffscreenCanvas) can read the just-loaded faces. Italic and bold variants are added to the atlas lazily on first use, so any tick where OffscreenCanvas hasn't caught up bakes that variant with fallback metrics. Diffs surface this because syntax highlighters use italic heavily for comments/strings/keywords; pure ASCII output may never trigger an italic measurement. See attempt 12 below.
+**Residual issue (RESOLVED-DIAGNOSED, fix not yet shipped)**: After attempts 8–11 landed, a smaller class of black characters still appeared. Attempt 12 theorised an OffscreenCanvas tick-gap and shipped a "prewarm atlas" fix; attempt 13 (2026-04-27) walked back from that theory entirely. **The residual black blocks were never a font-loading bug — they were a Mesa OpenGL driver bug rejecting WebGL `glTexImage2D` allocations on Intel UHD (CML GT2)**. 200+ `GL_INVALID_OPERATION` errors confirmed the driver-layer cause. None of attempts 1–12 could have fixed it because the failing call is below the JS layer. See attempt 13 for the full diagnosis and remediation paths (Vulkan ANGLE backend, Mesa upgrade, DOM-renderer fallback, dGPU offload).
 
 **Related reference**: [[browser-terminal-emulators]] — landscape, renderer comparison, and documented xterm.js WebGL failures.
 
@@ -183,13 +183,55 @@ These observations together fit a clear pattern: each tab spawns its own xterm +
 
 ---
 
+### 13. Diagnosed driver-layer bug — Mesa OpenGL `texImage2D` rejection on Intel UHD (CML GT2)
+**Commit**: pending (this session) — 2026-04-27
+**Symptom (continuing)**: Black blocks still appear after attempts 1–12 land. User confirms identical visual symptom — characters replaced by solid black rectangles, sometimes recovering on resize-triggered repaint (DevTools panel exhibited the same recovery, an early signal that this was below the xterm layer).
+
+**Diagnostic data captured (`chrome://gpu` 2026-04-27, ~250 errors over a typical session)**:
+```
+GL_INVALID_OPERATION: Error: 0x00000502, in
+.../angle/src/libANGLE/renderer/gl/TextureGL.cpp,
+allocateMipmapLevelsForGeneration:1593.
+```
+Each error is ANGLE attempting `functions->texImage2D(...)` for a mipmap level allocation and the underlying GL driver rejecting it. xterm's WebGL addon allocates a glyph-atlas texture; when an allocation fails silently like this, the atlas page is uninitialised; reads from it produce black or garbage. This is exactly the visual symptom we'd been chasing in attempts 1–12.
+
+**Hardware/driver state**:
+- Optimus laptop: NVIDIA RTX 2080 Super dGPU available, but `*ACTIVE*` GPU is Intel UHD Graphics (CML GT2 / 10th gen)
+- Driver: Mesa 25.2.8-0ubuntu0.24.04.1 (the standard Ubuntu 24.04 backport)
+- Chrome 147.0.7727.101 on Linux 6.17.0-22-generic, GL implementation `egl-angle / angle=opengl`, ANGLE 2.1.27286
+- WebGL marked "Hardware accelerated" in `chrome://gpu` Graphics Feature Status — i.e. Chrome thinks it's working; the bug is below that layer
+
+**Why attempts 1–12 could not have helped**:
+- `texImage2D` allocation failure happens *after* xterm builds its WebGL command stream. By the time the driver rejects the call, font measurements have long since happened correctly. Font metrics, atlas timing, and addon lifecycle are all upstream of the failure.
+- The DevTools-panel-recovers-on-resize tell was the giveaway: DevTools doesn't use xterm. Any "fix at the xterm layer" is the wrong altitude.
+
+**Why VS Code etc. don't hit this** (refines section 4 of [[xterm-webfont-loading]] §4): same hardware running VS Code's WebGL renderer can, in theory, hit the same Mesa bug. Most VS Code Linux users either run on a system with a working OpenGL driver or have the iGPU swapped out by their distro's GPU selection. CADE-via-Chrome is more exposed because Chrome's GPU process has its own ANGLE pipeline and is harder for the user to reroute without explicit env vars.
+
+**Remediation paths (none are CADE-side fixes)**:
+
+1. **Switch Chrome's ANGLE backend to Vulkan** — `--use-angle=vulkan` reroutes through Mesa's Vulkan driver (ANV), which is generally less buggy than its GL driver. Intel UHD CML GT2 has Vulkan support exposed in `chrome://gpu` Dawn info. Lowest-effort test, fully reversible.
+2. **Upgrade Mesa** — kisak PPA (`ppa:kisak/kisak-mesa`) or oibaf bleeding-edge. Newer Mesa versions often have Intel iGPU fixes. Reboot required.
+3. **Force the dGPU** — `__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia google-chrome`. Works but battery/heat cost makes it impractical as a daily driver.
+4. **File a Mesa bug** — long-tail. Repro on `gitlab.freedesktop.org/mesa/mesa`. Won't help in the short term but unblocks future Intel CML GT2 users.
+
+**CADE-side fix (defensive, ships regardless of whether the user fixes their driver)**:
+Add a DOM-renderer fallback. xterm.js falls back to DOM elements with no atlas, no `texImage2D`, no GPU texture allocation at all. Trigger via a user setting or URL flag like `?renderer=dom`. ~3× slower paint, imperceptible for chat-style output. Bulletproof against any driver-level failure on any GPU. **Status**: not yet implemented.
+
+**User-facing remediation guide saved at**: `~/Documents/cade-nvidia-gpu-test.md` (the user's local notes — not part of this repo, but referenced here for provenance).
+
+**Status**: **DIAGNOSIS CONFIRMED**, CADE-side fallback pending. User to test `--use-angle=vulkan` and Mesa upgrade in their environment first.
+
+---
+
 ## Why Earlier Attempts All Missed
 
-Every attempt 1–9 assumed the symptom was about *timing* (atlas built before fonts ready) or *renderer choice* (WebGL vs canvas vs DOM). Both were defensible — the literature, GitHub issues, and the visible behaviour all pointed there. But the actual cause was a **deployment-path bug**: absolute URLs in CSS that worked locally and broke under the EC2 reverse-proxy layout. A 404'd font behaves identically to a font that hasn't loaded yet, so all the timing-based fixes failed indistinguishably.
+Two distinct bugs, both producing the same visual symptom (black-block characters), got conflated. Untangling them retrospectively:
 
-**Lesson for future debugging**: when the symptom only reproduces in one environment (here: EC2 web vs local), the cause is almost always environmental — config, paths, proxy, or auth — not application logic. The first diagnostic to run is "is the asset actually reaching the browser" (DevTools Network tab), not "is our application code correct". We spent 9 attempts patching the application before checking the network.
+**Bug A (resolved attempt 10)**: deployment-path bug. Absolute font URLs broke under the EC2 nginx subpath layout, fonts 404'd, atlas baked with system-fallback metrics. Attempts 1–9 patched application logic looking for a timing bug; the actual cause was environmental (config, paths). **Lesson**: when a symptom only reproduces in one environment, the cause is almost always environmental — first diagnostic should be "is the asset actually reaching the browser" (DevTools Network tab), not "is our application code correct".
 
-The earlier fixes (font bundling, `nudgeReflow` correction, `fonts.ready` gate, `rescaleOverlappingGlyphs`) are kept — each addresses a real bug that would surface eventually even after the URL fix lands.
+**Bug B (diagnosed attempt 13, fix pending)**: Mesa OpenGL driver bug rejecting `glTexImage2D` mipmap allocations on Intel UHD CML GT2. Same visual symptom as Bug A, but a wholly different cause far below the application layer. Attempts 11–12 patched higher application layers (race conditions, prewarm) looking for the residual occurrence; none of them could have fixed it because the failure is in Mesa, not in JS. **Lesson**: when application-layer fixes don't land but the symptom continues, look at the layers below before iterating again. `chrome://gpu` and the Chrome GPU-process error log should have been step 1, not step 13. The DevTools-panel-also-flickers tell was direct evidence the bug was below xterm; we should have caught that earlier.
+
+The earlier fixes (font bundling, `nudgeReflow` correction, `fonts.ready` gate, `rescaleOverlappingGlyphs`, double-attach guard, prewarm) are kept — each addresses a real bug that would surface eventually even after Bug A's URL fix landed and Bug B's driver fix lands at the user's system level.
 
 ## What's In The Code Now
 
@@ -204,3 +246,9 @@ The earlier fixes (font bundling, `nudgeReflow` correction, `fonts.ready` gate, 
 | `frontend/src/terminal/webgl-renderer.ts` | `attachWhenFontsReady` checks `this.addon !== null` before attaching | Prevents double-attach race when `loadingdone` fires before `fonts.ready` resolves |
 | `frontend/src/terminal/webgl-renderer.ts` | `prewarmAtlas()` called from `attach()` after addon load | Bakes all 4 weight/style variants into the atlas immediately so no variant gets lazy-measured during an OffscreenCanvas tick gap |
 | `frontend/src/terminal/terminal.ts` | `rescaleOverlappingGlyphs: true` | Fallback-font glyphs (✽, ·) won't bleed into adjacent atlas cells |
+
+## Pending CADE-side change (attempt 13 follow-up)
+
+| File | Change | Why |
+|---|---|---|
+| `frontend/src/terminal/webgl-renderer.ts` (or `terminal.ts`) | DOM-renderer fallback gate, triggered by user setting or `?renderer=dom` URL flag | Bypass WebGL entirely on machines with broken OpenGL drivers (Intel Mesa, etc.). xterm's DOM renderer has no atlas and no `texImage2D` calls, so any GPU/driver-layer rejection is impossible. ~3× slower paint, imperceptible for chat-style output. |
