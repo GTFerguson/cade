@@ -17,6 +17,16 @@ Evidence base for CADE's design decisions. Each doc covers a single topic with f
 - [[xterm-rendering-issue]] — Black-block glyph corruption: full attempt log, confirmed dead-ends, current theory, escalation path
 - [[xterm-webfont-loading]] — Official `@xterm/addon-web-fonts` solution, gap analysis vs our implementation, recommended migration
 
+## Common Knowledge
+
+The agent research docs below are also published in the shared library. Canonical home is `common-knowledge/ai-agents/` — search with `nkrdn search "topic" --source docs` to find them.
+
+| Local doc | Common Knowledge |
+|-----------|-----------------|
+| [[coding-agent-prompts]] | [[common-knowledge/ai-agents/coding-agent-prompts]] |
+| [[agentic-context-engineering]] | [[common-knowledge/ai-agents/agentic-context-engineering]] |
+| [[self-improving-agent-systems]] | [[common-knowledge/ai-agents/self-improving-agent-systems]] |
+
 ## Navigation
 
 - Architecture docs (how CADE systems work): `docs/technical/`
