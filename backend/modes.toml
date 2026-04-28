@@ -1,0 +1,52 @@
+# Mode registry — defines all CADE agent modes.
+# Each mode controls: display label, color, prompt modules, write permissions, and slash command names.
+#
+# write_access values:
+#   "all"       — unrestricted file writes
+#   "docs_plans" — writes only within docs/plans/
+#   "none"      — read-only
+
+[modes.plan]
+label = "PLAN"
+description = "Switch to Plan mode (read-only)"
+color = "var(--accent-orange)"
+modules = ["plan"]
+additional_modules = ["nkrdn"]
+write_access = "none"
+slash_names = ["plan"]
+
+[modes.code]
+label = "CODE"
+description = "Switch to Code mode (full access)"
+color = "var(--accent-green)"
+modules = ["code"]
+additional_modules = ["nkrdn", "test-driven-debugging"]
+write_access = "all"
+slash_names = ["code"]
+
+[modes.research]
+label = "RESEARCH"
+description = "Switch to Research mode (PROVEN pipeline)"
+color = "var(--accent-cyan)"
+modules = ["research"]
+additional_modules = ["nkrdn"]
+write_access = "none"
+slash_names = ["research"]
+
+[modes.review]
+label = "REVIEW"
+description = "Switch to Review mode (skill orchestrator)"
+color = "var(--accent-blue)"
+modules = ["review"]
+additional_modules = ["nkrdn"]
+write_access = "docs_plans"
+slash_names = ["review"]
+
+[modes.orchestrator]
+label = "ORCH"
+description = "Switch to Orchestrator mode"
+color = "var(--accent-yellow)"
+modules = ["orchestrator"]
+additional_modules = ["nkrdn"]
+write_access = "all"
+slash_names = ["orch", "orchestrator"]

@@ -4,13 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# Modes with unrestricted write access
-_WRITE_ALL = {"code", "orchestrator"}
+from backend.modes import MODES
 
-# Modes restricted to writing within docs/plans/ only
-_WRITE_DOCS_ONLY = {"review"}
-
-# All other modes (plan, research) are fully read-only
+_WRITE_ALL = {name for name, cfg in MODES.items() if cfg.write_access == "all"}
+_WRITE_DOCS_ONLY = {name for name, cfg in MODES.items() if cfg.write_access == "docs_plans"}
 
 
 def can_write(mode: str) -> bool:

@@ -368,7 +368,7 @@ export class ProjectContextImpl implements IProjectContext {
 
     // Agent lifecycle events
     this.ws.on("agent-spawned", (msg) => {
-      this.agentManager?.createAgent(msg.agentId, msg.name, "worker", msg.task);
+      this.agentManager?.createAgent(msg.agentId, msg.name, "worker", msg.task, msg.parentAgentId ?? null);
       // Auto-switch to the new agent tab (fires after user approved the spawn)
       this.agentManager?.switchToAgent(msg.agentId);
       this.terminalManager?.updateStatusIndicator();

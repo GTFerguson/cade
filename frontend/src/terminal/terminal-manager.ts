@@ -493,6 +493,8 @@ export class TerminalManager implements Component {
 
   /**
    * Build/rebuild the agent tab bar. Called from updateStatusIndicator.
+   * Renders a tree: top-level agents flat, sub-agents as indented children
+   * that expand/collapse when their parent is clicked.
    */
   private renderAgentTabBar(): void {
     const agents = this.agentManager?.getAgentList() ?? [];
@@ -515,26 +517,66 @@ export class TerminalManager implements Component {
     });
     this.agentTabBar.appendChild(orchTab);
 
-    // Agent tabs — numbered 1, 2, 3...
-    agents.forEach((agent, index) => {
+    // Build a flat ordered list: top-level agents in insertion order,
+    // with children inserted after their parent when expanded.
+    const topLevel = agents.filter((a) => !a.parentAgentId);
+    let counter = 1;
+
+    const renderAgent = (agent: typeof agents[number], depth: number): void => {
+      const index = counter++;
+      const children = this.agentManager?.getChildAgentIds(agent.agentId) ?? [];
+      const hasChildren = children.length > 0;
+      const isExpanded = hasChildren && (this.agentManager?.isExpanded(agent.agentId) ?? false);
+
       const tab = document.createElement("span");
       tab.className = "agent-tab";
+      if (depth > 0) tab.classList.add("agent-tab-child");
       if (agent.agentId === activeAgentId) tab.classList.add("agent-tab-active");
 
       const led = document.createElement("span");
       led.className = `agent-led agent-led-${agent.state}`;
-
-      const label = document.createTextNode(`${index + 1}`);
-
       tab.appendChild(led);
-      tab.appendChild(label);
+
+      tab.appendChild(document.createTextNode(`${index}`));
+
+      if (hasChildren) {
+        const arrow = document.createElement("span");
+        arrow.className = "agent-tab-arrow";
+        arrow.textContent = isExpanded ? "▾" : "▸";
+        tab.appendChild(arrow);
+      }
+
       tab.title = `${agent.label} (${agent.state})\n${agent.task?.slice(0, 100) ?? ""}`;
-      tab.addEventListener("click", () => {
-        this.agentManager?.switchToAgent(agent.agentId);
+
+      tab.addEventListener("click", (e) => {
+        if (hasChildren) {
+          e.stopPropagation();
+          this.agentManager?.toggleExpanded(agent.agentId);
+          this.updateStatusIndicator();
+        } else {
+          this.agentManager?.switchToAgent(agent.agentId);
+        }
       });
 
+      // Double-click on a sub-parent also navigates to it
+      if (hasChildren) {
+        tab.addEventListener("dblclick", () => {
+          this.agentManager?.switchToAgent(agent.agentId);
+        });
+      }
+
       this.agentTabBar.appendChild(tab);
-    });
+
+      if (isExpanded) {
+        const agentMap = new Map(agents.map((a) => [a.agentId, a]));
+        for (const childId of children) {
+          const child = agentMap.get(childId);
+          if (child) renderAgent(child, depth + 1);
+        }
+      }
+    };
+
+    topLevel.forEach((agent) => renderAgent(agent, 0));
   }
 
   /**

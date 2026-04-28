@@ -198,14 +198,20 @@ class PermissionManager:
         )
         self._pending[request_id] = request
 
-        await self._send_to(connection_id, {
+        msg: dict[str, Any] = {
             "type": "chat-stream",
             "event": "permission-request",
             "requestId": request_id,
             "toolName": tool_name,
             "description": description,
             "toolInput": tool_input,
-        })
+        }
+        # Worker connection IDs start with "agent-". Include agentId so the
+        # frontend routes the prompt to the worker's chat pane rather than
+        # the primary ORCH tab (which may be hidden when a worker tab is active).
+        if connection_id.startswith("agent-"):
+            msg["agentId"] = connection_id
+        await self._send_to(connection_id, msg)
 
         logger.info("Permission requested: %s %s (id=%s)", tool_name, description[:60], request_id)
 

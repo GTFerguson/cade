@@ -14,16 +14,20 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from backend.modes import MODES
 from backend.prompts.compose import BUNDLED_SKILLS_DIR
 
 USER_SKILLS_DIR = Path.home() / ".claude" / "skills"
 
+# Mode switch commands — one entry per mode using its primary slash name
+_MODE_COMMANDS: list[dict[str, str]] = [
+    {"name": cfg.slash_names[0], "description": cfg.description}
+    for cfg in MODES.values()
+    if cfg.slash_names
+]
+
 NATIVE_COMMANDS: list[dict[str, str]] = [
-    {"name": "plan", "description": "Switch to Plan mode (read-only)"},
-    {"name": "code", "description": "Switch to Code mode (full access)"},
-    {"name": "research", "description": "Switch to Research mode (PROVEN pipeline)"},
-    {"name": "review", "description": "Switch to Review mode (skill orchestrator)"},
-    {"name": "orch", "description": "Switch to Orchestrator mode"},
+    *_MODE_COMMANDS,
     {"name": "compact", "description": "Summarise session as handoff and start fresh"},
 ]
 

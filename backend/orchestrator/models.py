@@ -30,6 +30,7 @@ class AgentRecord:
     mode: str
     state: AgentState
     owner_connection_id: str = ""
+    parent_agent_id: str = ""
     session_id: str | None = None
     report: str = ""
     error: str = ""

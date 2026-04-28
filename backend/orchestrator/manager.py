@@ -102,6 +102,20 @@ class OrchestratorManager:
     def unregister_connection(self, connection_id: str) -> None:
         self._connections.pop(connection_id, None)
 
+    def _root_connection_id(self, connection_id: str) -> str:
+        """Walk the agent ownership chain to find the root WS connection_id."""
+        seen: set[str] = set()
+        cur = connection_id
+        while cur not in self._connections:
+            if cur in seen:
+                break
+            seen.add(cur)
+            record = self._agents.get(cur)
+            if record is None:
+                break
+            cur = record.owner_connection_id
+        return cur
+
     async def _send_to(self, connection_id: str, message: dict) -> None:
         """Send a message to one specific connection."""
         entry = self._connections.get(connection_id)
@@ -119,10 +133,11 @@ class OrchestratorManager:
                     logger.debug("Broadcast callback failed", exc_info=True)
 
     async def _send_to_agent(self, agent_id: str, message: dict) -> None:
-        """Send a message to the connection that owns this agent."""
+        """Send a message to the root WS connection that owns this agent."""
         record = self._agents.get(agent_id)
         if record:
-            await self._send_to(record.owner_connection_id, message)
+            root = self._root_connection_id(record.owner_connection_id)
+            await self._send_to(root, message)
 
     # ── Public API ──────────────────────────────────────────────────
 
@@ -154,6 +169,11 @@ class OrchestratorManager:
             "spawn_agent: id=%s name=%s connection=%s", agent_id, spec.name, connection_id
         )
 
+        # If the caller is itself an agent, record it as the parent and route
+        # the approval request to the root WS connection instead.
+        parent_agent_id = connection_id if connection_id in self._agents else ""
+        root_connection_id = self._root_connection_id(connection_id)
+
         record = AgentRecord(
             agent_id=agent_id,
             name=spec.name,
@@ -161,10 +181,11 @@ class OrchestratorManager:
             mode=spec.mode,
             state=AgentState.PENDING,
             owner_connection_id=connection_id,
+            parent_agent_id=parent_agent_id,
         )
         self._agents[agent_id] = record
 
-        await self._send_to(connection_id, {
+        await self._send_to(root_connection_id, {
             "type": MessageType.CHAT_STREAM,
             "event": "agent-approval-request",
             "targetAgentId": agent_id,
@@ -205,15 +226,18 @@ class OrchestratorManager:
         provider = _make_worker_provider(record.name, record.mode, working_dir, agent_id)
         self._providers[agent_id] = provider
 
-        await self._send_to(connection_id, {
+        root_connection_id = self._root_connection_id(connection_id)
+
+        await self._send_to(root_connection_id, {
             "type": MessageType.AGENT_SPAWNED,
             "agentId": agent_id,
             "name": record.name,
             "task": record.task,
             "mode": record.mode,
+            "parentAgentId": record.parent_agent_id,
         })
 
-        await self._send_to(connection_id, {
+        await self._send_to(root_connection_id, {
             "type": MessageType.CHAT_STREAM,
             "event": "agent-approval-resolved",
             "targetAgentId": agent_id,
@@ -236,7 +260,7 @@ class OrchestratorManager:
         record.final_result = "Agent spawn was rejected by user."
         record.completion_event.set()
 
-        await self._send_to(record.owner_connection_id, {
+        await self._send_to(self._root_connection_id(record.owner_connection_id), {
             "type": MessageType.CHAT_STREAM,
             "event": "agent-approval-resolved",
             "targetAgentId": agent_id,
@@ -405,6 +429,17 @@ class OrchestratorManager:
         })
 
         return True
+
+    async def kill_connection_agents(self, connection_id: str) -> int:
+        """Kill all agents in the tree rooted at this connection. Returns count killed."""
+        root = self._root_connection_id(connection_id)
+        to_kill = [
+            aid for aid, rec in self._agents.items()
+            if self._root_connection_id(rec.owner_connection_id) == root
+        ]
+        for aid in to_kill:
+            await self.kill_agent(aid)
+        return len(to_kill)
 
     def list_agents(self) -> list[dict]:
         return [

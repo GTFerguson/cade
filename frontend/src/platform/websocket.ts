@@ -574,6 +574,10 @@ export class WebSocketClient extends BaseWSClient {
     this.send({ type: MessageType.AGENT_REJECT, agentId } as any);
   }
 
+  sendAgentMessage(agentId: string, content: string): void {
+    this.send({ type: MessageType.AGENT_MESSAGE, agentId, content } as any);
+  }
+
   sendAgentApproveReport(agentId: string): void {
     this.send({ type: MessageType.AGENT_APPROVE_REPORT, agentId } as any);
   }

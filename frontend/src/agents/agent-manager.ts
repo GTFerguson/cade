@@ -19,6 +19,7 @@ export interface AgentInfo {
   role: AgentRole;
   state: AgentState;
   task: string;
+  parentAgentId: string | null;
 }
 
 interface AgentEntry {
@@ -27,6 +28,7 @@ interface AgentEntry {
   role: AgentRole;
   state: AgentState;
   task: string;
+  parentAgentId: string | null;
   chatPane: ChatPane;
   chatContainer: HTMLElement;
 }
@@ -34,6 +36,7 @@ interface AgentEntry {
 export class AgentManager implements Component {
   private agents: Map<string, AgentEntry> = new Map();
   private activeAgentId: string | null = null;
+  private expandedAgents: Set<string> = new Set();
   private pendingChatEvents: Map<string, ChatStreamMessage[]> = new Map();
 
   // Callbacks
@@ -57,7 +60,7 @@ export class AgentManager implements Component {
    * Create a new worker agent with its own ChatPane.
    * Flushes any chat events that arrived before the agent-spawned event.
    */
-  createAgent(agentId: string, label: string, role: AgentRole, task: string = ""): void {
+  createAgent(agentId: string, label: string, role: AgentRole, task: string = "", parentAgentId: string | null = null): void {
     if (this.agents.has(agentId)) {
       return;
     }
@@ -71,7 +74,7 @@ export class AgentManager implements Component {
 
     const chatPane = new ChatPane(chatContainer, this.ws, {
       autoSubscribe: false,
-      readOnly: true,
+      agentId,
     });
     chatPane.initialize();
 
@@ -81,6 +84,7 @@ export class AgentManager implements Component {
       role,
       state: "starting",
       task,
+      parentAgentId,
       chatPane,
       chatContainer,
     };
@@ -117,6 +121,7 @@ export class AgentManager implements Component {
     entry.chatContainer.remove();
 
     this.agents.delete(agentId);
+    this.expandedAgents.delete(agentId);
     this.pendingChatEvents.delete(agentId);
     this.previewState.delete(agentId);
   }
@@ -244,7 +249,26 @@ export class AgentManager implements Component {
       role: e.role,
       state: e.state,
       task: e.task,
+      parentAgentId: e.parentAgentId,
     }));
+  }
+
+  getChildAgentIds(agentId: string): string[] {
+    return Array.from(this.agents.values())
+      .filter((e) => e.parentAgentId === agentId)
+      .map((e) => e.agentId);
+  }
+
+  isExpanded(agentId: string): boolean {
+    return this.expandedAgents.has(agentId);
+  }
+
+  toggleExpanded(agentId: string): void {
+    if (this.expandedAgents.has(agentId)) {
+      this.expandedAgents.delete(agentId);
+    } else {
+      this.expandedAgents.add(agentId);
+    }
   }
 
   onAgentSwitch(callback: (agentId: string | null) => void): void {
@@ -280,6 +304,7 @@ export class AgentManager implements Component {
     }
 
     this.agents.clear();
+    this.expandedAgents.clear();
     this.pendingChatEvents.clear();
     this.previewState.clear();
   }

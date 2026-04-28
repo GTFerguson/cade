@@ -70,6 +70,7 @@ const CADE_MERMAID_CONFIG = {
 export interface ChatPaneOptions {
   autoSubscribe?: boolean;
   readOnly?: boolean;
+  agentId?: string;
   onOpenFile?: (path: string) => void;
 }
 
@@ -94,8 +95,13 @@ export class ChatPane implements Component, PaneKeyHandler {
   private contextBudget: ContextBudgetIndicator | null = null;
   private permissionsButton: PermissionsButton | null = null;
   private mcpStatusIcon: MCPStatusIcon | null = null;
-  private systemInfo: { model?: string; slashCommands: Array<{ name: string; description: string }> } = {
+  private systemInfo: {
+    model?: string;
+    slashCommands: Array<{ name: string; description: string }>;
+    modes: Record<string, { label: string; color: string }>;
+  } = {
     slashCommands: [],
+    modes: {},
   };
   private onModelNameChange: (() => void) | null = null;
   private slashHintEl: HTMLElement | null = null;
@@ -107,6 +113,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   private queuedMessage: string | null = null;
   private readonly autoSubscribe: boolean;
   private readonly readOnly: boolean;
+  private readonly agentId: string | null;
   private readonly onOpenFile: ((path: string) => void) | null;
 
   // Scroll-lock: track whether new content should auto-scroll to bottom.
@@ -136,6 +143,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   ) {
     this.autoSubscribe = options?.autoSubscribe ?? true;
     this.readOnly = options?.readOnly ?? false;
+    this.agentId = options?.agentId ?? null;
     this.onOpenFile = options?.onOpenFile ?? null;
     this.renderer = new MarkdownRenderer({
       mermaidConfig: CADE_MERMAID_CONFIG,
@@ -283,8 +291,10 @@ export class ChatPane implements Component, PaneKeyHandler {
 
   setMode(mode: string): void {
     this.currentMode = mode;
-    this.modeEl.textContent = mode.toUpperCase();
-    this.modeEl.className = `status-mode ${mode}`;
+    const cfg = this.systemInfo.modes[mode];
+    this.modeEl.textContent = cfg?.label ?? mode.toUpperCase();
+    this.modeEl.className = "status-mode";
+    this.modeEl.style.color = cfg?.color ?? "";
   }
 
   private updateTokenCount(usage?: { prompt_tokens?: number; completion_tokens?: number }): void {
@@ -482,6 +492,20 @@ export class ChatPane implements Component, PaneKeyHandler {
   }
 
   private sendMessage(text: string): void {
+    if (this.agentId) {
+      // Worker pane: queue message directly, no streaming lock
+      const userEl = document.createElement("div");
+      userEl.className = "chat-message user";
+      const textEl = document.createElement("div");
+      textEl.className = "chat-message-text";
+      textEl.textContent = text;
+      userEl.appendChild(textEl);
+      this.messagesEl.appendChild(userEl);
+      this.scrollToBottom();
+      this.ws.sendAgentMessage(this.agentId, text);
+      return;
+    }
+
     if (this.isStreaming) {
       this.queuedMessage = text;
       this.chatInput?.showQueued(text);
@@ -569,6 +593,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     const modelChanged = !!msg.model && msg.model !== this.systemInfo.model;
     if (msg.model) this.systemInfo.model = msg.model;
     if (msg.slashCommands) this.systemInfo.slashCommands = msg.slashCommands;
+    if (msg.modes) this.systemInfo.modes = msg.modes;
     if (msg.model) {
       this.providerEl.textContent = msg.model;
       this.contextBudget?.setModel(msg.model);

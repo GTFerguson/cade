@@ -43,6 +43,7 @@ from backend.protocol import ErrorCode, MessageType, SessionKey
 from core.backend.providers.config import get_providers_config
 from backend.providers.registry import ProviderRegistry
 from backend.providers.claude_code_provider import ClaudeCodeProvider
+from backend.modes import MODE_SLASH_MAP, MODES
 from backend.prompts import BUNDLED_SKILLS_DIR, build_slash_commands, compose_prompt
 from core.backend.providers.types import ChatDone, ChatError, ChatMessage, SystemInfo, TextDelta, ThinkingDelta, ToolResult, ToolUseStart
 from backend.session import load_session, save_session
@@ -711,6 +712,10 @@ class ConnectionHandler:
             message["session"] = session
 
         message["slashCommands"] = build_slash_commands()
+        message["modes"] = {
+            name: {"label": cfg.label, "color": cfg.color}
+            for name, cfg in MODES.items()
+        }
 
         # Include MCP auth status so the frontend can warn if tools are unavailable
         try:
@@ -1377,14 +1382,7 @@ class ConnectionHandler:
         from backend.orchestrator.manager import get_orchestrator_manager
         await get_orchestrator_manager().reject_report(agent_id)
 
-    CADE_MODE_COMMANDS = {
-        "/plan": "plan",
-        "/code": "code",
-        "/research": "research",
-        "/review": "review",
-        "/orch": "orchestrator",
-        "/orchestrator": "orchestrator",
-    }
+    CADE_MODE_COMMANDS = MODE_SLASH_MAP
 
     def _try_load_skill(self, content: str) -> tuple[str, str]:
         """Check if content starts with /<skillname> and load the skill.
@@ -1421,6 +1419,7 @@ class ConnectionHandler:
 
     async def _handle_mode_switch(self, mode: str) -> None:
         """Switch the active Claude Code provider's mode and notify the client."""
+        prev_mode = self._current_mode
         self._current_mode = mode
         from backend.permissions.manager import get_permission_manager
         get_permission_manager().set_mode(mode, connection_id=self._connection_id)
@@ -1438,6 +1437,13 @@ class ConnectionHandler:
                 provider._has_session = False
         elif hasattr(provider, "set_mode"):
             provider.set_mode(mode)
+
+        # Leaving orchestrator mode: kill any worker agents this connection owns.
+        # They can't be controlled or observed outside orchestrator mode, and
+        # their tabs would otherwise stick around in the UI.
+        if prev_mode == "orchestrator" and mode != "orchestrator":
+            from backend.orchestrator.manager import get_orchestrator_manager
+            await get_orchestrator_manager().kill_connection_agents(self._connection_id)
 
         await self._send({
             "type": MessageType.CHAT_MODE_CHANGE,
@@ -1565,6 +1571,10 @@ class ConnectionHandler:
                         "tools": event.tools,
                         "slashCommands": build_slash_commands(),
                         "version": event.version,
+                        "modes": {
+                            name: {"label": cfg.label, "color": cfg.color}
+                            for name, cfg in MODES.items()
+                        },
                     })
                 elif isinstance(event, TextDelta):
                     self._chat_session.append_response_chunk(event.content)

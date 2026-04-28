@@ -24,21 +24,10 @@ BUNDLED_SKILLS_DIR = BUNDLED_DIR / "skills"
 
 ALWAYS = ["dashboard", "neovim"]
 
-MODE_MODULES: dict[str, list[str]] = {
-    "code": ["code"],
-    "plan": ["plan"],
-    "research": ["research"],
-    "review": ["review"],
-    "orchestrator": ["orchestrator"],
-}
+from backend.modes import MODES  # noqa: E402 — after path constants
 
-ADDITIONAL: dict[str, list[str]] = {
-    "code": ["nkrdn", "test-driven-debugging"],
-    "plan": ["nkrdn"],
-    "research": ["nkrdn"],
-    "review": ["nkrdn"],
-    "orchestrator": ["nkrdn"],
-}
+MODE_MODULES: dict[str, list[str]] = {name: cfg.modules for name, cfg in MODES.items()}
+ADDITIONAL: dict[str, list[str]] = {name: cfg.additional_modules for name, cfg in MODES.items()}
 
 
 def _load_file(name: str) -> str:

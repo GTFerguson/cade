@@ -471,6 +471,7 @@ export interface ChatStreamMessage extends BaseMessage {
   sessionId?: string;
   tools?: string[];
   slashCommands?: Array<{ name: string; description: string }>;
+  modes?: Record<string, { label: string; color: string }>;
   version?: string;
   // agent approval fields
   targetAgentId?: string;
@@ -523,6 +524,7 @@ export interface AgentSpawnedMessage extends BaseMessage {
   name: string;
   task: string;
   mode: string;
+  parentAgentId?: string;
 }
 
 /**

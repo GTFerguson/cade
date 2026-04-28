@@ -129,8 +129,6 @@ export class PermissionsButton {
     const toggle = document.createElement("button");
     toggle.className = "permissions-toggle";
     toggle.dataset["key"] = key;
-    // Row click handles toggle; stop propagation to avoid double-firing
-    toggle.addEventListener("click", (e) => e.stopPropagation());
 
     row.appendChild(labelEl);
     row.appendChild(toggle);
