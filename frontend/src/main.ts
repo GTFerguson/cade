@@ -455,7 +455,7 @@ class App {
         const activeTab = this.tabManager.getActiveTab();
         const chatPane = activeTab?.context?.getTerminalManager()?.getChatPane();
         if (chatPane) {
-          const modes = ["plan", "code", "research", "review", "orchestrator"];
+          const modes = ["plan", "code", "research", "review"];
           const current = chatPane.getMode();
           const next = modes[(modes.indexOf(current) + 1) % modes.length]!;
           activeTab?.ws.sendChatMessage(`/${next}`);
@@ -465,7 +465,7 @@ class App {
         const activeTab = this.tabManager.getActiveTab();
         const chatPane = activeTab?.context?.getTerminalManager()?.getChatPane();
         if (chatPane) {
-          const modes = ["plan", "code", "research", "review", "orchestrator"];
+          const modes = ["plan", "code", "research", "review"];
           const current = chatPane.getMode();
           const prev = modes[(modes.indexOf(current) + modes.length - 1) % modes.length]!;
           activeTab?.ws.sendChatMessage(`/${prev}`);

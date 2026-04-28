@@ -94,6 +94,8 @@ export class ChatPane implements Component, PaneKeyHandler {
   private totalCost = 0;
   private contextBudget: ContextBudgetIndicator | null = null;
   private permissionsButton: PermissionsButton | null = null;
+  private orchToggleEl: HTMLElement | null = null;
+  private isOrchestrator = false;
   private mcpStatusIcon: MCPStatusIcon | null = null;
   private systemInfo: {
     model?: string;
@@ -196,9 +198,16 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.permissionsButton = new PermissionsButton();
     this.mcpStatusIcon = new MCPStatusIcon();
 
+    this.orchToggleEl = document.createElement("button");
+    this.orchToggleEl.className = "statusline-orch-toggle";
+    this.orchToggleEl.title = "Toggle orchestrator mode (/orch)";
+    this.orchToggleEl.textContent = "ORCH";
+    this.orchToggleEl.addEventListener("click", () => this.sendMessage("/orch"));
+
     // Right-side group pushed to the end of the statusline
     const statusRight = document.createElement("div");
     statusRight.className = "statusline-right";
+    statusRight.appendChild(this.orchToggleEl);
     statusRight.appendChild(this.mcpStatusIcon.getElement());
     statusRight.appendChild(this.permissionsButton.getElement());
 
@@ -295,6 +304,13 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.modeEl.textContent = cfg?.label ?? mode.toUpperCase();
     this.modeEl.className = "status-mode";
     this.modeEl.style.color = cfg?.color ?? "";
+  }
+
+  setOrchestrator(enabled: boolean): void {
+    this.isOrchestrator = enabled;
+    if (this.orchToggleEl) {
+      this.orchToggleEl.classList.toggle("active", enabled);
+    }
   }
 
   private updateTokenCount(usage?: { prompt_tokens?: number; completion_tokens?: number }): void {
@@ -1529,6 +1545,9 @@ export class ChatPane implements Component, PaneKeyHandler {
 
   private handleModeChange(msg: ChatModeChangeMessage): void {
     this.setMode(msg.mode);
+    if (msg.orchestrator !== undefined) {
+      this.setOrchestrator(msg.orchestrator);
+    }
     // Mode commands (e.g. /orch) are intercepted server-side and never
     // reach the CC subprocess, so no "done" event fires. Re-enable input.
     this.isStreaming = false;

@@ -66,6 +66,7 @@ export const MessageType = {
   AGENT_REJECT: "agent-reject",
   AGENT_APPROVE_REPORT: "agent-approve-report",
   AGENT_REJECT_REPORT: "agent-reject-report",
+  AGENT_MESSAGE: "agent-message",
 
   // Orchestrator - Server -> Client
   AGENT_SPAWNED: "agent-spawned",

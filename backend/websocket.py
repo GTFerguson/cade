@@ -123,6 +123,7 @@ class ConnectionHandler:
         self._launch_yaml: dict = {}
         self._kiosk_mode: bool = False
         self._current_mode: str = "code"
+        self._orchestrator_on: bool = False
 
     async def _send_status(self, message: str) -> None:
         """Send a startup status message."""
@@ -354,6 +355,7 @@ class ConnectionHandler:
         self._launch_yaml: dict = load_launch_preset(self._working_dir)
         self._kiosk_mode: bool = bool(self._launch_yaml.get("kiosk_mode", False))
         self._current_mode: str = "code"
+        self._orchestrator_on: bool = False
         if self._kiosk_mode:
             logger.info("Kiosk mode enabled — PTY, file watcher, and CC features disabled")
         provider_config_dict = extract_provider_config(self._launch_yaml)
@@ -1419,7 +1421,6 @@ class ConnectionHandler:
 
     async def _handle_mode_switch(self, mode: str) -> None:
         """Switch the active Claude Code provider's mode and notify the client."""
-        prev_mode = self._current_mode
         self._current_mode = mode
         from backend.permissions.manager import get_permission_manager
         get_permission_manager().set_mode(mode, connection_id=self._connection_id)
@@ -1429,25 +1430,39 @@ class ConnectionHandler:
             provider = self._provider_registry.get_default()
 
         if isinstance(provider, ClaudeCodeProvider):
-            old_mode = provider.mode
             provider.set_mode(mode)
-            # Force a new CC session when entering/leaving orchestrator mode
-            # so MCP tools load fresh (resumed sessions remember stale MCP state)
-            if mode == "orchestrator" or old_mode == "orchestrator":
-                provider._has_session = False
         elif hasattr(provider, "set_mode"):
             provider.set_mode(mode)
 
-        # Leaving orchestrator mode: kill any worker agents this connection owns.
-        # They can't be controlled or observed outside orchestrator mode, and
-        # their tabs would otherwise stick around in the UI.
-        if prev_mode == "orchestrator" and mode != "orchestrator":
+        await self._send({
+            "type": MessageType.CHAT_MODE_CHANGE,
+            "mode": mode,
+            "orchestrator": self._orchestrator_on,
+        })
+
+    async def _handle_orchestrator_toggle(self) -> None:
+        """Toggle orchestrator overlay on/off without changing the current mode."""
+        self._orchestrator_on = not self._orchestrator_on
+        from backend.permissions.manager import get_permission_manager
+        get_permission_manager().set_orchestrator(self._orchestrator_on, connection_id=self._connection_id)
+
+        provider = None
+        if self._provider_registry is not None:
+            provider = self._provider_registry.get_default()
+
+        # Reset CC session so MCP tools reload with updated state
+        if isinstance(provider, ClaudeCodeProvider):
+            provider._has_session = False
+
+        # Turning off: kill any worker agents this connection owns
+        if not self._orchestrator_on:
             from backend.orchestrator.manager import get_orchestrator_manager
             await get_orchestrator_manager().kill_connection_agents(self._connection_id)
 
         await self._send({
             "type": MessageType.CHAT_MODE_CHANGE,
-            "mode": mode,
+            "mode": self._current_mode,
+            "orchestrator": self._orchestrator_on,
         })
 
     async def _handle_chat_message(self, data: dict) -> None:
@@ -1457,6 +1472,11 @@ class ConnectionHandler:
             return
 
         # Intercept CADE-native mode commands before forwarding to provider
+        # Orchestrator toggle — works in any mode
+        if content in ("/orch", "/orchestrator"):
+            await self._handle_orchestrator_toggle()
+            return
+
         if content in self.CADE_MODE_COMMANDS:
             await self._handle_mode_switch(self.CADE_MODE_COMMANDS[content])
             return
@@ -1554,7 +1574,7 @@ class ConnectionHandler:
 
         try:
             messages = self._chat_session.get_messages()
-            system_prompt = None if isinstance(provider, ClaudeCodeProvider) else compose_prompt(self._current_mode, self._working_dir)
+            system_prompt = None if isinstance(provider, ClaudeCodeProvider) else compose_prompt(self._current_mode, self._working_dir, orchestrator=self._orchestrator_on)
             async for event in provider.stream_chat(messages, system_prompt):
                 if self._closed:
                     break

@@ -68,10 +68,10 @@ def _load_rules() -> list[tuple[str, str, str]]:
 RULES = _load_rules()
 
 
-def compose_prompt(mode: str, working_dir: "Path | None" = None) -> str:
+def compose_prompt(mode: str, working_dir: "Path | None" = None, orchestrator: bool = False) -> str:
     """Return the assembled system prompt for the given mode.
 
-    Compose order: datetime → base → rules → always → mode → additional → project
+    Compose order: datetime → base → rules → always → mode → additional → orchestrator → project
     """
     parts = []
 
@@ -104,6 +104,12 @@ def compose_prompt(mode: str, working_dir: "Path | None" = None) -> str:
     # ADDITIONAL
     for name in ADDITIONAL.get(mode, []):
         content = _load_file(name)
+        if content:
+            parts.append(content)
+
+    # ORCHESTRATOR overlay (added on top of any mode when the toggle is on)
+    if orchestrator:
+        content = _load_file("orchestrator")
         if content:
             parts.append(content)
 

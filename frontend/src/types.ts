@@ -501,6 +501,7 @@ export interface ChatHistoryMessage extends BaseMessage {
 export interface ChatModeChangeMessage extends BaseMessage {
   type: "chat-mode-change";
   mode: string;
+  orchestrator?: boolean;
 }
 
 export interface ChatCompactMessage extends BaseMessage {

@@ -42,12 +42,14 @@ async def _collect_broadcasts(manager: OrchestratorManager, connection_id: str) 
 
 class TestSpawnAgent:
     @pytest.mark.asyncio
-    async def test_blocked_when_not_orchestrator_mode(self):
+    async def test_blocked_when_orchestrator_toggle_off(self):
         manager = _make_manager()
         await _collect_broadcasts(manager, "conn-1")
 
         from backend.permissions.manager import get_permission_manager
-        get_permission_manager().set_mode("code", connection_id="conn-1")
+        pm = get_permission_manager()
+        pm.set_mode("code", connection_id="conn-1")
+        pm.set_orchestrator(False, connection_id="conn-1")
 
         with pytest.raises(ValueError, match="orchestrator mode"):
             await manager.spawn_agent(AgentSpec("bot", "Do X"), connection_id="conn-1")
@@ -59,7 +61,7 @@ class TestSpawnAgent:
 
         from backend.permissions.manager import get_permission_manager
         pm = get_permission_manager()
-        pm.set_mode("orchestrator", connection_id="conn-2")
+        pm.set_orchestrator(True, connection_id="conn-2")
         pm.set_permission("allowSubagents", False, connection_id="conn-2")
 
         with pytest.raises(ValueError, match="disabled"):
@@ -72,7 +74,7 @@ class TestSpawnAgent:
 
         from backend.permissions.manager import get_permission_manager
         pm = get_permission_manager()
-        pm.set_mode("orchestrator", connection_id="conn-3")
+        pm.set_orchestrator(True, connection_id="conn-3")
         pm.set_permission("allowSubagents", True, connection_id="conn-3")
 
         record = await manager.spawn_agent(
@@ -94,7 +96,7 @@ class TestApproveAgentModeEnforcement:
 
         from backend.permissions.manager import get_permission_manager
         pm = get_permission_manager()
-        pm.set_mode("orchestrator", connection_id="conn-mode")
+        pm.set_orchestrator(True, connection_id="conn-mode")
         pm.set_permission("allowSubagents", True, connection_id="conn-mode")
 
         record = await manager.spawn_agent(
@@ -113,14 +115,15 @@ class TestApproveAgentModeEnforcement:
         assert pm.get_mode(agent_id) == "plan"
 
     @pytest.mark.asyncio
-    async def test_worker_mode_independent_of_orchestrator_mode(self):
-        """Orchestrator mode should remain 'orchestrator'; worker gets its own."""
+    async def test_worker_mode_independent_of_parent_mode(self):
+        """Parent mode is unaffected by worker; worker gets its own mode."""
         manager = _make_manager()
         await _collect_broadcasts(manager, "conn-iso")
 
         from backend.permissions.manager import get_permission_manager
         pm = get_permission_manager()
-        pm.set_mode("orchestrator", connection_id="conn-iso")
+        pm.set_mode("code", connection_id="conn-iso")
+        pm.set_orchestrator(True, connection_id="conn-iso")
         pm.set_permission("allowSubagents", True, connection_id="conn-iso")
 
         record = await manager.spawn_agent(
@@ -133,7 +136,7 @@ class TestApproveAgentModeEnforcement:
         with patch("backend.orchestrator.manager._make_worker_provider", return_value=mock_provider):
             await manager.approve_agent(record.agent_id)
 
-        assert pm.get_mode("conn-iso") == "orchestrator"
+        assert pm.get_mode("conn-iso") == "code"
         assert pm.get_mode(record.agent_id) == "research"
 
 

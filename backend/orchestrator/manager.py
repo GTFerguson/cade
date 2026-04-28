@@ -154,12 +154,11 @@ class OrchestratorManager:
         short_id = uuid.uuid4().hex[:6]
         agent_id = f"agent-{spec.name}-{short_id}"
 
-        if perms.get_mode(connection_id) != "orchestrator":
+        if not perms.get_orchestrator(connection_id):
             logger.warning(
-                "spawn_agent blocked: mode=%s is not orchestrator (agent_id=%s)",
-                perms.get_mode(connection_id), agent_id,
+                "spawn_agent blocked: orchestrator toggle is off (agent_id=%s)", agent_id,
             )
-            raise ValueError("Subagents can only be spawned in orchestrator mode")
+            raise ValueError("Subagent spawning requires orchestrator mode to be enabled")
 
         if not perms.get_allow_subagents(connection_id):
             logger.warning("spawn_agent blocked: allow_subagents=False (agent_id=%s)", agent_id)

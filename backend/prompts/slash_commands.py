@@ -28,6 +28,7 @@ _MODE_COMMANDS: list[dict[str, str]] = [
 
 NATIVE_COMMANDS: list[dict[str, str]] = [
     *_MODE_COMMANDS,
+    {"name": "orch", "description": "Toggle orchestrator mode (spawn sub-agents from any mode)"},
     {"name": "compact", "description": "Summarise session as handoff and start fresh"},
 ]
 

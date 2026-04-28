@@ -42,6 +42,7 @@ class PermissionRequest:
 class ConnectionState:
     """Per-connection permission and mode state."""
     mode: str = "code"
+    orchestrator: bool = False
     provider_type: str = "api"
     allow_read: bool = True
     allow_write: bool = True
@@ -83,6 +84,12 @@ class PermissionManager:
 
     def get_mode(self, connection_id: str = "") -> str:
         return self._state(connection_id).mode
+
+    def set_orchestrator(self, enabled: bool, connection_id: str = "") -> None:
+        self._state(connection_id).orchestrator = enabled
+
+    def get_orchestrator(self, connection_id: str = "") -> bool:
+        return self._state(connection_id).orchestrator
 
     # ------------------------------------------------------------------
     # Permission toggles
