@@ -1,156 +1,312 @@
 ---
-title: nkrdn Agent Memory
+title: nkrdn Agent Memory — Implementation Plan
 created: 2026-04-23
-status: planning
-tags: [nkrdn, memory, agent, ace, knowledge-graph]
+updated: 2026-04-28
+status: active
+tags: [nkrdn, memory, agent, suite]
 ---
 
 # nkrdn Agent Memory
 
-nkrdn is CADE's memory and knowledge system. This plan extends it to store and retrieve agent experience — what agents learn as they work — alongside the structural code knowledge it already holds.
+CADE and nkrdn ship as a complete suite. This plan implements persistent agent
+memory using nkrdn as the graph substrate and adapting Padarax's retrieval
+plugin, which already implements the canonical scoring approach.
+
+Design rationale and evidence base: [[../future/agent-memory]] and
+[[../reference/agent-memory-systems]].
 
 ## What This Adds
 
-Agents accumulate experience during work sessions: they discover quirks, make mistakes, develop heuristics, find the right patterns for a codebase. Today that knowledge dies at context end. This feature persists it in nkrdn and loads it back when the agent returns to the same code.
+Agents accumulate experience during work sessions — decisions made, approaches
+tried and rejected, code quirks found. Today that knowledge dies at context
+end. This feature persists it in nkrdn's graph, attached to the symbols it
+describes, and retrieves the relevant slice when the agent returns to the same
+code.
 
-The result is ACE's itemized playbook pattern (structured bullets, Generator-Reflector-Curator update cycle) but spatially indexed — memories live on graph nodes rather than floating globally in the system prompt. Only the relevant slice loads, keeping context clean.
+## Scope Reduction from Padarax Reuse
 
-## How It Works
+Padarax (`engine/src/agents/memory_store.cpp` + `memory_retriever.cpp`) already
+implements the full retrieval stack:
 
-### Storage
+- Park et al. 2023 triple-score formula (recency × last-access decay +
+  importance stored at write time + nkrdn embedding relevance, all min-max
+  normalised)
+- LLM-controlled multi-round iterative retrieval with `seen_ids` dedup (the
+  MemR³ masked-retrieval pattern)
+- Graceful fallback to Jaccard when nkrdn embeddings are unavailable
 
-Memories are annotations on existing nkrdn nodes. Every node (symbol, file, module, workspace) can carry a `memories` property: a list of structured bullets written by the agent.
+**The diff to CADE is small:**
+- `ChronicleEvent` → `MemoryEntry` (same fields, rename)
+- `game_time_days` → wall-clock time throughout (formula unchanged)
+- Add a supersession pre-filter before scoring (one predicate check)
+- Swap the system prompt from NPC dialogue to dev-context retrieval
 
+Phases 1–2 (nkrdn schema + ingestion) are the real work. Phase 3
+(retrieval plugin) is largely a port.
+
+## Phases
+
+### Phase 1 — nkrdn schema changes
+
+**UUID-keyed entity identity**
+
+nkrdn currently keys entities by FQN + file path. Memory edges break on
+rename/move. Fix: assign a stable UUID on first index; store FQN, path, and
+line range as properties on the URI, not as the URI itself.
+
+On rebuild, match new-source entities to existing graph entities via a layered
+heuristic:
+1. Exact FQN + file path → preserve UUID (fast path)
+2. Same name + same parent module + similar signature → preserve UUID, record `code:previousName` or `code:movedFrom`
+3. Same signature shape, different name, same file → preserve UUID, record rename
+4. No match → mint new UUID
+
+`nkrdn lookup <name>` needs a separate name index (name → UUID) since names
+are no longer the URI.
+
+#### Design decisions
+
+**UUID format.** Random `uuid4` hex strings. Content-hash IDs would change every
+time a function's body changed — defeats the purpose. Random IDs stay stable
+across edits.
+
+**URI shape.** `<namespace>repo/{repo}/{type}/{uuid}>`. Keeping the type
+segment costs nothing and makes raw turtle output and SPARQL queries
+human-readable.
+
+**Name index.** The existing `symbols` table already serves as the name index
+(unique on `(repository_name, fqn)`). Add a `stable_id` column (UUID4 hex)
+to both `symbols` and `files`. Lookup becomes a SQL query on the existing
+`idx_symbols_repo_fqn` index — no new infrastructure.
+
+**UUID preservation across rebuilds.** Today `file_processor.py:237` runs
+`delete_symbols_not_in(file_id, current_fqns)` then `upsert_symbols_bulk()`.
+Inject the matcher between these two calls:
+
+1. Snapshot the old rows for `file_id` (FQN + stable_id + signature_json).
+2. Run the matcher: for each new symbol, find its prior `stable_id` via
+   tier 1 → 4. Carry it forward into the upsert payload.
+3. `INSERT ... ON CONFLICT DO UPDATE` on `(repo_name, fqn)` keeps the
+   existing `stable_id` when FQN is unchanged (don't UPDATE the column).
+4. After upsert, the unmatched old rows are tombstoned (soft delete via a
+   `tombstoned_at` column) instead of being hard-deleted.
+
+**Cross-file moves (tier 2 with module change) — deferred.** Cross-file
+matching needs a higher-level coordinator that sees all files in one rebuild
+pass. Phase 1a ships tier 1, tier 3 (within-file rename), and tier 4. Tier 2
+cross-file moves land in Phase 1b once the in-file path is proven.
+
+**"Similar signature" definition.** Same parameter count, same return type
+name (raw string from `signature_json`). Loose enough to absorb parameter
+renames and minor type tweaks; strict enough that two unrelated functions
+in the same file don't collide.
+
+**Symbol-table → graph projection.** `URIFactory.create_uri(entity_type, fqn)`
+becomes `URIFactory.create_uri_for_symbol(symbol_row)` — looks up
+`stable_id` from the row and returns
+`<namespace>repo/{repo}/{type}/{stable_id}>`. Callers in
+`graph_constructor.py`, `entity_processing_service.py`,
+`summary_generation_service.py` switch to passing the symbol row instead of
+the FQN. The fallback in `cross_reference_builder.py:624` that
+reconstructs URIs from FQN dies — replaced with a SQL lookup that returns
+the URI directly.
+
+**Tombstoning**
+
+When rebuild doesn't see a previously-indexed entity: add `code:deletedAt
+<timestamp>`, do not drop it. All `mem:*` edges stay valid. Default queries
+hide tombstones; `--include-deleted` exposes them.
+
+GC policy: tombstones with no `mem:*` edges and age > 90 days are
+hard-deleted. Tombstones with memory edges are kept until memory is archived
+or retargeted.
+
+**New code: predicates**
+
+| Predicate | Meaning |
+|---|---|
+| `code:firstSeen` | Timestamp of first index |
+| `code:previousName` | Prior FQN(s), if renamed |
+| `code:movedFrom` | Prior `belongsToModule`, if moved |
+| `code:deletedAt` | Timestamp of tombstoning |
+
+**New mem: entity types**
+
+| Type | Purpose |
+|---|---|
+| `mem:Decision` | A choice with rationale |
+| `mem:Attempt` | A tried-and-rejected approach |
+| `mem:Session` | A work session (date, topics) |
+| `mem:Note` | Lightweight observation |
+
+Namespace: `http://nkrdn.knowledge/memory#` (prefix: `mem:`)
+
+**New mem: predicates**
+
+`mem:appliesTo`, `mem:supersedes`, `mem:contradicts`, `mem:authoredBy`,
+`mem:duringSession`, `mem:retargetedFrom`, `mem:archivedAt`
+
+**Memory-aware rebuild delta**
+
+Extend `nkrdn delta show` to include a `memory_affected` section: entities
+with `mem:*` edges that were renamed, moved, or tombstoned in this run. CADE
+subscribes to this to surface the "memory orphaned" review flow.
+
+### Phase 2 — Markdown ingestion
+
+Storage format: markdown files with YAML frontmatter in `.cade/memory/`
+(gitignored by default). nkrdn's existing doc parser is extended to handle
+`mem:` frontmatter.
+
+**Frontmatter → triples**
+
+```yaml
+---
+type: decision
+applies_to: [[AuthService]]
+supersedes: 2026-01-12-exceptions
+authored_by: agent:claude
+session: 2026-01-31
+tags: [error-handling, auth]
+---
 ```
-node: backend/providers/failover.py
-memories:
-  - text: "FailoverProvider silently swallows the first provider's error — log before fallback or it's invisible"
-    importance: 4
-    created: 2026-04-22
-    commit: 43ea106
-    uses: 3
-    successes: 3
+
+- `type` → entity class (`mem:Decision` etc.)
+- `applies_to` wiki-links → `mem:appliesTo` edges, resolved to symbol UUIDs
+- `supersedes` → `mem:supersedes` edge to prior Decision
+- `authored_by` → `mem:authoredBy` literal
+
+**Wiki-link resolution**
+
+`[[AuthService]]` must resolve to a symbol UUID at ingest time. Resolution:
+look up by name index (Phase 1). Ambiguous names (multiple symbols with the
+same name) → log the ambiguity, store the raw name as a `mem:unresolvedLink`
+literal for manual resolution. On rebuild, attempt re-resolution.
+
+Store the resolved UUID as `mem:resolvedTarget` alongside the wiki-link text
+so the markdown stays human-readable but the graph edge is stable.
+
+**Supersession chain building**
+
+When parsing, any Decision with a `supersedes` frontmatter field gets a
+`mem:supersedes` edge to the referenced Decision. The retrieval pre-filter
+uses this to exclude superseded Decisions from default queries.
+
+### Phase 3 — Retrieval plugin (port from Padarax)
+
+Port `memory_store.cpp` and `memory_retriever.cpp` from Padarax into nkrdn
+(Python, mirroring the C++ logic). Key changes from the original:
+
+- `ChronicleEvent` → `MemoryEntry` dataclass (id, type, content, importance,
+  created\_at, last\_accessed, metadata)
+- All time in wall-clock `datetime`, not `game_time_days`
+- Relevance: nkrdn embedding cosine similarity (existing infrastructure),
+  Jaccard fallback
+- Pre-filter: exclude entries where `mem:supersedes` points at them (active
+  supersession chain check before scoring)
+- System prompt: dev-context retrieval rather than NPC dialogue — "you are the
+  memory layer for a development agent; recall past decisions and observations
+  relevant to the current task"
+
+New CLI commands:
+
+```bash
+nkrdn memory search "<query>"          # LLM-controlled iterative retrieval
+nkrdn memory search "<query>" --uri <code-entity-uri>  # scoped to symbol
+nkrdn memory list <uri>                # all memories attached to a node
+nkrdn memory add <uri> <markdown-file> # attach a memory file
+nkrdn memory retire <memory-uri>       # set mem:archivedAt
 ```
 
-Granularity is contextual — the agent attaches at whatever level is appropriate:
-- **Symbol-level** for specific function quirks, edge cases, gotchas
-- **File-level** for module-level patterns, conventions, design decisions
-- **Package-level** for architectural patterns, cross-file invariants
-- **Workspace-level** for cross-repo patterns and shared conventions
+Wire into CADE backend: a `/api/memory/search` endpoint that proxies
+`nkrdn memory search` with the agent's current task context as the query.
 
-### Retrieval
+### Phase 4 — Capture layer (CADE)
 
-When the agent opens a file or edits a symbol, nkrdn loads the relevant memory annotations alongside the existing structural context (`nkrdn context <filepath>` already does this for code structure — memories extend it).
+Trigger conditions for writing a Decision vs a Note vs nothing:
 
-The agent gets both:
-- Structural knowledge: what this file contains, what depends on it, what it inherits
-- Experiential knowledge: what previous agent sessions learned about it
+- **Decision**: agent makes an explicit trade-off (chose X over Y, with
+  rationale). Trigger: agent output contains reasoning about alternatives
+  or a choice between approaches.
+- **Attempt**: agent tries something and reverts or pivots. Trigger: a
+  significant edit is reversed within the session.
+- **Note**: lightweight observation the agent flags as worth keeping.
+  Trigger: explicit agent annotation.
+- **Nothing**: small edits, routine tool calls, anything without reasoning
+  content.
 
-**Retrieval mechanisms**: nkrdn already has graph traversal, embedding index, and TF-IDF index (`.cade/doc-index-embeddings.json`, `.cade/doc-index-tfidf.json`). Hybrid retrieval across all three is an option. The better question is what to use as the query.
+Capture flow: agent writes a markdown file to `.cade/memory/` using a
+frontmatter template. File is created immediately; graph ingestion happens
+on next `nkrdn rebuild` (or via a lightweight single-file ingest command:
+`nkrdn memory add`).
 
-**The retrieval query matters more than the mechanism**: File path / graph proximity is coarse — it loads everything attached to the current file regardless of relevance. The stronger signal is the agent's current task intent ("fix the pagination cursor off-by-one" vs "refactor the pagination module" — same file, very different memories needed). This is the Memento-Skills finding: behaviour-aligned retrieval (optimised for execution success) outperforms semantic similarity retrieval. The query should be task intent + structural location, not structural location alone.
+At session end, optionally trigger a Reflector pass (ACE
+Generator-Reflector-Curator): review session notes, consolidate overlapping
+Decisions, promote high-value Notes to Decisions.
 
-**Proximity-weighted fusion**: Graph structure provides the behaviour-alignment signal without a separate routing model. The fusion score combines semantic relevance with spatial proximity to where the agent is currently focused:
+### Phase 5 — CADE UI
 
-```
-score = semantic_similarity(memory, task_intent)
-      × proximity_decay(graph_distance(memory_node, focus_nodes))
-```
+- **Symbol detail pane**: show attached `mem:Decision` and `mem:Attempt`
+  nodes alongside structural info. Superseded entries collapsed by default.
+- **Memory review queue**: notifications from memory-aware rebuild delta —
+  "3 memories attached to renamed/deleted code, review needed."
+- **Retarget flow**: for orphaned memories (target tombstoned), offer
+  drag-onto-symbol or auto-suggested match from rename detection.
+- **Promote to docs/ gesture**: button on a Decision → drafts a formal
+  architecture doc section, user approves.
 
-`focus_nodes` is a session-weighted set, not a single file — nodes touched more during the session accumulate higher focus weight, creating a heat map across the graph. Two semantically identical memories rank differently based on where they're anchored relative to where the agent has been working. Decay function: exponential over edge hops, flattening at package boundaries so workspace-level memories aren't suppressed by distance alone.
-
-### Update Cycle (ACE Generator-Reflector-Curator)
-
-After each task, the Reflector pass reviews the session and proposes memory updates:
-- **New bullet** — something learned that wasn't known before
-- **Update** — existing bullet revised based on new evidence
-- **Retire** — bullet no longer accurate
-
-Curator applies the delta. Memories are bullets, not prose — concise, actionable, independent.
-
-### Staleness Handling
-
-nkrdn already tracks when symbols and files change. When a node's code changes significantly:
-1. Attached memories are soft-flagged stale (not deleted)
-2. On next load, agent sees the flag: "attached node changed at commit X"
-3. Curator pass validates/updates/retires during that session
-
-Quality scoring prunes memories that consistently don't help:
-`quality = (successes + 1) / (uses + 2)`
-
-Memories below threshold are auto-archived on the next Curator pass.
-
-## Memory Hierarchy
-
-Mirrors nkrdn's existing two-level structure:
-
-```
-workspace graph (cross-repo)
-  └─ cross-cutting patterns, shared conventions, inter-project knowledge
-
-project graph (per-repo named graph)
-  ├─ package-level  (architectural patterns)
-  ├─ file-level     (module conventions, design decisions)
-  └─ symbol-level   (function quirks, edge cases)
-```
-
-Cross-cutting memories (e.g. "auth always needs X regardless of which service") live at workspace scope. Project-specific memories live in the project graph at the appropriate granularity.
-
-## Tailored Advantages
-
-Most of the research this plan draws on was conducted on legacy codebases where structure must be inferred. Here it's explicit — which changes what the retrieval system gets for free:
-
-**Wiki-links are graph edges**: `[[agentic-context-engineering]]` is a typed relationship already in the files. nkrdn should parse these as first-class edges rather than treating them as plain text. Cross-document links become traversable connections in the graph, not just text similarity candidates.
-
-**Doc type is a trust signal**: Reference docs are evidence, architecture docs are ground truth about shipped systems, plan docs are intent. When the agent retrieves knowledge, these carry different confidence levels and should be weighted accordingly — not treated as a flat document pool.
-
-**PROVEN tiers are quality weights**: A Tier 1 citation (meta-analysis) is epistemically different from a Tier 5 practitioner opinion. That distinction is already in the files as structured metadata — it's a retrieval weight waiting to be used.
-
-**Frontmatter status is freshness**: `status: active` vs `status: draft` vs a plan that should be deleted. The lifecycle is declared, not inferred. Stale docs can be down-weighted without heuristics.
-
-**Section boundaries enable semantic chunking**: Every `## Section` is a natural chunk with known context from the document's frontmatter. Character-based chunking (embedding first N chars) throws this away. Section-level chunks with inherited metadata are strictly better.
-
-## Integration Points
-
-- **`nkrdn context <filepath>`** — already the load-on-open command. Extend to include memory annotations in output.
-- **`nkrdn memory add <uri> <text>`** — new command to attach a memory bullet to a node
-- **`nkrdn memory list <uri>`** — list memories on a node and its ancestors
-- **`nkrdn memory retire <id>`** — mark a memory as no longer valid
-- **CADE agent hooks** — after-task Curator pass triggers memory update cycle
-- **nkrdn RAG suite** (dependency) — Phase 2 Neo4j vector index and Phase 3 VectorStore abstraction are the retrieval infrastructure this plan runs on. Memory nodes plug into the existing RRF fusion pipeline as a new node type.
+Phase 5 is lower priority than Phases 1–4. The agent benefit (retrieval
+working) doesn't require UI.
 
 ## Key Challenges
 
-**Schema extension**: nkrdn is currently a structural graph. Memory annotations need to be a first-class property type, not a workaround. Decision: whether memories live as RDF annotations on existing nodes or as linked memory nodes in the graph.
+**Identity matcher false positives** — two simultaneously renamed functions,
+swapped function pairs, mass refactor. When the heuristic can't choose
+confidently, mint new UUIDs and surface the ambiguity in the memory-affected
+delta rather than blocking the rebuild.
 
-**Retrieval scope**: When loading memories for a file, which ancestor memories also load? Probably file + package, not workspace (too broad). Need a depth limit or relevance filter.
+**Reflection / consolidation quality gate** — the ACE Reflector pass can
+synthesise incorrect memories into high-importance beliefs (self-reinforcing
+reflection error, documented in Du 2026, arXiv:2603.07670). Any consolidation
+pass must trace provenance back to source memories; reflections derived only
+from agent-authored sources should be marked provisional.
 
-**Curator cost**: Running a full Reflector-Curator pass after every task is expensive. Options: always-on for explicit agent sessions, opt-in for quick edits, async background pass.
-
-**Memory vs documentation**: nkrdn already indexes `docs/`. Memories are distinct — they're agent-learned heuristics, not human-written documentation. They should be queryable separately but can coexist in the graph.
+**Capture threshold calibration** — too aggressive generates noise; too
+conservative never accumulates value. Start conservative: only Decisions with
+explicit alternative-comparison reasoning, and only Attempts that involved a
+non-trivial revert. Tune from there.
 
 ## Open Questions
 
-- Does nkrdn store memories as RDF properties on symbol nodes, or as separate linked nodes with `about` edges?
-- What's the right depth for ancestor memory inheritance at load time?
-- Should memories be committed to git (reproducible, reviewable) or stay in the local `.nkrdn/` store only?
-- How does CADE surface memories in the UI — inline in the chat context, separate panel, or invisible (agent-only)?
+1. **Identity-matcher ambiguity**: when heuristic can't choose, mint new UUID
+   and surface in delta — agreed in principle, exact UX not decided.
+2. **Memory location default**: `.cade/memory/` gitignored (personal) vs
+   committed (team-shared). Probably configurable; default TBD.
+3. **Promotion gesture**: UI button vs agent suggestion vs manual. TBD in
+   Phase 5.
+4. **Cross-language identity**: Python vs C++ matchers need separate
+   heuristics. Phase 1 can start Python-only.
 
-## Double Duty: Retrieval and Many-Shot Learning
+## Implementation Notes for Fresh Session
 
-Memory bullets stored in nkrdn serve two roles simultaneously:
+Start with Phase 1. The UUID-keying change is load-bearing for everything
+else — nothing in Phase 2+ works without stable identity across rebuilds.
 
-1. **Retrieval targets** — loaded into context when the agent works near the relevant node
-2. **Few-shot examples** — loaded as in-context demonstrations that implicitly calibrate the agent to project conventions
+Key files in nkrdn to read first:
+- `src/nkrdn/graph/builder/` — where entity URIs are generated
+- `src/nkrdn/parsers/docs/` — doc indexer to extend in Phase 2
+- `src/nkrdn/cli/` — where new `nkrdn memory *` commands live
 
-Many-shot in-context learning (Agarwal et al., 2024) shows performance keeps improving well beyond the traditional 2-5 examples, particularly on tasks where the model has weak priors — niche domains, unusual patterns, project-specific conventions. This is exactly the case for accumulated project memory. Describing conventions explicitly in a system prompt is weaker than showing 20-50 examples of them in action.
-
-ACE's itemized bullet format is well-suited to this: short, structured bullets are efficient few-shot material. Prose memories would consume window budget too fast. The format constraint that makes bullets good for retrieval (concise, self-contained) also makes them good as few-shot examples.
-
-**Implication for context assembly**: when loading memories for a task, ordering matters. The most relevant memories should be at the start or end of the loaded set, not the middle — lost-in-the-middle attention bias applies within the memory block too.
+Key files in Padarax to read before Phase 3:
+- `engine/src/agents/memory_store.cpp` — scoring formula, nkrdn relevance query
+- `engine/src/agents/memory_retriever.cpp` — iterative LLM-controlled loop
+- `engine/include/padarax/agents/memory_retriever.hpp` — struct definitions
 
 ## Evidence Base
 
-- [[agentic-context-engineering]] — ACE framework, itemized bullets, Generator-Reflector-Curator
-- [[self-improving-agent-systems]] — importance scoring, staleness handling, quality decay formula
-- [[coding-agent-prompts]] — Prompt Alchemy, execution-driven refinement
+- [[../reference/agent-memory-systems]] — scoring formula, failure modes,
+  Padarax implementation details
+- [[../future/agent-memory]] — full design rationale, schema, lifecycle
+- Park et al. 2023 (arXiv:2304.03442) — triple-score retrieval formula
+- Du, Li, Zhang, Song 2025 (arXiv:2512.20237) — masked iterative retrieval
+  (MemR³); implemented in Padarax's `seen_ids` dedup

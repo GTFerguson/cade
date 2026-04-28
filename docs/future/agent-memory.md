@@ -1,223 +1,319 @@
 ---
-title: Agent Memory & Knowledge Base
+title: Agent Memory (built on nkrdn)
 created: 2026-01-31
-updated: 2026-01-31
+updated: 2026-04-28
 status: exploratory
-tags: [agents, memory, knowledge-base, concept]
+tags: [agents, memory, knowledge-base, nkrdn, suite]
 ---
 
-# Agent Memory & Knowledge Base
+# Agent Memory (built on nkrdn)
 
 > [!NOTE]
-> This is an exploratory concept that needs further development and clarification, especially around how it relates to existing project documentation practices.
+> Exploratory. Memory is a **CADE + nkrdn suite feature**, not a standalone CADE
+> subsystem. nkrdn provides the graph substrate and canonical schema; CADE owns
+> capture, retrieval policy, lifecycle, and UI. nkrdn ships as a bundled package
+> inside CADE so memory is always available.
 
 ## Concept
 
-Enable agents to build and maintain persistent memory across sessions, creating continuity and avoiding repeated context-building.
+Persistent, structured memory that lives in the same knowledge graph as the
+code it describes. A "decision" or "failed attempt" is not a loose note in a
+folder — it's a node in nkrdn's graph with typed edges into the symbols it
+applies to. Querying `nkrdn details <ClassURI>` surfaces structure *and* the
+decision history for that class side-by-side.
 
 ## Motivation
 
-**Current behavior:**
-- Each Claude session starts fresh with no memory of previous sessions
-- Users must re-explain project context, past decisions, and conventions
-- No continuity between sessions or across agents
+**Today:** every Claude session starts cold. The user re-explains conventions,
+past decisions, and rejected approaches. Knowledge accumulated during a session
+evaporates when it ends.
 
-**Proposed behavior:**
-- Agents build persistent knowledge of your project over time
-- Agent remembers: "we decided to use X library because Y", "this component is deprecated", etc.
-- Searchable knowledge base accessible across sessions
-- Reduces context-building overhead
+**With graph-backed memory:** decisions, attempts, and session notes attach to
+the code they touch. Future sessions (and future agents) can ask "what's the
+history of this module?" and get an answer grounded in real edges, not in a
+vector-search guess at relevance.
 
-## Relationship to `docs/` Folder
+## Why nkrdn is the right substrate
 
-**Overlap with existing practice:**
+nkrdn already provides the machinery agent memory needs:
 
-Projects already maintain documentation in `docs/` folders:
-- Curated, formal documentation
-- Requires user approval for changes
-- Permanent, authoritative knowledge
-- Versioned in git
+| Need | nkrdn already does this |
+|------|--------------------------|
+| Typed entities + relationships | Class, Function, Module, Package, Namespace + `inheritsFrom`, `dependsOn`, `belongsToModule` |
+| Markdown-with-frontmatter ingest | `src/nkrdn/parsers/docs/` — TF-IDF fusion search |
+| Unified search across kinds | `nkrdn search` over code + docs |
+| Cross-project scope | Workspace graph at `~/.nkrdn/workspace/graph.ttl` with per-repo named graphs |
+| Provenance / staleness signals | Delta tracking between rebuilds |
+| Programmable queries | SPARQL, `--json` output |
 
-**How agent memory differs (potentially):**
+Building a parallel `.cade/memory/` system would duplicate all of the above.
+Extending nkrdn's schema with memory entity types reuses every piece.
 
-| `docs/` (current) | Agent memory (proposed) |
-|-------------------|-------------------------|
-| Human-curated | Agent-generated |
-| Formal documentation | Working memory, scratchpad |
-| Requires approval | Auto-generated |
-| Permanent | Potentially ephemeral |
-| Committed to git | Not in git (`.cade/` gitignored) |
-| "How the system works" | "What we discussed", "Decisions made during development" |
+## Schema additions (nkrdn)
 
-**Open question:** Do these serve different enough purposes to warrant separate systems, or should we integrate them?
+New entity types, sitting alongside the existing code-symbol types:
 
-## Potential Approaches
+| Type | Purpose | Example |
+|------|---------|---------|
+| `mem:Decision` | A choice with rationale | "Use Result<T,E> over exceptions in auth module" |
+| `mem:Attempt` | A tried-and-rejected approach | "Tried async pipeline 2026-01-15 — race conditions" |
+| `mem:Session` | A conversation/work session | Date + participants + topics |
+| `mem:Note` | Lightweight scratchpad observation | "This naming pattern recurs across handlers" |
 
-### Approach 1: Separate Agent Memory
+New predicates linking memory ↔ code (and memory ↔ memory):
 
-Agent maintains its own knowledge base separate from `docs/`:
+| Predicate | Direction | Meaning |
+|-----------|-----------|---------|
+| `mem:appliesTo` | memory → code entity | Which symbol(s) the memory is about |
+| `mem:supersedes` | decision → decision | Explicit succession of prior decision |
+| `mem:contradicts` | memory → memory | Flag for conflict resolution |
+| `mem:duringSession` | memory → session | Provenance |
+| `mem:authoredBy` | memory → "agent:..." / "user:..." | Who wrote it |
+| `mem:rejectedAlternative` | decision → string/URI | What was considered and dropped |
+| `mem:evidence` | memory → doc URI | Backing reference (e.g. a docs/ file or external link) |
 
-**Location:** `.cade/memory/` or `.cade/knowledge/`
+Namespace: `http://nkrdn.knowledge/memory#` (prefix: `mem:`), parallel to
+the existing `code:` namespace.
 
-**Content:**
-- Session notes (what was discussed)
-- Quick decisions (not worth formal documentation)
-- Context snippets (code patterns agent noticed)
-- Failed attempts ("tried X, didn't work because Y")
+## Storage format (input layer)
 
-**Example:**
+Humans and agents write memory as markdown files with structured frontmatter.
+nkrdn's doc indexer parses the frontmatter into triples on rebuild. Wiki-links
+resolve to symbol URIs and become real graph edges.
+
 ```yaml
 ---
-topic: error-handling
+type: decision
+id: 2026-01-31-result-types
+applies_to: [[AuthService]]
+supersedes: 2026-01-12-exceptions
+authored_by: agent:claude
 session: 2026-01-31
-type: decision
+tags: [error-handling, auth]
 ---
 
-Decided to use Result<T, E> pattern for error handling in auth module.
-Reasoning: Explicit error types, better than throwing exceptions.
-Considered panic! but rejected (too aggressive for auth errors).
-```
+# Use Result<T, AuthError> in the auth module
 
-**Benefits:**
-- Doesn't pollute formal documentation
-- Fast, no approval needed
-- Agent scratchpad for working memory
-
-**Challenges:**
-- Duplication with `docs/`?
-- When does agent memory graduate to formal docs?
-- How to prevent stale/incorrect agent memory?
-
-### Approach 2: Enhanced `docs/` Integration
-
-Agents become better at working with existing `docs/` folder:
-
-**Capabilities:**
-- Build search index over `docs/` for quick lookup
-- Auto-tag and categorize documentation
-- Suggest what should be documented formally
-- Read `docs/` to understand project context
-
-**Benefits:**
-- Single source of truth (`docs/`)
-- No duplication
-- Encourages formal documentation
-
-**Challenges:**
-- Still requires approval for changes
-- Doesn't solve "session continuity" problem (agent remembering what you discussed)
-
-### Approach 3: Hybrid
-
-- Agent uses `docs/` as primary knowledge source
-- Agent maintains session logs in `.cade/sessions/` (what was discussed, not formal docs)
-- UI to promote session notes → formal `docs/` when valuable
-
-**Example workflow:**
-1. Agent helps you implement feature, logs decisions in `.cade/sessions/2026-01-31.md`
-2. At end of session, CADE suggests: "Document the new auth pattern in `docs/technical/`?"
-3. User approves, agent drafts formal documentation
-4. Session log remains for continuity, formal doc becomes authoritative
-
-## Use Cases
-
-**Session continuity:**
-```
-Day 1: "Let's use JWT for auth"
-Day 2: Agent remembers: "We decided on JWT yesterday. Should I implement token refresh?"
-```
-
-**Avoiding repeated explanations:**
-```
-Agent: "I see you're using a custom error type. Based on previous discussion, should I follow the Result<T, AuthError> pattern?"
-```
-
-**Failed attempt history:**
-```
-Agent: "I see we tried async processing for this before (2026-01-15) but it caused race conditions. Should we try a different approach?"
-```
-
-**Team knowledge sharing:**
-```
-New team member's agent reads project memory: "This codebase uses X pattern for Y, deprecated Z approach."
-```
-
-## Storage Format
-
-**Obsidian-style markdown with YAML frontmatter** (consistent with agent orchestration proposal):
-
-```yaml
----
-topic: database-migration
-type: decision
-date: 2026-01-31T14:30:00Z
-tags: [database, migration, postgres]
-status: implemented
----
-
-# Database Migration Strategy
-
-Decided to use raw SQL migrations instead of ORM migrations.
-
-## Reasoning
-- More control over migration steps
-- Easier to review in PRs
-- ORM abstraction caused issues in production
+Explicit error types beat throwing for auth: callers can pattern-match,
+errors don't unwind across async boundaries, and the type system documents
+what can go wrong at each call site.
 
 ## Rejected alternatives
-- Prisma migrations - too opaque
-- Manual ALTER statements - error-prone
 
-## Implementation
-Created `migrations/` directory with numbered SQL files.
+- `panic!` — too aggressive for recoverable errors like bad credentials
+- `Box<dyn Error>` — loses the structured information we need for telemetry
 ```
 
-**Searchable via frontmatter tags, topics, dates.**
+Files live on disk (in `.cade/memory/` or a project-chosen location); the
+graph is just an index. This keeps memory inspectable, version-controllable
+(if the user wants), and easy to prune by hand.
 
-## Open Questions
+## Lifecycle and rebuild semantics
 
-1. **Scope:** Should agent memory be per-project, per-agent, or global?
+Memory only works if it stays attached to the code it describes — through
+renames, moves, and deletions. This requires meaningful changes to how nkrdn
+identifies entities and what it does with them across rebuilds.
 
-2. **Lifecycle:** When does agent memory expire? How to prevent stale information?
+### The problem
 
-3. **Trust:** How to handle incorrect agent memory? User correction mechanism?
+nkrdn currently keys entities by structural identity (FQN + file path + AST
+position). That breaks the moment code mutates:
 
-4. **Duplication:** How to avoid duplicating what's already in `docs/`? Auto-detect overlap?
+- `AuthService` → `AuthenticationService` rename → URI changes → `mem:appliesTo` edge dangles
+- Function moved between modules → URI changes → same problem
+- File deleted → entity vanishes from next rebuild → memory orphaned silently
 
-5. **Migration path:** When does agent memory get promoted to formal `docs/`? Manual or automatic?
+The rule: **the graph never silently loses a memory edge.** Every rebuild
+preserves identity where it can, surfaces ambiguity where it can't, and
+keeps history for things that no longer exist.
 
-6. **Multi-agent:** Do all agents share the same memory, or each maintain their own?
+### Identity stability (UUID-keyed entities)
 
-7. **Privacy:** Should session logs be committed to git or stay local? Team sharing vs personal notes?
+Entities get a stable UUID on first index. URIs become `code:entity/<uuid>`,
+with FQN, file path, and line range stored as *properties* rather than
+identity.
 
-8. **Search/retrieval:** How does agent efficiently search its memory? Embeddings? Full-text search?
+New predicates on code entities:
 
-9. **UI:** How does user browse/edit agent memory? Dedicated pane? File tree integration?
+| Predicate | Meaning |
+|-----------|---------|
+| `code:firstSeen` | Timestamp of first index — entity's birth |
+| `code:previousName` | Prior FQN(s), if renamed |
+| `code:movedFrom` | Prior `belongsToModule`, if moved |
+| `code:deletedAt` | Timestamp of disappearance — see Tombstoning below |
 
-## Implementation Considerations
+On rebuild, the matcher tries to map each new-source entity to an existing
+graph entity using a layered heuristic:
 
-**Storage:**
-- `.cade/memory/` directory structure
-- Markdown files with frontmatter
-- Not committed to git by default
+1. Exact FQN + file path → preserve UUID (the fast path, most entities)
+2. Same name + same parent module + similar signature → preserve UUID, record `code:previousName` or `code:movedFrom`
+3. Same signature shape, different name, same file → preserve UUID, record rename
+4. No match → mint a new UUID
 
-**Search:**
-- Full-text search via ripgrep
-- Tag-based filtering via frontmatter
-- Possible: Embeddings for semantic search
+Lookup (`nkrdn lookup <name>`) needs a separate name index that points at
+UUIDs, since names no longer *are* the URI.
 
-**Integration:**
-- Agent reads memory on session start
-- Agent appends to memory during session
-- UI to review/edit/delete memory entries
+### Tombstoning instead of deletion
 
-**Cleanup:**
-- Archive old session logs periodically
-- Detect and remove contradictory entries
-- User can manually prune memory
+When a rebuild doesn't see a previously-indexed entity:
+
+- It is **not** dropped from the graph
+- `code:deletedAt <timestamp>` is added
+- All `mem:*` edges remain intact and valid
+- Default queries hide tombstones; `--include-deleted` exposes them
+
+This makes the graph temporal — you can answer "what existed in this module
+on 2026-02-15?" and "what did this deleted class do, and why was it
+removed?" The Decision that *led to* the deletion stays attached to the
+thing it deleted, which is exactly where it belongs.
+
+### Memory-aware rebuild delta
+
+nkrdn already emits version deltas (`nkrdn delta show`). The memory-aware
+extension: after each rebuild, emit a "memory affected" report listing every
+entity with `mem:*` edges that was renamed, moved, or tombstoned in this
+run.
+
+CADE subscribes to this report and surfaces it in the UI so the user can
+review, retarget, or accept.
+
+### Garbage collection
+
+Tombstones can't grow without bound. Policy:
+
+| Tombstone state | Action |
+|-----------------|--------|
+| No memory edges, age > GC threshold | Hard-delete the entity (and its tombstone) |
+| Has memory edges | Keep indefinitely until memory is archived or retargeted |
+| User explicitly archives | Hard-delete entity, archive the memory file alongside |
+
+GC threshold is configurable; sensible default is something like 90 days
+for hands-off cleanup of tombstones nobody attached anything to.
+
+### Memory deletion (the other direction)
+
+Memory has its own lifecycle separate from code:
+
+- **User deletes a memory entry** — set `mem:archivedAt`, hide from default
+  views, allow undo, hard-delete after a policy window.
+- **Target code is deleted** — memory stays attached to the tombstone.
+  CADE's notification surfaces the orphan so the user can:
+  - Retarget to a successor symbol (set `mem:appliesTo` to a new URI, record `mem:retargetedFrom`)
+  - Accept the tombstone (memory becomes purely historical, still queryable)
+  - Archive the memory (`mem:archivedAt`)
+
+The graph never silently loses a memory edge — every transition is
+explicit.
+
+### Summary of nkrdn changes required
+
+To make memory durable, nkrdn needs:
+
+1. UUID-keyed entity URIs (with a separate name index for lookup)
+2. Rename/move detection on rebuild via signature heuristics
+3. Tombstoning instead of deletion, with `code:deletedAt`
+4. Memory-aware delta output after each rebuild
+5. Configurable GC policy for tombstones with no memory
+
+Most of these are wins for nkrdn beyond memory — semantic deltas, rename
+tracking, and temporal queries are useful regardless. Memory is the forcing
+function that makes them necessary.
+
+## What CADE owns
+
+| Layer | Responsibility |
+|-------|----------------|
+| **Capture** | When the agent decides to record a Decision vs let it stay ephemeral. Templates for the markdown frontmatter. |
+| **Retrieval policy** | When to query memory for a given prompt; how much to surface; ranking/dedup. |
+| **UI** | Decision-history pane on a symbol; supersession chain visualizer; memory editor; prune/correct flow. |
+| **Lifecycle** | Promote `.cade/memory/` notes to formal `docs/` when they mature. Detect stale memory when target symbols change (using nkrdn delta tracking). |
+| **Bootstrap** | Auto-index project on open; ensure nkrdn is initialised; run watch mode. |
+| **Multi-agent coordination** | `mem:authoredBy` tags differentiate agents; CADE's orchestrator threads these into spawned subagent context. |
+
+## Bundling
+
+nkrdn ships inside CADE as a Python package — same PyInstaller bundle as the
+backend. The desktop build copies it into `desktop/src-tauri/resources/`
+alongside `cade-backend.exe`. Default backend is the rdflib file fallback
+(`.nkrdn/graph.ttl`) so users don't need Docker; Neo4j becomes an optional
+upgrade for large workspaces.
+
+This is what makes them "a complete suite" rather than two tools that
+optionally integrate.
+
+## Use cases
+
+**Session continuity**
+
+```
+Day 1: "Let's use JWT for auth"
+  → agent writes mem:Decision linked to AuthService
+
+Day 2: agent reads mem:Decision via nkrdn details
+  → "We decided on JWT yesterday. Implement token refresh now?"
+```
+
+**Avoiding repeated explanations**
+
+```
+Agent (querying memory before suggesting): "I see a Decision (2026-01-31)
+saying we use Result<T, AuthError> in this module. Following that pattern."
+```
+
+**Failed-attempt history**
+
+```
+Agent: "There's an Attempt node from 2026-01-15 — async pipeline tried here,
+rejected for race conditions. Want a different approach?"
+```
+
+**Team knowledge sharing**
+
+```
+New collaborator opens the project. nkrdn workspace graph already has the
+Decision/Attempt/Session history. Their first agent session has full context.
+```
+
+## Open questions
+
+Most of the original proposal's open questions dissolve once nkrdn is the
+substrate (scope, search, multi-agent, search/retrieval — all handled by
+nkrdn primitives) and lifecycle is handled by tombstoning + identity
+matching. What remains:
+
+1. **Capture threshold.** What signals trigger an agent to write a Decision
+   vs a Note vs nothing? Conservative defaults to start, then learn.
+
+2. **Memory-affected delta UX.** Tombstoning + the memory-aware delta give
+   us the mechanism. What's the right surface? Inline indicator on the
+   memory file? Dedicated review queue? Toast on rebuild? Probably all
+   three at different urgency levels.
+
+3. **Identity-matcher ambiguity.** When the rebuild heuristic can't choose
+   confidently (two simultaneous renames, function-pair swap, mass refactor),
+   what's the fallback? Mint new UUIDs and let the user retarget after the
+   fact, or pause the rebuild and surface the ambiguity for resolution?
+   Leaning toward the former — never block a rebuild — but needs review.
+
+4. **GC default threshold.** 90 days for tombstones with no memory feels
+   right but is unprincipled. Could be tuned by repo activity rate.
+
+5. **Promotion to `docs/`.** What's the explicit gesture (UI button? agent
+   suggestion?) and what's the rule for when memory has matured into formal
+   architecture documentation?
+
+6. **Privacy / sharing.** Default memory location: per-user (`~/.cade/memory/`)
+   or per-project (`.cade/memory/`, gitignored)? Per-project committed for
+   team sharing? Probably configurable, but pick a sensible default.
+
+7. **Cross-language identity.** nkrdn supports Python and C++. Identity
+   heuristics need to work for both — Python's dynamic naming and C++'s
+   templates/overloads have different signature shapes. Each language's
+   parser needs its own matcher.
 
 ## See Also
 
-- [[agent-orchestration|Agent Orchestration]] - Uses similar Obsidian MD format for task/knowledge sharing
-- [[../technical/README|Technical Documentation]] - Existing formal documentation system
-- Project `CLAUDE.md` and `.claude/rules/` - Current context system
+- [[agent-orchestration|Agent Orchestration]] — uses the same workspace graph for cross-agent coordination
+- [[../technical/README|Technical Documentation]] — formal documentation that mature memory graduates into
+- nkrdn `CLAUDE.md` and `schema.md` (in `~/projects/nkrdn/`) — current entity types and predicates
+- Project `CLAUDE.md` and `.claude/rules/` — current text-based context system, complementary not replaced

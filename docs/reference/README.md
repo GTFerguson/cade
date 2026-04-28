@@ -10,6 +10,7 @@ Evidence base for CADE's design decisions. Each doc covers a single topic with f
 
 ## Documents
 
+- [[agent-memory-systems]] — Retrieval scoring formula (Park et al. triple), context budget strategies, documented failure modes, Padarax reference implementation
 - [[coding-agent-prompts]] — Prompt Alchemy (Ye et al., 2025) and ACE-based prompt patterns for code generation
 - [[agentic-context-engineering]] — ACE framework: itemized context, Generator-Reflector-Curator, self-improving agent contexts
 - [[self-improving-agent-systems]] — SICA, Memento-Skills, SkillClaw, EvolveR: memory, skill libraries, and experience evolution
