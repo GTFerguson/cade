@@ -48,6 +48,8 @@ Phases 1–2 (nkrdn schema + ingestion) are the real work. Phase 3
 
 ### Phase 1 — nkrdn schema changes
 
+**Status:** Phase 1a (UUID-keyed identity, end-to-end) and Phase 1b (soft tombstoning) shipped in nkrdn `0d52287`, `36da615`, `1b30581`. Migration note in `nkrdn/CHANGELOG.md`. Cross-file move detection (tier 2) and `nkrdn delta show memory_affected` deferred until a concrete user need surfaces.
+
 **UUID-keyed entity identity**
 
 nkrdn currently keys entities by FQN + file path. Memory edges break on
