@@ -16,6 +16,7 @@ System architecture documentation for CADE — what exists, how it works, and wh
 - [[components|Components]] — Full component inventory with responsibilities, dependencies, and dependency graph
 - [[data-flow|Data Flow]] — Major data flows with Mermaid sequence diagrams
 - [[dependencies|Dependencies]] — External services, key libraries, environment variables, configuration files
+- [[nkrdn-agent-memory|nkrdn Agent Memory]] — Persistent agent memory: stable symbol identity, `.cade/memory/` ingestion, wiki-link resolution (Phases 1–2 shipped)
 
 ## See Also
 

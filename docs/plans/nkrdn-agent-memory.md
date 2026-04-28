@@ -156,6 +156,8 @@ subscribes to this to surface the "memory orphaned" review flow.
 
 ### Phase 2 — Markdown ingestion
 
+**Status:** Shipped in nkrdn `bbb6712`. Architecture doc: [[../architecture/nkrdn-agent-memory]].
+
 Storage format: markdown files with YAML frontmatter in `.cade/memory/`
 (gitignored by default). nkrdn's existing doc parser is extended to handle
 `mem:` frontmatter.
