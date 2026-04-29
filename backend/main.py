@@ -328,6 +328,14 @@ class AgentMessageRequest(BaseModel):
     message: str
 
 
+class MemorySearchRequest(BaseModel):
+    project: str
+    query: str
+    uri: str | None = None
+    limit: int = 10
+    direct: bool = True  # Skip LLM retrieval — agent does its own ranking.
+
+
 async def _send_to_connections(connections: list, message: dict) -> int:
     """Send a message to a list of WebSocket connections.
 
@@ -859,6 +867,73 @@ def create_app(config: Config | None = None) -> FastAPI:
             return JSONResponse({"success": True})
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=500)
+
+    # --- Memory API (proxies `nkrdn memory search`) ---
+
+    @app.post("/api/memory/search")
+    async def memory_search(body: MemorySearchRequest) -> JSONResponse:
+        """Run `nkrdn memory search` against a project's graph and return results.
+
+        Defaults to --direct so we don't fork a nested LLM call inside an
+        already-LLM-driven session. Agents that want the iterative retriever
+        pass direct=false.
+        """
+        import asyncio as _asyncio
+        import json as _json
+
+        from backend.nkrdn_service import _NKRDN_BIN
+
+        if _NKRDN_BIN is None:
+            return JSONResponse(
+                {"error": "nkrdn CLI not available on PATH"},
+                status_code=503,
+            )
+
+        project_path = Path(body.project).expanduser().resolve()
+        if not project_path.is_dir():
+            return JSONResponse(
+                {"error": f"project path is not a directory: {project_path}"},
+                status_code=400,
+            )
+
+        cmd = [_NKRDN_BIN, "memory", "search", body.query, "--json",
+               "--limit", str(body.limit)]
+        if body.uri:
+            cmd += ["--uri", body.uri]
+        if body.direct:
+            cmd.append("--direct")
+
+        try:
+            proc = await _asyncio.create_subprocess_exec(
+                *cmd,
+                cwd=str(project_path),
+                stdout=_asyncio.subprocess.PIPE,
+                stderr=_asyncio.subprocess.PIPE,
+            )
+            stdout_b, stderr_b = await _asyncio.wait_for(proc.communicate(), timeout=30.0)
+        except _asyncio.TimeoutError:
+            return JSONResponse({"error": "nkrdn memory search timed out"}, status_code=504)
+
+        if proc.returncode != 0:
+            return JSONResponse(
+                {
+                    "error": "nkrdn memory search failed",
+                    "exit_code": proc.returncode,
+                    "stderr": stderr_b.decode("utf-8", errors="replace").strip(),
+                },
+                status_code=502,
+            )
+
+        try:
+            payload = _json.loads(stdout_b.decode("utf-8"))
+        except _json.JSONDecodeError as exc:
+            return JSONResponse(
+                {"error": f"could not parse nkrdn output: {exc}",
+                 "raw": stdout_b.decode("utf-8", errors="replace")[:500]},
+                status_code=502,
+            )
+
+        return JSONResponse(payload)
 
     # --- UI Tools API (called by MCP tools) ---
 
