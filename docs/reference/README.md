@@ -11,6 +11,7 @@ Evidence base for CADE's design decisions. Each doc covers a single topic with f
 ## Documents
 
 - [[agent-memory-systems]] — Retrieval scoring formula (Park et al. triple), context budget strategies, documented failure modes, Padarax reference implementation
+- [[agent-memory-capture]] — Phase 4 capture-surface design synthesis: explicit-call tools, dedup/supersedes, MADR-shaped body, quality gates
 - [[coding-agent-prompts]] — Prompt Alchemy (Ye et al., 2025) and ACE-based prompt patterns for code generation
 - [[agentic-context-engineering]] — ACE framework: itemized context, Generator-Reflector-Curator, self-improving agent contexts
 - [[self-improving-agent-systems]] — SICA, Memento-Skills, SkillClaw, EvolveR: memory, skill libraries, and experience evolution
@@ -27,6 +28,12 @@ The agent research docs below are also published in the shared library. Canonica
 | [[coding-agent-prompts]] | [[common-knowledge/ai-agents/coding-agent-prompts]] |
 | [[agentic-context-engineering]] | [[common-knowledge/ai-agents/agentic-context-engineering]] |
 | [[self-improving-agent-systems]] | [[common-knowledge/ai-agents/self-improving-agent-systems]] |
+
+[[agent-memory-capture]] cites three common-knowledge docs that don't have local mirrors:
+
+- [[common-knowledge/ai-agents/agent-memory-write-tools]] — capture surface design
+- [[common-knowledge/ai-agents/memory-write-deduplication]] — write-time dedup
+- [[common-knowledge/ai-agents/architecture-decision-records]] — ADR practice
 
 ## Navigation
 
