@@ -31,6 +31,12 @@ _CODE_EXTENSIONS = frozenset({
     ".py", ".cpp", ".cc", ".cxx", ".hpp", ".h", ".hxx",
 })
 
+# Memory directory (relative to project root). Markdown writes here also
+# trigger debounced rebuilds — that's how the agent's record_decision /
+# record_attempt / record_note writes get into the graph without the writer
+# needing a direct handle on NkrdnService.
+_MEMORY_DIR_FRAGMENT = ".cade/memory"
+
 
 def _find_usage_rule() -> Path | None:
     """Locate the nkrdn usage-rule.md from the installed package."""
@@ -179,11 +185,17 @@ class NkrdnService:
             logger.warning("nkrdn initial build failed: %s", e)
 
     def on_file_change(self, event: "FileChangeEvent") -> None:
-        """FileWatcher callback. Queues debounced rebuild for code files."""
-        suffix = Path(event.path).suffix.lower()
-        if suffix not in _CODE_EXTENSIONS:
+        """FileWatcher callback. Queues debounced rebuild for code or memory files."""
+        path = Path(event.path)
+        suffix = path.suffix.lower()
+        if suffix in _CODE_EXTENSIONS:
+            self._schedule_rebuild()
             return
-        self._schedule_rebuild()
+        # Memory markdown writes trigger rebuilds too, so newly captured
+        # decisions/attempts/notes land in the graph without the writer
+        # needing a direct handle on NkrdnService.
+        if suffix == ".md" and _MEMORY_DIR_FRAGMENT in path.as_posix():
+            self._schedule_rebuild()
 
     def _schedule_rebuild(self) -> None:
         """Cancel any pending rebuild and schedule a new one."""

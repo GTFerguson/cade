@@ -227,6 +227,16 @@ Wire into CADE backend: a `/api/memory/search` endpoint that proxies
 
 ### Phase 4 — Capture layer (CADE)
 
+**Status:** Shipped. The `record_decision` / `record_attempt` / `record_note`
+tools are registered in `backend/providers/registry.py`; emission lives in
+`backend/memory/writer.py` with idempotent content-hash dedup; markdown writes
+trigger nkrdn rebuilds via the existing FileWatcher debounce in
+`backend/nkrdn_service.py` (now also accepting `.md` writes under
+`.cade/memory/`). Round-trip verified: cade writes → nkrdn parser ingests as
+expected `mem:*` triples. Design synthesis: [[../reference/agent-memory-capture]].
+Reflector pass deferred until capture is in real use (see that doc §7 for the
+rationale on self-reinforcing reflection error).
+
 Trigger conditions for writing a Decision vs a Note vs nothing:
 
 - **Decision**: agent makes an explicit trade-off (chose X over Y, with
