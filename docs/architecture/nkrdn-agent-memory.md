@@ -106,17 +106,54 @@ Isolating memory triples in `http://nkrdn.knowledge/memory` keeps them easy to e
 | Named graph | `http://nkrdn.knowledge/memory` | Fixed in `parsers/memory/__init__.py`. |
 | Namespace | `http://nkrdn.knowledge/memory#` | Fixed. |
 
-## What's In Scope (Phases 1–2)
+## Capture Layer
+
+The agent writes memory entries via three type-discriminated tools registered
+in CADE's per-connection `ToolRegistry`:
+
+| Tool | When to call | Required fields |
+|---|---|---|
+| `record_decision` | After choosing between concrete alternatives with non-trivial trade-off | `rationale`, `alternatives`, `applies_to`, `importance` |
+| `record_attempt` | After abandoning an approach mid-task | `approach`, `outcome`, `applies_to`, `importance` |
+| `record_note` | When finding a non-obvious quirk worth keeping | `observation`, `applies_to`, `importance` |
+
+`backend/memory/writer.py` emits markdown files into `.cade/memory/` with
+frontmatter that matches the parser schema above. The body uses MADR-style
+sections (rationale → Considered Options → Consequences for decisions). A
+content hash over `(type, primary_text, sorted(alternatives), sorted(applies_to))`
+is embedded as an HTML comment; identical writes are silent no-ops returning
+the existing URI.
+
+**Rebuild trigger.** `backend/nkrdn_service.py` extends its FileWatcher
+filter to include `.md` files under `.cade/memory/`. The existing 10-second
+debounce schedules a single rebuild per burst of writes — the writer
+doesn't need a direct `NkrdnService` handle.
+
+**Why explicit tool calls (vs autonomous post-turn extraction):** cheaper,
+more auditable, and avoids the self-reinforcing reflection error documented
+in Du 2026 (arXiv:2603.07670). Cross-domain evidence and rationale:
+[[../reference/agent-memory-capture]].
+
+## What's In Scope
 
 - Stable identity for code symbols across rebuilds (Phase 1)
-- Markdown ingestion and wiki-link resolution (Phase 2, shipped)
+- Markdown ingestion and wiki-link resolution (Phase 2)
 - Supersession chain storage via `mem:supersedes`
+- LLM-controlled iterative retrieval (Phase 3) — `nkrdn memory search` CLI +
+  CADE's `/api/memory/search` endpoint
+- Type-discriminated capture tools (Phase 4) — `record_decision`,
+  `record_attempt`, `record_note` with content-hash idempotency
 
 ## What's Not In Scope Yet
 
-- **Retrieval** (Phase 3) — `nkrdn memory search` CLI, scored retrieval using the Park et al. triple-score formula (recency × importance × relevance)
-- **Capture layer** (Phase 4) — CADE writing memory files automatically at session end
-- **UI** (Phase 5) — symbol detail pane showing attached memories, orphan review queue
+- **LLM-judge dedup** — refinement vs supersedes detection at write time;
+  Phase 4 ships with content-hash exact-match only. The agent uses the
+  explicit `supersedes` parameter when it knows.
+- **Reflector pass** — session-end consolidation per ACE Generator-Reflector-
+  Curator. Deferred until capture is in real use; needs provenance tracing
+  to avoid the self-reinforcing reflection error failure mode.
+- **UI** (Phase 5) — symbol detail pane showing attached memories, orphan
+  review queue, promote-to-docs gesture.
 
 ## Key Files
 
@@ -125,10 +162,16 @@ Isolating memory triples in `http://nkrdn.knowledge/memory` keeps them easy to e
 | `nkrdn/src/nkrdn/parsers/memory/parser.py` | Frontmatter → triples |
 | `nkrdn/src/nkrdn/parsers/memory/resolver.py` | Wiki-link → symbol URI |
 | `nkrdn/src/nkrdn/parsers/memory/__init__.py` | `ingest_memory_triples()` entry point |
-| `nkrdn/src/nkrdn/cli/rebuild.py` | Phase 2.5 wiring (after line ~588) |
-| `nkrdn/tests/parsers/memory/` | 24 unit tests |
+| `nkrdn/src/nkrdn/memory/store.py` | Park et al. triple-score retrieval |
+| `nkrdn/src/nkrdn/memory/retriever.py` | LLM-controlled iterative loop with `seen_ids` dedup |
+| `nkrdn/src/nkrdn/cli/commands/memory.py` | `nkrdn memory search/list/retire` |
+| `cade/backend/memory/writer.py` | Markdown emitter with content-hash idempotency |
+| `cade/backend/memory/tool_executor.py` | `record_decision`/`attempt`/`note` tool surface |
+| `cade/backend/providers/registry.py` | Wires the memory tools into the per-connection registry |
+| `cade/backend/nkrdn_service.py` | FileWatcher trigger for memory writes |
 
 ## See Also
 
-- [[../reference/agent-memory-systems]] — evidence base, scoring formula, failure modes
-- [[../plans/nkrdn-agent-memory]] — phase plan (Phases 3–5 still in flight)
+- [[../reference/agent-memory-systems]] — retrieval evidence base, scoring formula, failure modes
+- [[../reference/agent-memory-capture]] — capture-layer design synthesis
+- [[../plans/nkrdn-agent-memory]] — phase plan (Phase 5 UI still ahead)
