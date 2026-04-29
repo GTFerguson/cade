@@ -95,7 +95,6 @@ export class ChatPane implements Component, PaneKeyHandler {
   private contextBudget: ContextBudgetIndicator | null = null;
   private permissionsButton: PermissionsButton | null = null;
   private orchToggleEl: HTMLElement | null = null;
-  private isOrchestrator = false;
   private mcpStatusIcon: MCPStatusIcon | null = null;
   private systemInfo: {
     model?: string;
@@ -307,7 +306,6 @@ export class ChatPane implements Component, PaneKeyHandler {
   }
 
   setOrchestrator(enabled: boolean): void {
-    this.isOrchestrator = enabled;
     if (this.orchToggleEl) {
       this.orchToggleEl.classList.toggle("active", enabled);
     }
