@@ -3,7 +3,8 @@ node_modules/
 
 # Build output
 src-tauri/target/
-src-tauri/resources/cade-backend*
+# All build artifacts from scripts/build-backend-sidecar.py
+src-tauri/resources/
 
 # Tauri generated files
 src-tauri/Cargo.lock
