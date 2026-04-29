@@ -264,7 +264,13 @@ export interface ConnectedMessage extends BaseMessage {
   launchPreset?: LaunchPreset;
   slashCommands?: Array<{ name: string; description: string }>;
   connectionId?: string;
-  mcpStatus?: Array<{ name: string; authenticated: boolean; authUrl?: string }>;
+  mcpStatus?: Array<{
+    name: string;
+    authenticated: boolean;
+    authUrl?: string;
+    reason?: string;
+    authInstructions?: string;
+  }>;
 }
 
 /**

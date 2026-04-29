@@ -719,7 +719,10 @@ class ConnectionHandler:
             for name, cfg in MODES.items()
         }
 
-        # Include MCP auth status so the frontend can warn if tools are unavailable
+        # Include MCP auth status so the frontend can warn if tools are unavailable.
+        # CADE doesn't run its own OAuth flow — it reads tokens that Claude Code
+        # has already obtained via `claude mcp`. So the "auth instructions" is
+        # always: run claude mcp, authenticate there, reload CADE.
         try:
             from core.backend.providers.http_mcp_tools import get_mcp_oauth_status
             alphaxiv_status = get_mcp_oauth_status("alphaxiv")
@@ -727,6 +730,13 @@ class ConnectionHandler:
                 {
                     "name": "alphaxiv",
                     "authenticated": alphaxiv_status["authenticated"],
+                    "reason": alphaxiv_status.get("reason", ""),
+                    "authInstructions": (
+                        "alphaxiv uses OAuth via Claude Code. To authenticate: "
+                        "run `claude` in a terminal, run `/mcp` and pick alphaxiv, "
+                        "complete the OAuth flow in your browser, then reload CADE. "
+                        "Tokens are stored at ~/.claude/.credentials.json."
+                    ),
                     "authUrl": "https://alphaxiv.org",
                 }
             ]

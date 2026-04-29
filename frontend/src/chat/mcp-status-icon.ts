@@ -9,6 +9,10 @@ export interface MCPEntry {
   name: string;
   authenticated: boolean;
   authUrl?: string;
+  /** Optional one-line reason: "401", "no_token", "not_found", etc. */
+  reason?: string;
+  /** Optional plain-text guidance shown when the user clicks an unauthenticated row. */
+  authInstructions?: string;
 }
 
 // Minimal two-prong plug SVG
@@ -117,6 +121,9 @@ export class MCPStatusIcon {
   }
 
   private buildRow(entry: MCPEntry): HTMLElement {
+    const wrapper = document.createElement("div");
+    wrapper.className = "mcp-status-entry";
+
     const row = document.createElement("div");
     row.className = "permissions-row mcp-status-row"; // reuse layout styles
 
@@ -126,21 +133,46 @@ export class MCPStatusIcon {
 
     const status = document.createElement("span");
     status.className = `mcp-status-indicator mcp-status-indicator--${entry.authenticated ? "ok" : "error"}`;
-    status.textContent = entry.authenticated ? "ok" : "auth";
+    status.textContent = entry.authenticated ? "ok" : (entry.reason || "auth");
 
     row.appendChild(label);
     row.appendChild(status);
+    wrapper.appendChild(row);
 
-    if (!entry.authenticated && entry.authUrl) {
+    if (!entry.authenticated) {
+      const detail = document.createElement("div");
+      detail.className = "mcp-status-detail";
+      detail.style.display = "none";
+
+      const text = entry.authInstructions
+        || "Run `claude mcp` in a terminal, authenticate this server through Claude Code, then reload CADE. CADE reads OAuth tokens from ~/.claude/.credentials.json.";
+      const para = document.createElement("div");
+      para.className = "mcp-status-detail-text";
+      para.textContent = text;
+      detail.appendChild(para);
+
+      if (entry.authUrl) {
+        const link = document.createElement("a");
+        link.href = entry.authUrl;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.className = "mcp-status-detail-link";
+        link.textContent = "Open server site →";
+        detail.appendChild(link);
+      }
+
+      wrapper.appendChild(detail);
+
       row.style.cursor = "pointer";
-      row.title = `Authenticate ${entry.name}`;
-      row.addEventListener("click", () => {
-        window.open(entry.authUrl, "_blank", "noopener,noreferrer");
-        this.closeFlyout();
+      row.title = `Click for ${entry.name} auth instructions`;
+      row.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const open = detail.style.display !== "none";
+        detail.style.display = open ? "none" : "";
       });
     }
 
-    return row;
+    return wrapper;
   }
 
   private toggle(): void {

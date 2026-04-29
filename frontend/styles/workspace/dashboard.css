@@ -1151,6 +1151,21 @@
   cursor: pointer;
 }
 
+.dash-notification__close {
+  margin-left: 12px;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+}
+
+.dash-notification__close:hover {
+  color: var(--text-primary);
+}
+
 /* ═══════════════════════════════════════════════
    Agent pushed panels
    ═══════════════════════════════════════════════ */

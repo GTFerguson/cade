@@ -112,6 +112,9 @@ export class ChatPane implements Component, PaneKeyHandler {
   } = { items: [], selectedName: null };
   private isStreaming = false;
   private queuedMessage: string | null = null;
+  private waitingEl: HTMLElement | null = null;
+  private waitingTimer: number | null = null;
+  private waitingStart = 0;
   private readonly autoSubscribe: boolean;
   private readonly readOnly: boolean;
   private readonly agentId: string | null;
@@ -542,6 +545,43 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.ws.sendChatMessage(text);
     this.chatInput?.setDisabled(true);
     this.isStreaming = true;
+    this.showWaiting();
+  }
+
+  private showWaiting(): void {
+    this.clearWaiting();
+    this.waitingStart = Date.now();
+    const el = document.createElement("div");
+    el.className = "chat-waiting";
+    const dot = document.createElement("span");
+    dot.className = "chat-waiting-dot";
+    const label = document.createElement("span");
+    label.textContent = "waiting for response";
+    const elapsed = document.createElement("span");
+    elapsed.className = "chat-waiting-elapsed";
+    elapsed.textContent = "0.0s";
+    el.appendChild(dot);
+    el.appendChild(label);
+    el.appendChild(elapsed);
+    this.messagesEl.appendChild(el);
+    this.scrollToBottom();
+    this.waitingEl = el;
+    this.waitingTimer = window.setInterval(() => {
+      if (!this.waitingEl) return;
+      const dt = (Date.now() - this.waitingStart) / 1000;
+      elapsed.textContent = `${dt.toFixed(1)}s`;
+    }, 100);
+  }
+
+  private clearWaiting(): void {
+    if (this.waitingTimer !== null) {
+      window.clearInterval(this.waitingTimer);
+      this.waitingTimer = null;
+    }
+    if (this.waitingEl) {
+      this.waitingEl.remove();
+      this.waitingEl = null;
+    }
   }
 
   private handleChatStream(msg: ChatStreamMessage): void {
@@ -619,6 +659,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   }
 
   private handleTextDelta(content: string): void {
+    this.clearWaiting();
     this.ensureAssistantEl();
     this.finalizeThinking();
 
@@ -637,6 +678,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   }
 
   private handleThinkingDelta(content: string): void {
+    this.clearWaiting();
     this.ensureAssistantEl();
 
     if (!this.thinkingEl) {
@@ -711,6 +753,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     toolName: string,
     toolInput?: Record<string, unknown>,
   ): void {
+    this.clearWaiting();
     this.ensureAssistantEl();
 
     // Finalize any in-progress text stream before inserting tool block
@@ -969,6 +1012,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   }
 
   private async handleDone(msg: ChatStreamMessage): Promise<void> {
+    this.clearWaiting();
     this.isStreaming = false;
 
     if (msg.cancelled) {
@@ -1003,6 +1047,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   }
 
   private handleError(message: string): void {
+    this.clearWaiting();
     this.isStreaming = false;
 
     const errorEl = document.createElement("div");
@@ -1548,6 +1593,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     }
     // Mode commands (e.g. /orch) are intercepted server-side and never
     // reach the CC subprocess, so no "done" event fires. Re-enable input.
+    this.clearWaiting();
     this.isStreaming = false;
     this.flushQueuedMessage();
   }
@@ -1628,11 +1674,13 @@ export class ChatPane implements Component, PaneKeyHandler {
       this.messagesEl.appendChild(marker);
     }
 
+    this.clearWaiting();
     this.isStreaming = false;
     this.flushQueuedMessage();
   }
 
   dispose(): void {
+    this.clearWaiting();
     if (this.autoSubscribe) {
       this.ws.off("chat-stream", this.boundHandlers.chatStream);
       this.ws.off("chat-history", this.boundHandlers.chatHistory);

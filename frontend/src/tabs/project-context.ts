@@ -83,16 +83,19 @@ export class ProjectContextImpl implements IProjectContext {
         this.terminalManager?.getChatPane()?.setSlashCommands(msg.slashCommands);
       }
 
-      // Push MCP auth state to the statusline icon and warn on first connect
+      // Push MCP auth state to the statusline icon and warn on first connect.
+      // The plug icon (bottom-right of chat) holds the actual auth instructions —
+      // toast just nudges the user toward it. Warning toasts persist until
+      // dismissed (see showNotificationLink).
       if (msg.mcpStatus) {
         this.terminalManager?.getChatPane()?.setMcpStatus(msg.mcpStatus);
         if (!msg.sessionRestored) {
           for (const mcp of msg.mcpStatus) {
             if (!mcp.authenticated) {
               this.showNotificationLink(
-                `${mcp.name} research tools not authenticated`,
-                mcp.authUrl ?? null,
-                "Authenticate",
+                `${mcp.name} not authenticated — research tools disabled. Click the plug icon for setup steps.`,
+                null,
+                "",
                 "warning",
               );
             }
@@ -619,6 +622,10 @@ export class ProjectContextImpl implements IProjectContext {
 
   /**
    * Show a toast notification with an optional clickable link.
+   *
+   * Warning/error toasts stay until the user dismisses them — auto-fade only
+   * applies to info-level. Auth and connection problems shouldn't vanish in
+   * 6s when the user looks away.
    */
   private showNotificationLink(
     message: string,
@@ -645,12 +652,27 @@ export class ProjectContextImpl implements IProjectContext {
       toast.appendChild(anchor);
     }
 
+    const persistent = style === "warning" || style === "error";
+    if (persistent) {
+      const close = document.createElement("button");
+      close.className = "dash-notification__close";
+      close.textContent = "×";
+      close.title = "Dismiss";
+      close.addEventListener("click", () => {
+        toast.style.opacity = "0";
+        setTimeout(() => toast.remove(), 200);
+      });
+      toast.appendChild(close);
+    }
+
     this.container.appendChild(toast);
 
-    setTimeout(() => {
-      toast.style.opacity = "0";
-      setTimeout(() => toast.remove(), 300);
-    }, 6000);
+    if (!persistent) {
+      setTimeout(() => {
+        toast.style.opacity = "0";
+        setTimeout(() => toast.remove(), 300);
+      }, 6000);
+    }
   }
 
   /**
