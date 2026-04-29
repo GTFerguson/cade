@@ -225,38 +225,114 @@ nkrdn memory retire <memory-uri>       # set mem:archivedAt
 Wire into CADE backend: a `/api/memory/search` endpoint that proxies
 `nkrdn memory search` with the agent's current task context as the query.
 
-### Phase 4 — Capture layer (CADE)
+### Phase 4 — Capture machinery (CADE)
 
-**Status:** Shipped. The `record_decision` / `record_attempt` / `record_note`
-tools are registered in `backend/providers/registry.py`; emission lives in
-`backend/memory/writer.py` with idempotent content-hash dedup; markdown writes
-trigger nkrdn rebuilds via the existing FileWatcher debounce in
-`backend/nkrdn_service.py` (now also accepting `.md` writes under
+**Status:** Shipped at `aa1d11c`. The `record_decision` / `record_attempt` /
+`record_note` tools are registered in `backend/providers/registry.py`;
+emission lives in `backend/memory/writer.py` with content-hash idempotency;
+markdown writes trigger nkrdn rebuilds via the existing FileWatcher debounce
+in `backend/nkrdn_service.py` (now also accepting `.md` writes under
 `.cade/memory/`). Round-trip verified: cade writes → nkrdn parser ingests as
 expected `mem:*` triples. Design synthesis: [[../reference/agent-memory-capture]].
-Reflector pass deferred until capture is in real use (see that doc §7 for the
-rationale on self-reinforcing reflection error).
 
-Trigger conditions for writing a Decision vs a Note vs nothing:
+What Phase 4 *doesn't* do: it doesn't make the agent actually call the tools.
+The system prompt has no nudges, the dedup judge for refinement-vs-supersedes
+isn't built, and there's no session-end consolidation. The next chunks
+address each.
 
-- **Decision**: agent makes an explicit trade-off (chose X over Y, with
-  rationale). Trigger: agent output contains reasoning about alternatives
-  or a choice between approaches.
-- **Attempt**: agent tries something and reverts or pivots. Trigger: a
-  significant edit is reversed within the session.
-- **Note**: lightweight observation the agent flags as worth keeping.
-  Trigger: explicit agent annotation.
-- **Nothing**: small edits, routine tool calls, anything without reasoning
-  content.
+### Phase 4.1 — Capture activation in LiteLLM mode
 
-Capture flow: agent writes a markdown file to `.cade/memory/` using a
-frontmatter template. File is created immediately; graph ingestion happens
-on next `nkrdn rebuild` (or via a lightweight single-file ingest command:
-`nkrdn memory add`).
+The tools exist but aren't reached for. This phase wires capture into the
+live agent loop so writes happen organically during real sessions.
 
-At session end, optionally trigger a Reflector pass (ACE
-Generator-Reflector-Curator): review session notes, consolidate overlapping
-Decisions, promote high-value Notes to Decisions.
+- **System-prompt nudges** — extend `backend/prompts/modules/nkrdn.md` (or a
+  new `agent-memory.md` module loaded from every mode's `additional_modules`
+  in `backend/modes.toml`) with: when to call each tool, type-discrimination
+  examples, and explicit "do NOT" guidance for routine edits. Conservative
+  capture is the goal — fewer high-quality entries beats noisy floods.
+- **Mode-aware filtering decision** — `MemoryToolExecutor.tool_definitions()`
+  currently returns all three tools regardless of mode. Decide whether
+  read-only modes (plan, research, review) should expose write-tools. The
+  research synthesis recommends "yes" — capture during a research session
+  is itself valuable — but confirm and gate via
+  `permissions.manager.get_mode(connection_id)` if the answer turns out to
+  be "no for plan, yes for research/review".
+- **Verification** — open a real CADE session, ask the agent to make a
+  decision, confirm the tool is called, the file lands in `.cade/memory/`,
+  the rebuild fires, and `nkrdn memory search` finds it. The current
+  Phase 4 tests cover the wiring; this phase needs end-to-end smoke
+  testing in a live session.
+- **Out of scope here:** spawned subagents (ClaudeCodeProvider) — CC has
+  its own tool ecosystem; per CADE CLAUDE.md guidance, don't re-implement
+  what CC already does. Defer to a separate question.
+
+Trigger conditions to encode in the prompt nudge:
+
+- **record_decision** — agent makes an explicit trade-off between concrete
+  alternatives, with rationale. NOT for routine choices without real
+  alternatives.
+- **record_attempt** — agent abandons an approach mid-task after a
+  meaningful effort (more than a few tool calls). NOT for routine
+  backtracking.
+- **record_note** — agent finds a non-obvious quirk worth keeping. NOT
+  for things visible in the code itself.
+- **Nothing** — small edits, routine tool calls, successful operations
+  without trade-off reasoning.
+
+### Phase 4.2 — Refinement vs supersedes detection
+
+Phase 4 ships with content-hash exact-match idempotency only. If the agent
+re-records a decision with slightly different wording, that's currently a
+new entry, not an update. This phase adds an LLM-judge dedup pass at write
+time:
+
+1. **Candidate retrieval** — embedding ANN over existing entries
+   (sequential scan is fine until index size warrants ANN; A-MEM does this
+   too). Top-k nearest by `(content + alternatives + applies_to)` embedding.
+2. **LLM yes/no rubric** — for each candidate, judge: same type? same
+   primary `applies_to` target? refines/extends or contradicts? content
+   materially different (>30% novel tokens)?
+3. **Decision matrix** —
+   - identical → silent no-op (current Phase 4.0 behaviour)
+   - refinement → update body, preserve URI
+   - contradicts → new entry with `mem:supersedes` link
+   - distinct → new entry
+4. **Conservative editing default** — when the judge has uncertainty,
+   prefer link over merge, supersede over delete. Reversible operations
+   only.
+
+Module: `backend/memory/dedup.py` (new). Wire from
+`MemoryWriter._write_file()` before the current `_scan_for_duplicate` step.
+
+Reference: [[../../common-knowledge/ai-agents/memory-write-deduplication]].
+
+### Phase 4.3 — Session-end Reflector pass
+
+ACE Generator-Reflector-Curator (Zhang et al. 2025) review of the session's
+captured entries: consolidate overlapping Decisions, promote high-value
+Notes to Decisions, identify gaps the agent should have captured but
+didn't.
+
+Hard prerequisite: **provenance tracing** to mitigate the self-reinforcing
+reflection error documented in Du 2026 (arXiv:2603.07670). Reflections
+derived only from agent-authored sources must be marked provisional;
+reflections derived from a mix of agent and user-authored sources can
+write to canonical memory. Without this, the Reflector compounds errors
+into high-importance beliefs that propagate forward.
+
+Trigger (informed by [[../../common-knowledge/ai-agents/self-improving-agent-systems#3-multi-condition-trigger-mechanisms]]):
+
+```
+reflect_now = (
+    importance_sum >= 30           # accumulated session importance
+    OR turns_since_last_reflect >= 15
+    OR session_end                 # always reflect at session close
+)
+```
+
+Defer this phase until capture is in real use and we have data on what
+entries the agent actually produces — premature reflection on noise is
+worse than no reflection at all.
 
 ### Phase 5 — CADE UI
 
@@ -303,23 +379,29 @@ non-trivial revert. Tune from there.
 
 ## Implementation Notes for Fresh Session
 
-Start with Phase 1. The UUID-keying change is load-bearing for everything
-else — nothing in Phase 2+ works without stable identity across rebuilds.
+Phases 1, 2, 3, and 4 are shipped. The next chunk is Phase 4.1 — see the
+active handoff at [[handoff/agent-memory-phase-4-1-litellm-activation]] for
+the full briefing, file map, and gotchas.
 
-Key files in nkrdn to read first:
-- `src/nkrdn/graph/builder/` — where entity URIs are generated
-- `src/nkrdn/parsers/docs/` — doc indexer to extend in Phase 2
-- `src/nkrdn/cli/` — where new `nkrdn memory *` commands live
-
-Key files in Padarax to read before Phase 3:
-- `engine/src/agents/memory_store.cpp` — scoring formula, nkrdn relevance query
-- `engine/src/agents/memory_retriever.cpp` — iterative LLM-controlled loop
-- `engine/include/padarax/agents/memory_retriever.hpp` — struct definitions
+Key files for Phase 4.1+:
+- `backend/prompts/modules/nkrdn.md` — where to add capture-tool guidance
+  (or beside it as a new `agent-memory.md` module)
+- `backend/modes.toml` — wire the new module into every mode's
+  `additional_modules` list
+- `backend/memory/tool_executor.py` — `MemoryToolExecutor.tool_definitions()`
+  is where mode filtering would land if the next agent decides to gate
+  tools by mode
+- `backend/memory/writer.py` — `_scan_for_duplicate` is the integration
+  point for Phase 4.2's LLM-judge dedup
+- `core/backend/providers/api_provider.py:146` — `definitions_async()` is
+  where LiteLLM gathers all registered tools
 
 ## Evidence Base
 
 - [[../reference/agent-memory-systems]] — scoring formula, failure modes,
   Padarax implementation details
+- [[../reference/agent-memory-capture]] — Phase 4 capture-surface design
+  synthesis, deferred-work rationale
 - [[../future/agent-memory]] — full design rationale, schema, lifecycle
 - Park et al. 2023 (arXiv:2304.03442) — triple-score retrieval formula
 - Du, Li, Zhang, Song 2025 (arXiv:2512.20237) — masked iterative retrieval
