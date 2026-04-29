@@ -11,17 +11,48 @@ library dependencies are collected via ldd so the bundle is self-contained on
 machines that don't have GTK/NSS/etc. installed.
 """
 
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# ── Self-bootstrap into the project venv ─────────────────────────────────────
+# Tauri's beforeBuildCommand invokes this script with whatever `python` is on
+# PATH. PyInstaller needs the project venv (where cade's deps live), so if we
+# weren't launched from .venv we re-exec ourselves with the venv interpreter.
+# Stdlib-only above this line — system Python just needs to reach the re-exec.
+def _bootstrap_into_venv() -> None:
+    venv_dir = PROJECT_ROOT / ".venv"
+    venv_python = (
+        venv_dir / "Scripts" / "python.exe"
+        if sys.platform == "win32"
+        else venv_dir / "bin" / "python"
+    )
+    if not venv_python.exists():
+        return
+    # `sys.prefix == sys.base_prefix` means we're on system Python; in a venv
+    # sys.prefix points at the venv root. Comparing executables doesn't work
+    # because the venv's python is typically a symlink to the system one.
+    in_target_venv = (
+        sys.prefix != sys.base_prefix
+        and Path(sys.prefix).resolve() == venv_dir.resolve()
+    )
+    if in_target_venv:
+        return
+    import subprocess as _sp
+    print(f"[build-sidecar] Re-exec into venv: {venv_python}")
+    sys.exit(_sp.run([str(venv_python), __file__, *sys.argv[1:]]).returncode)
+
+
+_bootstrap_into_venv()
+
 import re
 import os
 import platform
 import shutil
 import subprocess
-import sys
 import tarfile
 import urllib.request
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DIST_DIR = PROJECT_ROOT / "dist"
 RESOURCES_DIR = PROJECT_ROOT / "desktop" / "src-tauri" / "resources"
 

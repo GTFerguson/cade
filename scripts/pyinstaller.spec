@@ -69,6 +69,9 @@ hiddenimports += collect_submodules('tiktoken_ext')
 datas += collect_data_files('tiktoken_ext')
 datas += collect_data_files('tiktoken')
 
+# Bundle backend config files that are read at runtime from the package path
+datas.append((str(project_root / 'backend' / 'modes.toml'), 'backend'))
+
 # Bundle Neovim portable (downloaded by build script)
 nvim_dist = project_root / 'dist' / 'nvim'
 if nvim_dist.is_dir():
