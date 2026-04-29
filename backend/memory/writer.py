@@ -6,6 +6,7 @@ matches `nkrdn/parsers/memory/parser.py`. Schema fields:
   type: decision | attempt | note | session
   applies_to: [[SymbolName]]          # wiki-links, resolved on nkrdn rebuild
   supersedes: <stem-of-prior-entry>   # optional
+  evidence: [[[doc-stem]], "URL", "citation text"]  # optional, mixed
   authored_by: agent:cade
   session: <YYYY-MM-DD>
   tags: [tag1, tag2]
@@ -167,6 +168,24 @@ def _format_tag_list(tags: list[str]) -> str:
     return "[" + ", ".join(_yaml_escape(t) for t in tags) + "]"
 
 
+_WIKILINK_FULL = re.compile(r"^\[\[([^\[\]]+)\]\]$")
+
+
+def _format_evidence_item(item: str) -> str:
+    """Render one evidence item: keep `[[name]]` verbatim; YAML-quote everything else."""
+    stripped = item.strip()
+    if _WIKILINK_FULL.match(stripped):
+        return stripped
+    return _yaml_escape(stripped)
+
+
+def _format_evidence_list(evidence: list[str]) -> str:
+    """Render evidence as a mixed bracket list. Single wiki-link → bare; else list."""
+    if len(evidence) == 1 and _WIKILINK_FULL.match(evidence[0].strip()):
+        return evidence[0].strip()
+    return "[" + ", ".join(_format_evidence_item(e) for e in evidence) + "]"
+
+
 def _build_frontmatter(
     *,
     type_: str,
@@ -174,6 +193,7 @@ def _build_frontmatter(
     importance: int,
     tags: list[str],
     supersedes: str | None,
+    evidence: list[str] | None,
     today: date,
     author: str,
 ) -> str:
@@ -184,6 +204,8 @@ def _build_frontmatter(
     ]
     if supersedes:
         lines.append(f"supersedes: {supersedes}")
+    if evidence:
+        lines.append(f"evidence: {_format_evidence_list(evidence)}")
     lines.extend([
         f"authored_by: {author}",
         f"session: {today.isoformat()}",
@@ -296,6 +318,7 @@ class MemoryWriter:
         importance: int,
         tags: list[str],
         supersedes: str | None,
+        evidence: list[str] | None,
         content_hash: str,
         slug_seed: str,
     ) -> WriteResult:
@@ -321,6 +344,7 @@ class MemoryWriter:
             importance=importance,
             tags=tags,
             supersedes=supersedes,
+            evidence=evidence,
             today=today,
             author=self._author,
         )
@@ -348,6 +372,7 @@ class MemoryWriter:
         consequences: list[str] | None = None,
         supersedes: str | None = None,
         tags: list[str] | None = None,
+        evidence: list[str] | None = None,
     ) -> WriteResult:
         rationale = _require_nonempty("rationale", rationale)
         alternatives = _validate_strings("alternatives", alternatives or [])
@@ -362,6 +387,7 @@ class MemoryWriter:
             )
         cons = _validate_strings("consequences", consequences or [])
         tags = _validate_strings("tags", tags or [])
+        evidence = _validate_strings("evidence", evidence or [])
         importance = _clamp_importance(importance)
         supersedes_clean = supersedes.strip() if isinstance(supersedes, str) and supersedes.strip() else None
 
@@ -379,6 +405,7 @@ class MemoryWriter:
             importance=importance,
             tags=tags,
             supersedes=supersedes_clean,
+            evidence=evidence or None,
             content_hash=content_hash,
             slug_seed=rationale,
         )
@@ -393,6 +420,7 @@ class MemoryWriter:
         applies_to: list[str],
         importance: int,
         tags: list[str] | None = None,
+        evidence: list[str] | None = None,
     ) -> WriteResult:
         approach = _require_nonempty("approach", approach)
         outcome = _require_nonempty("outcome", outcome)
@@ -402,6 +430,7 @@ class MemoryWriter:
                 "record_attempt requires at least one applies_to target"
             )
         tags = _validate_strings("tags", tags or [])
+        evidence = _validate_strings("evidence", evidence or [])
         importance = _clamp_importance(importance)
 
         body = _build_attempt_body(approach, outcome)
@@ -418,6 +447,7 @@ class MemoryWriter:
             importance=importance,
             tags=tags,
             supersedes=None,
+            evidence=evidence or None,
             content_hash=content_hash,
             slug_seed=approach,
         )
@@ -431,6 +461,7 @@ class MemoryWriter:
         applies_to: list[str],
         importance: int,
         tags: list[str] | None = None,
+        evidence: list[str] | None = None,
     ) -> WriteResult:
         observation = _require_nonempty("observation", observation)
         applies_to = _validate_strings("applies_to", applies_to or [])
@@ -439,6 +470,7 @@ class MemoryWriter:
                 "record_note requires at least one applies_to target"
             )
         tags = _validate_strings("tags", tags or [])
+        evidence = _validate_strings("evidence", evidence or [])
         importance = _clamp_importance(importance)
 
         body = _build_note_body(observation)
@@ -455,6 +487,7 @@ class MemoryWriter:
             importance=importance,
             tags=tags,
             supersedes=None,
+            evidence=evidence or None,
             content_hash=content_hash,
             slug_seed=observation,
         )

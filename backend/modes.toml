@@ -11,7 +11,7 @@ label = "PLAN"
 description = "Switch to Plan mode (read-only)"
 color = "var(--accent-orange)"
 modules = ["plan"]
-additional_modules = ["nkrdn"]
+additional_modules = ["nkrdn", "agent-memory"]
 write_access = "none"
 slash_names = ["plan"]
 
@@ -20,7 +20,7 @@ label = "CODE"
 description = "Switch to Code mode (full access)"
 color = "var(--accent-green)"
 modules = ["code"]
-additional_modules = ["nkrdn", "test-driven-debugging"]
+additional_modules = ["nkrdn", "test-driven-debugging", "agent-memory"]
 write_access = "all"
 slash_names = ["code"]
 
@@ -29,7 +29,7 @@ label = "RESEARCH"
 description = "Switch to Research mode (PROVEN pipeline)"
 color = "var(--accent-cyan)"
 modules = ["research"]
-additional_modules = ["nkrdn"]
+additional_modules = ["nkrdn", "agent-memory"]
 write_access = "none"
 slash_names = ["research"]
 
@@ -38,7 +38,7 @@ label = "REVIEW"
 description = "Switch to Review mode (skill orchestrator)"
 color = "var(--accent-blue)"
 modules = ["review"]
-additional_modules = ["nkrdn"]
+additional_modules = ["nkrdn", "agent-memory"]
 write_access = "docs_plans"
 slash_names = ["review"]
 

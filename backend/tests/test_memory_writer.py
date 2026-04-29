@@ -32,6 +32,7 @@ from backend.memory.writer import (
     _resolve_collision,
     _content_hash,
     _extract_hash,
+    _format_evidence_list,
 )
 
 
@@ -188,6 +189,85 @@ def test_attempt_writes_outcome_section(temp_dir: Path):
     assert fm["type"] == "attempt"
     assert "## Outcome" in body
     assert "Lazy frame" in body
+
+
+# ---------------------------------------------------------------------------
+# Evidence formatting + emission
+# ---------------------------------------------------------------------------
+
+def test_format_evidence_list_single_wikilink_renders_bare():
+    assert _format_evidence_list(["[[agent-memory-systems]]"]) == "[[agent-memory-systems]]"
+
+
+def test_format_evidence_list_single_url_renders_quoted():
+    rendered = _format_evidence_list(["https://arxiv.org/abs/2304.03442"])
+    assert rendered == '["https://arxiv.org/abs/2304.03442"]'
+
+
+def test_format_evidence_list_mixed():
+    rendered = _format_evidence_list([
+        "[[agent-memory-systems]]",
+        "Park et al. 2023",
+        "https://arxiv.org/abs/2304.03442",
+    ])
+    assert rendered == (
+        '[[[agent-memory-systems]], '
+        'Park et al. 2023, '
+        '"https://arxiv.org/abs/2304.03442"]'
+    )
+
+
+def test_decision_emits_evidence_frontmatter(temp_dir: Path):
+    writer = MemoryWriter(temp_dir)
+    result = writer.record_decision(
+        rationale="Use Park et al. triple-score retrieval.",
+        alternatives=["pure cosine — loses recency/importance signal"],
+        applies_to=["MemoryRetriever"],
+        importance=7,
+        evidence=[
+            "[[agent-memory-systems]]",
+            "https://arxiv.org/abs/2304.03442",
+        ],
+    )
+    text = result.path.read_text(encoding="utf-8")
+    assert "evidence: [[[agent-memory-systems]], \"https://arxiv.org/abs/2304.03442\"]" in text
+
+
+def test_decision_omits_evidence_when_empty(temp_dir: Path):
+    writer = MemoryWriter(temp_dir)
+    result = writer.record_decision(
+        rationale="Some rationale.",
+        alternatives=["alt"],
+        applies_to=["X"],
+        importance=5,
+    )
+    text = result.path.read_text(encoding="utf-8")
+    assert "evidence:" not in text
+
+
+def test_attempt_emits_evidence(temp_dir: Path):
+    writer = MemoryWriter(temp_dir)
+    result = writer.record_attempt(
+        approach="Tried mocking nkrdn rebuild in tests.",
+        outcome="Mocks diverged from real parser; integration tests now hit real nkrdn.",
+        applies_to=["MemoryWriter"],
+        importance=4,
+        evidence=["[[test-driven-debugging]]"],
+    )
+    text = result.path.read_text(encoding="utf-8")
+    assert "evidence: [[test-driven-debugging]]" in text
+
+
+def test_note_emits_evidence(temp_dir: Path):
+    writer = MemoryWriter(temp_dir)
+    result = writer.record_note(
+        observation="Frontmatter parser splits bracket lists naively on commas.",
+        applies_to=["parse_frontmatter"],
+        importance=3,
+        evidence=["[[agent-memory-capture]]"],
+    )
+    text = result.path.read_text(encoding="utf-8")
+    assert "evidence: [[agent-memory-capture]]" in text
 
 
 def test_note_minimal(temp_dir: Path):

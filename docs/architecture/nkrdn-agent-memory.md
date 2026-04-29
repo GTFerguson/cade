@@ -62,6 +62,7 @@ Named graph: `http://nkrdn.knowledge/memory`.
 | `mem:appliesTo` | `applies_to:` | `code:` URI of resolved symbol |
 | `mem:unresolvedLink` | `applies_to:` | Raw name when resolution fails |
 | `mem:supersedes` | `supersedes:` | `mem:` URI of prior entry by filename stem |
+| `mem:evidence` | `evidence:` | Wiki-links resolve to `code:` URIs via the symbol resolver; URLs and citation literals stay as `Literal`. Mixed arrays supported. |
 | `mem:authoredBy` | `authored_by:` | Literal string (e.g. `agent:claude`) |
 | `mem:duringSession` | `session:` | Session date or ID |
 | `mem:tag` | `tags:` | One triple per tag |
@@ -134,6 +135,24 @@ more auditable, and avoids the self-reinforcing reflection error documented
 in Du 2026 (arXiv:2603.07670). Cross-domain evidence and rationale:
 [[../reference/agent-memory-capture]].
 
+### Capture Activation (Phase 4.1)
+
+The capture tools are wired into every CADE mode. Two decisions made together:
+
+**Prompt module — separate `agent-memory.md`.** The trigger guidance lives in
+`backend/prompts/modules/agent-memory.md`, distinct from `nkrdn.md` (which
+covers retrieval). Both modules are loaded as `additional_modules` in every
+entry of `backend/modes.toml`. Splitting capture from retrieval keeps each
+module focused on one concern; merging them would have made the combined
+file a sprawl across two distinct agent behaviours.
+
+**Mode filtering — uniform across all modes.** `MemoryToolExecutor.tool_definitions()`
+returns all three tools regardless of `write_access`. Plan and research modes
+are *where* most of the high-signal Decisions and Notes get reasoned through;
+gating capture by write permissions would lose the highest-quality entries.
+Memory writes go to `.cade/memory/`, which is outside the "user code"
+permission boundary that read-only modes are meant to protect.
+
 ## What's In Scope
 
 - Stable identity for code symbols across rebuilds (Phase 1)
@@ -152,6 +171,11 @@ in Du 2026 (arXiv:2603.07670). Cross-domain evidence and rationale:
 - **Reflector pass** — session-end consolidation per ACE Generator-Reflector-
   Curator. Deferred until capture is in real use; needs provenance tracing
   to avoid the self-reinforcing reflection error failure mode.
+- **Doc-stem evidence resolution** — `mem:evidence` wiki-links currently
+  only resolve through the symbol index. When a wiki-link points at a doc
+  stem (e.g. `[[agent-memory-systems]]`), it falls back to a `Literal` of
+  the inner name. Lifting it to a doc URI requires nkrdn to emit RDF nodes
+  for indexed docs, which it does not do today.
 - **UI** (Phase 5) — symbol detail pane showing attached memories, orphan
   review queue, promote-to-docs gesture.
 

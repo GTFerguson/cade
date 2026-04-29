@@ -99,6 +99,18 @@ _DECISION_SCHEMA: dict[str, Any] = {
             "items": {"type": "string"},
             "description": "Optional categorisation tags (e.g. ['auth', 'security']).",
         },
+        "evidence": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Optional. Backing references that ground this decision. Each "
+                "item can be a wiki-link to a reference doc or symbol "
+                "([[agent-memory-systems]]), a URL "
+                "(https://arxiv.org/abs/2304.03442), or a citation literal "
+                "('Park et al. 2023'). Wiki-links resolve to graph URIs on "
+                "the next nkrdn rebuild; other strings stay as literals."
+            ),
+        },
     },
     "required": ["rationale", "alternatives", "applies_to", "importance"],
 }
@@ -137,6 +149,15 @@ _ATTEMPT_SCHEMA: dict[str, Any] = {
             "type": "array",
             "items": {"type": "string"},
         },
+        "evidence": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Optional. Backing references — wiki-links to reference docs "
+                "or symbols, URLs, or citation literals. See record_decision "
+                "for format details."
+            ),
+        },
     },
     "required": ["approach", "outcome", "applies_to", "importance"],
 }
@@ -167,6 +188,15 @@ _NOTE_SCHEMA: dict[str, Any] = {
         "tags": {
             "type": "array",
             "items": {"type": "string"},
+        },
+        "evidence": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Optional. Backing references — wiki-links to reference docs "
+                "or symbols, URLs, or citation literals. See record_decision "
+                "for format details."
+            ),
         },
     },
     "required": ["observation", "applies_to", "importance"],
@@ -243,9 +273,11 @@ class MemoryToolExecutor:
     # ------------------------------------------------------------------
 
     def tool_definitions(self) -> list[ToolDefinition]:
-        # Memory capture is allowed in every mode for now. Read-only modes
-        # don't write code, but capturing findings/decisions during a research
-        # or review session is itself valuable. Tune later if needed.
+        # Memory capture is exposed uniformly in every mode. Read-only modes
+        # (plan, research, review) don't write code, but a research session
+        # is precisely where Decisions and Notes accumulate, and plan mode is
+        # where the most architectural trade-offs get reasoned through.
+        # Gating capture by write_access would lose the highest-signal entries.
         return list(_ALL_DEFINITIONS)
 
     def execute(self, name: str, arguments: dict) -> str:
@@ -272,6 +304,7 @@ class MemoryToolExecutor:
                     consequences=arguments.get("consequences"),
                     supersedes=arguments.get("supersedes"),
                     tags=arguments.get("tags"),
+                    evidence=arguments.get("evidence"),
                 )
             elif name == "record_attempt":
                 result = self._writer.record_attempt(
@@ -280,6 +313,7 @@ class MemoryToolExecutor:
                     applies_to=arguments.get("applies_to", []) or [],
                     importance=arguments.get("importance", 3),
                     tags=arguments.get("tags"),
+                    evidence=arguments.get("evidence"),
                 )
             elif name == "record_note":
                 result = self._writer.record_note(
@@ -287,6 +321,7 @@ class MemoryToolExecutor:
                     applies_to=arguments.get("applies_to", []) or [],
                     importance=arguments.get("importance", 3),
                     tags=arguments.get("tags"),
+                    evidence=arguments.get("evidence"),
                 )
             else:  # unreachable, _TOOL_NAMES guard above
                 return f"Error: unhandled memory tool '{name}'"

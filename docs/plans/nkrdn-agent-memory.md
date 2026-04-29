@@ -242,6 +242,14 @@ address each.
 
 ### Phase 4.1 — Capture activation in LiteLLM mode
 
+**Status:** Shipped. New prompt module `backend/prompts/modules/agent-memory.md`
+loaded as an `additional_modules` entry on every mode in `backend/modes.toml`;
+mode filtering kept uniform (all three tools exposed regardless of
+`write_access`); architecture doc updated. `mem:evidence` support added
+alongside (writer + parser + schema field on all three tools, mixed
+wiki-link / URL / citation literal forms). Live-session smoke test will
+run as the agent is used; fix forward if the agent under-uses the tools.
+
 The tools exist but aren't reached for. This phase wires capture into the
 live agent loop so writes happen organically during real sessions.
 
