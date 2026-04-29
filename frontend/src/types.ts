@@ -267,9 +267,8 @@ export interface ConnectedMessage extends BaseMessage {
   mcpStatus?: Array<{
     name: string;
     authenticated: boolean;
-    authUrl?: string;
+    serverUrl?: string;
     reason?: string;
-    authInstructions?: string;
   }>;
 }
 

@@ -26,6 +26,7 @@ import { DiagramViewer } from "@core/chat/diagram-viewer";
 import { ContextBudgetIndicator } from "../components/context-budget-indicator";
 import { PermissionsButton } from "./permissions-button";
 import { MCPStatusIcon, type MCPEntry } from "./mcp-status-icon";
+import { basePath as chatBasePath } from "../config/config";
 import { linkifyElement, patchLinks } from "@core/chat/linkify";
 
 const CADE_MERMAID_CONFIG = {
@@ -198,7 +199,7 @@ export class ChatPane implements Component, PaneKeyHandler {
 
     this.contextBudget = new ContextBudgetIndicator();
     this.permissionsButton = new PermissionsButton();
-    this.mcpStatusIcon = new MCPStatusIcon();
+    this.mcpStatusIcon = new MCPStatusIcon({ apiPrefix: chatBasePath });
 
     this.orchToggleEl = document.createElement("button");
     this.orchToggleEl.className = "statusline-orch-toggle";

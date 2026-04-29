@@ -85,6 +85,15 @@ interface WebSocketEvents {
     data: Record<string, unknown>[];
   };
   "notification": { type: string; message: string; style: string };
+  "mcp-status": {
+    type: string;
+    mcpStatus: Array<{
+      name: string;
+      authenticated: boolean;
+      serverUrl?: string;
+      reason?: string;
+    }>;
+  };
   error: ErrorMessage;
   "auth-failed": { code: number };
   "google-auth-required": { client_id: string };

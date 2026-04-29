@@ -423,6 +423,19 @@ export class ProjectContextImpl implements IProjectContext {
       this.showNotification(msg.message, msg.style);
     });
 
+    // MCP auth status push (e.g. after a successful OAuth callback). Refreshes
+    // the plug icon and surfaces a one-time toast so the user knows tools are
+    // available after a reload.
+    this.ws.on("mcp-status", (msg: { mcpStatus?: Array<{ name: string; authenticated: boolean; serverUrl?: string; reason?: string }> }) => {
+      if (!msg.mcpStatus) return;
+      this.terminalManager?.getChatPane()?.setMcpStatus(msg.mcpStatus);
+      for (const mcp of msg.mcpStatus) {
+        if (mcp.authenticated) {
+          this.showNotification(`${mcp.name} authenticated — tools live`, "success");
+        }
+      }
+    });
+
     this.hide();
   }
 

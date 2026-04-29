@@ -8,11 +8,15 @@
 export interface MCPEntry {
   name: string;
   authenticated: boolean;
-  authUrl?: string;
+  /** MCP server URL — needed to initiate OAuth via /api/mcp/oauth/start */
+  serverUrl?: string;
   /** Optional one-line reason: "401", "no_token", "not_found", etc. */
   reason?: string;
-  /** Optional plain-text guidance shown when the user clicks an unauthenticated row. */
-  authInstructions?: string;
+}
+
+export interface MCPStatusIconOptions {
+  /** Path prefix to backend (root_path), used when fetching /api/mcp/oauth/start. */
+  apiPrefix?: string;
 }
 
 // Minimal two-prong plug SVG
@@ -29,12 +33,14 @@ export class MCPStatusIcon {
   private flyout: HTMLElement;
   private entries: MCPEntry[] = [];
   private open = false;
+  private apiPrefix: string;
 
   private repositionHandler = (): void => {
     if (this.open) this.positionFlyout();
   };
 
-  constructor() {
+  constructor(options: MCPStatusIconOptions = {}) {
+    this.apiPrefix = options.apiPrefix ?? "";
     this.el = document.createElement("div");
     this.el.className = "mcp-status-widget";
     this.el.style.display = "none"; // hidden until entries arrive
@@ -125,7 +131,7 @@ export class MCPStatusIcon {
     wrapper.className = "mcp-status-entry";
 
     const row = document.createElement("div");
-    row.className = "permissions-row mcp-status-row"; // reuse layout styles
+    row.className = "permissions-row mcp-status-row";
 
     const label = document.createElement("span");
     label.className = "permissions-row-label";
@@ -144,27 +150,39 @@ export class MCPStatusIcon {
       detail.className = "mcp-status-detail";
       detail.style.display = "none";
 
-      const text = entry.authInstructions
-        || "Run `claude mcp` in a terminal, authenticate this server through Claude Code, then reload CADE. CADE reads OAuth tokens from ~/.claude/.credentials.json.";
       const para = document.createElement("div");
       para.className = "mcp-status-detail-text";
-      para.textContent = text;
+      para.textContent = entry.serverUrl
+        ? `Authenticate ${entry.name} to enable its tools. CADE will open the OAuth flow in your browser; on success, tokens are saved and you can reload to start using the tools.`
+        : `${entry.name} is not authenticated, but no server URL was provided so CADE can't start an OAuth flow automatically.`;
       detail.appendChild(para);
 
-      if (entry.authUrl) {
-        const link = document.createElement("a");
-        link.href = entry.authUrl;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.className = "mcp-status-detail-link";
-        link.textContent = "Open server site →";
-        detail.appendChild(link);
+      if (entry.serverUrl) {
+        const btn = document.createElement("button");
+        btn.className = "mcp-status-detail-action";
+        btn.textContent = `Authenticate ${entry.name}`;
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          btn.disabled = true;
+          btn.textContent = "Opening browser…";
+          try {
+            const url = await this.startAuth(entry);
+            window.open(url, "_blank", "noopener,noreferrer");
+            para.textContent = `Continue in your browser. When auth completes, ${entry.name} tools become available immediately — no reload needed.`;
+            btn.style.display = "none";
+          } catch (err) {
+            btn.disabled = false;
+            btn.textContent = `Authenticate ${entry.name}`;
+            para.textContent = `Could not start OAuth flow: ${err instanceof Error ? err.message : String(err)}`;
+          }
+        });
+        detail.appendChild(btn);
       }
 
       wrapper.appendChild(detail);
 
       row.style.cursor = "pointer";
-      row.title = `Click for ${entry.name} auth instructions`;
+      row.title = `Click to expand auth options for ${entry.name}`;
       row.addEventListener("click", (e) => {
         e.stopPropagation();
         const open = detail.style.display !== "none";
@@ -173,6 +191,23 @@ export class MCPStatusIcon {
     }
 
     return wrapper;
+  }
+
+  private async startAuth(entry: MCPEntry): Promise<string> {
+    if (!entry.serverUrl) throw new Error("missing serverUrl");
+    const r = await fetch(`${this.apiPrefix}/api/mcp/oauth/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ server: entry.name, serverUrl: entry.serverUrl }),
+    });
+    if (!r.ok) {
+      const text = await r.text().catch(() => `HTTP ${r.status}`);
+      throw new Error(text);
+    }
+    const data = await r.json();
+    if (!data.authUrl) throw new Error("backend did not return authUrl");
+    return data.authUrl as string;
   }
 
   private toggle(): void {

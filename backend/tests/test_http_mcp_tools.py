@@ -259,6 +259,69 @@ class TestHTTPMCPToolAdapterConnectionFailure:
         assert "Error" in result
 
 
+class TestHTTPMCPToolAdapterRefresh:
+    """Live adapters must drop their failure cache + bearer header when a
+    fresh OAuth token lands, so the user doesn't have to reload CADE."""
+
+    @pytest.mark.asyncio
+    async def test_refresh_credentials_resets_failure_cache(self, tmp_path: pathlib.Path) -> None:
+        creds_dir = tmp_path / ".claude"
+        creds_dir.mkdir()
+        (creds_dir / ".credentials.json").write_text(
+            '{"mcpOAuth": {"alphaxiv|abc": {"accessToken": "fresh-token-9", "expiresAt": 0}}}'
+        )
+        with patch.object(pathlib.Path, "home", return_value=tmp_path):
+            adapter = HTTPMCPToolAdapter(
+                "https://api.example.com/mcp",
+                server_name="alphaxiv",
+            )
+            adapter._connect_failed = True
+            adapter._connect_error = "401 Unauthorized"
+            adapter._tools = {}
+            ok = await adapter.refresh_credentials()
+        assert ok is True
+        assert adapter._connect_failed is False
+        assert adapter._connect_error is None
+        assert adapter._tools is None
+        assert adapter.headers["Authorization"] == "Bearer fresh-token-9"
+
+    @pytest.mark.asyncio
+    async def test_refresh_credentials_no_token_returns_false(self, tmp_path: pathlib.Path) -> None:
+        # No credentials file at all — nothing to refresh from.
+        with patch.object(pathlib.Path, "home", return_value=tmp_path):
+            adapter = HTTPMCPToolAdapter(
+                "https://api.example.com/mcp",
+                server_name="alphaxiv",
+            )
+            ok = await adapter.refresh_credentials()
+        assert ok is False
+
+    @pytest.mark.asyncio
+    async def test_refresh_adapters_for_server_finds_matching_instances(
+        self, tmp_path: pathlib.Path,
+    ) -> None:
+        """The module-level refresh helper must touch every live adapter
+        whose server_name matches, leaving others alone."""
+        from core.backend.providers.http_mcp_tools import refresh_adapters_for_server
+        creds_dir = tmp_path / ".claude"
+        creds_dir.mkdir()
+        (creds_dir / ".credentials.json").write_text(
+            '{"mcpOAuth": {"alphaxiv|abc": {"accessToken": "tok-A", "expiresAt": 0}}}'
+        )
+        with patch.object(pathlib.Path, "home", return_value=tmp_path):
+            a1 = HTTPMCPToolAdapter("https://api.example.com/mcp", server_name="alphaxiv")
+            a2 = HTTPMCPToolAdapter("https://api.example.com/mcp", server_name="alphaxiv")
+            a3 = HTTPMCPToolAdapter("https://other.example.com/mcp", server_name="other")
+            for a in (a1, a2, a3):
+                a._connect_failed = True
+            count = await refresh_adapters_for_server("alphaxiv")
+        assert count == 2
+        assert a1._connect_failed is False
+        assert a2._connect_failed is False
+        assert a3._connect_failed is True  # untouched
+        assert a1.headers["Authorization"] == "Bearer tok-A"
+
+
 class TestHTTPMCPToolAdapterWithMockSession:
 
     @pytest.mark.asyncio

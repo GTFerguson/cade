@@ -7,13 +7,25 @@ import json
 import logging
 import pathlib
 import time
+import weakref
+from typing import TYPE_CHECKING
 
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 from core.backend.providers.types import ToolDefinition
 
+if TYPE_CHECKING:
+    pass
+
 logger = logging.getLogger(__name__)
+
+
+# Process-wide registry of live adapter instances. Held weakly so adapters are
+# GC'd with their owning provider, but accessible so a fresh OAuth token can
+# invalidate the cached connect-failed state across every provider that wires
+# the same MCP server. Cleaned opportunistically.
+_adapter_refs: list[weakref.ref] = []
 
 
 def _summarise_exc(e: BaseException) -> str:
@@ -101,6 +113,7 @@ class HTTPMCPToolAdapter:
         self,
         url: str,
         headers: dict[str, str] | None = None,
+        server_name: str | None = None,
     ) -> None:
         self.url = url
         self.headers = headers or {}
@@ -109,17 +122,19 @@ class HTTPMCPToolAdapter:
         self._tools: dict[str, ToolDefinition] | None = None
         self._connect_failed = False
         self._connect_error: str | None = None
+        self._server_name = server_name
+        _adapter_refs.append(weakref.ref(self))
 
     @classmethod
     def from_claude_oauth(cls, url: str, server_name: str) -> "HTTPMCPToolAdapter":
-        """Create adapter using Claude Code's stored OAuth credentials for the named server."""
+        """Create adapter using stored OAuth credentials for the named server."""
         token = load_claude_oauth_token(server_name)
-        headers = {}
+        headers: dict[str, str] = {}
         if token:
             headers["Authorization"] = f"Bearer {token}"
         else:
             logger.warning("No valid OAuth token found for MCP server '%s'", server_name)
-        return cls(url, headers)
+        return cls(url, headers, server_name=server_name)
 
     async def _ensure_connected(self) -> None:
         if self._session is not None:
@@ -240,3 +255,63 @@ class HTTPMCPToolAdapter:
         if self._http_ctx is not None:
             await self._http_ctx.__aexit__(None, None, None)
             self._http_ctx = None
+
+    async def refresh_credentials(self) -> bool:
+        """Reload the OAuth token from disk and reset connect/tool caches.
+
+        Called after a fresh OAuth flow completes so the adapter picks up
+        the new bearer token and tries again on the next chat turn instead
+        of staying stuck on the cached failure.
+
+        Returns True if a non-empty token was loaded.
+        """
+        if not self._server_name:
+            return False
+        token = load_claude_oauth_token(self._server_name)
+        if not token:
+            return False
+        # Drop any cached session — its old auth header is dead. Closing it
+        # may itself raise (anyio cleanup quirks); always reset state regardless.
+        try:
+            await self.close()
+        except BaseException as e:  # noqa: BLE001
+            logger.debug(
+                "HTTP MCP %s: error closing stale session during refresh (%s)",
+                self.url, type(e).__name__,
+            )
+            self._session = None
+            self._http_ctx = None
+        self.headers["Authorization"] = f"Bearer {token}"
+        self._tools = None
+        self._connect_failed = False
+        self._connect_error = None
+        logger.info("HTTP MCP %s: credentials refreshed", self.url)
+        return True
+
+
+async def refresh_adapters_for_server(server_name: str) -> int:
+    """Refresh every live adapter that belongs to the named server.
+
+    Returns the count of adapters actually refreshed. Adapters that no
+    longer exist (GC'd) are pruned from the registry.
+    """
+    refreshed = 0
+    surviving: list[weakref.ref] = []
+    for ref in _adapter_refs:
+        adapter = ref()
+        if adapter is None:
+            continue
+        surviving.append(ref)
+        if adapter._server_name != server_name:
+            continue
+        try:
+            ok = await adapter.refresh_credentials()
+            if ok:
+                refreshed += 1
+        except BaseException as e:  # noqa: BLE001
+            logger.warning(
+                "HTTP MCP %s: refresh failed (%s: %s)",
+                adapter.url, type(e).__name__, str(e).splitlines()[0][:200] if str(e) else "",
+            )
+    _adapter_refs[:] = surviving
+    return refreshed

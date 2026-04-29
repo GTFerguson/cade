@@ -719,25 +719,19 @@ class ConnectionHandler:
             for name, cfg in MODES.items()
         }
 
-        # Include MCP auth status so the frontend can warn if tools are unavailable.
-        # CADE doesn't run its own OAuth flow — it reads tokens that Claude Code
-        # has already obtained via `claude mcp`. So the "auth instructions" is
-        # always: run claude mcp, authenticate there, reload CADE.
+        # Include MCP auth status. The plug-icon flyout uses serverUrl to
+        # initiate OAuth via /api/mcp/oauth/start when the user clicks
+        # "authenticate" — CADE runs its own OAuth flow now (Clerk-style
+        # discovery + DCR + PKCE) and writes tokens to ~/.claude/.credentials.json.
         try:
             from core.backend.providers.http_mcp_tools import get_mcp_oauth_status
             alphaxiv_status = get_mcp_oauth_status("alphaxiv")
             message["mcpStatus"] = [
                 {
                     "name": "alphaxiv",
+                    "serverUrl": "https://api.alphaxiv.org/mcp/v1",
                     "authenticated": alphaxiv_status["authenticated"],
                     "reason": alphaxiv_status.get("reason", ""),
-                    "authInstructions": (
-                        "alphaxiv uses OAuth via Claude Code. To authenticate: "
-                        "run `claude` in a terminal, run `/mcp` and pick alphaxiv, "
-                        "complete the OAuth flow in your browser, then reload CADE. "
-                        "Tokens are stored at ~/.claude/.credentials.json."
-                    ),
-                    "authUrl": "https://alphaxiv.org",
                 }
             ]
         except Exception:

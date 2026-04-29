@@ -374,6 +374,33 @@ def create_app(config: Config | None = None) -> FastAPI:
     # Setup CORS middleware for remote access
     setup_cors(app)
 
+    # Wire MCP OAuth callback → refreshed status broadcast to all WS clients.
+    # Lives here so mcp_oauth doesn't need to know about WebSocket internals.
+    from backend import mcp_oauth as _oauth
+    from core.backend.providers.http_mcp_tools import get_mcp_oauth_status
+
+    async def _broadcast_mcp_status(server_name: str) -> None:
+        # For now we only know about alphaxiv — keep parity with the handshake
+        # payload. When more servers are added, build this from a real list.
+        status = get_mcp_oauth_status(server_name)
+        payload = {
+            "type": "mcp-status",
+            "mcpStatus": [
+                {
+                    "name": server_name,
+                    "authenticated": status["authenticated"],
+                    "reason": status.get("reason", ""),
+                }
+            ],
+        }
+        for ws in get_connection_registry().get_all_connections():
+            try:
+                await ws.send_json(payload)
+            except Exception:  # noqa: BLE001 — dead/closed sockets
+                pass
+
+    _oauth.register_status_broadcaster(_broadcast_mcp_status)
+
     @app.websocket("/ws")
     async def ws_endpoint(websocket: WebSocket) -> None:
         """WebSocket endpoint for terminal and file operations."""
@@ -820,6 +847,71 @@ def create_app(config: Config | None = None) -> FastAPI:
             "mode": perms.get_mode(connection_id),
             **perms.get_permissions(connection_id),
         })
+
+    # --- MCP OAuth API ---
+
+    class MCPOAuthStartRequest(BaseModel):
+        server: str
+        serverUrl: str
+
+    @app.post("/api/mcp/oauth/start")
+    async def mcp_oauth_start(
+        body: MCPOAuthStartRequest,
+        request: Request,
+        cade_session: str | None = Cookie(default=None),
+    ) -> JSONResponse:
+        """Begin an OAuth flow for a named MCP server. Returns the authorize URL."""
+        from backend import mcp_oauth as _oauth
+        cfg = get_config()
+        if cfg.auth_enabled and not validate_session_cookie(cade_session or "", cfg):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        # Browser-reachable backend origin. Use the request's scheme+host so it
+        # works whether CADE is local, remote with reverse proxy, or in dev.
+        scheme = request.headers.get("x-forwarded-proto", "http")
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host") or f"{cfg.host}:{cfg.port}"
+        backend_origin = f"{scheme}://{host}{cfg.root_path}"
+        try:
+            auth_url, request_id = await _oauth.start_flow(
+                body.server, body.serverUrl, backend_origin,
+            )
+        except Exception as e:
+            logger.exception("MCP OAuth start failed")
+            return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"authUrl": auth_url, "requestId": request_id})
+
+    @app.get("/api/mcp/oauth/callback")
+    async def mcp_oauth_callback(state: str = "", code: str = "", error: str = "") -> HTMLResponse:
+        """Receive the OAuth redirect, exchange code for tokens, persist them."""
+        from backend import mcp_oauth as _oauth
+        if error:
+            body = (
+                f"<h1>Authentication failed</h1>"
+                f"<p>{error}</p>"
+                f"<p>You can close this window.</p>"
+            )
+            return HTMLResponse(content=body, status_code=400)
+        if not state or not code:
+            return HTMLResponse(
+                content="<h1>Missing state/code</h1><p>Bad callback URL.</p>",
+                status_code=400,
+            )
+        try:
+            entry = await _oauth.complete_flow(state, code)
+        except Exception as e:
+            logger.exception("MCP OAuth callback failed")
+            return HTMLResponse(
+                content=f"<h1>Authentication failed</h1><pre>{e}</pre>",
+                status_code=500,
+            )
+        await _oauth.broadcast_status_change(entry["serverName"])
+        body = (
+            "<!DOCTYPE html><html><body style='font-family:monospace;padding:32px'>"
+            f"<h1>{entry['serverName']} authenticated ✓</h1>"
+            "<p>You can close this window and return to CADE — tools are now live.</p>"
+            "<script>setTimeout(()=>window.close(),2000)</script>"
+            "</body></html>"
+        )
+        return HTMLResponse(content=body)
 
     # --- Project config API ---
 

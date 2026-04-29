@@ -985,9 +985,20 @@
 }
 
 .mcp-status-flyout {
-  min-width: 200px;
+  display: none;
+  position: fixed;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  padding: 8px 0;
+  min-width: 220px;
+  max-width: 360px;
+  z-index: 1000;
   font-family: var(--font-mono);
   font-size: 11px;
+}
+
+.mcp-status-flyout.permissions-flyout--open {
+  display: block;
 }
 
 .mcp-status-empty {
@@ -996,8 +1007,58 @@
   font-style: italic;
 }
 
+.mcp-status-entry {
+  display: flex;
+  flex-direction: column;
+}
+
 .mcp-status-row {
   cursor: default;
+}
+
+.mcp-status-detail {
+  padding: 8px 12px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+  background: rgba(0, 0, 0, 0.18);
+  border-top: 1px solid var(--border-color);
+}
+
+.mcp-status-detail-text {
+  margin-bottom: 8px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.mcp-status-detail-action {
+  display: inline-block;
+  font-size: 11px;
+  color: var(--accent-blue);
+  background: transparent;
+  border: 1px solid var(--accent-blue);
+  padding: 3px 8px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+}
+
+.mcp-status-detail-action:hover {
+  background: var(--accent-blue);
+  color: var(--bg-primary);
+}
+
+.mcp-status-detail-action[disabled] {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+
+.mcp-status-detail-link {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-decoration: underline;
 }
 
 .mcp-status-indicator {
