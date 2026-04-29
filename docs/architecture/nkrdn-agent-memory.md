@@ -167,6 +167,12 @@ permission boundary that read-only modes are meant to protect.
   carrying `mem:unresolvedLink` literals. Renames are deliberately excluded:
   the stable_id carries through, so the edge isn't broken; surfacing them
   would generate persistent noise with no terminating event.
+- Doc-URI emission — indexed markdown docs become first-class graph nodes
+  in a `doc:` named graph (`http://nkrdn.knowledge/doc`) with `rdf:type`,
+  `rdfs:label`, `doc:path`, `doc:stem`, `doc:tag`, and `doc:docType`
+  predicates. Memory wiki-links resolve to symbols first, then fall back
+  to doc stems — so `mem:evidence [[agent-memory-systems]]` now lands as
+  a `doc:` URIRef rather than a literal of the inner name.
 
 ## What's Not In Scope Yet
 
@@ -176,11 +182,6 @@ permission boundary that read-only modes are meant to protect.
 - **Reflector pass** — session-end consolidation per ACE Generator-Reflector-
   Curator. Deferred until capture is in real use; needs provenance tracing
   to avoid the self-reinforcing reflection error failure mode.
-- **Doc-stem evidence resolution** — `mem:evidence` wiki-links currently
-  only resolve through the symbol index. When a wiki-link points at a doc
-  stem (e.g. `[[agent-memory-systems]]`), it falls back to a `Literal` of
-  the inner name. Lifting it to a doc URI requires nkrdn to emit RDF nodes
-  for indexed docs, which it does not do today.
 - **UI** (Phase 5) — symbol detail pane showing attached memories, orphan
   review queue, promote-to-docs gesture.
 
