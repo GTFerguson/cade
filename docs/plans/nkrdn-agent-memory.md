@@ -48,7 +48,7 @@ Phases 1–2 (nkrdn schema + ingestion) are the real work. Phase 3
 
 ### Phase 1 — nkrdn schema changes
 
-**Status:** Phase 1a (UUID-keyed identity, end-to-end) and Phase 1b (soft tombstoning) shipped in nkrdn `0d52287`, `36da615`, `1b30581`. Migration note in `nkrdn/CHANGELOG.md`. Cross-file move detection (tier 2) and `nkrdn delta show memory_affected` deferred until a concrete user need surfaces.
+**Status:** Phase 1a (UUID-keyed identity, end-to-end) and Phase 1b (soft tombstoning) shipped in nkrdn `0d52287`, `36da615`, `1b30581`. Migration note in `nkrdn/CHANGELOG.md`. Memory-health surfacing shipped as `nkrdn memory affected` — placed under the memory subcommand rather than `delta show` because it is a static health query, not a delta-graph concern. Cross-file move detection (tier 2) deferred until a concrete user need surfaces.
 
 **UUID-keyed entity identity**
 

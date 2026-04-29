@@ -162,6 +162,11 @@ permission boundary that read-only modes are meant to protect.
   CADE's `/api/memory/search` endpoint
 - Type-discriminated capture tools (Phase 4) — `record_decision`,
   `record_attempt`, `record_note` with content-hash idempotency
+- Memory-health surfacing — `nkrdn memory affected` reports entries whose
+  `applies_to` URIs point at tombstoned or missing symbols, plus entries
+  carrying `mem:unresolvedLink` literals. Renames are deliberately excluded:
+  the stable_id carries through, so the edge isn't broken; surfacing them
+  would generate persistent noise with no terminating event.
 
 ## What's Not In Scope Yet
 
