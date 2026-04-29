@@ -15,6 +15,22 @@ from core.backend.providers.types import ToolDefinition
 logger = logging.getLogger(__name__)
 
 
+def _outer_cancel_pending() -> bool:
+    """True if the current task has been cancelled by an outside caller.
+
+    Distinguishes a real outer cancel from an internal anyio TaskGroup
+    unwind (raised as CancelledError when a child task fails). Requires
+    Python 3.11+ for Task.cancelling().
+    """
+    task = asyncio.current_task()
+    if task is None:
+        return False
+    cancelling = getattr(task, "cancelling", None)
+    if cancelling is None:
+        return True
+    return cancelling() > 0
+
+
 class MCPToolAdapter:
     """Adapter that connects to an MCP server and exposes its tools."""
 
@@ -37,6 +53,7 @@ class MCPToolAdapter:
         self._session: ClientSession | None = None
         self._stdio_ctx = None
         self._tools: dict[str, ToolDefinition] | None = None
+        self._connect_failed = False
 
     async def _ensure_connected(self) -> None:
         """Connect to the MCP server if not already connected."""
@@ -60,12 +77,20 @@ class MCPToolAdapter:
         if self._tools is not None:
             return self._tools
 
+        if self._connect_failed:
+            return {}
         try:
             await self._ensure_connected()
-        except asyncio.CancelledError:
+        except (SystemExit, KeyboardInterrupt):
             raise
-        except Exception as e:
-            logger.debug(f"Could not connect to MCP server: {e}")
+        except BaseException as e:
+            if isinstance(e, asyncio.CancelledError) and _outer_cancel_pending():
+                raise
+            self._connect_failed = True
+            logger.warning(
+                "MCP %s: connect failed, disabling for this session (%s: %s)",
+                self.command, type(e).__name__, str(e).splitlines()[0][:200] if str(e) else "",
+            )
             return {}
 
         if self._session is None:

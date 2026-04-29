@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import AsyncIterator
 
 import litellm
@@ -127,6 +128,13 @@ class APIProvider(BaseProvider):
 
         If system_prompt is None, uses the default from provider config.
         """
+        t_start = time.monotonic()
+        logger.info(
+            "[%s] stream_chat start: model=%s, mode=%s, n_messages=%d, sysprompt_len=%d",
+            self._config.name, self._model, self._mode, len(messages),
+            len(system_prompt) if system_prompt else 0,
+        )
+
         # Emit SystemInfo at the start so the frontend knows the model
         yield SystemInfo(
             model=self._model,
@@ -144,9 +152,14 @@ class APIProvider(BaseProvider):
         kwargs = self._build_kwargs(litellm_messages)
 
         if self._tool_registry:
+            t_tools = time.monotonic()
             defs = await self._tool_registry.definitions_async()
             if self._mode != "orchestrator":
                 defs = [d for d in defs if d.name not in self._ORCHESTRATOR_ONLY_TOOLS]
+            logger.info(
+                "[%s] tool definitions resolved: n=%d (%.2fs)",
+                self._config.name, len(defs), time.monotonic() - t_tools,
+            )
             if defs:
                 kwargs["tools"] = [_tool_def_to_litellm(d) for d in defs]
                 kwargs["tool_choice"] = "auto"
@@ -154,23 +167,42 @@ class APIProvider(BaseProvider):
         tool_turn_count = 0
 
         while True:
+            t_request = time.monotonic()
+            logger.info(
+                "[%s] turn %d: calling acompletion (n_messages=%d, n_tools=%d)",
+                self._config.name, tool_turn_count,
+                len(kwargs["messages"]), len(kwargs.get("tools") or []),
+            )
             try:
                 response = await litellm.acompletion(**kwargs)
             except Exception as e:
-                logger.exception("LiteLLM streaming error: %s", e)
+                logger.exception("[%s] LiteLLM acompletion error: %s", self._config.name, e)
                 yield ChatError(
                     message=str(e),
                     code=str(getattr(e, "status_code", "unknown")),
                 )
                 return
+            logger.info(
+                "[%s] turn %d: acompletion returned, awaiting first chunk (%.2fs since request, %.2fs since start)",
+                self._config.name, tool_turn_count,
+                time.monotonic() - t_request, time.monotonic() - t_start,
+            )
 
             finish_reason = None
             pending_tool_calls: dict[int, dict] = {}
             last_chunk = None
             accumulated_prompt_tokens = 0
             accumulated_completion_tokens = 0
+            first_chunk_logged = False
 
             async for chunk in response:
+                if not first_chunk_logged:
+                    logger.info(
+                        "[%s] turn %d: first chunk received (%.2fs since request)",
+                        self._config.name, tool_turn_count,
+                        time.monotonic() - t_request,
+                    )
+                    first_chunk_logged = True
                 last_chunk = chunk
 
                 # Accumulate usage across all chunks — Anthropic-format providers
@@ -213,6 +245,14 @@ class APIProvider(BaseProvider):
 
             # Handle tool calls or finish
             if finish_reason == "tool_calls" and self._tool_registry and pending_tool_calls:
+                tool_names = [
+                    pending_tool_calls[i].get("name", "?")
+                    for i in sorted(pending_tool_calls)
+                ]
+                logger.info(
+                    "[%s] turn %d: model requested %d tool call(s): %s",
+                    self._config.name, tool_turn_count, len(tool_names), tool_names,
+                )
                 tool_turn_count += 1
                 if tool_turn_count > self._max_tool_turns:
                     yield ChatError(
@@ -258,10 +298,15 @@ class APIProvider(BaseProvider):
 
                 # Execute all tool calls concurrently so parallel spawns run in parallel
                 import asyncio as _asyncio
+                t_exec = time.monotonic()
                 results = await _asyncio.gather(*[
                     self._tool_registry.execute_async(tc["name"], args)
                     for tc, args in parsed
                 ])
+                logger.info(
+                    "[%s] tool batch executed in %.2fs",
+                    self._config.name, time.monotonic() - t_exec,
+                )
 
                 for (tc, _args), result_content in zip(parsed, results):
                     status = "error" if result_content.startswith("Error:") else "success"
@@ -289,6 +334,11 @@ class APIProvider(BaseProvider):
                     }
                 else:
                     usage = _extract_usage(last_chunk)
+                logger.info(
+                    "[%s] stream_chat done: finish_reason=%s, total=%.2fs, usage=%s",
+                    self._config.name, finish_reason,
+                    time.monotonic() - t_start, usage,
+                )
                 yield ChatDone(usage=usage)
                 return
 

@@ -16,6 +16,33 @@ from core.backend.providers.types import ToolDefinition
 logger = logging.getLogger(__name__)
 
 
+def _summarise_exc(e: BaseException) -> str:
+    """One-line description of an exception suitable for user-facing errors."""
+    if isinstance(e, BaseExceptionGroup):
+        children = [_summarise_exc(c) for c in e.exceptions]
+        return f"{type(e).__name__}({'; '.join(children)})"
+    msg = str(e).strip()
+    if not msg:
+        return type(e).__name__
+    return f"{type(e).__name__}: {msg.splitlines()[0][:200]}"
+
+
+def _outer_cancel_pending() -> bool:
+    """True if the current task has been cancelled by an outside caller.
+
+    Distinguishes a genuine outer cancellation from an internal anyio
+    TaskGroup unwind (which raises CancelledError as part of cleanup when
+    a child task fails). Requires Python 3.11+ for Task.cancelling().
+    """
+    task = asyncio.current_task()
+    if task is None:
+        return False
+    cancelling = getattr(task, "cancelling", None)
+    if cancelling is None:
+        return True
+    return cancelling() > 0
+
+
 def load_claude_oauth_token(server_name: str) -> str | None:
     """Load OAuth access token for a named MCP server from Claude Code credentials."""
     creds_path = pathlib.Path.home() / ".claude" / ".credentials.json"
@@ -80,6 +107,8 @@ class HTTPMCPToolAdapter:
         self._session: ClientSession | None = None
         self._http_ctx = None
         self._tools: dict[str, ToolDefinition] | None = None
+        self._connect_failed = False
+        self._connect_error: str | None = None
 
     @classmethod
     def from_claude_oauth(cls, url: str, server_name: str) -> "HTTPMCPToolAdapter":
@@ -106,12 +135,26 @@ class HTTPMCPToolAdapter:
     async def _list_tools(self) -> dict[str, ToolDefinition]:
         if self._tools is not None:
             return self._tools
+        if self._connect_failed:
+            return {}
+        # Run the connect in a child task so anyio's TaskGroup cancel scope
+        # (used by streamable_http_client) is isolated from our caller. If
+        # the MCP server returns 401, anyio cancels its own scope; without
+        # this isolation, that cancel propagates up and kills the chat stream.
+        setup_task = asyncio.create_task(self._ensure_connected())
         try:
-            await self._ensure_connected()
-        except (Exception, BaseException) as e:
-            if isinstance(e, (asyncio.CancelledError, SystemExit, KeyboardInterrupt)):
+            await setup_task
+        except (SystemExit, KeyboardInterrupt):
+            raise
+        except BaseException as e:
+            if isinstance(e, asyncio.CancelledError) and _outer_cancel_pending():
                 raise
-            logger.debug("Could not connect to HTTP MCP server %s: %s", self.url, e)
+            self._connect_failed = True
+            self._connect_error = _summarise_exc(e)
+            logger.warning(
+                "HTTP MCP %s: connect failed, disabling for this session (%s)",
+                self.url, self._connect_error,
+            )
             return {}
         if self._session is None:
             return {}
@@ -159,12 +202,18 @@ class HTTPMCPToolAdapter:
             return asyncio.run(self.execute_async(name, arguments))
 
     async def execute_async(self, name: str, arguments: dict) -> str:
+        if self._connect_failed:
+            return f"Error: HTTP MCP server unavailable ({self._connect_error or 'previous connect failed'})"
         try:
             await self._ensure_connected()
-        except (Exception, BaseException) as e:
-            if isinstance(e, (asyncio.CancelledError, SystemExit, KeyboardInterrupt)):
+        except (SystemExit, KeyboardInterrupt):
+            raise
+        except BaseException as e:
+            if isinstance(e, asyncio.CancelledError) and _outer_cancel_pending():
                 raise
-            return f"Error: HTTP MCP server not connected for tool '{name}': {e}"
+            self._connect_failed = True
+            self._connect_error = _summarise_exc(e)
+            return f"Error: HTTP MCP server connect failed for tool '{name}': {self._connect_error}"
         if self._session is None:
             return f"Error: HTTP MCP server not connected for tool '{name}'"
         try:

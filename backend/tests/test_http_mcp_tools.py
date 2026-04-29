@@ -199,22 +199,64 @@ class TestHTTPMCPToolAdapterConnectionFailure:
         assert "Error" in result
 
     @pytest.mark.asyncio
-    async def test_list_tools_propagates_cancelled_error(self) -> None:
-        """CancelledError must propagate so the owning task can be cancelled."""
+    async def test_list_tools_swallows_internal_cancel_from_anyio(self) -> None:
+        """anyio's TaskGroup raises CancelledError during transport-error
+        unwind (e.g. alphaxiv 401). When the outer task isn't being
+        cancelled by a caller, that's an internal cancel and must not kill
+        the chat stream — just disable this MCP server and return {}."""
         import asyncio
         adapter = HTTPMCPToolAdapter("https://api.example.com/mcp")
         with self._patch_connect(asyncio.CancelledError()):
-            with pytest.raises(asyncio.CancelledError):
-                await adapter._list_tools()
+            result = await adapter._list_tools()
+        assert result == {}
+        assert adapter._connect_failed is True
 
     @pytest.mark.asyncio
-    async def test_execute_async_propagates_cancelled_error(self) -> None:
-        """CancelledError during connect must propagate from execute_async."""
+    async def test_list_tools_caches_failure_no_retry(self) -> None:
+        """After a connect failure, subsequent calls return {} immediately
+        without retrying — avoids hammering a broken MCP every chat turn."""
+        import asyncio
+        adapter = HTTPMCPToolAdapter("https://api.example.com/mcp")
+        with self._patch_connect(OSError("connection refused")) as mock_connect:
+            await adapter._list_tools()
+            # second call should not call _ensure_connected again
+            await adapter._list_tools()
+        assert mock_connect.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_list_tools_propagates_real_outer_cancel(self) -> None:
+        """When the outer task is genuinely cancelled by a caller (e.g. user
+        clicks stop), CancelledError must still propagate so the chat task
+        unwinds cleanly."""
+        import asyncio
+        adapter = HTTPMCPToolAdapter("https://api.example.com/mcp")
+
+        async def _slow_connect() -> None:
+            await asyncio.sleep(10)
+
+        async def _runner() -> None:
+            with patch(
+                "core.backend.providers.http_mcp_tools.HTTPMCPToolAdapter._ensure_connected",
+                side_effect=_slow_connect,
+            ):
+                await adapter._list_tools()
+
+        task = asyncio.create_task(_runner())
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    @pytest.mark.asyncio
+    async def test_execute_async_returns_error_on_internal_cancel(self) -> None:
+        """execute_async surfaces an Error string instead of letting an
+        anyio-internal cancel kill the parent stream."""
         import asyncio
         adapter = HTTPMCPToolAdapter("https://api.example.com/mcp")
         with self._patch_connect(asyncio.CancelledError()):
-            with pytest.raises(asyncio.CancelledError):
-                await adapter.execute_async("tool", {})
+            result = await adapter.execute_async("tool", {})
+        assert isinstance(result, str)
+        assert "Error" in result
 
 
 class TestHTTPMCPToolAdapterWithMockSession:
