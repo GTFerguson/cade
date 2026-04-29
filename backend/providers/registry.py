@@ -47,7 +47,11 @@ def _create_tool_registry(provider_config, working_dir: "Path | None" = None, co
         registry.register(bash_executor, "bash")
 
         from backend.memory.tool_executor import MemoryToolExecutor, _ALL_DEFINITIONS as _MEM_DEFS
-        memory_executor = MemoryToolExecutor(_Path(working_dir), connection_id=connection_id)
+        memory_executor = MemoryToolExecutor(
+            _Path(working_dir),
+            provider_name=provider_config.name,
+            connection_id=connection_id,
+        )
         for defn in _MEM_DEFS:
             registry.register(memory_executor, defn.name)
 

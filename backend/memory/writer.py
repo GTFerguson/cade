@@ -168,6 +168,23 @@ def _format_tag_list(tags: list[str]) -> str:
     return "[" + ", ".join(_yaml_escape(t) for t in tags) + "]"
 
 
+def _format_quoted_list(items: list[str]) -> str:
+    """Render free-text items as a YAML bracket list with every item quoted.
+
+    Used for alternatives: items frequently contain commas, em-dashes, and
+    other separators that would break the parser's naive comma split if
+    rendered unquoted.
+    """
+    if not items:
+        return "[]"
+
+    def _quote(s: str) -> str:
+        escaped = s.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+
+    return "[" + ", ".join(_quote(s) for s in items) + "]"
+
+
 _WIKILINK_FULL = re.compile(r"^\[\[([^\[\]]+)\]\]$")
 
 
@@ -194,6 +211,7 @@ def _build_frontmatter(
     tags: list[str],
     supersedes: str | None,
     evidence: list[str] | None,
+    alternatives: list[str] | None,
     today: date,
     author: str,
 ) -> str:
@@ -206,6 +224,12 @@ def _build_frontmatter(
         lines.append(f"supersedes: {supersedes}")
     if evidence:
         lines.append(f"evidence: {_format_evidence_list(evidence)}")
+    if alternatives:
+        # Same content appears as prose in the body's "Considered Options"
+        # section; here it surfaces as queryable mem:rejectedAlternative
+        # triples after nkrdn ingest. Always-quote rendering protects items
+        # containing commas / em-dashes from the parser's naive split.
+        lines.append(f"alternatives: {_format_quoted_list(alternatives)}")
     lines.extend([
         f"authored_by: {author}",
         f"session: {today.isoformat()}",
@@ -319,6 +343,7 @@ class MemoryWriter:
         tags: list[str],
         supersedes: str | None,
         evidence: list[str] | None,
+        alternatives: list[str] | None,
         content_hash: str,
         slug_seed: str,
     ) -> WriteResult:
@@ -345,6 +370,7 @@ class MemoryWriter:
             tags=tags,
             supersedes=supersedes,
             evidence=evidence,
+            alternatives=alternatives,
             today=today,
             author=self._author,
         )
@@ -406,6 +432,7 @@ class MemoryWriter:
             tags=tags,
             supersedes=supersedes_clean,
             evidence=evidence or None,
+            alternatives=alternatives,
             content_hash=content_hash,
             slug_seed=rationale,
         )
@@ -448,6 +475,7 @@ class MemoryWriter:
             tags=tags,
             supersedes=None,
             evidence=evidence or None,
+            alternatives=None,
             content_hash=content_hash,
             slug_seed=approach,
         )
@@ -488,6 +516,7 @@ class MemoryWriter:
             tags=tags,
             supersedes=None,
             evidence=evidence or None,
+            alternatives=None,
             content_hash=content_hash,
             slug_seed=observation,
         )

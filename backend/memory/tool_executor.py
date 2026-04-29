@@ -262,9 +262,17 @@ class MemoryToolExecutor:
         self,
         project_root: Path,
         *,
-        author: str = DEFAULT_AUTHOR,
+        author: str | None = None,
+        provider_name: str = "",
         connection_id: str = "",
     ) -> None:
+        # Author resolution: explicit `author=` wins; otherwise derive from
+        # the active LiteLLM provider name (e.g. 'agent:cerebras'). Falling
+        # back to DEFAULT_AUTHOR preserves the prior 'agent:cade' behaviour
+        # for callers that pass nothing.
+        if author is None:
+            slug = (provider_name or "").strip().lower()
+            author = f"agent:{slug}" if slug else DEFAULT_AUTHOR
         self._writer = MemoryWriter(Path(project_root), author=author)
         self._connection_id = connection_id
 

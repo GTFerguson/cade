@@ -63,7 +63,8 @@ Named graph: `http://nkrdn.knowledge/memory`.
 | `mem:unresolvedLink` | `applies_to:` | Raw name when resolution fails |
 | `mem:supersedes` | `supersedes:` | `mem:` URI of prior entry by filename stem |
 | `mem:evidence` | `evidence:` | Wiki-links resolve to `code:` URIs via the symbol resolver; URLs and citation literals stay as `Literal`. Mixed arrays supported. |
-| `mem:authoredBy` | `authored_by:` | Literal string (e.g. `agent:claude`) |
+| `mem:rejectedAlternative` | `alternatives:` | One literal per rejected option for a Decision. Same content also appears as prose in the body's `## Considered Options` section for human readability. |
+| `mem:authoredBy` | `authored_by:` | Literal string. Format: `agent:<provider-name>` (e.g. `agent:cerebras`, `agent:mistral`) — the writer reads the active LiteLLM provider's `name` from `~/.cade/providers.toml` at executor construction time. Falls back to `agent:cade` when no provider is wired. |
 | `mem:duringSession` | `session:` | Session date or ID |
 | `mem:tag` | `tags:` | One triple per tag |
 | `mem:createdAt` | `created:` | ISO date string |

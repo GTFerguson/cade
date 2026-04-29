@@ -217,6 +217,111 @@ def test_format_evidence_list_mixed():
     )
 
 
+# ---------------------------------------------------------------------------
+# alternatives → frontmatter (mem:rejectedAlternative triples after ingest)
+# ---------------------------------------------------------------------------
+
+def test_decision_emits_alternatives_in_frontmatter(temp_dir: Path):
+    writer = MemoryWriter(temp_dir)
+    result = writer.record_decision(
+        rationale="Use JWT for stateless auth.",
+        alternatives=[
+            "session cookies — needs sticky sessions",
+            "API keys — no expiry semantics",
+        ],
+        applies_to=["AuthService"],
+        importance=7,
+    )
+    text = result.path.read_text(encoding="utf-8")
+    # Frontmatter list — quoted because each item contains ': ' or '—'
+    assert (
+        'alternatives: ["session cookies — needs sticky sessions", '
+        '"API keys — no expiry semantics"]'
+    ) in text
+    # Body still has Considered Options for human readability
+    assert "## Considered Options" in text
+
+
+def test_attempt_does_not_emit_alternatives(temp_dir: Path):
+    writer = MemoryWriter(temp_dir)
+    result = writer.record_attempt(
+        approach="Tried polling.",
+        outcome="Burned API quota.",
+        applies_to=["X"],
+        importance=4,
+    )
+    text = result.path.read_text(encoding="utf-8")
+    assert "alternatives:" not in text
+
+
+def test_note_does_not_emit_alternatives(temp_dir: Path):
+    writer = MemoryWriter(temp_dir)
+    result = writer.record_note(
+        observation="The cache TTL is configured per-deploy, not globally.",
+        applies_to=["Cache"],
+        importance=3,
+    )
+    text = result.path.read_text(encoding="utf-8")
+    assert "alternatives:" not in text
+
+
+# ---------------------------------------------------------------------------
+# authored_by reflects provider name
+# ---------------------------------------------------------------------------
+
+def test_executor_default_author_when_no_provider_name(temp_dir: Path):
+    """No provider_name → fall back to DEFAULT_AUTHOR (agent:cade)."""
+    executor = MemoryToolExecutor(temp_dir)
+    result = executor.execute("record_note", {
+        "observation": "x",
+        "applies_to": ["Y"],
+        "importance": 3,
+    })
+    payload = json.loads(result)
+    text = Path(payload["path"]).read_text(encoding="utf-8")
+    assert "authored_by: agent:cade" in text
+
+
+def test_executor_provider_name_becomes_authored_by(temp_dir: Path):
+    executor = MemoryToolExecutor(temp_dir, provider_name="cerebras")
+    result = executor.execute("record_note", {
+        "observation": "x",
+        "applies_to": ["Y"],
+        "importance": 3,
+    })
+    payload = json.loads(result)
+    text = Path(payload["path"]).read_text(encoding="utf-8")
+    assert "authored_by: agent:cerebras" in text
+
+
+def test_executor_provider_name_lowercased(temp_dir: Path):
+    executor = MemoryToolExecutor(temp_dir, provider_name="  Mistral  ")
+    result = executor.execute("record_note", {
+        "observation": "x",
+        "applies_to": ["Y"],
+        "importance": 3,
+    })
+    payload = json.loads(result)
+    text = Path(payload["path"]).read_text(encoding="utf-8")
+    assert "authored_by: agent:mistral" in text
+
+
+def test_executor_explicit_author_overrides_provider(temp_dir: Path):
+    executor = MemoryToolExecutor(
+        temp_dir,
+        author="agent:custom",
+        provider_name="cerebras",
+    )
+    result = executor.execute("record_note", {
+        "observation": "x",
+        "applies_to": ["Y"],
+        "importance": 3,
+    })
+    payload = json.loads(result)
+    text = Path(payload["path"]).read_text(encoding="utf-8")
+    assert "authored_by: agent:custom" in text
+
+
 def test_decision_emits_evidence_frontmatter(temp_dir: Path):
     writer = MemoryWriter(temp_dir)
     result = writer.record_decision(
