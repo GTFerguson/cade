@@ -725,14 +725,15 @@ class ConnectionHandler:
         # discovery + DCR + PKCE) and writes tokens to ~/.claude/.credentials.json.
         try:
             from core.backend.providers.http_mcp_tools import get_mcp_oauth_status
-            alphaxiv_status = get_mcp_oauth_status("alphaxiv")
+            from backend.mcp_servers import KNOWN_SERVERS
             message["mcpStatus"] = [
                 {
-                    "name": "alphaxiv",
-                    "serverUrl": "https://api.alphaxiv.org/mcp/v1",
-                    "authenticated": alphaxiv_status["authenticated"],
-                    "reason": alphaxiv_status.get("reason", ""),
+                    "name": name,
+                    "serverUrl": url,
+                    "authenticated": get_mcp_oauth_status(name)["authenticated"],
+                    "reason": get_mcp_oauth_status(name).get("reason", ""),
                 }
+                for name, url in KNOWN_SERVERS.items()
             ]
         except Exception:
             pass

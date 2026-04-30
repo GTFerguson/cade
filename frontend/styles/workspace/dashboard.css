@@ -1166,6 +1166,32 @@
   color: var(--text-primary);
 }
 
+.dash-notification--auth {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dash-notification__action {
+  background: transparent;
+  color: var(--accent-blue);
+  border: 1px solid var(--accent-blue);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.dash-notification__action:hover {
+  background: var(--accent-blue);
+  color: var(--bg-primary);
+}
+
+.dash-notification__action[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* ═══════════════════════════════════════════════
    Agent pushed panels
    ═══════════════════════════════════════════════ */

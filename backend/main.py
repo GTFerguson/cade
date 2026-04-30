@@ -380,14 +380,17 @@ def create_app(config: Config | None = None) -> FastAPI:
     from core.backend.providers.http_mcp_tools import get_mcp_oauth_status
 
     async def _broadcast_mcp_status(server_name: str) -> None:
-        # For now we only know about alphaxiv — keep parity with the handshake
-        # payload. When more servers are added, build this from a real list.
+        # Keep this payload shape in sync with the handshake path in
+        # websocket.py — the frontend needs serverUrl to know where to
+        # point a fresh OAuth flow if the user re-auths later.
+        from backend.mcp_servers import get_known_server_url
         status = get_mcp_oauth_status(server_name)
         payload = {
             "type": "mcp-status",
             "mcpStatus": [
                 {
                     "name": server_name,
+                    "serverUrl": get_known_server_url(server_name) or "",
                     "authenticated": status["authenticated"],
                     "reason": status.get("reason", ""),
                 }

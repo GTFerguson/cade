@@ -91,13 +91,8 @@ export class ProjectContextImpl implements IProjectContext {
         this.terminalManager?.getChatPane()?.setMcpStatus(msg.mcpStatus);
         if (!msg.sessionRestored) {
           for (const mcp of msg.mcpStatus) {
-            if (!mcp.authenticated) {
-              this.showNotificationLink(
-                `${mcp.name} not authenticated — research tools disabled. Click the plug icon for setup steps.`,
-                null,
-                "",
-                "warning",
-              );
+            if (!mcp.authenticated && mcp.serverUrl) {
+              this.showAuthToast(mcp.name, mcp.serverUrl);
             }
           }
         }
@@ -621,6 +616,66 @@ export class ProjectContextImpl implements IProjectContext {
   /**
    * Show a toast notification.
    */
+  /**
+   * Persistent warning toast for an unauthenticated MCP server. Short
+   * label + inline Authenticate button that fires the OAuth flow on
+   * the same /api/mcp/oauth/start endpoint the plug flyout uses.
+   */
+  private showAuthToast(serverName: string, serverUrl: string): void {
+    const toast = document.createElement("div");
+    toast.className = "dash-notification dash-notification--warning dash-notification--auth";
+
+    const label = document.createElement("span");
+    label.textContent = `${serverName}: not authenticated`;
+    toast.appendChild(label);
+
+    const action = document.createElement("button");
+    action.className = "dash-notification__action";
+    action.textContent = "Authenticate";
+    action.addEventListener("click", async () => {
+      action.disabled = true;
+      action.textContent = "Opening…";
+      try {
+        const res = await fetch(`${this.basePath()}/api/mcp/oauth/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ server: serverName, serverUrl }),
+        });
+        if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`));
+        const data = await res.json();
+        if (!data.authUrl) throw new Error("backend did not return authUrl");
+        window.open(data.authUrl, "_blank", "noopener,noreferrer");
+        label.textContent = `${serverName}: continue in browser`;
+        action.style.display = "none";
+      } catch (err) {
+        action.disabled = false;
+        action.textContent = "Authenticate";
+        label.textContent = `${serverName}: ${err instanceof Error ? err.message : String(err)}`;
+      }
+    });
+    toast.appendChild(action);
+
+    const close = document.createElement("button");
+    close.className = "dash-notification__close";
+    close.textContent = "×";
+    close.title = "Dismiss";
+    close.addEventListener("click", () => {
+      toast.style.opacity = "0";
+      setTimeout(() => toast.remove(), 200);
+    });
+    toast.appendChild(close);
+
+    this.container.appendChild(toast);
+  }
+
+  /** Backend path prefix for fetches (root_path). */
+  private basePath(): string {
+    // Dynamically reads the same BASE_URL used elsewhere; avoids a static
+    // import in case ProjectContext is mounted before config is ready.
+    return (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+  }
+
   private showNotification(message: string, style: string = "info"): void {
     const toast = document.createElement("div");
     toast.className = `dash-notification dash-notification--${style}`;
@@ -631,61 +686,6 @@ export class ProjectContextImpl implements IProjectContext {
       toast.style.opacity = "0";
       setTimeout(() => toast.remove(), 300);
     }, 3000);
-  }
-
-  /**
-   * Show a toast notification with an optional clickable link.
-   *
-   * Warning/error toasts stay until the user dismisses them — auto-fade only
-   * applies to info-level. Auth and connection problems shouldn't vanish in
-   * 6s when the user looks away.
-   */
-  private showNotificationLink(
-    message: string,
-    url: string | null,
-    linkText: string,
-    style: string = "info",
-  ): void {
-    const toast = document.createElement("div");
-    toast.className = `dash-notification dash-notification--${style}`;
-
-    const span = document.createElement("span");
-    span.textContent = message;
-    toast.appendChild(span);
-
-    if (url) {
-      const separator = document.createTextNode(" — ");
-      toast.appendChild(separator);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.target = "_blank";
-      anchor.rel = "noopener noreferrer";
-      anchor.textContent = linkText;
-      anchor.className = "dash-notification__link";
-      toast.appendChild(anchor);
-    }
-
-    const persistent = style === "warning" || style === "error";
-    if (persistent) {
-      const close = document.createElement("button");
-      close.className = "dash-notification__close";
-      close.textContent = "×";
-      close.title = "Dismiss";
-      close.addEventListener("click", () => {
-        toast.style.opacity = "0";
-        setTimeout(() => toast.remove(), 200);
-      });
-      toast.appendChild(close);
-    }
-
-    this.container.appendChild(toast);
-
-    if (!persistent) {
-      setTimeout(() => {
-        toast.style.opacity = "0";
-        setTimeout(() => toast.remove(), 300);
-      }, 6000);
-    }
   }
 
   /**
