@@ -55,6 +55,11 @@ def _create_tool_registry(provider_config, working_dir: "Path | None" = None, co
         for defn in _MEM_DEFS:
             registry.register(memory_executor, defn.name)
 
+        from backend.tools.specter_client import SpecterToolExecutor
+        specter_executor = SpecterToolExecutor()
+        for defn in specter_executor.tool_definitions():
+            registry.register(specter_executor, defn.name)
+
     # Add MCP tools if configured via "mcp_servers" or "mcp-servers"
     mcp_servers = provider_config.extra.get("mcp_servers") or provider_config.extra.get("mcp-servers")
     if mcp_servers and isinstance(mcp_servers, dict):
