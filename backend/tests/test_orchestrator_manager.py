@@ -1,4 +1,4 @@
-"""Tests for OrchestratorManager — mode enforcement, guidance, messaging, multi-turn."""
+"""Tests for OrchestratorManager — mode enforcement, messaging, multi-turn."""
 
 from __future__ import annotations
 
@@ -140,83 +140,9 @@ class TestApproveAgentModeEnforcement:
         assert pm.get_mode(record.agent_id) == "research"
 
 
-# ── request_guidance / respond_guidance ───────────────────────────────────────
-
-class TestGuidance:
-    @pytest.mark.asyncio
-    async def test_request_guidance_blocks_until_response(self):
-        manager = _make_manager()
-        collected = await _collect_broadcasts(manager, "conn-g")
-
-        # Create a minimal agent record so _send_to_agent can route correctly
-        agent_id = "agent-test-aabbcc"
-        manager._agents[agent_id] = AgentRecord(
-            agent_id=agent_id, name="test", task="t", mode="code",
-            state=AgentState.BUSY, owner_connection_id="conn-g",
-        )
-
-        async def delayed_respond():
-            await asyncio.sleep(0.01)
-            await manager.respond_guidance(agent_id, "Use approach B")
-
-        asyncio.create_task(delayed_respond())
-        result = await manager.request_guidance(agent_id, "Which approach?")
-
-        assert result == "Use approach B"
-
-    @pytest.mark.asyncio
-    async def test_guidance_request_sends_event_to_owner(self):
-        manager = _make_manager()
-        collected = await _collect_broadcasts(manager, "conn-gevt")
-
-        agent_id = "agent-gevt-112233"
-        manager._agents[agent_id] = AgentRecord(
-            agent_id=agent_id, name="test", task="t", mode="code",
-            state=AgentState.BUSY, owner_connection_id="conn-gevt",
-        )
-
-        async def respond_immediately():
-            await asyncio.sleep(0.01)
-            await manager.respond_guidance(agent_id, "ok")
-
-        asyncio.create_task(respond_immediately())
-        await manager.request_guidance(agent_id, "Help?")
-
-        types = [m.get("type") for m in collected]
-        assert MessageType.AGENT_GUIDANCE_REQUEST in types
-
-    @pytest.mark.asyncio
-    async def test_respond_guidance_returns_false_when_no_pending(self):
-        manager = _make_manager()
-        result = await manager.respond_guidance("nonexistent-agent", "hello")
-        assert result is False
-
-
 # ── send_message_to_agent ─────────────────────────────────────────────────────
 
 class TestSendMessageToAgent:
-    @pytest.mark.asyncio
-    async def test_resolves_pending_guidance_request(self):
-        manager = _make_manager()
-        collected = await _collect_broadcasts(manager, "conn-msg")
-
-        agent_id = "agent-msg-001122"
-        manager._agents[agent_id] = AgentRecord(
-            agent_id=agent_id, name="test", task="t", mode="code",
-            state=AgentState.BUSY, owner_connection_id="conn-msg",
-        )
-
-        # Set up a pending guidance future
-        loop = asyncio.get_event_loop()
-        future: asyncio.Future[str] = loop.create_future()
-        manager._guidance_futures[agent_id] = future
-
-        result = await manager.send_message_to_agent(agent_id, "Go with plan A")
-
-        assert result is True
-        assert future.done()
-        assert future.result() == "Go with plan A"
-
     @pytest.mark.asyncio
     async def test_queues_message_when_no_guidance_pending(self):
         manager = _make_manager()

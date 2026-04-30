@@ -87,7 +87,6 @@ class OrchestratorManager:
         self._providers: dict[str, BaseProvider] = {}
         self._connections: dict[str, _ConnectionEntry] = {}
         self._message_queues: dict[str, asyncio.Queue] = {}
-        self._guidance_futures: dict[str, asyncio.Future] = {}
 
     def register_connection(
         self,
@@ -306,50 +305,15 @@ class OrchestratorManager:
 
         return True
 
-    async def request_guidance(self, agent_id: str, question: str) -> str:
-        """Called by a worker via its request_guidance MCP tool. Blocks until user responds."""
-        loop = asyncio.get_event_loop()
-        future: asyncio.Future[str] = loop.create_future()
-        self._guidance_futures[agent_id] = future
-
-        await self._send_to_agent(agent_id, {
-            "type": MessageType.AGENT_GUIDANCE_REQUEST,
-            "agentId": agent_id,
-            "question": question,
-        })
-
-        try:
-            return await asyncio.wait_for(asyncio.shield(future), timeout=3600.0)
-        except asyncio.TimeoutError:
-            return "No response received (timeout). Continue with your best judgment."
-        finally:
-            self._guidance_futures.pop(agent_id, None)
-
-    async def respond_guidance(self, agent_id: str, response: str) -> bool:
-        """Resolve a pending guidance request from a worker."""
-        future = self._guidance_futures.get(agent_id)
-        if future is None or future.done():
-            return False
-        future.set_result(response)
-        return True
-
     async def send_message_to_agent(self, agent_id: str, message: str) -> bool:
         """Send a message to a running agent.
 
-        If the agent is waiting on request_guidance, the message resolves it.
-        Otherwise it is queued and picked up when the agent finishes its current turn.
+        Queued and picked up when the agent finishes its current turn.
         """
         record = self._agents.get(agent_id)
         if record is None or record.state not in (AgentState.BUSY, AgentState.STARTING):
             return False
 
-        # Resolve a pending guidance request first
-        future = self._guidance_futures.get(agent_id)
-        if future and not future.done():
-            future.set_result(message)
-            return True
-
-        # Queue for pickup at the next turn boundary
         queue = self._message_queues.get(agent_id)
         if queue:
             await queue.put(message)
@@ -463,7 +427,6 @@ class OrchestratorManager:
 
         Supports multi-turn: if the user queues a message while the agent is busy,
         it is injected as a new user turn when the current LLM turn finishes.
-        If the agent calls request_guidance(), it blocks until the user responds.
         """
         record = self._agents[agent_id]
         record.state = AgentState.STARTING
@@ -621,7 +584,6 @@ class OrchestratorManager:
             from backend.permissions.manager import get_permission_manager
             get_permission_manager().drop_connection(agent_id)
             self._message_queues.pop(agent_id, None)
-            self._guidance_futures.pop(agent_id, None)
 
     async def _set_state(self, agent_id: str, state: AgentState) -> None:
         await self._send_to_agent(agent_id, {

@@ -1056,12 +1056,6 @@ class ConnectionHandler:
                     data.get("agentId", ""),
                     data.get("content", ""),
                 )
-            elif msg_type == MessageType.AGENT_GUIDANCE_RESPOND:
-                from backend.orchestrator.manager import get_orchestrator_manager
-                await get_orchestrator_manager().respond_guidance(
-                    data.get("agentId", ""),
-                    data.get("response", ""),
-                )
             elif msg_type == MessageType.DASHBOARD_GET_CONFIG:
                 if self._dashboard:
                     await self._dashboard.load_and_send_config()

@@ -315,15 +315,6 @@ class SpawnAgentRequest(BaseModel):
     mode: str = "code"
 
 
-class GuidanceRequest(BaseModel):
-    agent_id: str
-    question: str
-
-
-class GuidanceResponse(BaseModel):
-    response: str
-
-
 class AgentMessageRequest(BaseModel):
     message: str
 
@@ -715,26 +706,6 @@ def create_app(config: Config | None = None) -> FastAPI:
         if not ok:
             return JSONResponse({"error": "Agent not found or not in review"}, status_code=400)
         return JSONResponse({"status": "rejected"})
-
-    @app.post("/api/orchestrator/guidance-request")
-    async def orchestrator_guidance_request(body: GuidanceRequest) -> PlainTextResponse:
-        """Called by a worker's request_guidance MCP tool. Blocks until the user responds."""
-        from backend.orchestrator.manager import get_orchestrator_manager
-
-        manager = get_orchestrator_manager()
-        response = await manager.request_guidance(body.agent_id, body.question)
-        return PlainTextResponse(response)
-
-    @app.post("/api/orchestrator/guidance-respond/{agent_id}")
-    async def orchestrator_guidance_respond(agent_id: str, body: GuidanceResponse) -> JSONResponse:
-        """User responds to a pending guidance request from a worker."""
-        from backend.orchestrator.manager import get_orchestrator_manager
-
-        manager = get_orchestrator_manager()
-        ok = await manager.respond_guidance(agent_id, body.response)
-        if not ok:
-            return JSONResponse({"error": "No pending guidance request for this agent"}, status_code=400)
-        return JSONResponse({"status": "ok"})
 
     @app.post("/api/orchestrator/message/{agent_id}")
     async def orchestrator_message_agent(agent_id: str, body: AgentMessageRequest) -> JSONResponse:
