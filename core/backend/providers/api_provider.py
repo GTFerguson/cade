@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -178,15 +179,43 @@ class APIProvider(BaseProvider):
                 self._config.name, tool_turn_count,
                 len(kwargs["messages"]), len(kwargs.get("tools") or []),
             )
-            try:
-                response = await litellm.acompletion(**kwargs)
-            except Exception as e:
-                logger.exception("[%s] LiteLLM acompletion error: %s", self._config.name, e)
-                yield ChatError(
-                    message=str(e),
-                    code=str(getattr(e, "status_code", "unknown")),
-                )
-                return
+            _retries = 0
+            _max_retries = 3
+            while True:
+                try:
+                    response = await litellm.acompletion(**kwargs)
+                    break
+                except (litellm.APIConnectionError, litellm.ServiceUnavailableError) as e:
+                    if _retries < _max_retries:
+                        _retries += 1
+                        delay = 2 ** (_retries - 1)
+                        logger.warning(
+                            "[%s] transient network error (attempt %d/%d), retrying in %.0fs: %s",
+                            self._config.name, _retries, _max_retries, delay, e,
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        logger.exception("[%s] LiteLLM acompletion error: %s", self._config.name, e)
+                        yield ChatError(message=str(e), code=str(getattr(e, "status_code", "unknown")))
+                        return
+                except litellm.InternalServerError as e:
+                    msg = str(e).lower()
+                    if _retries < _max_retries and ("name resolution" in msg or "cannot connect" in msg or "connection" in msg):
+                        _retries += 1
+                        delay = 2 ** (_retries - 1)
+                        logger.warning(
+                            "[%s] transient connection error (attempt %d/%d), retrying in %.0fs: %s",
+                            self._config.name, _retries, _max_retries, delay, e,
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        logger.exception("[%s] LiteLLM acompletion error: %s", self._config.name, e)
+                        yield ChatError(message=str(e), code=str(getattr(e, "status_code", "unknown")))
+                        return
+                except Exception as e:
+                    logger.exception("[%s] LiteLLM acompletion error: %s", self._config.name, e)
+                    yield ChatError(message=str(e), code=str(getattr(e, "status_code", "unknown")))
+                    return
             logger.info(
                 "[%s] turn %d: acompletion returned, awaiting first chunk (%.2fs since request, %.2fs since start)",
                 self._config.name, tool_turn_count,
