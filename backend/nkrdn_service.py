@@ -111,6 +111,29 @@ def _graph_path(project_dir: Path) -> Path:
     return project_dir / ".cade" / "graph.ttl"
 
 
+_SYSTEMD_RUN = shutil.which("systemd-run")
+
+
+def _wrap_with_resource_caps(cmd: list[str]) -> list[str]:
+    """Prefix the command with systemd-run cgroup limits when available.
+
+    Without these caps, an nkrdn rebuild that loads the FastEmbed transformer
+    on a large repo can OOM the host. systemd-run --user --scope confines the
+    whole process tree to MemoryMax/CPUQuota; over the limit the kernel kills
+    the rebuild instead of the user's session.
+    """
+    if not _SYSTEMD_RUN:
+        return cmd
+    return [
+        _SYSTEMD_RUN,
+        "--user", "--scope", "--quiet",
+        "-p", "MemoryMax=2G",
+        "-p", "MemorySwapMax=0",
+        "-p", "CPUQuota=200%",
+        *cmd,
+    ]
+
+
 def _run_nkrdn_rebuild(project_dir: Path) -> subprocess.CompletedProcess:
     """Run nkrdn rebuild as a subprocess.
 
@@ -129,9 +152,10 @@ def _run_nkrdn_rebuild(project_dir: Path) -> subprocess.CompletedProcess:
 
     env = os.environ.copy()
     env["NKRDN_BACKEND"] = "file"  # force rdflib, no Neo4j dependency
+    env.setdefault("NKRDN_EMBED_THREADS", "2")
 
     result = subprocess.run(
-        cmd,
+        _wrap_with_resource_caps(cmd),
         capture_output=True,
         text=True,
         cwd=str(project_dir),
