@@ -639,6 +639,41 @@ async def _tool_names_sent_to_litellm(provider: APIProvider) -> set[str]:
 
 
 @pytest.mark.asyncio
+async def test_no_arg_tool_call_serialises_empty_args_as_object():
+    """When the model invokes a no-arg tool, the assistant turn must carry
+    arguments='{}' rather than ''. Empty string is invalid JSON and strict
+    Anthropic-compatible gateways (e.g. MiniMax) reject the next request
+    with 'invalid params' (error 2013)."""
+    config = ProviderConfig(name="t", type="api", model="gpt-4o-mini", api_key="sk")
+
+    class NoArgExecutor:
+        def tool_definitions(self):
+            return [ToolDefinition(name="ping", description="", parameters_schema={"type": "object", "properties": {}})]
+        async def execute_async(self, name: str, arguments: dict) -> str:
+            return "pong"
+
+    registry = ToolRegistry()
+    registry.register(NoArgExecutor(), "ping")
+    provider = APIProvider(config, tool_registry=registry)
+
+    # First response: tool call with NO arguments delta. Second response: text.
+    first = [MockToolChunk(index=0, tool_id="call_1", name="ping", arguments=None, finish_reason="tool_calls")]
+    second = [MockChunk("done")]
+
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm:
+        mock_litellm.acompletion = AsyncMock(side_effect=[MockStreamResponse(first), MockStreamResponse(second)])
+        async for _ in provider.stream_chat([ChatMessage(role="user", content="ping it")]):
+            pass
+
+        # The second call's messages should contain an assistant turn whose
+        # tool_calls[0].function.arguments is the JSON object string '{}'.
+        second_call_kwargs = mock_litellm.acompletion.call_args_list[1].kwargs
+        msgs = second_call_kwargs["messages"]
+        assistant_turn = next(m for m in msgs if m.get("role") == "assistant" and m.get("tool_calls"))
+        assert assistant_turn["tool_calls"][0]["function"]["arguments"] == "{}"
+
+
+@pytest.mark.asyncio
 async def test_orchestrator_tools_hidden_in_non_orchestrator_mode():
     config = ProviderConfig(name="t", type="api", model="gpt-4o-mini", api_key="sk")
     provider = APIProvider(config, tool_registry=_make_orchestrator_registry())

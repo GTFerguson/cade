@@ -279,7 +279,10 @@ class APIProvider(BaseProvider):
                             "type": "function",
                             "function": {
                                 "name": tc["name"],
-                                "arguments": tc["arguments"],
+                                # MiniMax (and other strict Anthropic-compatible
+                                # gateways) reject "" here — a no-arg tool call
+                                # must serialise as the JSON object "{}".
+                                "arguments": tc["arguments"] or "{}",
                             },
                         }
                         for tc in sorted_calls

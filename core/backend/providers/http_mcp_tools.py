@@ -123,6 +123,9 @@ class HTTPMCPToolAdapter:
         self._connect_failed = False
         self._connect_error: str | None = None
         self._server_name = server_name
+        # SSE-style MCP sessions can't multiplex — serialise concurrent
+        # call_tool() invocations through one ClientSession.
+        self._call_lock = asyncio.Lock()
         _adapter_refs.append(weakref.ref(self))
 
     @classmethod
@@ -232,7 +235,14 @@ class HTTPMCPToolAdapter:
         if self._session is None:
             return f"Error: HTTP MCP server not connected for tool '{name}'"
         try:
-            result = await self._session.call_tool(name, arguments)
+            async with self._call_lock:
+                result = await asyncio.wait_for(
+                    self._session.call_tool(name, arguments),
+                    timeout=60.0,
+                )
+        except asyncio.TimeoutError:
+            return f"Error: tool '{name}' timed out after 60s on HTTP MCP server"
+        try:
             if hasattr(result, "content") and result.content:
                 text_parts = []
                 for content_block in result.content:
