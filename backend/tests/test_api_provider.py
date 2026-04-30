@@ -607,3 +607,84 @@ async def test_usage_empty_when_provider_omits_it(provider: APIProvider):
 
     done = next(e for e in events if isinstance(e, ChatDone))
     assert done.usage == {}
+
+
+def _make_orchestrator_registry() -> ToolRegistry:
+    """Registry with one normal tool plus the orchestrator-only pair."""
+    class Exec:
+        def tool_definitions(self):
+            return [
+                ToolDefinition(name="bash", description="run", parameters_schema={"type": "object", "properties": {}}),
+                ToolDefinition(name="spawn_agent", description="spawn", parameters_schema={"type": "object", "properties": {}}),
+                ToolDefinition(name="list_agents", description="list", parameters_schema={"type": "object", "properties": {}}),
+            ]
+
+        def execute(self, name: str, arguments: dict) -> str:
+            return ""
+
+    registry = ToolRegistry()
+    executor = Exec()
+    for n in ("bash", "spawn_agent", "list_agents"):
+        registry.register(executor, n)
+    return registry
+
+
+async def _tool_names_sent_to_litellm(provider: APIProvider) -> set[str]:
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm:
+        mock_litellm.acompletion = AsyncMock(return_value=MockStreamResponse([MockChunk("OK")]))
+        async for _ in provider.stream_chat([ChatMessage(role="user", content="Hi")]):
+            pass
+        tools = mock_litellm.acompletion.call_args.kwargs.get("tools") or []
+        return {t["function"]["name"] for t in tools}
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_tools_hidden_in_non_orchestrator_mode():
+    config = ProviderConfig(name="t", type="api", model="gpt-4o-mini", api_key="sk")
+    provider = APIProvider(config, tool_registry=_make_orchestrator_registry())
+    provider.set_mode("research")
+
+    names = await _tool_names_sent_to_litellm(provider)
+
+    assert "bash" in names
+    assert "spawn_agent" not in names
+    assert "list_agents" not in names
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_overlay_exposes_tools_in_any_mode():
+    """The /orch overlay should be additive — spawn_agent/list_agents become available
+    on top of whatever mode the parent is in (research, code, architect, …)."""
+    config = ProviderConfig(name="t", type="api", model="gpt-4o-mini", api_key="sk")
+    provider = APIProvider(config, tool_registry=_make_orchestrator_registry())
+    provider.set_mode("research")
+    provider.set_orchestrator(True)
+
+    names = await _tool_names_sent_to_litellm(provider)
+
+    assert {"bash", "spawn_agent", "list_agents"} <= names
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_mode_exposes_tools_without_overlay():
+    config = ProviderConfig(name="t", type="api", model="gpt-4o-mini", api_key="sk")
+    provider = APIProvider(config, tool_registry=_make_orchestrator_registry())
+    provider.set_mode("orchestrator")
+
+    names = await _tool_names_sent_to_litellm(provider)
+
+    assert {"spawn_agent", "list_agents"} <= names
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_overlay_can_be_toggled_off():
+    config = ProviderConfig(name="t", type="api", model="gpt-4o-mini", api_key="sk")
+    provider = APIProvider(config, tool_registry=_make_orchestrator_registry())
+    provider.set_mode("code")
+    provider.set_orchestrator(True)
+    provider.set_orchestrator(False)
+
+    names = await _tool_names_sent_to_litellm(provider)
+
+    assert "spawn_agent" not in names
+    assert "list_agents" not in names

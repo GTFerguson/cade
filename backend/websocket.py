@@ -1458,6 +1458,8 @@ class ConnectionHandler:
         # Reset CC session so MCP tools reload with updated state
         if isinstance(provider, ClaudeCodeProvider):
             provider._has_session = False
+        elif provider is not None and hasattr(provider, "set_orchestrator"):
+            provider.set_orchestrator(self._orchestrator_on)
 
         # Turning off: kill any worker agents this connection owns
         if not self._orchestrator_on:

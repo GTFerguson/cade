@@ -68,7 +68,7 @@ def _extract_usage(last_chunk) -> dict:
 class APIProvider(BaseProvider):
     """Provider that calls LLM APIs via LiteLLM."""
 
-    # Tools restricted to orchestrator mode — hidden from all other modes
+    # Tools that require the orchestrator overlay (or orchestrator mode) to be visible.
     _ORCHESTRATOR_ONLY_TOOLS = frozenset({"spawn_agent", "list_agents"})
 
     def __init__(self, config: ProviderConfig, tool_registry: ToolRegistry | None = None) -> None:
@@ -77,10 +77,14 @@ class APIProvider(BaseProvider):
         self._model = config.model
         self._tool_registry = tool_registry
         self._mode: str = config.extra.get("mode", "code")
+        self._orchestrator_overlay: bool = False
         self._max_tool_turns: int = int(config.extra.get("max_tool_turns", _DEFAULT_MAX_TOOL_TURNS))
 
     def set_mode(self, mode: str) -> None:
         self._mode = mode
+
+    def set_orchestrator(self, enabled: bool) -> None:
+        self._orchestrator_overlay = enabled
 
     @property
     def mode(self) -> str:
@@ -154,7 +158,8 @@ class APIProvider(BaseProvider):
         if self._tool_registry:
             t_tools = time.monotonic()
             defs = await self._tool_registry.definitions_async()
-            if self._mode != "orchestrator":
+            allow_orchestrator_tools = self._mode == "orchestrator" or self._orchestrator_overlay
+            if not allow_orchestrator_tools:
                 defs = [d for d in defs if d.name not in self._ORCHESTRATOR_ONLY_TOOLS]
             logger.info(
                 "[%s] tool definitions resolved: n=%d (%.2fs)",
