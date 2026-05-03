@@ -13,7 +13,7 @@ import { loadFonts } from "./terminal/web-fonts";
 // DOMContentLoaded below — this top-level call just starts the fetch
 // early. loadFonts is idempotent (FontFace.load() returns the in-flight
 // promise on subsequent calls), so awaiting it later is safe.
-loadFonts(["JetBrains Mono"]).catch(() => {
+loadFonts().catch(() => {
   // Fall through — the await in DOMContentLoaded reports the real error.
 });
 
@@ -1149,24 +1149,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   const authed = await checkAuth();
   if (!authed) return;
 
-  // Block app init until every JetBrains Mono face is loaded. Iterating
-  // document.fonts directly (rather than loadFonts(['JetBrains Mono'])) is
-  // a deliberate workaround: in production builds the addon-style loader
-  // resolves without actually calling FontFace.load() on 5 of the 8 faces
-  // (verified empirically — only weights the page renders end up loaded,
-  // the rest stay 'unloaded'). When chat then renders a 700-bold token
-  // for the first time, the OffscreenCanvas measures fallback metrics,
-  // the WebGL atlas bakes a wrong cell, and glyphs render as black blocks.
-  // The raw form below loads all 8 faces deterministically.
-  // See docs/reference/xterm-webfont-loading.md.
+  // Block app init until every registered font face is loaded. Chrome returns
+  // FontFace.family with quotes for multi-word families ("JetBrains Mono"),
+  // so filtering by family === "JetBrains Mono" silently matches nothing.
+  // Loading all faces is safe — only JetBrains Mono is registered — and
+  // guarantees the OffscreenCanvas-visible load that document.fonts.ready
+  // alone does not. See docs/reference/xterm-webfont-loading.md.
   try {
     await document.fonts.ready;
-    const faces = Array.from(document.fonts).filter(
-      (f) => f.family === "JetBrains Mono",
-    );
-    await Promise.all(faces.map((f) => f.load()));
+    await Promise.all(Array.from(document.fonts).map((f) => f.load()));
   } catch (e) {
-    console.warn("[main] JetBrains Mono load failed, using fallback:", e);
+    console.warn("[main] font load failed, using fallback:", e);
   }
 
   app.initialize().catch((e) => {

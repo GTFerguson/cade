@@ -1,18 +1,32 @@
 ---
-title: xterm.js Webfont Loading — Research and Official Solution
+title: xterm.js Webfont Loading — Research and Resolution
 created: 2026-04-26
-updated: 2026-04-26
-status: active
-tags: [xterm, webgl, fonts, rendering, frontend]
+updated: 2026-05-03
+status: resolved
+tags: [xterm, webgl, canvas, fonts, rendering, frontend]
 ---
 
-# xterm.js Webfont Loading — Research and Official Solution
+# xterm.js Webfont Loading — Research and Resolution
 
-Research log answering: *has anyone in the wider ecosystem solved the xterm.js + WebGL + webfont rendering problem we have spent 12 attempts on, and is there a working reference implementation?*
-
-**TL;DR**: Yes. The xterm.js team ships an official addon — `@xterm/addon-web-fonts` (released 2024) — which solves exactly this class of bug. Its internals confirm our diagnosis (the `fontFamily` toggle-through-sentinel is the right way to force a remeasure, and `document.fonts.ready` alone is not enough — each `FontFace` must be `.load()`-ed individually). We are missing that final step.
+Research log for the xterm.js black-glyph rendering bug. After 13+ attempts to fix this in the WebGL renderer, the root cause was accepted as unfixable at the application layer: xterm's WebGL atlas-baking happens in a narrow synchronous window where no JavaScript-level font-load gate can reliably guarantee the OffscreenCanvas font registry is up to date. **The fix was switching from `@xterm/addon-webgl` to `@xterm/addon-canvas`** (PR: commit `fix: switch xterm renderer from WebGL to Canvas`). The Canvas renderer renders each glyph via Canvas 2D on every frame — no pre-baked atlas, no atlas-corruption-from-wrong-metrics, no driver issues.
 
 See also: [[xterm-rendering-issue]] (attempt log), [[browser-terminal-emulators]] (renderer landscape).
+
+---
+
+## Resolution (2026-05-03)
+
+After 13+ failed attempts to fix the WebGL atlas-baking race via font-loading gates, the renderer was switched from `@xterm/addon-webgl` to `@xterm/addon-canvas`.
+
+**Why Canvas renderer fixes the problem permanently**: The Canvas renderer uses `canvas.getContext('2d').fillText()` to render each glyph on every frame. There is no pre-baked texture atlas. The browser's normal text rendering path handles font selection on every draw call, so a font-not-yet-loaded-at-first-paint scenario simply means the next frame renders correctly once the font is available. There is no "atlas baked with wrong metrics and wrong forever" failure mode.
+
+**Why font-loading fixes couldn't fully solve it**: The WebGL renderer measures glyph cells in a synchronous window during `terminal.open()` and bakes the atlas immediately when the WebGL addon attaches. JavaScript's font-load API (`FontFace.load()`, `document.fonts.ready`) operates in the microtask/promise queue, which can only run between turns of the event loop — not within the synchronous atlas-baking code. Any race between "WebGL addon attaches" and "all font faces are genuinely available to OffscreenCanvas" cannot be closed from application code without patching xterm internals. The `relayout()` / fontFamily-toggle approach was the right workaround but was unreliable in practice.
+
+**Additional bug found during investigation**: The `f.family` filter in `main.ts` was comparing `f.family === "JetBrains Mono"`, but Chrome returns `FontFace.family` *with* surrounding quotes (`"JetBrains Mono"`) for multi-word family names. The filter silently matched nothing, making the per-`FontFace.load()` bootstrap gate a no-op. This was fixed (filter replaced with `Array.from(document.fonts).map(f => f.load())` — no family filter needed since only JetBrains Mono is registered) but did not resolve the black-glyph bug, confirming the issue was structural.
+
+**Tradeoff**: Canvas renderer has higher CPU usage than WebGL for very large terminals or high-frequency updates. In practice this is not noticeable for a terminal emulator at typical sizes.
+
+---
 
 ---
 
