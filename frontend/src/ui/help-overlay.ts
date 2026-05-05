@@ -219,6 +219,9 @@ export class HelpOverlay implements Component {
       { label: "expand / open detail", key: "l" },
       { label: "collapse", key: "h" },
       { label: "filter", key: "/" },
+      { label: "retarget orphan (top candidate)", key: "r" },
+      { label: "retarget orphan to candidate 1-3", key: "1 / 2 / 3" },
+      { label: "archive orphan", key: "a" },
       { label: "clear / back", key: "Esc" },
     ];
 
@@ -227,6 +230,7 @@ export class HelpOverlay implements Component {
       { label: "expand entry", key: "l" },
       { label: "collapse entry", key: "h" },
       { label: "toggle superseded", key: "s" },
+      { label: "archive entry", key: "a" },
       { label: "back to graph", key: "Esc" },
     ];
 

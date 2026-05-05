@@ -10,7 +10,7 @@ export class SymbolDetailPane {
   private bodyEl: HTMLElement | null = null;
   private statusEl: HTMLElement | null = null;
 
-  constructor(private container: HTMLElement) {}
+  constructor(private container: HTMLElement, private projectPath: string = "") {}
 
   initialize(): void {
     this.container.className = "memory-detail-pane";
@@ -36,6 +36,10 @@ export class SymbolDetailPane {
 
     this.container.setAttribute("tabindex", "-1");
     this.container.addEventListener("keydown", (e) => this.handleKey(e), true);
+  }
+
+  setProjectPath(path: string): void {
+    this.projectPath = path;
   }
 
   showSymbol(sym: MemorySymbol): void {
@@ -262,7 +266,25 @@ export class SymbolDetailPane {
         this.showSuperseded = !this.showSuperseded;
         this.render();
         break;
+      case "a": {
+        e.preventDefault();
+        const entry = active[this.selectedEntryIdx];
+        if (entry) this.archiveEntry(entry.uuid);
+        break;
+      }
     }
+  }
+
+  private async archiveEntry(uuid: string): Promise<void> {
+    if (!this.projectPath) return;
+    const uri = `http://nkrdn.knowledge/memory#${uuid}`;
+    try {
+      await fetch("/api/memory/archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project: this.projectPath, uri }),
+      });
+    } catch { /* FileWatcher triggers rebuild + re-emit */ }
   }
 }
 

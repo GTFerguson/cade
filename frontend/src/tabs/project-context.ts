@@ -280,13 +280,14 @@ export class ProjectContextImpl implements IProjectContext {
     this.fileTree = new FileTree(filesWrap, this.ws);
     this.fileTree.initialize();
 
-    this.memoryGraphTree = new MemoryGraphTree(graphWrap, this.ws);
+    this.memoryGraphTree = new MemoryGraphTree(graphWrap, this.ws, this.projectPath);
     this.memoryGraphTree.initialize();
     this.memoryGraphTree.mount();
 
     this.rightPane = new RightPaneManager(viewerEl, this.ws);
     this.rightPane.initialize();
     this.rightPane.getViewer().setProjectPath(this.projectPath);
+    this.rightPane.setMemoryProjectPath(this.projectPath);
 
     // Wire agent overview pane in the right pane
     this.rightPane.setAgentManager(this.agentManager);

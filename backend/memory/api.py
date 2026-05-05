@@ -110,6 +110,46 @@ def build_graph_message(project_dir: Path) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Retarget action
+# ---------------------------------------------------------------------------
+
+def retarget_memory(project_dir: Path, uri: str, target_name: str) -> None:
+    """Update a memory's applies_to to a new symbol name.
+
+    Rewrites the YAML frontmatter of the source markdown file. The wiki-link
+    is updated so the next nkrdn rebuild resolves it to the new symbol.
+    """
+    # Find the source file from the URI fragment
+    mem_id = uri.split("#")[-1]
+    memory_dir = project_dir / ".cade" / "memory"
+    source_path: Path | None = None
+
+    # Match by stem — files are named <date>-<slug>.md or just <id>.md
+    for md_file in memory_dir.glob("*.md"):
+        if md_file.stem == mem_id:
+            source_path = md_file
+            break
+
+    if source_path is None:
+        raise FileNotFoundError(f"No memory file found for URI fragment: {mem_id}")
+
+    text = source_path.read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        raise ValueError(f"Memory file has no YAML frontmatter: {source_path}")
+
+    end_marker = text.index("\n---", 3)
+    frontmatter_text = text[3:end_marker]
+    body = text[end_marker + 4:]
+
+    fm = yaml.safe_load(frontmatter_text) or {}
+    fm["applies_to"] = [f"[[{target_name}]]"]
+
+    # Reconstruct the file preserving body
+    new_fm = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
+    source_path.write_text(f"---\n{new_fm}\n---\n{body}", encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
 # SQLite symbol loading
 # ---------------------------------------------------------------------------
 

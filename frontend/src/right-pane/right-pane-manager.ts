@@ -208,6 +208,10 @@ export class RightPaneManager implements Component, PaneKeyHandler {
     return this.symbolDetailPane;
   }
 
+  setMemoryProjectPath(projectPath: string): void {
+    this.symbolDetailPane?.setProjectPath(projectPath);
+  }
+
   /**
    * Open a file in Neovim for editing, returning to the viewer on exit.
    */

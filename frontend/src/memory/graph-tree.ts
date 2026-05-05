@@ -27,6 +27,7 @@ export class MemoryGraphTree {
   constructor(
     private paneEl: HTMLElement,
     private ws: WebSocketClient,
+    private projectPath: string = "",
   ) {}
 
   initialize(): void {
@@ -311,10 +312,62 @@ export class MemoryGraphTree {
         e.preventDefault();
         this.filterInput?.focus();
         break;
+      case "a": {
+        const item = this.flatItems[this.selectedIndex];
+        if (item?.type === "orphan") {
+          const orphan = item.data as OrphanMemory;
+          this.archiveOrphan(orphan);
+        }
+        break;
+      }
+      case "r": {
+        const item = this.flatItems[this.selectedIndex];
+        if (item?.type === "orphan") {
+          const orphan = item.data as OrphanMemory;
+          if (orphan.candidates[0]) this.retarget(orphan, orphan.candidates[0].name);
+        }
+        break;
+      }
+      case "1":
+      case "2":
+      case "3": {
+        const item = this.flatItems[this.selectedIndex];
+        if (item?.type === "orphan") {
+          const orphan = item.data as OrphanMemory;
+          const idx = parseInt(e.key, 10) - 1;
+          const cand = orphan.candidates[idx];
+          if (cand) this.retarget(orphan, cand.name);
+        }
+        break;
+      }
       case "Escape":
         this.onSelectCallback?.(null);
         break;
     }
+  }
+
+  private async archiveOrphan(orphan: OrphanMemory): Promise<void> {
+    if (!this.projectPath) return;
+    const uri = `http://nkrdn.knowledge/memory#${orphan.uuid}`;
+    try {
+      await fetch("/api/memory/archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project: this.projectPath, uri }),
+      });
+    } catch { /* backend will re-emit via FileWatcher */ }
+  }
+
+  private async retarget(orphan: OrphanMemory, targetName: string): Promise<void> {
+    if (!this.projectPath) return;
+    const uri = `http://nkrdn.knowledge/memory#${orphan.uuid}`;
+    try {
+      await fetch("/api/memory/retarget", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project: this.projectPath, uri, target_name: targetName }),
+      });
+    } catch { /* FileWatcher handles rebuild + re-emit */ }
   }
 
   private selectIndex(idx: number): void {
