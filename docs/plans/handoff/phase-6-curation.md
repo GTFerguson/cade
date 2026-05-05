@@ -53,7 +53,7 @@ The Phase 5 codebase had already shipped most of the P1 surface area — only th
 ## Worktree / branch
 
 - Path: `/home/gary/projects/cade` — the **main checkout, on `main` branch**. Phase 5's worktree (`/home/gary/projects/cade-phase5-memory`) and `phase5/memory-ui` branch are now redundant; the user has not yet asked to remove them, so leave both alone unless asked.
-- Last commit on main: `3cc62d2 Phase 6 P2: retrieval trigger guidance in agent-memory and nkrdn modules`
+- Last commit on main: `934cfc9 Phase 6 P3: ambient memory presence cues in chat + neovim header`
 
 ## Shipped this session
 
@@ -65,7 +65,7 @@ The Phase 5 codebase had already shipped most of the P1 surface area — only th
 - `92d03fa` — plans: Phase 6 priorities and explicit non-goals (research-grounded)
 - `c69ed5f` — Phase 6 P1: discard action on memory capture toast
 - `3cc62d2` — Phase 6 P2: retrieval trigger guidance in `agent-memory.md` and `nkrdn.md`
-- (this session) — **Phase 6 P3: ambient memory presence cues in chat + neovim header**
+- `934cfc9` — **Phase 6 P3: ambient memory presence cues in chat + neovim header**
 
 ### What P3 actually shipped
 
@@ -95,7 +95,7 @@ P2 is loaded by every mode that has `agent-memory` and/or `nkrdn` in `additional
 
 ## In flight (uncommitted work)
 
-**Mine (Phase 6):** none — P1 committed in `c69ed5f`, P2 in `3cc62d2`, P3 in this session's last commit (see `git log`).
+**Mine (Phase 6):** none — P1 committed in `c69ed5f`, P2 in `3cc62d2`, P3 in `934cfc9`.
 
 **User's, untouched (separate triage feature in flight — DO NOT bundle with Phase 6 commits, DO NOT delete):**
 - `backend/memory/tool_executor.py` — adds `record_investigation` tool
