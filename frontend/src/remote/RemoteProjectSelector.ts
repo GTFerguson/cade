@@ -48,7 +48,9 @@ export class RemoteProjectSelector {
       onCancel: () => this.handleEscape(),
     });
 
-    this.boundHandleKeyDown = (e: KeyboardEvent) => this.nav.handleKeyDown(e);
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (this.nav.handleKeyDown(e)) e.stopPropagation();
+    };
   }
 
   private async handleSelect(): Promise<void> {
@@ -551,7 +553,7 @@ export class RemoteProjectSelector {
 
   async show(): Promise<SelectionResult | null> {
     await this.showConnectionsScreen();
-    document.addEventListener("keydown", this.boundHandleKeyDown);
+    document.addEventListener("keydown", this.boundHandleKeyDown, true);
 
     return new Promise((resolve) => {
       this.resolve = resolve;
@@ -566,7 +568,7 @@ export class RemoteProjectSelector {
   }
 
   private remove(): void {
-    document.removeEventListener("keydown", this.boundHandleKeyDown);
+    document.removeEventListener("keydown", this.boundHandleKeyDown, true);
 
     if (this.ws) {
       this.ws.disconnect();

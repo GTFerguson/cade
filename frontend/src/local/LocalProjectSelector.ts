@@ -74,33 +74,39 @@ export class LocalProjectSelector {
         case "j":
         case "ArrowDown":
           e.preventDefault();
+          e.stopPropagation();
           this.selectedIndex = (this.selectedIndex + 1) % totalOptions;
           this.renderScreen();
           break;
         case "k":
         case "ArrowUp":
           e.preventDefault();
+          e.stopPropagation();
           this.selectedIndex = (this.selectedIndex - 1 + totalOptions) % totalOptions;
           this.renderScreen();
           break;
         case "l":
         case "ArrowRight":
           e.preventDefault();
+          e.stopPropagation();
           this.handleNavigateIn();
           break;
         case "Enter":
         case " ":
           e.preventDefault();
+          e.stopPropagation();
           this.handleConfirm();
           break;
         case "h":
         case "ArrowLeft":
         case "Backspace":
           e.preventDefault();
+          e.stopPropagation();
           this.handleBack();
           break;
         case "Escape":
           e.preventDefault();
+          e.stopPropagation();
           this.close();
           break;
       }
