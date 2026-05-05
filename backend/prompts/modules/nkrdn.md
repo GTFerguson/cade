@@ -8,6 +8,7 @@ nkrdn indexes code structure (symbols, relationships, inheritance) and project d
 |---|---|
 | **Design/conceptual** — "How does X work?", "Why is X designed this way?" | `nkrdn search "X" --source docs` → read the design doc → verify in code |
 | **Structure/relationships** — "What depends on X?", "What would break if I changed X?", "What does X inherit?", "How is the code organized?" | `nkrdn lookup X` → then `usages`, `details`, `tree`, or `scope` as needed |
+| **Project memory** — "Has this been decided before?", "Has this approach been tried?", "Why does this symbol behave oddly?" | `nkrdn memory search "<query>"` (optionally `--uri <symbol>`) — see `agent-memory` module for trigger guidance |
 | **Cross-project** — "What repos use this?", "What changed across projects?" | `nkrdn workspace diff --since 7d` or query the workspace graph directly |
 | **Location/implementation** — "Find where X is", "How is X implemented?" | Grep or Read directly — nkrdn has structure, not code |
 
@@ -26,6 +27,18 @@ nkrdn indexes code structure (symbols, relationships, inheritance) and project d
 | `tree <uri>` | Full inheritance hierarchy |
 | `stats` | Entity counts and graph overview |
 | `context <filepath>` | Code structure + related docs for a file |
+
+## Memory Commands
+
+Project memory entries live in `.cade/memory/` and attach to code symbols. See the `agent-memory` module for when to write and when to query.
+
+| Command | Purpose |
+|---|---|
+| `memory search "<query>"` | Retrieve relevant entries (LLM retriever by default; `--direct` for raw scoring) |
+| `memory search "<query>" --uri <symbol-uri>` | Restrict to entries attached to a specific symbol |
+| `memory list` | List all entries; `--uri <symbol-uri>` scopes to one symbol |
+| `memory affected` | Entries whose `applies_to` URIs are tombstoned, missing, or unresolved |
+| `memory retire <uri>` | Archive a memory (writes `archived_at` to its source markdown) |
 
 ## Workspace Commands
 
