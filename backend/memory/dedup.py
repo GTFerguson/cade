@@ -24,12 +24,15 @@ restructuring the writer.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Protocol
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -287,3 +290,97 @@ class TokenJaccardJudge:
         if best is not None and best[0] >= self._update_threshold:
             return Update(best[1])
         return New()
+
+
+# Minimum token-set overlap to bother asking the LLM. Below this the entries
+# are too dissimilar to plausibly contradict each other.
+_SUPERSEDE_MIN_OVERLAP = 0.20
+
+
+class LLMDedupJudge:
+    """Wraps TokenJaccardJudge and adds LLM-backed Supersede detection.
+
+    Calls litellm.completion (sync) for candidates where token overlap falls
+    in the ambiguous zone: above _SUPERSEDE_MIN_OVERLAP (related topic) but
+    below the Update threshold (not a pure refinement). Uses the yes/no rubric
+    from docs/reference/agent-memory-capture.md §3.2.
+
+    Conservative on LLM failure: returns New rather than a false Supersede.
+
+    Designed to run inside asyncio.to_thread — litellm.completion is sync
+    and must not be called from the async event loop directly.
+    """
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str = "",
+        update_threshold: float = 0.70,
+    ) -> None:
+        self._base = TokenJaccardJudge(update_threshold=update_threshold)
+        self._model = model
+        self._api_key = api_key
+
+    def judge(
+        self,
+        *,
+        type_: str,
+        applies_to: list[str],
+        body: str,
+        content_hash: str,
+        candidates: list[DedupCandidate],
+    ) -> Verdict:
+        verdict = self._base.judge(
+            type_=type_,
+            applies_to=applies_to,
+            body=body,
+            content_hash=content_hash,
+            candidates=candidates,
+        )
+        if not isinstance(verdict, New) or not candidates:
+            return verdict
+
+        new_tokens = _tokens(body)
+        if not new_tokens:
+            return verdict
+
+        best_score, best_cand = max(
+            ((_jaccard(new_tokens, _tokens(c.body)), c) for c in candidates),
+            key=lambda x: x[0],
+        )
+        if best_score < _SUPERSEDE_MIN_OVERLAP:
+            return verdict
+
+        if self._ask_contradicts(body, best_cand.body, type_):
+            return Supersede(best_cand)
+        return verdict
+
+    def _ask_contradicts(self, new_body: str, old_body: str, type_: str) -> bool:
+        """Sync LLM yes/no check. Safe to call from a thread pool (asyncio.to_thread)."""
+        try:
+            import litellm  # lazy import — dedup runs without litellm in tests
+
+            prompt = (
+                f"Compare two {type_} memory entries for a software project.\n\n"
+                f"OLD:\n{old_body[:800]}\n\nNEW:\n{new_body[:800]}\n\n"
+                "Does the NEW entry directly contradict the OLD entry? "
+                "Contradiction means the new entry reverses or invalidates a key claim. "
+                "Extension, refinement, or adding detail is NOT a contradiction.\n"
+                "Answer YES or NO only."
+            )
+            kwargs: dict = {
+                "model": self._model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 5,
+                "temperature": 0.0,
+            }
+            if self._api_key:
+                kwargs["api_key"] = self._api_key
+
+            resp = litellm.completion(**kwargs)
+            answer = resp.choices[0].message.content.strip().upper()
+            return answer.startswith("YES")
+        except Exception as exc:
+            logger.debug("LLMDedupJudge: LLM check failed, defaulting to New: %s", exc)
+            return False

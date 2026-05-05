@@ -817,3 +817,105 @@ def test_jaccard_judge_only_considers_same_target(temp_dir: Path):
     assert first.action == "created"
     assert elsewhere.action == "created"
     assert first.path != elsewhere.path
+
+
+# ---------------------------------------------------------------------------
+# LLMDedupJudge — conservative fallback + Supersede verdict path
+# ---------------------------------------------------------------------------
+
+def test_llm_dedup_judge_falls_back_to_new_on_llm_failure(temp_dir: Path):
+    """When the LLM call fails, LLMDedupJudge must return New (not raise)."""
+    from backend.memory.dedup import LLMDedupJudge
+    from unittest.mock import patch
+
+    # Use a model/key combo that will fail (no real API call in tests)
+    judge = LLMDedupJudge(model="nonexistent/model", api_key="bad-key")
+    writer = MemoryWriter(temp_dir, dedup_judge=judge)
+
+    first = writer.record_decision(
+        rationale="Use PostgreSQL for its ACID guarantees and mature tooling.",
+        alternatives=["MySQL", "SQLite"],
+        applies_to=["DataLayer"],
+        importance=6,
+    )
+    # Moderately different body on the same target — overlaps enough to
+    # trigger the LLM check, which will fail → conservative New
+    second = writer.record_decision(
+        rationale="Switch to MySQL because the team has more operational experience with it.",
+        alternatives=["PostgreSQL", "SQLite"],
+        applies_to=["DataLayer"],
+        importance=5,
+    )
+    assert first.action == "created"
+    assert second.action == "created"
+    assert first.path != second.path
+
+
+def test_llm_dedup_judge_returns_supersede_when_llm_says_yes(temp_dir: Path):
+    """When the LLM returns YES, LLMDedupJudge produces a Supersede verdict."""
+    from backend.memory.dedup import LLMDedupJudge
+    from unittest.mock import MagicMock, patch
+
+    judge = LLMDedupJudge(model="any/model", api_key="key")
+    writer = MemoryWriter(temp_dir, dedup_judge=judge)
+
+    # Use substantially overlapping rationale text so token-set Jaccard falls in
+    # the ambiguous zone (> _SUPERSEDE_MIN_OVERLAP=0.20, < update_threshold=0.70)
+    # and the LLM check is triggered.
+    first = writer.record_decision(
+        rationale=(
+            "Use PostgreSQL for the primary data store because of ACID compliance "
+            "and its strong reliability guarantees for production workloads."
+        ),
+        alternatives=["MySQL", "SQLite"],
+        applies_to=["DataLayer"],
+        importance=6,
+    )
+
+    mock_resp = MagicMock()
+    mock_resp.choices[0].message.content = "YES"
+
+    with patch("litellm.completion", return_value=mock_resp):
+        second = writer.record_decision(
+            rationale=(
+                "Use MySQL for the primary data store instead of PostgreSQL because "
+                "the team has operational experience with MySQL for production workloads."
+            ),
+            alternatives=["PostgreSQL", "SQLite"],
+            applies_to=["DataLayer"],
+            importance=5,
+        )
+
+    assert first.action == "created"
+    # Supersede falls through to the New path — creates a new file
+    assert second.action == "created"
+    assert second.path != first.path
+    # New file must carry the supersedes link
+    content = second.path.read_text()
+    assert first.uri_stem in content
+
+
+def test_llm_dedup_judge_skips_dissimilar_candidates(temp_dir: Path):
+    """No LLM call when token overlap is below _SUPERSEDE_MIN_OVERLAP."""
+    from backend.memory.dedup import LLMDedupJudge
+    from unittest.mock import patch
+
+    judge = LLMDedupJudge(model="any/model", api_key="key")
+    writer = MemoryWriter(temp_dir, dedup_judge=judge)
+
+    writer.record_decision(
+        rationale="The authentication layer should use JWT tokens for stateless auth.",
+        alternatives=["session cookies"],
+        applies_to=["AuthService"],
+        importance=7,
+    )
+
+    with patch("litellm.completion") as mock_llm:
+        # Completely unrelated topic on the same target — overlap below threshold
+        writer.record_decision(
+            rationale="The database connection pool size should be tuned to 20 connections.",
+            alternatives=["unbounded pool"],
+            applies_to=["AuthService"],
+            importance=4,
+        )
+    mock_llm.assert_not_called()

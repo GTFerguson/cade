@@ -47,10 +47,18 @@ def _create_tool_registry(provider_config, working_dir: "Path | None" = None, co
         registry.register(bash_executor, "bash")
 
         from backend.memory.tool_executor import MemoryToolExecutor, _ALL_DEFINITIONS as _MEM_DEFS
+        from backend.memory.dedup import LLMDedupJudge
+        dedup_judge = None
+        if provider_config.model and provider_config.api_key:
+            dedup_judge = LLMDedupJudge(
+                model=provider_config.model,
+                api_key=provider_config.api_key,
+            )
         memory_executor = MemoryToolExecutor(
             _Path(working_dir),
             provider_name=provider_config.name,
             connection_id=connection_id,
+            dedup_judge=dedup_judge,
         )
         for defn in _MEM_DEFS:
             registry.register(memory_executor, defn.name)

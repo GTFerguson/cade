@@ -21,7 +21,7 @@ from typing import Any
 
 from core.backend.providers.types import ToolDefinition
 
-from backend.memory.dedup import TokenJaccardJudge
+from backend.memory.dedup import DedupJudge, TokenJaccardJudge
 from backend.memory.writer import (
     DEFAULT_AUTHOR,
     MemoryWriter,
@@ -358,23 +358,15 @@ class MemoryToolExecutor:
         author: str | None = None,
         provider_name: str = "",
         connection_id: str = "",
+        dedup_judge: DedupJudge | None = None,
     ) -> None:
-        # Author resolution: explicit `author=` wins; otherwise derive from
-        # the active LiteLLM provider name (e.g. 'agent:cerebras'). Falling
-        # back to DEFAULT_AUTHOR preserves the prior 'agent:cade' behaviour
-        # for callers that pass nothing.
         if author is None:
             slug = (provider_name or "").strip().lower()
             author = f"agent:{slug}" if slug else DEFAULT_AUTHOR
-        # Phase 6 P5: TokenJaccardJudge adds Update detection to the
-        # baseline content-hash skip path. Same-target rewrites that share
-        # most tokens with an existing entry refine it in place rather than
-        # creating near-duplicate noise. Supersession (semantic
-        # contradiction) still requires an LLM judge — not wired yet.
         self._writer = MemoryWriter(
             Path(project_root),
             author=author,
-            dedup_judge=TokenJaccardJudge(),
+            dedup_judge=dedup_judge or TokenJaccardJudge(),
         )
         self._connection_id = connection_id
 
@@ -395,7 +387,10 @@ class MemoryToolExecutor:
         return self._dispatch_sync(name, arguments)
 
     async def execute_async(self, name: str, arguments: dict) -> str:
-        raw = self._dispatch_sync(name, arguments)
+        # Run in a thread: _dispatch_sync does file I/O, and when LLMDedupJudge
+        # is active it also calls litellm.completion (sync) — both must stay
+        # off the event loop.
+        raw = await asyncio.to_thread(self._dispatch_sync, name, arguments)
         send_fn = _WRITE_BROADCASTS.get(self._connection_id) if self._connection_id else None
         if send_fn is not None:
             try:
