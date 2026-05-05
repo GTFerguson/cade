@@ -110,14 +110,17 @@ Isolating memory triples in `http://nkrdn.knowledge/memory` keeps them easy to e
 
 ## Capture Layer
 
-The agent writes memory entries via three type-discriminated tools registered
-in CADE's per-connection `ToolRegistry`:
+The agent writes memory entries via type-discriminated tools registered in
+CADE's per-connection `ToolRegistry`:
 
 | Tool | When to call | Required fields |
 |---|---|---|
 | `record_decision` | After choosing between concrete alternatives with non-trivial trade-off | `rationale`, `alternatives`, `applies_to`, `importance` |
 | `record_attempt` | After abandoning an approach mid-task | `approach`, `outcome`, `applies_to`, `importance` |
 | `record_note` | When finding a non-obvious quirk worth keeping | `observation`, `applies_to`, `importance` |
+| `record_investigation` | After completing a transaction triage investigation | `applies_to` (counterparty name), `verdict`, `confidence`, `signals`, `specter_snapshot`, `rationale`, `transaction_id` |
+
+`record_investigation` is triage-mode-only. Its `applies_to` is a single string (counterparty entity name, not a code symbol). Importance is hard-coded from the verdict: 7 for `escalate`/`block`, 4 for `legit`.
 
 `backend/memory/writer.py` emits markdown files into `.cade/memory/` with
 frontmatter that matches the parser schema above. The body uses MADR-style
@@ -129,7 +132,16 @@ the existing URI.
 **Rebuild trigger.** `backend/nkrdn_service.py` extends its FileWatcher
 filter to include `.md` files under `.cade/memory/`. The existing 10-second
 debounce schedules a single rebuild per burst of writes — the writer
-doesn't need a direct `NkrdnService` handle.
+doesn't need a direct `NkrdnService` handle. After a successful incremental
+rebuild, `NkrdnService` calls its `on_rebuild` callback; the websocket
+handler passes `_emit_nkrdn_graph` so the frontend immediately receives the
+updated graph without waiting for the next session.
+
+**Live write notification.** `MemoryToolExecutor.execute_async` fires a
+`memory-write` WebSocket event immediately after a successful write (before
+the rebuild). The event carries `action`, `memory_type`, and `uri_stem`.
+`MemoryPresenceIndex` listens to it and notifies subscribers so the UI can
+show a pending state while the rebuild is in flight.
 
 **Why explicit tool calls (vs autonomous post-turn extraction):** cheaper,
 more auditable, and avoids the self-reinforcing reflection error documented
@@ -239,13 +251,20 @@ picking flow that warrants its own scope.
 - Type-discriminated capture tools (Phase 4) — `record_decision`,
   `record_attempt`, `record_note` with content-hash idempotency
 - **Pluggable dedup judge at write time** (Phase 6) — `DedupJudge` interface
-  in `backend/memory/dedup.py` with two built-in implementations:
-  `ContentHashJudge` (Phase 4 baseline: skip on exact match) and
+  in `backend/memory/dedup.py` with three built-in implementations:
+  `ContentHashJudge` (Phase 4 baseline: skip on exact match),
   `TokenJaccardJudge` (adds Update detection — same-target rewrites with
   ≥0.7 token-set Jaccard overlap refine the existing entry in place,
-  preserving its URI). The tool executor wires `TokenJaccardJudge` by
-  default. Verdict is one of Skip / Update / Supersede / New; a new
-  `WriteResult.action` field surfaces which path ran.
+  preserving its URI), and `LLMDedupJudge` (adds LLM-backed Supersede
+  detection — wraps `TokenJaccardJudge` and calls `litellm.completion` for
+  candidates in the ambiguous overlap zone 0.20–0.70, using the yes/no
+  rubric from [[../reference/agent-memory-capture#3-2-dedup-judge-rubric]];
+  returns `New` on any LLM failure). Verdict is one of Skip / Update /
+  Supersede / New; `WriteResult.action` surfaces which path ran.
+  `registry.py` wires `LLMDedupJudge` when the provider has `model` + `api_key`;
+  falls back to `TokenJaccardJudge` otherwise. `execute_async` runs
+  `_dispatch_sync` via `asyncio.to_thread` so the sync LLM call never
+  blocks the event loop.
 - Memory-health surfacing — `nkrdn memory affected` reports entries whose
   `applies_to` URIs point at tombstoned or missing symbols, plus entries
   carrying `mem:unresolvedLink` literals. Renames are deliberately excluded:
@@ -262,15 +281,6 @@ picking flow that warrants its own scope.
 
 ## What's Not In Scope Yet
 
-- **LLM-backed Supersede detection** — the dedup `DedupJudge` interface
-  has a Supersede verdict but no built-in implementation produces it.
-  Detecting that a new Decision *contradicts* (rather than refines) an
-  existing one requires semantic understanding; the dedup module is
-  shaped so a future `LLMJudge` can plug in alongside the existing
-  `TokenJaccardJudge` without restructuring the writer. Until then,
-  contradictory same-target writes fall through to New (the safe
-  default), and the agent uses the explicit `supersedes` parameter
-  when it knows.
 - **Reflector pass** — session-end consolidation per ACE Generator-Reflector-
   Curator. Deferred until capture is in real use; needs provenance tracing
   to avoid the self-reinforcing reflection error failure mode.
@@ -295,14 +305,14 @@ picking flow that warrants its own scope.
 | `nkrdn/src/nkrdn/memory/retriever.py` | LLM-controlled iterative loop with `seen_ids` dedup |
 | `nkrdn/src/nkrdn/cli/commands/memory.py` | `nkrdn memory search/list/retire` |
 | `cade/backend/memory/writer.py` | Markdown emitter; consults `DedupJudge` per write, supports Skip / Update-in-place / New / explicit-Supersede |
-| `cade/backend/memory/dedup.py` | `DedupJudge` interface + `ContentHashJudge` / `TokenJaccardJudge` implementations |
-| `cade/backend/memory/tool_executor.py` | `record_decision`/`attempt`/`note` tool surface; default-wires `TokenJaccardJudge` |
+| `cade/backend/memory/dedup.py` | `DedupJudge` interface + `ContentHashJudge` / `TokenJaccardJudge` / `LLMDedupJudge` implementations |
+| `cade/backend/memory/tool_executor.py` | `record_decision`/`attempt`/`note`/`investigation` tool surface; wires judge, fires `memory-write` WS event on write |
 | `cade/backend/memory/api.py` | `build_graph_message`, archive + retarget endpoints |
-| `cade/backend/providers/registry.py` | Wires the memory tools into the per-connection registry |
-| `cade/backend/nkrdn_service.py` | FileWatcher trigger for memory writes |
+| `cade/backend/providers/registry.py` | Wires memory tools + `LLMDedupJudge` (when provider has credentials) into per-connection registry |
+| `cade/backend/nkrdn_service.py` | FileWatcher trigger for memory writes; `on_rebuild` callback re-emits `nkrdn-graph` after incremental rebuild |
 | `cade/frontend/src/memory/graph-tree.ts` | Memory graph tree (left pane) |
 | `cade/frontend/src/memory/symbol-detail.ts` | Symbol detail pane (viewer); `p` keybinding triggers promote-to-docs |
-| `cade/frontend/src/memory/presence-index.ts` | File-level memory presence index for ambient cues |
+| `cade/frontend/src/memory/presence-index.ts` | File-level memory presence index; refreshes on `nkrdn-graph` and notifies subscribers on `memory-write` |
 | `cade/frontend/src/memory/promote-prompt.ts` | Builds the structured CoT prompt for promote-to-docs |
 | `cade/frontend/src/chat/chat-pane.ts` | Capture toast render + presence-cue decorator on file links |
 | `cade/frontend/styles/workspace/memory.css` | Tree, detail pane, and capture-toast styles |

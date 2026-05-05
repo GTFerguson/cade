@@ -370,8 +370,16 @@ graduated design.
   (arXiv:2602.07609). Synthesis logged in
   [[../reference/agent-memory-capture#12-1-promote-to-docs-evidence-design-implications]].
 - P5 — Pluggable `DedupJudge` interface + `TokenJaccardJudge` for
-  Update-in-place detection. LLM-backed Supersede detection still
-  deferred — see [[../architecture/nkrdn-agent-memory#What's Not In Scope Yet]].
+  Update-in-place detection (`1d630de`).
+- P6 — `LLMDedupJudge` wrapping `TokenJaccardJudge`; calls
+  `litellm.completion` (sync, via `asyncio.to_thread`) for candidates in
+  the 0.20–0.70 Jaccard overlap zone; wired in `registry.py` when provider
+  has credentials (`f2f6f1a`).
+- P7 — Live presence-index updates: `NkrdnService.on_rebuild` re-emits
+  `nkrdn-graph` after incremental rebuild; `memory-write` WS event fires
+  immediately after write for pending-state UI (`a2098cc`).
+- P8 — Triage mode: `record_investigation` tool + `[modes.triage]` in
+  `modes.toml` + `backend/prompts/modules/triage.md` (`d30e003`).
 
 **Explicitly out of scope** by the existing research, unchanged through
 Phase 6:
@@ -395,7 +403,7 @@ Three prerequisites unchanged from Phase 4 deferral
 3. Multi-condition trigger framework
    (`importance_sum ≥ 30 OR turns_since_last ≥ 15 OR session_end`).
 
-Don't pick up until P1–P5 ship and we have real-world memory data.
+Don't pick up until real-world memory data accumulates (P1–P8 shipped; capture only started).
 
 ## Key Challenges
 
@@ -440,10 +448,9 @@ non-trivial revert. Tune from there.
 
 ## Implementation Notes for Fresh Session
 
-Phases 1 through 5 are shipped. The next chunk is Phase 6 — see the
-section above for priorities and explicit non-goals. Decide on the
-archived-memory schema (Open Question 2) before P1 code starts. No
-active handoff yet.
+Phases 1 through 6 (P1–P8) are shipped. The only remaining active work is
+Phase 6.1 (Reflector), which is explicitly deferred pending real capture
+data. No active handoff.
 
 Key files for Phase 4.1+:
 - `backend/prompts/modules/nkrdn.md` — where to add capture-tool guidance
