@@ -7,6 +7,7 @@
 
 import { AgentManager, type AgentState } from "../agents";
 import { FileTree } from "../file-tree";
+import { MemoryGraphTree } from "../memory";
 import type { PaneKeyHandler, PaneType } from "../input/keybindings";
 import { wrapIndex } from "@core/nav";
 import { Layout } from "../ui/layout";
@@ -30,6 +31,7 @@ export class ProjectContextImpl implements IProjectContext {
   private terminalManager: TerminalManager | null = null;
   private agentManager: AgentManager | null = null;
   private fileTree: FileTree | null = null;
+  private memoryGraphTree: MemoryGraphTree | null = null;
   private rightPane: RightPaneManager | null = null;
   private splash: Splash | null = null;
   private saveTimeout: number | null = null;
@@ -244,8 +246,43 @@ export class ProjectContextImpl implements IProjectContext {
     terminalEl.addEventListener("mousedown", () => this.focusPane("terminal"));
     viewerEl.addEventListener("mousedown", () => this.focusPane("viewer"));
 
-    this.fileTree = new FileTree(fileTreeEl, this.ws);
+    // Build a layered structure inside the file-tree pane so FileTree and
+    // MemoryGraphTree each own a sub-container and don't stomp each other.
+    fileTreeEl.innerHTML = `
+      <div class="memory-pane-toggle"></div>
+      <div class="memory-pane-files" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden"></div>
+      <div class="memory-pane-graph" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden"></div>
+    `;
+    fileTreeEl.style.display = "flex";
+    fileTreeEl.style.flexDirection = "column";
+
+    const filesWrap = fileTreeEl.querySelector<HTMLElement>(".memory-pane-files")!;
+    const graphWrap = fileTreeEl.querySelector<HTMLElement>(".memory-pane-graph")!;
+    const toggleEl  = fileTreeEl.querySelector<HTMLElement>(".memory-pane-toggle")!;
+
+    toggleEl.innerHTML = `
+      <button class="memory-tree-tab memory-tree-tab--active" data-mode="files">files</button>
+      <span class="memory-tree-tab-sep"></span>
+      <button class="memory-tree-tab" data-mode="graph">graph</button>
+    `;
+    toggleEl.className = "memory-tree-toggle memory-pane-toggle";
+    toggleEl.addEventListener("click", (e) => {
+      const btn = (e.target as HTMLElement).closest("[data-mode]") as HTMLElement | null;
+      if (!btn) return;
+      const mode = btn.dataset["mode"];
+      toggleEl.querySelectorAll<HTMLElement>("[data-mode]").forEach(b => {
+        b.classList.toggle("memory-tree-tab--active", b.dataset["mode"] === mode);
+      });
+      filesWrap.style.display = mode === "files" ? "flex" : "none";
+      graphWrap.style.display = mode === "graph" ? "flex" : "none";
+    });
+
+    this.fileTree = new FileTree(filesWrap, this.ws);
     this.fileTree.initialize();
+
+    this.memoryGraphTree = new MemoryGraphTree(graphWrap, this.ws);
+    this.memoryGraphTree.initialize();
+    this.memoryGraphTree.mount();
 
     this.rightPane = new RightPaneManager(viewerEl, this.ws);
     this.rightPane.initialize();
@@ -318,6 +355,17 @@ export class ProjectContextImpl implements IProjectContext {
         viewer.loadFile(path, undefined, this.fileTree?.currentRoot ?? null);
       }
       this.scheduleSave();
+    });
+
+    this.memoryGraphTree.onSelect((sym) => {
+      const detail = this.rightPane?.getSymbolDetailPane();
+      if (sym && detail) {
+        this.rightPane?.setMode("memory-symbol");
+        detail.showSymbol(sym);
+      } else if (!sym) {
+        detail?.clear();
+        this.rightPane?.setMode("markdown");
+      }
     });
 
     this.fileTree.onExpandChange(() => {

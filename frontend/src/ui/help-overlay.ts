@@ -212,6 +212,31 @@ export class HelpOverlay implements Component {
       ])
     );
 
+    // ── Row 3: Memory ──
+
+    const memGraphBindings: Binding[] = [
+      { label: "navigate", key: "j / k" },
+      { label: "expand / open detail", key: "l" },
+      { label: "collapse", key: "h" },
+      { label: "filter", key: "/" },
+      { label: "clear / back", key: "Esc" },
+    ];
+
+    const memDetailBindings: Binding[] = [
+      { label: "navigate entries", key: "j / k" },
+      { label: "expand entry", key: "l" },
+      { label: "collapse entry", key: "h" },
+      { label: "toggle superseded", key: "s" },
+      { label: "back to graph", key: "Esc" },
+    ];
+
+    this.body.appendChild(
+      buildRow("help-row-memory", [
+        buildSection("MEMORY GRAPH", memGraphBindings),
+        buildSection("MEMORY DETAIL", memDetailBindings),
+      ])
+    );
+
     panel.appendChild(this.body);
 
     const footer = document.createElement("div");

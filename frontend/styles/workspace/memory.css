@@ -1,0 +1,434 @@
+/* ── Memory Graph Tree — left pane ─────────────────────────────────── */
+
+.memory-tree-toggle {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.memory-tree-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 6px 0;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+
+.memory-tree-tab--active {
+  color: var(--accent-red);
+  border-bottom: 1px solid var(--accent-red);
+  margin-bottom: -1px;
+  font-weight: 600;
+}
+
+.memory-tree-tab-sep {
+  width: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
+.memory-tree-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.memory-tree-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.memory-tree-filter-prompt {
+  color: var(--accent-green);
+  font-size: 11px;
+}
+
+.memory-tree-filter-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 11px;
+  outline: none;
+  letter-spacing: 0.5px;
+  padding-bottom: 1px;
+}
+
+.memory-tree-filter-tok {
+  font-size: 9px;
+  letter-spacing: 0.8px;
+  padding: 1px 5px;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.memory-tree-filter-tok--on {
+  color: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+}
+
+.memory-tree-stats {
+  display: flex;
+  gap: 10px;
+  padding: 4px 10px;
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.8px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.memory-stat-n    { color: var(--text-secondary); }
+.memory-stat-warn { color: var(--accent-orange); }
+
+.memory-tree-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.memory-tree-body::-webkit-scrollbar { width: 4px; }
+.memory-tree-body::-webkit-scrollbar-thumb { background: var(--border-color); }
+
+.memory-tree-empty {
+  padding: 16px 12px;
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+/* ── Tree rows ─────────────────────────────────────────────────────── */
+
+.memory-tree-row {
+  display: flex;
+  align-items: baseline;
+  padding: 2px 10px;
+  gap: 4px;
+  cursor: default;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.memory-tree-row:hover { background: var(--bg-hover); }
+
+.memory-tree-row--focused {
+  background: var(--bg-tertiary);
+  border-left: 2px solid var(--accent-red);
+  padding-left: 8px;
+}
+
+.memory-tree-row--module { }
+.memory-tree-row--mem { gap: 6px; }
+
+.memory-tree-chev  { color: var(--text-muted); width: 12px; flex-shrink: 0; }
+.memory-tree-mem-conn { color: var(--text-muted); flex-shrink: 0; font-size: 11px; }
+.memory-tree-cand-conn { color: var(--text-muted); flex-shrink: 0; padding-left: 14px; font-size: 11px; }
+
+.memory-tree-kind {
+  font-size: 10px;
+  flex-shrink: 0;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.memory-tree-kind--c { color: var(--accent-blue); }
+.memory-tree-kind--f { color: var(--accent-cyan); }
+.memory-tree-kind--m { color: var(--text-muted); }
+
+.memory-tree-name {
+  color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.memory-tree-name--class  { color: var(--accent-blue); }
+.memory-tree-name--function { color: var(--text-secondary); }
+.memory-tree-name--module { color: var(--text-muted); text-transform: lowercase; letter-spacing: 1px; }
+.memory-tree-name--tomb   { color: var(--text-muted); text-decoration: line-through; }
+.memory-tree-name--mem    { color: var(--text-secondary); font-size: 11px; flex: 1; overflow: hidden; text-overflow: ellipsis; }
+
+.memory-tree-tomb-marker  { color: var(--accent-orange); font-size: 10px; }
+.memory-tree-date         { color: var(--text-muted); font-size: 10px; flex-shrink: 0; margin-left: auto; padding-right: 4px; }
+.memory-tree-count        { font-size: 10px; color: var(--text-muted); margin-left: auto; padding-right: 4px; flex-shrink: 0; }
+.memory-tree-count--warn  { color: var(--accent-orange); }
+
+.memory-tree-section {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px 4px;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-color);
+  margin-top: 4px;
+}
+.memory-tree-section--warn { color: var(--accent-orange); }
+.memory-tree-section-count { color: var(--text-muted); font-size: 10px; }
+
+.memory-tree-cand-row { opacity: 0.9; }
+.memory-tree-cand-name { color: var(--accent-blue); font-size: 11px; }
+.memory-tree-cand-conf { color: var(--accent-yellow); font-size: 10px; margin-left: auto; }
+
+/* ── Memory type pills — shared ────────────────────────────────────── */
+
+.memory-pill {
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 0 5px;
+  border: 1px solid;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+.memory-pill--decision { color: var(--accent-yellow); border-color: var(--accent-yellow); }
+.memory-pill--attempt  { color: var(--accent-orange); border-color: var(--accent-orange); }
+.memory-pill--note     { color: var(--accent-cyan);   border-color: var(--accent-cyan); }
+
+/* Shortened pill variant for tree rows */
+.memory-pill--dec { color: var(--accent-yellow); border-color: var(--accent-yellow); }
+.memory-pill--att { color: var(--accent-orange); border-color: var(--accent-orange); }
+.memory-pill--not { color: var(--accent-cyan);   border-color: var(--accent-cyan); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Symbol Detail Pane — right pane / viewer slot
+══════════════════════════════════════════════════════════════════════ */
+
+.memory-detail-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.memory-detail-header {
+  text-align: center;
+  padding: 12px 0 14px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.memory-detail-bracket {
+  color: var(--accent-red);
+  font-size: 14px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.memory-detail-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.memory-detail-uuid { color: var(--text-muted); }
+
+.memory-detail-tomb-chip {
+  margin-left: 10px;
+  color: var(--accent-orange);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  border: 1px solid var(--accent-orange);
+  padding: 1px 6px;
+}
+
+.memory-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.memory-detail-body::-webkit-scrollbar { width: 4px; }
+.memory-detail-body::-webkit-scrollbar-thumb { background: var(--border-color); }
+
+/* ── Section ──────────────────────────────────────────────────────── */
+
+.memory-detail-section { display: flex; flex-direction: column; gap: 8px; }
+
+.memory-detail-section-title {
+  color: var(--accent-red);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 5px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.memory-detail-section-meta {
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  font-weight: 400;
+  text-transform: none;
+}
+
+/* ── Structure ────────────────────────────────────────────────────── */
+
+.memory-detail-struct { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.memory-struct-decl { margin-bottom: 2px; }
+.memory-struct-kw   { color: var(--accent-purple); margin-right: 6px; }
+.memory-struct-name { color: var(--accent-blue); font-weight: 600; }
+.memory-struct-row  { display: flex; gap: 8px; }
+.memory-struct-conn { color: var(--text-muted); }
+.memory-struct-label { color: var(--text-muted); min-width: 80px; }
+.memory-struct-path  { color: var(--accent-blue); }
+.memory-struct-ty    { color: var(--accent-cyan); }
+
+/* ── Orphan banner ────────────────────────────────────────────────── */
+
+.memory-detail-orphan-banner {
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border-left: 2px solid var(--accent-orange);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  font-size: 11px;
+}
+
+.memory-detail-orphan-label {
+  display: block;
+  color: var(--accent-orange);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-size: 10px;
+  margin-bottom: 4px;
+}
+
+.memory-detail-orphan-body { color: var(--text-secondary); }
+.memory-detail-orphan-body strong { color: var(--text-primary); font-weight: 500; }
+
+/* ── Memory entries ───────────────────────────────────────────────── */
+
+.memory-detail-entry {
+  border-left: 2px solid transparent;
+  padding: 7px 0 7px 10px;
+  margin-left: -12px;
+  cursor: default;
+}
+
+.memory-detail-entry:hover { background: var(--bg-secondary); border-left-color: var(--accent-blue); }
+.memory-detail-entry--expanded { background: var(--bg-secondary); border-left-color: var(--accent-yellow); }
+.memory-detail-entry--orphan   { border-left-color: var(--accent-orange); background: var(--bg-secondary); }
+.memory-detail-entry--superseded { opacity: 0.6; }
+
+.memory-detail-entry-head {
+  display: grid;
+  grid-template-columns: 12px 88px 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.memory-entry-chev  { color: var(--text-muted); font-size: 11px; }
+.memory-entry-title { color: var(--text-primary); font-size: 12px; font-weight: 500; }
+.memory-entry-date  { color: var(--text-muted); font-size: 11px; }
+
+.memory-detail-body-inner {
+  margin-top: 10px;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.memory-detail-body-text {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.65;
+  max-width: 60ch;
+}
+
+/* ── Memory metadata grid ─────────────────────────────────────────── */
+
+.memory-meta-grid {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  row-gap: 6px;
+  column-gap: 12px;
+  font-size: 11px;
+}
+
+.memory-meta-grid dt {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 10px;
+  padding-top: 1px;
+}
+
+.memory-meta-grid dd { color: var(--text-secondary); }
+
+.memory-meta-evidence { display: flex; flex-direction: column; gap: 2px; }
+.memory-ev-doc  { color: var(--accent-blue); }
+.memory-ev-code { color: var(--accent-cyan); }
+.memory-ev-ext  { color: var(--accent-purple); }
+
+.memory-meta-alt {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+.memory-meta-rej { color: var(--accent-red); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
+.memory-meta-author  { color: var(--accent-green); }
+.memory-meta-session { color: var(--text-muted); margin-left: 10px; }
+.memory-tag { color: var(--accent-purple); margin-right: 6px; }
+
+/* ── Superseded row ───────────────────────────────────────────────── */
+
+.memory-detail-superseded-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--bg-tertiary);
+}
+
+/* ── Status + help bars ───────────────────────────────────────────── */
+
+.memory-detail-status {
+  display: flex;
+  gap: 14px;
+  padding: 5px 12px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.memory-detail-mode  { color: var(--accent-orange); font-weight: 600; text-transform: uppercase; }
+.memory-detail-path  { color: var(--text-secondary); }
+.memory-detail-right { margin-left: auto; display: flex; gap: 12px; }
+.memory-detail-lang  { color: var(--accent-cyan); }
+.memory-detail-alert { color: var(--accent-orange); }
+

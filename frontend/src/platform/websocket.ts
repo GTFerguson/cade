@@ -84,6 +84,8 @@ interface WebSocketEvents {
     panel: { id: string; title: string; component: string };
     data: Record<string, unknown>[];
   };
+  "nkrdn-graph": import("../memory/types").NkrdnGraphMessage;
+  "nkrdn-select": import("../memory/types").NkrdnSelectMessage;
   "notification": { type: string; message: string; style: string };
   error: ErrorMessage;
   "auth-failed": { code: number };
