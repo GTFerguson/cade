@@ -691,6 +691,145 @@ def test_tool_definitions_have_required_fields():
             assert "importance" in schema["required"]
 
 
+def test_tool_definitions_returned_by_executor(temp_dir: Path):
+    executor = MemoryToolExecutor(temp_dir)
+    defs = executor.tool_definitions()
+    assert {d.name for d in defs} == {d.name for d in _ALL_DEFINITIONS}
+
+
+@pytest.mark.asyncio
+async def test_execute_async_fires_write_broadcast(temp_dir: Path):
+    executor = MemoryToolExecutor(temp_dir, connection_id="test-conn")
+
+    from backend.memory.tool_executor import register_write_broadcast, unregister_write_broadcast
+    received: list[dict] = []
+
+    async def fake_send(msg: dict) -> None:
+        received.append(msg)
+
+    register_write_broadcast("test-conn", fake_send)
+    try:
+        raw = await executor.execute_async(
+            "record_decision",
+            {
+                "rationale": "Use Redis for caching to reduce DB load.",
+                "alternatives": ["Memcached"],
+                "applies_to": ["CacheLayer"],
+                "importance": 6,
+            },
+        )
+        import asyncio
+        await asyncio.sleep(0)  # let create_task fire
+        payload = json.loads(raw)
+        assert payload["action"] == "created"
+        assert len(received) == 1
+        assert received[0]["type"] == "memory-write"
+        assert received[0]["action"] == "created"
+        assert received[0]["memory_type"] == "decision"
+    finally:
+        unregister_write_broadcast("test-conn")
+
+
+@pytest.mark.asyncio
+async def test_execute_async_no_broadcast_on_duplicate(temp_dir: Path):
+    executor = MemoryToolExecutor(temp_dir, connection_id="test-conn-dup")
+
+    from backend.memory.tool_executor import register_write_broadcast, unregister_write_broadcast
+    received: list[dict] = []
+
+    async def fake_send(msg: dict) -> None:
+        received.append(msg)
+
+    args = {
+        "rationale": "Use Redis for caching to reduce DB load.",
+        "alternatives": ["Memcached"],
+        "applies_to": ["CacheLayer"],
+        "importance": 6,
+    }
+    register_write_broadcast("test-conn-dup", fake_send)
+    try:
+        await executor.execute_async("record_decision", args)
+        import asyncio
+        await asyncio.sleep(0)
+        received.clear()
+        await executor.execute_async("record_decision", args)  # duplicate
+        await asyncio.sleep(0)
+        assert received == []  # skipped — no broadcast
+    finally:
+        unregister_write_broadcast("test-conn-dup")
+
+
+def test_record_investigation_writes_file(temp_dir: Path):
+    executor = MemoryToolExecutor(temp_dir)
+    raw = executor._dispatch_sync(
+        "record_investigation",
+        {
+            "applies_to": "[[ACME Holdings]]",
+            "verdict": "legit",
+            "confidence": 0.92,
+            "signals": ["fca_registered", "established_2010"],
+            "specter_snapshot": "ACME Holdings Ltd, founded 2010, FCA-regulated, active.",
+            "rationale": "Strong regulatory standing and long operating history.",
+            "transaction_id": "tx-042",
+        },
+    )
+    payload = json.loads(raw)
+    assert payload["status"] == "written"
+    assert payload["created"] is True
+    content = Path(payload["path"]).read_text()
+    assert "type: investigation" in content
+    assert "transaction-triage" in content
+    assert "legit" in content
+    assert "fca_registered" in content
+    assert "tx-042" in content
+
+
+def test_record_investigation_importance_escalate(temp_dir: Path):
+    executor = MemoryToolExecutor(temp_dir)
+    raw = executor._dispatch_sync(
+        "record_investigation",
+        {
+            "applies_to": "[[Dodgy Corp]]",
+            "verdict": "block",
+            "confidence": 0.95,
+            "signals": ["sanctions_hit"],
+            "specter_snapshot": "Dodgy Corp, sanctions-listed entity.",
+            "rationale": "Sanctions list match — hard block.",
+            "transaction_id": "tx-043",
+        },
+    )
+    payload = json.loads(raw)
+    assert payload["status"] == "written"
+    content = Path(payload["path"]).read_text()
+    assert "importance: 7" in content  # block → high importance
+
+
+def test_record_investigation_missing_applies_to(temp_dir: Path):
+    executor = MemoryToolExecutor(temp_dir)
+    raw = executor._dispatch_sync("record_investigation", {"applies_to": ""})
+    assert raw.startswith("Validation error:")
+
+
+def test_record_investigation_strips_wiki_link_brackets(temp_dir: Path):
+    executor = MemoryToolExecutor(temp_dir)
+    for form in ("[[ACME Ltd]]", "ACME Ltd"):
+        raw = executor._dispatch_sync(
+            "record_investigation",
+            {
+                "applies_to": form,
+                "verdict": "legit",
+                "confidence": 0.8,
+                "signals": [],
+                "specter_snapshot": "ACME Ltd, active.",
+                "rationale": "Clean record.",
+                "transaction_id": f"tx-{form[:4]}",
+            },
+        )
+        payload = json.loads(raw)
+        content = Path(payload["path"]).read_text()
+        assert "[[ACME Ltd]]" in content  # writer always wraps in wiki-link
+
+
 # ---------------------------------------------------------------------------
 # Schema match with nkrdn parser
 # ---------------------------------------------------------------------------
@@ -893,6 +1032,36 @@ def test_llm_dedup_judge_returns_supersede_when_llm_says_yes(temp_dir: Path):
     # New file must carry the supersedes link
     content = second.path.read_text()
     assert first.uri_stem in content
+
+
+def test_llm_dedup_judge_skips_empty_body(temp_dir: Path):
+    """Empty body produces no tokens — LLM check must be skipped."""
+    from backend.memory.dedup import LLMDedupJudge, load_candidates, DedupCandidate
+    from unittest.mock import patch
+    from pathlib import Path as _Path
+
+    judge = LLMDedupJudge(model="any/model", api_key="key")
+    writer = MemoryWriter(temp_dir, dedup_judge=judge)
+    writer.record_decision(
+        rationale="Use Redis for caching.",
+        alternatives=["Memcached"],
+        applies_to=["CacheLayer"],
+        importance=5,
+    )
+
+    with patch("litellm.completion") as mock_llm:
+        # Force an empty-body scenario by calling judge directly
+        candidates = load_candidates(temp_dir / "memory", type_="decision", applies_to=["CacheLayer"])
+        from backend.memory.dedup import New
+        verdict = judge.judge(
+            type_="decision",
+            applies_to=["CacheLayer"],
+            body="",  # empty — no tokens
+            content_hash="deadbeef",
+            candidates=candidates,
+        )
+    assert isinstance(verdict, New)
+    mock_llm.assert_not_called()
 
 
 def test_llm_dedup_judge_skips_dissimilar_candidates(temp_dir: Path):
