@@ -327,6 +327,21 @@ class MemorySearchRequest(BaseModel):
     direct: bool = True  # Skip LLM retrieval — agent does its own ranking.
 
 
+class MemoryGraphRequest(BaseModel):
+    project: str
+
+
+class MemoryArchiveRequest(BaseModel):
+    project: str
+    uri: str  # mem: URI of the entry to archive
+
+
+class MemoryRetargetRequest(BaseModel):
+    project: str
+    uri: str           # mem: URI of the orphan memory
+    target_name: str   # symbol name to retarget to (e.g. "AuthServiceV2")
+
+
 async def _send_to_connections(connections: list, message: dict) -> int:
     """Send a message to a list of WebSocket connections.
 
@@ -1000,6 +1015,86 @@ def create_app(config: Config | None = None) -> FastAPI:
             )
 
         return JSONResponse(payload)
+
+    @app.post("/api/memory/graph")
+    async def memory_graph(body: MemoryGraphRequest) -> JSONResponse:
+        """Build and return the NkrdnGraphMessage for a project.
+
+        Reads .cade/graph.ttl and .cade/knowledge_base.db directly — no CLI
+        subprocess needed. Returns an empty-but-valid message if graph data
+        doesn't exist yet.
+        """
+        import asyncio as _asyncio
+
+        project_path = Path(body.project).expanduser().resolve()
+        if not project_path.is_dir():
+            return JSONResponse(
+                {"error": f"project path is not a directory: {project_path}"},
+                status_code=400,
+            )
+
+        try:
+            from backend.memory.api import build_graph_message
+            payload = await _asyncio.to_thread(build_graph_message, project_path)
+        except Exception as exc:
+            import traceback
+            return JSONResponse(
+                {"error": str(exc), "traceback": traceback.format_exc()},
+                status_code=500,
+            )
+
+        return JSONResponse(payload)
+
+    @app.post("/api/memory/archive")
+    async def memory_archive(body: MemoryArchiveRequest) -> JSONResponse:
+        """Archive a memory entry via `nkrdn memory retire <uri>`."""
+        import asyncio as _asyncio
+
+        from backend.nkrdn_service import _NKRDN_BIN
+
+        if _NKRDN_BIN is None:
+            return JSONResponse({"error": "nkrdn CLI not available"}, status_code=503)
+
+        project_path = Path(body.project).expanduser().resolve()
+        if not project_path.is_dir():
+            return JSONResponse({"error": f"not a directory: {project_path}"}, status_code=400)
+
+        try:
+            proc = await _asyncio.create_subprocess_exec(
+                _NKRDN_BIN, "memory", "retire", body.uri,
+                cwd=str(project_path),
+                stdout=_asyncio.subprocess.PIPE,
+                stderr=_asyncio.subprocess.PIPE,
+            )
+            _, stderr_b = await _asyncio.wait_for(proc.communicate(), timeout=10.0)
+        except _asyncio.TimeoutError:
+            return JSONResponse({"error": "nkrdn retire timed out"}, status_code=504)
+
+        if proc.returncode != 0:
+            return JSONResponse(
+                {"error": "retire failed", "stderr": stderr_b.decode(errors="replace").strip()},
+                status_code=502,
+            )
+        return JSONResponse({"ok": True})
+
+    @app.post("/api/memory/retarget")
+    async def memory_retarget(body: MemoryRetargetRequest) -> JSONResponse:
+        """Update a memory's applies_to to point at a new symbol name."""
+        import asyncio as _asyncio
+
+        project_path = Path(body.project).expanduser().resolve()
+        if not project_path.is_dir():
+            return JSONResponse({"error": f"not a directory: {project_path}"}, status_code=400)
+
+        try:
+            from backend.memory.api import retarget_memory
+            await _asyncio.to_thread(retarget_memory, project_path, body.uri, body.target_name)
+        except FileNotFoundError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+        return JSONResponse({"ok": True})
 
     # --- UI Tools API (called by MCP tools) ---
 

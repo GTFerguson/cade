@@ -129,6 +129,13 @@ export class ChatPane implements Component, PaneKeyHandler {
   private static readonly NEAR_BOTTOM_PX = 100;
   private static readonly REATTACH_AFTER_MS = 60_000;
 
+  private static readonly MEMORY_TOOLS = new Set([
+    "record_decision",
+    "record_attempt",
+    "record_note",
+  ]);
+  private static readonly MEMORY_TOAST_COLLAPSE_MS = 3_000;
+
   private boundHandlers = {
     chatStream: (msg: ChatStreamMessage) => {
       // When auto-subscribed, ignore events meant for agents
@@ -764,6 +771,15 @@ export class ChatPane implements Component, PaneKeyHandler {
     }
     this.finalizeThinking();
 
+    if (ChatPane.MEMORY_TOOLS.has(toolName)) {
+      const toastEl = this.buildMemoryCaptureToast(toolName, toolInput);
+      const contentEl = this.currentAssistantEl!.querySelector(".chat-message-content");
+      if (contentEl) contentEl.appendChild(toastEl);
+      this.activeToolEls.set(toolId, toastEl);
+      this.scrollToBottom();
+      return;
+    }
+
     const toolEl = document.createElement("div");
     toolEl.className = "chat-tool-use chat-tool-use--running";
 
@@ -816,6 +832,13 @@ export class ChatPane implements Component, PaneKeyHandler {
   ): void {
     const toolEl = this.activeToolEls.get(toolId);
     if (!toolEl) return;
+
+    if (toolEl.classList.contains("memory-capture-toast")) {
+      this.completeMemoryCaptureToast(toolEl, status, content);
+      this.activeToolEls.delete(toolId);
+      this.scrollToBottom();
+      return;
+    }
 
     toolEl.classList.remove("chat-tool-use--running");
     toolEl.classList.add(
@@ -897,6 +920,108 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.activeToolEls.delete(toolId);
     this.scrollToBottom();
     this.collapseOldToolCalls();
+  }
+
+  private buildMemoryCaptureToast(
+    toolName: string,
+    toolInput?: Record<string, unknown>,
+  ): HTMLElement {
+    const type = toolName.replace("record_", "");
+    const titleSrc =
+      toolName === "record_decision" ? toolInput?.["rationale"] :
+      toolName === "record_attempt"  ? toolInput?.["approach"]  :
+                                       toolInput?.["observation"];
+    const title = typeof titleSrc === "string" ? this.truncateMemoryTitle(titleSrc) : "";
+    const appliesTo = toolInput?.["applies_to"];
+    const target = Array.isArray(appliesTo) && typeof appliesTo[0] === "string"
+      ? appliesTo[0]
+      : "";
+
+    const toast = document.createElement("div");
+    toast.className = "memory-capture-toast memory-capture-toast--saving";
+
+    const head = document.createElement("div");
+    head.className = "memory-capture-toast__head";
+
+    const icon = document.createElement("span");
+    icon.className = "memory-capture-toast__icon";
+    icon.textContent = "✦"; // ✦
+
+    const pill = document.createElement("span");
+    pill.className = "memory-capture-toast__pill";
+    pill.textContent = type;
+
+    const titleEl = document.createElement("span");
+    titleEl.className = "memory-capture-toast__title";
+    titleEl.textContent = title;
+
+    head.appendChild(icon);
+    head.appendChild(pill);
+    head.appendChild(titleEl);
+
+    if (target) {
+      const targetEl = document.createElement("span");
+      targetEl.className = "memory-capture-toast__target";
+      targetEl.textContent = `→ ${target}`;
+      head.appendChild(targetEl);
+    }
+
+    const status = document.createElement("span");
+    status.className = "memory-capture-toast__status";
+    status.textContent = "saving…";
+    head.appendChild(status);
+
+    toast.appendChild(head);
+
+    toast.addEventListener("click", () => {
+      toast.classList.toggle("memory-capture-toast--collapsed");
+    });
+
+    return toast;
+  }
+
+  private completeMemoryCaptureToast(
+    toastEl: HTMLElement,
+    status: string,
+    content?: string,
+  ): void {
+    toastEl.classList.remove("memory-capture-toast--saving");
+    const statusEl = toastEl.querySelector(
+      ".memory-capture-toast__status",
+    ) as HTMLElement | null;
+
+    if (status === "error") {
+      toastEl.classList.add("memory-capture-toast--error");
+      if (statusEl) statusEl.textContent = "failed";
+      if (content && content.trim()) {
+        const err = document.createElement("div");
+        err.className = "memory-capture-toast__error";
+        err.textContent = content.trim();
+        toastEl.appendChild(err);
+      }
+      return;
+    }
+
+    let savedLabel = "saved";
+    if (content) {
+      try {
+        const parsed = JSON.parse(content);
+        if (parsed?.status === "duplicate-skipped") savedLabel = "duplicate";
+      } catch {
+        /* leave default */
+      }
+    }
+    if (statusEl) statusEl.textContent = savedLabel;
+
+    window.setTimeout(() => {
+      toastEl.classList.add("memory-capture-toast--collapsed");
+    }, ChatPane.MEMORY_TOAST_COLLAPSE_MS);
+  }
+
+  private truncateMemoryTitle(text: string, max = 90): string {
+    const t = text.trim().replace(/\s+/g, " ");
+    if (t.length <= max) return t;
+    return `${t.slice(0, max - 1).trimEnd()}…`;
   }
 
   private collapseOldToolCalls(): void {

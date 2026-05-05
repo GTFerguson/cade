@@ -194,6 +194,9 @@ class ConnectionHandler:
             await self._send_status("Connected")
             await self._send_connected()
 
+            # Emit memory graph for any graph data that already exists
+            asyncio.create_task(self._emit_nkrdn_graph())
+
             # Register this connection so orchestrator events are scoped to it
             from backend.orchestrator.manager import get_orchestrator_manager
             orchestrator = get_orchestrator_manager()
@@ -227,12 +230,14 @@ class ConnectionHandler:
                     self._doc_index.initial_build()
                 )
 
-            # Build knowledge graph in background on project open
+            # Build knowledge graph in background on project open;
+            # re-emit nkrdn-graph after build so the UI gets fresh data
             nkrdn_task: asyncio.Task | None = None
             if self._nkrdn is not None:
-                nkrdn_task = asyncio.create_task(
-                    self._nkrdn.initial_build()
-                )
+                async def _build_then_emit() -> None:
+                    await self._nkrdn.initial_build()  # type: ignore[union-attr]
+                    await self._emit_nkrdn_graph()
+                nkrdn_task = asyncio.create_task(_build_then_emit())
 
             # Receive loop controls connection lifetime
             # PTY output and watch loops run as long-lived background tasks
@@ -769,6 +774,15 @@ class ConnectionHandler:
         # is up and unsolicited server-pushed frames (initial scene, idle
         # ambient beats) land in chat without waiting for user input.
         await self._maybe_start_websocket_provider()
+
+    async def _emit_nkrdn_graph(self) -> None:
+        """Build and send the nkrdn-graph message for the current project."""
+        try:
+            from backend.memory.api import build_graph_message
+            payload = await asyncio.to_thread(build_graph_message, self._working_dir)
+            await self._send(payload)
+        except Exception as exc:
+            logger.debug("nkrdn-graph emit skipped: %s", exc)
 
     async def _maybe_stream_initial_scene(self) -> None:
         """If the default provider declares an initial_command and this

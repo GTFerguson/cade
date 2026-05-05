@@ -13,11 +13,12 @@ import { AgentOverviewPane, type AgentManager } from "../agents";
 import { DashboardPane } from "../dashboard";
 import type { PaneKeyHandler } from "../input/keybindings";
 import { MarkdownViewer } from "../markdown/markdown";
+import { SymbolDetailPane } from "../memory";
 import { NeovimPane } from "../neovim";
 import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 
-export type RightPaneMode = "markdown" | "neovim" | "agents" | "dashboard";
+export type RightPaneMode = "markdown" | "neovim" | "agents" | "dashboard" | "memory-symbol";
 
 export class RightPaneManager implements Component, PaneKeyHandler {
   private mode: RightPaneMode = "markdown";
@@ -25,10 +26,12 @@ export class RightPaneManager implements Component, PaneKeyHandler {
   private neovimPane: NeovimPane | null = null;
   private agentPane: AgentOverviewPane | null = null;
   private dashboardPane: DashboardPane | null = null;
+  private symbolDetailPane: SymbolDetailPane | null = null;
   private neovimContainer: HTMLElement;
   private viewerContainer: HTMLElement;
   private agentsContainer: HTMLElement;
   private dashboardContainer: HTMLElement;
+  private memoryContainer: HTMLElement;
   private onModeChangeCallback: (() => void) | null = null;
   private onAgentSelectCallback: ((agentId: string) => void) | null = null;
 
@@ -61,10 +64,20 @@ export class RightPaneManager implements Component, PaneKeyHandler {
     this.dashboardContainer.style.display = "none";
     this.dashboardContainer.style.overflow = "auto";
 
+    this.memoryContainer = document.createElement("div");
+    this.memoryContainer.className = "right-pane-memory";
+    this.memoryContainer.style.width = "100%";
+    this.memoryContainer.style.height = "100%";
+    this.memoryContainer.style.display = "none";
+
     this.container.appendChild(this.viewerContainer);
     this.container.appendChild(this.neovimContainer);
     this.container.appendChild(this.agentsContainer);
     this.container.appendChild(this.dashboardContainer);
+    this.container.appendChild(this.memoryContainer);
+
+    this.symbolDetailPane = new SymbolDetailPane(this.memoryContainer);
+    this.symbolDetailPane.initialize();
 
     this.viewer = new MarkdownViewer(this.viewerContainer, this.ws);
   }
@@ -94,6 +107,7 @@ export class RightPaneManager implements Component, PaneKeyHandler {
     this.neovimContainer.style.display = mode === "neovim" ? "" : "none";
     this.agentsContainer.style.display = mode === "agents" ? "" : "none";
     this.dashboardContainer.style.display = mode === "dashboard" ? "" : "none";
+    this.memoryContainer.style.display = mode === "memory-symbol" ? "" : "none";
 
     if (mode === "agents") {
       this.agentPane?.render();
@@ -185,6 +199,17 @@ export class RightPaneManager implements Component, PaneKeyHandler {
    */
   getAgentPane(): AgentOverviewPane | null {
     return this.agentPane;
+  }
+
+  /**
+   * Get the symbol detail pane for memory graph navigation.
+   */
+  getSymbolDetailPane(): SymbolDetailPane | null {
+    return this.symbolDetailPane;
+  }
+
+  setMemoryProjectPath(projectPath: string): void {
+    this.symbolDetailPane?.setProjectPath(projectPath);
   }
 
   /**

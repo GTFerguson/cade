@@ -22,6 +22,7 @@
 @import "./workspace/terminal.css";
 @import "./workspace/chat.css";
 @import "./workspace/dashboard.css";
+@import "./workspace/memory.css";
 
 /* Full-pane screens & overlays */
 @import "./screens/dialogs.css";
