@@ -622,9 +622,9 @@ def test_filename_starts_with_today(temp_dir: Path):
 # Tool executor surface
 # ---------------------------------------------------------------------------
 
-def test_tool_executor_exposes_three_definitions():
+def test_tool_executor_exposes_four_definitions():
     names = {d.name for d in _ALL_DEFINITIONS}
-    assert names == {"record_decision", "record_attempt", "record_note"}
+    assert names == {"record_decision", "record_attempt", "record_note", "record_investigation"}
 
 
 def test_tool_executor_returns_json_status(temp_dir: Path):
@@ -684,9 +684,11 @@ def test_tool_definitions_have_required_fields():
     for defn in _ALL_DEFINITIONS:
         schema = defn.parameters_schema
         assert "applies_to" in schema["properties"]
-        assert "importance" in schema["properties"]
         assert "applies_to" in schema["required"]
-        assert "importance" in schema["required"]
+        # record_investigation hard-codes importance from verdict; all others expose it
+        if defn.name != "record_investigation":
+            assert "importance" in schema["properties"]
+            assert "importance" in schema["required"]
 
 
 # ---------------------------------------------------------------------------
