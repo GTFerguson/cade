@@ -344,17 +344,11 @@ worse than no reflection at all.
 
 ### Phase 5 — CADE UI
 
-- **Symbol detail pane**: show attached `mem:Decision` and `mem:Attempt`
-  nodes alongside structural info. Superseded entries collapsed by default.
-- **Memory review queue**: notifications from memory-aware rebuild delta —
-  "3 memories attached to renamed/deleted code, review needed."
-- **Retarget flow**: for orphaned memories (target tombstoned), offer
-  drag-onto-symbol or auto-suggested match from rename detection.
-- **Promote to docs/ gesture**: button on a Decision → drafts a formal
-  architecture doc section, user approves.
-
-Phase 5 is lower priority than Phases 1–4. The agent benefit (retrieval
-working) doesn't require UI.
+Shipped. Memory graph tree, symbol detail pane (with archive + retarget),
+and inline capture toast for `record_decision` / `record_attempt` /
+`record_note`. Promote-to-docs and a memory-delete endpoint were the two
+sub-features cut from scope and rolled into Phase 6. See
+[[../architecture/nkrdn-agent-memory#UI Layer (Phase 5)]].
 
 ## Key Challenges
 
@@ -387,9 +381,9 @@ non-trivial revert. Tune from there.
 
 ## Implementation Notes for Fresh Session
 
-Phases 1, 2, 3, and 4 are shipped. The next chunk is Phase 4.1 — see the
-active handoff at [[handoff/agent-memory-phase-4-1-litellm-activation]] for
-the full briefing, file map, and gotchas.
+Phases 1 through 5 are shipped. The next chunk is Phase 6 — proactive
+retrieval at session start, promote-to-docs, and a memory-delete endpoint.
+No active handoff yet.
 
 Key files for Phase 4.1+:
 - `backend/prompts/modules/nkrdn.md` — where to add capture-tool guidance

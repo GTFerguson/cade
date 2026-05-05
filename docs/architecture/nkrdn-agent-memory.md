@@ -1,7 +1,7 @@
 ---
 title: nkrdn Agent Memory — Architecture
 created: 2026-04-28
-updated: 2026-04-28
+updated: 2026-05-05
 status: active
 tags: [nkrdn, memory, architecture]
 ---
@@ -136,6 +136,24 @@ more auditable, and avoids the self-reinforcing reflection error documented
 in Du 2026 (arXiv:2603.07670). Cross-domain evidence and rationale:
 [[../reference/agent-memory-capture]].
 
+### Capture toast
+
+When `record_decision`, `record_attempt`, or `record_note` flows through
+the chat stream, `ChatPane` renders a `.memory-capture-toast` (yellow rule,
+✦ glyph, type pill) inline with the tool sequence instead of the generic
+tool-use block. The toast pulls a truncated title from the tool input
+(`rationale` / `approach` / `observation`) and the target from
+`applies_to[0]`. On `tool-result` it flips to `saved` — or `duplicate`
+when the content-hash idempotency check returns the existing URI — then
+auto-collapses to a muted single row after three seconds. Click any
+collapsed row to re-expand.
+
+There is no dismiss action. The markdown file is already written by the
+time the result arrives, so a discard control would imply a backend
+tombstone endpoint that doesn't exist. The toast is a notification, not a
+prompt — keeping it information-only matches the autonomous-capture
+posture the agent already runs in.
+
 ### Capture Activation (Phase 4.1)
 
 The capture tools are wired into every CADE mode. Two decisions made together:
@@ -153,6 +171,63 @@ are *where* most of the high-signal Decisions and Notes get reasoned through;
 gating capture by write permissions would lose the highest-quality entries.
 Memory writes go to `.cade/memory/`, which is outside the "user code"
 permission boundary that read-only modes are meant to protect.
+
+## UI Layer (Phase 5)
+
+The Phase 5 surfaces expose the memory graph in CADE through two screens:
+
+| Surface | Hosts |
+|---|---|
+| **Memory graph tree** (`frontend/src/memory/graph-tree.ts`) | Browse symbols by `belongsToModule` containment with attached-memory counts; tombstoned symbols and orphan-memory entries surface as their own sections |
+| **Symbol detail pane** (`frontend/src/memory/symbol-detail.ts`) | Inspect attached `mem:Decision` / `mem:Attempt` / `mem:Note`, supersession chain, evidence URIs, archive + retarget controls |
+
+The capture toast described above is the third visible surface — it's
+implemented inside `ChatPane` rather than the dedicated memory module,
+since it's part of the chat-stream render path.
+
+### Layout
+
+The graph tree lives in the **left tree pane** as a sibling to the file
+tree, gated by a `+mem` toggle. Two sub-divs (`.memory-pane-graph`,
+`.memory-pane-files`) sit inside the same `.file-tree-pane` container —
+`FileTree` clears only its own sub-div, so the two coexist without DOM
+conflict. The detail pane opens in the **viewer slot** as a full-pane
+replacement; CADE has no modals.
+
+### Backend wiring
+
+- `GET /api/memory/graph` returns the assembled graph payload.
+  `build_graph_message()` (`backend/memory/api.py`) walks the symbol DB,
+  joins `mem:appliesTo` triples from the rebuilt RDF graph, and tags
+  tombstoned symbols + orphan memory entries.
+- WebSocket `nkrdn-graph` event fires twice on a fresh session: once on
+  connect (whatever's already built), once after `initial_build()`
+  finishes. Frontend re-renders idempotently on each.
+- `POST /api/memory/archive` and `POST /api/memory/retarget` rewrite the
+  source markdown files. The existing FileWatcher debounce schedules the
+  rebuild — there is no direct rebuild call from the API path.
+
+### Why two surfaces, not four
+
+The original phase plan called out four sub-features (detail pane, review
+queue, retarget, promote-to-docs). They all compose into the graph tree
+plus the detail pane:
+
+- Files aren't the natural unit of memory — a file with twelve functions
+  may carry memory on two of them. The natural unit is the symbol.
+- The file tree stays clean (the design bible forbids row decorations),
+  so memory presence is surfaced in a sibling tree, not on the file tree.
+- The graph tree mirrors what nkrdn already gives: UUID-stable symbols,
+  `belongsToModule` containment, and `mem:appliesTo` edges. A tree view
+  of that graph is the most direct UI surface for what the back-end
+  already models.
+- The detail pane composes with the graph tree through a single
+  navigation idiom (`l` / enter on a tree row opens the pane).
+
+The review queue is the orphan-memory section inside the graph tree;
+retargeting is a state of the detail pane. Promote-to-docs is mocked but
+deferred — it needs an LLM-drafted markdown section and a destination-
+picking flow that warrants its own scope.
 
 ## What's In Scope
 
@@ -174,6 +249,8 @@ permission boundary that read-only modes are meant to protect.
   predicates. Memory wiki-links resolve to symbols first, then fall back
   to doc stems — so `mem:evidence [[agent-memory-systems]]` now lands as
   a `doc:` URIRef rather than a literal of the inner name.
+- **CADE UI** (Phase 5) — memory graph tree, symbol detail pane with
+  archive + retarget actions, capture toast. See "UI Layer" above.
 
 ## What's Not In Scope Yet
 
@@ -183,8 +260,15 @@ permission boundary that read-only modes are meant to protect.
 - **Reflector pass** — session-end consolidation per ACE Generator-Reflector-
   Curator. Deferred until capture is in real use; needs provenance tracing
   to avoid the self-reinforcing reflection error failure mode.
-- **UI** (Phase 5) — symbol detail pane showing attached memories, orphan
-  review queue, promote-to-docs gesture.
+- **Proactive retrieval at session start** — the `nkrdn memory search` path
+  exists; agents call it voluntarily. Auto-loading relevant memories when a
+  symbol is opened is a Phase 6 concern.
+- **Promote-to-docs gesture** — drafting an architecture-doc section from a
+  Decision is mocked but unbuilt. Needs an LLM draft path and a destination
+  picker; deferred to Phase 6.
+- **Memory delete / tombstone endpoint** — the capture toast has no discard
+  action because the markdown file is already written by the time the toast
+  renders. A first-class delete flow needs a backend endpoint.
 
 ## Key Files
 
@@ -198,11 +282,15 @@ permission boundary that read-only modes are meant to protect.
 | `nkrdn/src/nkrdn/cli/commands/memory.py` | `nkrdn memory search/list/retire` |
 | `cade/backend/memory/writer.py` | Markdown emitter with content-hash idempotency |
 | `cade/backend/memory/tool_executor.py` | `record_decision`/`attempt`/`note` tool surface |
+| `cade/backend/memory/api.py` | `build_graph_message`, archive + retarget endpoints |
 | `cade/backend/providers/registry.py` | Wires the memory tools into the per-connection registry |
 | `cade/backend/nkrdn_service.py` | FileWatcher trigger for memory writes |
+| `cade/frontend/src/memory/graph-tree.ts` | Memory graph tree (left pane) |
+| `cade/frontend/src/memory/symbol-detail.ts` | Symbol detail pane (viewer) |
+| `cade/frontend/src/chat/chat-pane.ts` | Capture toast render path (`buildMemoryCaptureToast`) |
+| `cade/frontend/styles/workspace/memory.css` | Tree, detail pane, and capture-toast styles |
 
 ## See Also
 
 - [[../reference/agent-memory-systems]] — retrieval evidence base, scoring formula, failure modes
 - [[../reference/agent-memory-capture]] — capture-layer design synthesis
-- [[../plans/nkrdn-agent-memory]] — phase plan (Phase 5 UI still ahead)
