@@ -432,3 +432,101 @@
 .memory-detail-lang  { color: var(--accent-cyan); }
 .memory-detail-alert { color: var(--accent-orange); }
 
+/* ── Memory capture toast — chat pane ──────────────────────────────── */
+
+.memory-capture-toast {
+  margin-top: 4px;
+  border-left: 2px solid var(--accent-yellow);
+  padding: 7px 10px;
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: padding 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.memory-capture-toast__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.memory-capture-toast__icon {
+  color: var(--accent-yellow);
+  flex-shrink: 0;
+}
+
+.memory-capture-toast__pill {
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 0 5px;
+  border: 1px solid var(--accent-yellow);
+  color: var(--accent-yellow);
+  flex-shrink: 0;
+}
+
+.memory-capture-toast__title {
+  color: var(--text-secondary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-capture-toast__target {
+  color: var(--accent-blue);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.memory-capture-toast__status {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-style: italic;
+  flex-shrink: 0;
+}
+
+.memory-capture-toast--saving .memory-capture-toast__status {
+  animation: memory-capture-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes memory-capture-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.memory-capture-toast__error {
+  color: var(--accent-red);
+  font-size: 10px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--border-color);
+}
+
+.memory-capture-toast--collapsed {
+  border-left-color: var(--text-muted);
+  background: transparent;
+  padding: 3px 10px;
+}
+
+.memory-capture-toast--collapsed .memory-capture-toast__icon { color: var(--text-muted); }
+.memory-capture-toast--collapsed .memory-capture-toast__pill {
+  border-color: var(--text-muted);
+  color: var(--text-muted);
+}
+.memory-capture-toast--collapsed .memory-capture-toast__title { color: var(--text-muted); }
+.memory-capture-toast--collapsed .memory-capture-toast__target { color: var(--text-muted); }
+
+.memory-capture-toast--error {
+  border-left-color: var(--accent-red);
+}
+.memory-capture-toast--error .memory-capture-toast__icon { color: var(--accent-red); }
+.memory-capture-toast--error .memory-capture-toast__pill {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+

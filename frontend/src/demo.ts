@@ -363,6 +363,68 @@ const PHASE5_CHAT = [
   { role: "assistant" as const, content: "I'll add a RateLimiter in backend/auth/rate_limiter.py, wire it into authenticate(), and surface AuthError::RateLimited as a Result variant. After that I'll record the decision so future sessions see the rationale." },
 ];
 
+function injectPhase5MemoryCaptures(ws: WebSocketClient): void {
+  const fire = (delay: number, payload: Record<string, unknown>) => {
+    setTimeout(() => ws.injectEvent("chat-stream", payload as any), delay);
+  };
+
+  // Decision capture — active state, then auto-collapses after the result.
+  const decisionId = "demo-decision-1";
+  fire(900, {
+    event: "tool-use-start",
+    toolId: decisionId,
+    toolName: "record_decision",
+    toolInput: {
+      rationale: "Rate limiting uses token-bucket, not a sliding window — predictable burst tolerance and constant-time refill match the existing AuthError::RateLimited Result pattern.",
+      alternatives: ["sliding window", "fixed window"],
+      applies_to: ["AuthService"],
+      importance: 7,
+    },
+  });
+  fire(2200, {
+    event: "tool-result",
+    toolId: decisionId,
+    toolName: "record_decision",
+    status: "success",
+    content: JSON.stringify({
+      tool: "record_decision",
+      uri_stem: "2026-05-05-rate-limiting-uses-token-bucket",
+      path: "/demo/.cade/memory/2026-05-05-rate-limiting-uses-token-bucket.md",
+      created: true,
+      status: "written",
+    }),
+  });
+
+  // Note capture — fires while the first toast is still visible so both
+  // states are on screen at once.
+  const noteId = "demo-note-1";
+  fire(3400, {
+    event: "tool-use-start",
+    toolId: noteId,
+    toolName: "record_note",
+    toolInput: {
+      observation: "RateLimiter falls back to an in-process counter when Redis is unreachable — keeps auth available but resets per-process.",
+      applies_to: ["RateLimiter"],
+      importance: 4,
+    },
+  });
+  fire(4500, {
+    event: "tool-result",
+    toolId: noteId,
+    toolName: "record_note",
+    status: "success",
+    content: JSON.stringify({
+      tool: "record_note",
+      uri_stem: "2026-05-05-ratelimiter-redis-fallback",
+      path: "/demo/.cade/memory/2026-05-05-ratelimiter-redis-fallback.md",
+      created: true,
+      status: "written",
+    }),
+  });
+
+  fire(5200, { event: "done" });
+}
+
 const SCENARIOS: Record<string, Scenario> = {
   "phase5-memory": {
     initial: PHASE5_GRAPH,
@@ -439,6 +501,7 @@ export function activateDemoMode(ws: WebSocketClient): void {
       ws.injectEvent("nkrdn-graph", PHASE5_GRAPH as any);
       ws.injectEvent("file-tree", { type: "file-tree", data: [] });
       ws.injectEvent("chat-history", { type: "chat-history", messages: PHASE5_CHAT });
+      injectPhase5MemoryCaptures(ws);
       return;
     }
 
