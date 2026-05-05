@@ -53,7 +53,7 @@ The Phase 5 codebase had already shipped most of the P1 surface area — only th
 ## Worktree / branch
 
 - Path: `/home/gary/projects/cade` — the **main checkout, on `main` branch**. Phase 5's worktree (`/home/gary/projects/cade-phase5-memory`) and `phase5/memory-ui` branch are now redundant; the user has not yet asked to remove them, so leave both alone unless asked.
-- Last commit on main: P2 commit (this session) — see "Shipped this session"
+- Last commit on main: `3cc62d2 Phase 6 P2: retrieval trigger guidance in agent-memory and nkrdn modules`
 
 ## Shipped this session
 
@@ -64,7 +64,7 @@ The Phase 5 codebase had already shipped most of the P1 surface area — only th
 - In `common-knowledge`: `b50e142 ai-agents: ambient cues in developer tools` — PROVEN reference doc closing the HCI evidence gap for P3
 - `92d03fa` — plans: Phase 6 priorities and explicit non-goals (research-grounded)
 - `c69ed5f` — Phase 6 P1: discard action on memory capture toast
-- (this session) — **Phase 6 P2: retrieval trigger guidance in `agent-memory.md` and `nkrdn.md`**
+- `3cc62d2` — **Phase 6 P2: retrieval trigger guidance in `agent-memory.md` and `nkrdn.md`**
 
 ### What P2 actually shipped
 
