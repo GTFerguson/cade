@@ -42,3 +42,11 @@ additional_modules = ["nkrdn", "agent-memory"]
 write_access = "docs_plans"
 slash_names = ["review"]
 
+[modes.triage]
+label = "TRIAGE"
+description = "Switch to Triage mode (B2B transaction intelligence)"
+color = "var(--accent-purple)"
+modules = ["triage"]
+additional_modules = ["nkrdn", "agent-memory"]
+write_access = "none"
+slash_names = ["triage"]

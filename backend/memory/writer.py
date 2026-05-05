@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 
 MEMORY_DIR_NAME = ".cade/memory"
-VALID_TYPES = frozenset({"decision", "attempt", "note", "session"})
+VALID_TYPES = frozenset({"decision", "attempt", "note", "session", "investigation"})
 DEFAULT_AUTHOR = "agent:cade"
 SLUG_MAX_LEN = 50
 
