@@ -12,8 +12,10 @@ silently absorbs duplicates, so the agent can call these tools liberally.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +30,19 @@ from backend.memory.writer import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Connection-keyed send callbacks. The websocket registers its _send function
+# here so the executor can emit memory-write events without a direct reference.
+_WRITE_BROADCASTS: dict[str, Callable[[dict], Coroutine[Any, Any, None]]] = {}
+
+
+def register_write_broadcast(connection_id: str, send_fn: Callable[[dict], Coroutine[Any, Any, None]]) -> None:
+    if connection_id:
+        _WRITE_BROADCASTS[connection_id] = send_fn
+
+
+def unregister_write_broadcast(connection_id: str) -> None:
+    _WRITE_BROADCASTS.pop(connection_id, None)
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +218,64 @@ _NOTE_SCHEMA: dict[str, Any] = {
     "required": ["observation", "applies_to", "importance"],
 }
 
+_INVESTIGATION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "applies_to": {
+            "type": "string",
+            "description": (
+                "Counterparty name as a wiki-link, e.g. '[[ACME Holdings]]'. "
+                "Used to attach this investigation to the counterparty entity "
+                "in the knowledge graph."
+            ),
+        },
+        "verdict": {
+            "type": "string",
+            "enum": ["legit", "escalate", "block"],
+            "description": (
+                "Triage verdict for this transaction. 'legit' — approve and "
+                "pass through; 'escalate' — flag for human review; 'block' — "
+                "reject outright."
+            ),
+        },
+        "confidence": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "Confidence in the verdict, from 0.0 (uncertain) to 1.0 (certain).",
+        },
+        "signals": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Risk or trust signals that influenced the verdict, e.g. "
+                "['first_time_payee', 'large_amount', 'fca_registered']."
+            ),
+        },
+        "specter_snapshot": {
+            "type": "string",
+            "description": (
+                "2-3 sentence summary of what Specter returned for this "
+                "counterparty. Include founding year, operating status, and "
+                "any notable highlights."
+            ),
+        },
+        "rationale": {
+            "type": "string",
+            "description": (
+                "Why this verdict was reached. Connect the signals to the "
+                "verdict clearly — a future reviewer should understand the "
+                "reasoning without re-running the investigation."
+            ),
+        },
+        "transaction_id": {
+            "type": "string",
+            "description": "The transaction identifier, e.g. 'tx-003'.",
+        },
+    },
+    "required": ["applies_to", "verdict", "confidence", "signals", "specter_snapshot", "rationale", "transaction_id"],
+}
+
 
 _ALL_DEFINITIONS = [
     ToolDefinition(
@@ -238,6 +311,17 @@ _ALL_DEFINITIONS = [
         ),
         parameters_schema=_NOTE_SCHEMA,
     ),
+    ToolDefinition(
+        name="record_investigation",
+        description=(
+            "Record a completed transaction triage investigation — verdict, "
+            "confidence, signals observed, Specter counterparty snapshot, and "
+            "rationale. Call once per transaction after reaching a verdict. "
+            "Persists findings to the knowledge graph so future queries about "
+            "this counterparty start from accumulated intelligence."
+        ),
+        parameters_schema=_INVESTIGATION_SCHEMA,
+    ),
 ]
 
 
@@ -265,7 +349,7 @@ def _format_result(result: WriteResult, tool_name: str) -> str:
 
 
 class MemoryToolExecutor:
-    """Executes record_decision / record_attempt / record_note tool calls."""
+    """Executes record_decision / record_attempt / record_note / record_investigation tool calls."""
 
     def __init__(
         self,
@@ -311,7 +395,21 @@ class MemoryToolExecutor:
         return self._dispatch_sync(name, arguments)
 
     async def execute_async(self, name: str, arguments: dict) -> str:
-        return self._dispatch_sync(name, arguments)
+        raw = self._dispatch_sync(name, arguments)
+        send_fn = _WRITE_BROADCASTS.get(self._connection_id) if self._connection_id else None
+        if send_fn is not None:
+            try:
+                payload = json.loads(raw)
+                if payload.get("action") in ("created", "updated"):
+                    asyncio.create_task(send_fn({
+                        "type": "memory-write",
+                        "action": payload["action"],
+                        "memory_type": payload.get("tool", name).removeprefix("record_"),
+                        "uri_stem": payload.get("uri_stem", ""),
+                    }))
+            except (json.JSONDecodeError, Exception):
+                pass
+        return raw
 
     # ------------------------------------------------------------------
     # Dispatch
@@ -349,6 +447,8 @@ class MemoryToolExecutor:
                     tags=arguments.get("tags"),
                     evidence=arguments.get("evidence"),
                 )
+            elif name == "record_investigation":
+                result = self._record_investigation(arguments)
             else:  # unreachable, _TOOL_NAMES guard above
                 return f"Error: unhandled memory tool '{name}'"
         except WriteValidationError as exc:
@@ -358,3 +458,64 @@ class MemoryToolExecutor:
             return f"Error: memory write failed: {exc}"
 
         return _format_result(result, name)
+
+    def _record_investigation(self, arguments: dict) -> WriteResult:
+        """Map record_investigation tool args to MemoryWriter._write_file."""
+        from backend.memory.writer import (
+            _build_note_body,
+            _clamp_importance,
+            _content_hash,
+            _validate_strings,
+            _require_nonempty,
+            WriteValidationError,
+        )
+
+        applies_to_raw = arguments.get("applies_to", "")
+        if not isinstance(applies_to_raw, str) or not applies_to_raw.strip():
+            raise WriteValidationError("applies_to is required and must be a non-empty string")
+        # Strip wiki-link brackets if present so the writer re-adds them
+        applies_to_name = applies_to_raw.strip().lstrip("[[").rstrip("]]")
+        applies_to = [applies_to_name]
+
+        verdict = arguments.get("verdict", "")
+        rationale = _require_nonempty("rationale", arguments.get("rationale", ""))
+        transaction_id = arguments.get("transaction_id", "")
+        specter_snapshot = arguments.get("specter_snapshot", "")
+        confidence = arguments.get("confidence", 0.5)
+        signals = arguments.get("signals", []) or []
+
+        # Build the markdown body: rationale + structured fields as sections
+        signals_md = "\n".join(f"- {s}" for s in signals) if signals else "- (none)"
+        body = (
+            f"{rationale}\n\n"
+            f"## Transaction\n\n"
+            f"- ID: {transaction_id}\n"
+            f"- Verdict: **{verdict}**\n"
+            f"- Confidence: {confidence:.0%}\n\n"
+            f"## Signals\n\n"
+            f"{signals_md}\n\n"
+            f"## Specter Snapshot\n\n"
+            f"{specter_snapshot}"
+        )
+
+        tags = ["transaction-triage", verdict]
+
+        content_hash = _content_hash(
+            type_="investigation",
+            primary=rationale,
+            alternatives=[transaction_id, verdict],
+            applies_to=applies_to,
+        )
+
+        return self._writer._write_file(
+            type_="investigation",
+            body=body,
+            applies_to=applies_to,
+            importance=7 if verdict in ("escalate", "block") else 4,
+            tags=tags,
+            supersedes=None,
+            evidence=None,
+            alternatives=None,
+            content_hash=content_hash,
+            slug_seed=f"{transaction_id} {applies_to_name} {verdict}",
+        )

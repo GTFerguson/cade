@@ -22,12 +22,17 @@ export class MemoryPresenceIndex {
   private firstSymByFile: Map<string, MemorySymbol> = new Map();
   private subscribers: Set<() => void> = new Set();
   private boundHandler: ((msg: NkrdnGraphMessage) => void) | null = null;
+  private boundWriteHandler: (() => void) | null = null;
 
   constructor(private ws: WebSocketClient) {}
 
   initialize(): void {
     this.boundHandler = (msg: NkrdnGraphMessage) => this.ingest(msg);
     this.ws.on("nkrdn-graph" as any, this.boundHandler);
+    // memory-write fires before nkrdn rebuilds; notify subscribers so the UI
+    // can show a "pending" state. Counts update when nkrdn-graph arrives.
+    this.boundWriteHandler = () => { for (const cb of this.subscribers) cb(); };
+    this.ws.on("memory-write" as any, this.boundWriteHandler);
   }
 
   setProjectRoot(root: string): void {
@@ -68,6 +73,10 @@ export class MemoryPresenceIndex {
     if (this.boundHandler) {
       this.ws.off("nkrdn-graph" as any, this.boundHandler);
       this.boundHandler = null;
+    }
+    if (this.boundWriteHandler) {
+      this.ws.off("memory-write" as any, this.boundWriteHandler);
+      this.boundWriteHandler = null;
     }
     this.subscribers.clear();
   }

@@ -11,8 +11,9 @@ import logging
 import os
 import shutil
 import subprocess
+from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.backend.models import FileChangeEvent
@@ -169,8 +170,13 @@ def _run_nkrdn_rebuild(project_dir: Path) -> subprocess.CompletedProcess:
 class NkrdnService:
     """Manages knowledge graph lifecycle for a single project connection."""
 
-    def __init__(self, project_dir: Path) -> None:
+    def __init__(
+        self,
+        project_dir: Path,
+        on_rebuild: Callable[[], Coroutine[Any, Any, None]] | None = None,
+    ) -> None:
         self._project_dir = project_dir
+        self._on_rebuild = on_rebuild
         self._rebuild_task: asyncio.Task | None = None
         self._debounce_seconds = 10.0
         self._building = False
@@ -247,6 +253,8 @@ class NkrdnService:
                     "Knowledge graph rebuilt for %s",
                     self._project_dir,
                 )
+                if self._on_rebuild is not None:
+                    asyncio.create_task(self._on_rebuild())
             else:
                 logger.warning(
                     "nkrdn rebuild failed (exit %d): %s",

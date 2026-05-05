@@ -208,6 +208,10 @@ class ConnectionHandler:
             from backend.permissions.manager import get_permission_manager
             get_permission_manager().register_broadcast(self._connection_id, self._send)
 
+            # Register memory-write broadcast so the tool executor can emit WS events
+            from backend.memory.tool_executor import register_write_broadcast
+            register_write_broadcast(self._connection_id, self._send)
+
             # Start output loop for claude terminal
             self._start_output_loop(SessionKey.CLAUDE)
             watch_task = asyncio.create_task(self._watch_loop())
@@ -489,7 +493,7 @@ class ConnectionHandler:
 
             from backend.nkrdn_service import NKRDN_AVAILABLE, NkrdnService
             if NKRDN_AVAILABLE:
-                self._nkrdn = NkrdnService(self._working_dir)
+                self._nkrdn = NkrdnService(self._working_dir, on_rebuild=self._emit_nkrdn_graph)
                 self._watcher.on_change(self._nkrdn.on_file_change)
 
         # Dashboard handler — watches .cade/dashboard.yml separately
@@ -575,6 +579,9 @@ class ConnectionHandler:
         if self._nkrdn is not None:
             self._nkrdn.cancel()
             self._nkrdn = None
+
+        from backend.memory.tool_executor import unregister_write_broadcast
+        unregister_write_broadcast(self._connection_id)
 
         if self._watcher is not None:
             self._watcher.stop()
