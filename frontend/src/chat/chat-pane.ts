@@ -97,6 +97,7 @@ export class ChatPane implements Component, PaneKeyHandler {
   private permissionsButton: PermissionsButton | null = null;
   private orchToggleEl: HTMLElement | null = null;
   private mcpStatusIcon: MCPStatusIcon | null = null;
+  private projectPath = "";
   private systemInfo: {
     model?: string;
     slashCommands: Array<{ name: string; description: string }>;
@@ -496,6 +497,10 @@ export class ChatPane implements Component, PaneKeyHandler {
 
   setMcpStatus(entries: MCPEntry[]): void {
     this.mcpStatusIcon?.setStatus(entries);
+  }
+
+  setProjectPath(path: string): void {
+    this.projectPath = path;
   }
 
   private cancelStream(): void {
@@ -1003,19 +1008,69 @@ export class ChatPane implements Component, PaneKeyHandler {
     }
 
     let savedLabel = "saved";
+    let uriStem: string | null = null;
     if (content) {
       try {
         const parsed = JSON.parse(content);
         if (parsed?.status === "duplicate-skipped") savedLabel = "duplicate";
+        if (typeof parsed?.uri_stem === "string") uriStem = parsed.uri_stem;
       } catch {
         /* leave default */
       }
     }
     if (statusEl) statusEl.textContent = savedLabel;
 
+    if (uriStem && this.projectPath) {
+      const head = toastEl.querySelector(".memory-capture-toast__head");
+      if (head && !head.querySelector(".memory-capture-toast__archive")) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "memory-capture-toast__archive";
+        btn.textContent = "discard";
+        btn.title = "Archive this memory entry";
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.archiveCapturedMemory(toastEl, uriStem!);
+        });
+        head.appendChild(btn);
+      }
+    }
+
     window.setTimeout(() => {
       toastEl.classList.add("memory-capture-toast--collapsed");
     }, ChatPane.MEMORY_TOAST_COLLAPSE_MS);
+  }
+
+  private async archiveCapturedMemory(
+    toastEl: HTMLElement,
+    uriStem: string,
+  ): Promise<void> {
+    if (!this.projectPath) return;
+    const btn = toastEl.querySelector(
+      ".memory-capture-toast__archive",
+    ) as HTMLButtonElement | null;
+    if (btn) btn.disabled = true;
+
+    const uri = `http://nkrdn.knowledge/memory#${uriStem}`;
+    try {
+      const res = await fetch("/api/memory/archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project: this.projectPath, uri }),
+      });
+      if (!res.ok) throw new Error(`archive failed: ${res.status}`);
+    } catch {
+      if (btn) btn.disabled = false;
+      return;
+    }
+
+    toastEl.classList.add("memory-capture-toast--discarded");
+    toastEl.classList.remove("memory-capture-toast--collapsed");
+    const statusEl = toastEl.querySelector(
+      ".memory-capture-toast__status",
+    ) as HTMLElement | null;
+    if (statusEl) statusEl.textContent = "discarded";
+    if (btn) btn.remove();
   }
 
   private truncateMemoryTitle(text: string, max = 90): string {

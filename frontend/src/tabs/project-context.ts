@@ -286,6 +286,7 @@ export class ProjectContextImpl implements IProjectContext {
     this.rightPane.initialize();
     this.rightPane.getViewer().setProjectPath(this.projectPath);
     this.rightPane.setMemoryProjectPath(this.projectPath);
+    this.terminalManager?.setProjectPath(this.projectPath);
 
     // Wire agent overview pane in the right pane
     this.rightPane.setAgentManager(this.agentManager);

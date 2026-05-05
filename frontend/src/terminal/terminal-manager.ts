@@ -25,6 +25,7 @@ export class TerminalManager implements Component {
   private mode: TerminalMode = "terminal";
   private enhanced = false;
   private onOpenFile: ((path: string) => void) | null = null;
+  private projectPath = "";
   private statusIndicator: HTMLElement;
   private customKeyHandler: CustomKeyHandler | null = null;
   private agentManager: AgentManager | null = null;
@@ -108,6 +109,11 @@ export class TerminalManager implements Component {
     this.agentManager = manager;
   }
 
+  setProjectPath(path: string): void {
+    this.projectPath = path;
+    this.chatPane?.setProjectPath(path);
+  }
+
   /**
    * Switch between terminal and chat modes.
    */
@@ -126,6 +132,7 @@ export class TerminalManager implements Component {
         if (this.onOpenFile) chatPaneOpts.onOpenFile = this.onOpenFile;
         this.chatPane = new ChatPane(this.chatContainer, this.ws, chatPaneOpts);
         this.chatPane.initialize();
+        if (this.projectPath) this.chatPane.setProjectPath(this.projectPath);
         // Re-render status indicator when model name changes
         this.chatPane.onModelChange(() => this.updateStatusIndicator());
       }

@@ -530,3 +530,45 @@
   color: var(--accent-red);
 }
 
+.memory-capture-toast__archive {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--text-muted);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.memory-capture-toast__archive:hover {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.memory-capture-toast__archive:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.memory-capture-toast--discarded {
+  border-left-color: var(--accent-red);
+  background: transparent;
+  padding: 3px 10px;
+}
+.memory-capture-toast--discarded .memory-capture-toast__icon { color: var(--accent-red); }
+.memory-capture-toast--discarded .memory-capture-toast__pill {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+.memory-capture-toast--discarded .memory-capture-toast__title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+.memory-capture-toast--discarded .memory-capture-toast__target { color: var(--text-muted); }
+.memory-capture-toast--discarded .memory-capture-toast__status { color: var(--accent-red); }
+

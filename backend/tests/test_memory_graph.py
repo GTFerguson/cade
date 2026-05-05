@@ -273,3 +273,63 @@ class TestMemoryArchiveEndpoint:
                 json={"project": str(tmp_path), "uri": "http://nkrdn.knowledge/memory#foo"},
             )
         assert res.status_code == 503
+
+    def test_returns_400_for_invalid_project(self, client: TestClient, tmp_path: Path):
+        with patch("backend.nkrdn_service._NKRDN_BIN", "/usr/bin/nkrdn"):
+            res = client.post(
+                "/api/memory/archive",
+                json={
+                    "project": str(tmp_path / "no-such-dir"),
+                    "uri": "http://nkrdn.knowledge/memory#foo",
+                },
+            )
+        assert res.status_code == 400
+
+    def test_invokes_nkrdn_retire_on_success(self, client: TestClient, tmp_path: Path):
+        from unittest.mock import AsyncMock
+
+        proc = MagicMock()
+        proc.returncode = 0
+        proc.communicate = AsyncMock(return_value=(b"", b""))
+
+        async def fake_exec(*args, **kwargs):
+            fake_exec.captured = args
+            return proc
+
+        uri = "http://nkrdn.knowledge/memory#2026-05-05-test-decision"
+
+        with patch("backend.nkrdn_service._NKRDN_BIN", "/usr/bin/nkrdn"), \
+             patch("asyncio.create_subprocess_exec", fake_exec):
+            res = client.post(
+                "/api/memory/archive",
+                json={"project": str(tmp_path), "uri": uri},
+            )
+
+        assert res.status_code == 200
+        assert res.json() == {"ok": True}
+        assert fake_exec.captured == ("/usr/bin/nkrdn", "memory", "retire", uri)
+
+    def test_returns_502_when_nkrdn_retire_fails(self, client: TestClient, tmp_path: Path):
+        from unittest.mock import AsyncMock
+
+        proc = MagicMock()
+        proc.returncode = 1
+        proc.communicate = AsyncMock(return_value=(b"", b"no such memory"))
+
+        async def fake_exec(*args, **kwargs):
+            return proc
+
+        with patch("backend.nkrdn_service._NKRDN_BIN", "/usr/bin/nkrdn"), \
+             patch("asyncio.create_subprocess_exec", fake_exec):
+            res = client.post(
+                "/api/memory/archive",
+                json={
+                    "project": str(tmp_path),
+                    "uri": "http://nkrdn.knowledge/memory#bogus",
+                },
+            )
+
+        assert res.status_code == 502
+        body = res.json()
+        assert body["error"] == "retire failed"
+        assert "no such memory" in body["stderr"]
