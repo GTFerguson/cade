@@ -125,10 +125,17 @@ async def test_stream_chat_yields_text_deltas(provider: APIProvider):
 @pytest.mark.asyncio
 async def test_stream_chat_handles_error(provider: APIProvider):
     """Test that errors produce ChatError events."""
+    class _APIConnectionError(Exception): pass
+    class _ServiceUnavailableError(Exception): pass
+    class _InternalServerError(Exception): pass
+
     with patch("core.backend.providers.api_provider.litellm") as mock_litellm:
         mock_litellm.acompletion = AsyncMock(
             side_effect=Exception("API rate limited")
         )
+        mock_litellm.APIConnectionError = _APIConnectionError
+        mock_litellm.ServiceUnavailableError = _ServiceUnavailableError
+        mock_litellm.InternalServerError = _InternalServerError
 
         messages = [ChatMessage(role="user", content="Hi")]
         events = []

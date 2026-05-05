@@ -81,11 +81,9 @@ class MCPToolAdapter:
             return {}
         try:
             await self._ensure_connected()
-        except (SystemExit, KeyboardInterrupt):
+        except (SystemExit, KeyboardInterrupt, asyncio.CancelledError):
             raise
         except BaseException as e:
-            if isinstance(e, asyncio.CancelledError) and _outer_cancel_pending():
-                raise
             self._connect_failed = True
             logger.warning(
                 "MCP %s: connect failed, disabling for this session (%s: %s)",
