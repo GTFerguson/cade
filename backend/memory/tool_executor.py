@@ -19,6 +19,7 @@ from typing import Any
 
 from core.backend.providers.types import ToolDefinition
 
+from backend.memory.dedup import TokenJaccardJudge
 from backend.memory.writer import (
     DEFAULT_AUTHOR,
     MemoryWriter,
@@ -243,6 +244,13 @@ _ALL_DEFINITIONS = [
 _TOOL_NAMES = frozenset(d.name for d in _ALL_DEFINITIONS)
 
 
+_STATUS_BY_ACTION = {
+    "created": "written",
+    "skipped": "duplicate-skipped",
+    "updated": "refined-in-place",
+}
+
+
 def _format_result(result: WriteResult, tool_name: str) -> str:
     """Compact JSON status string the LLM can parse if it wants to."""
     payload = {
@@ -250,7 +258,8 @@ def _format_result(result: WriteResult, tool_name: str) -> str:
         "uri_stem": result.uri_stem,
         "path": str(result.path),
         "created": result.created,
-        "status": "written" if result.created else "duplicate-skipped",
+        "action": result.action,
+        "status": _STATUS_BY_ACTION.get(result.action, "written"),
     }
     return json.dumps(payload)
 
@@ -273,7 +282,16 @@ class MemoryToolExecutor:
         if author is None:
             slug = (provider_name or "").strip().lower()
             author = f"agent:{slug}" if slug else DEFAULT_AUTHOR
-        self._writer = MemoryWriter(Path(project_root), author=author)
+        # Phase 6 P5: TokenJaccardJudge adds Update detection to the
+        # baseline content-hash skip path. Same-target rewrites that share
+        # most tokens with an existing entry refine it in place rather than
+        # creating near-duplicate noise. Supersession (semantic
+        # contradiction) still requires an LLM judge — not wired yet.
+        self._writer = MemoryWriter(
+            Path(project_root),
+            author=author,
+            dedup_judge=TokenJaccardJudge(),
+        )
         self._connection_id = connection_id
 
     # ------------------------------------------------------------------

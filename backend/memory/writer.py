@@ -13,10 +13,14 @@ matches `nkrdn/parsers/memory/parser.py`. Schema fields:
   importance: 1-10                    # clamped at write
   created: <YYYY-MM-DD>
 
-Idempotency: a content hash over (rationale + sorted(alternatives) +
-sorted(applies_to)) is compared against existing entries. Exact matches
-return the existing URI silently. Phase 4.0 stops there — fuzzy/refinement
-detection via embedding ANN + LLM judge is deferred.
+Dedup: a pluggable DedupJudge classifies each incoming write as
+Skip / Update / Supersede / New. The default ContentHashJudge preserves
+Phase 4.0 behaviour (skip on exact match, else new). Wiring in
+TokenJaccardJudge adds Update detection — incoming bodies that are mostly
+re-statements rewrite the existing file's body in place. The Supersede
+path requires an LLM judge and is left for a follow-up; in its absence,
+materially-different content falls through to New (the conservative
+default).
 
 The writer does not invoke nkrdn rebuild directly. The FileWatcher in
 `backend/nkrdn_service.py` fires on memory `.md` writes and uses its
@@ -31,6 +35,17 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from typing import Literal
+
+from backend.memory.dedup import (
+    ContentHashJudge,
+    DedupCandidate,
+    DedupJudge,
+    Skip,
+    Supersede,
+    Update,
+    load_candidates,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,13 +56,17 @@ DEFAULT_AUTHOR = "agent:cade"
 SLUG_MAX_LEN = 50
 
 
+WriteAction = Literal["created", "skipped", "updated"]
+
+
 @dataclass(frozen=True)
 class WriteResult:
     """Outcome of a write call."""
     uri_stem: str          # The filename stem (also the mem: URI suffix)
     path: Path             # Absolute path of the markdown file
-    created: bool          # False if this was an idempotent no-op
-    content_hash: str      # The hash that determined idempotency
+    created: bool          # False for skipped/updated; preserved for back-compat
+    content_hash: str      # The hash recorded in the on-disk file
+    action: WriteAction = "created"  # Specific verdict from the dedup judge
 
 
 # ---------------------------------------------------------------------------
@@ -119,25 +138,12 @@ def _content_hash(
 
 
 _HASH_LINE_RE = re.compile(r"<!-- *cade-content-hash: ([0-9a-f]{64}) *-->")
+_FRONTMATTER_BOUNDARY = re.compile(r"^---\n.*?\n---\n", re.DOTALL)
 
 
 def _extract_hash(text: str) -> str | None:
     m = _HASH_LINE_RE.search(text)
     return m.group(1) if m else None
-
-
-def _scan_for_duplicate(memory_dir: Path, content_hash: str) -> Path | None:
-    """Linear scan of memory_dir for a file whose embedded hash matches."""
-    if not memory_dir.is_dir():
-        return None
-    for md_path in memory_dir.glob("*.md"):
-        try:
-            text = md_path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        if _extract_hash(text) == content_hash:
-            return md_path
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -322,9 +328,16 @@ def _require_nonempty(name: str, value: str) -> str:
 class MemoryWriter:
     """Emits memory markdown files into `.cade/memory/`."""
 
-    def __init__(self, project_root: Path, *, author: str = DEFAULT_AUTHOR) -> None:
+    def __init__(
+        self,
+        project_root: Path,
+        *,
+        author: str = DEFAULT_AUTHOR,
+        dedup_judge: DedupJudge | None = None,
+    ) -> None:
         self._root = Path(project_root).resolve()
         self._author = author
+        self._judge: DedupJudge = dedup_judge or ContentHashJudge()
 
     @property
     def memory_dir(self) -> Path:
@@ -347,17 +360,41 @@ class MemoryWriter:
         content_hash: str,
         slug_seed: str,
     ) -> WriteResult:
-        # Idempotency check: matching hash → silent no-op
-        existing = _scan_for_duplicate(self.memory_dir, content_hash)
-        if existing is not None:
-            logger.debug("Skipping duplicate memory write: %s", existing.name)
+        candidates = load_candidates(
+            self.memory_dir,
+            type_=type_,
+            applies_to=applies_to,
+        )
+        verdict = self._judge.judge(
+            type_=type_,
+            applies_to=applies_to,
+            body=body,
+            content_hash=content_hash,
+            candidates=candidates,
+        )
+
+        if isinstance(verdict, Skip):
+            existing = verdict.candidate
+            logger.debug("Dedup: skipping duplicate memory write: %s", existing.path.name)
             return WriteResult(
                 uri_stem=existing.stem,
-                path=existing.resolve(),
+                path=existing.path,
                 created=False,
                 content_hash=content_hash,
+                action="skipped",
             )
 
+        if isinstance(verdict, Update):
+            return self._apply_update(verdict.candidate, body=body, content_hash=content_hash)
+
+        if isinstance(verdict, Supersede):
+            # Carry the candidate forward as the explicit `supersedes:` link
+            # so the new write records the relationship, then fall through to
+            # the New path. Honours an explicit caller-supplied supersedes if
+            # they passed one (caller wins).
+            supersedes = supersedes or verdict.candidate.stem
+
+        # Verdict is New (or Supersede after rewriting `supersedes`).
         self._ensure_dir()
         today = date.today()
         base_stem = _date_stem(slug_seed, today=today)
@@ -384,6 +421,48 @@ class MemoryWriter:
             path=path.resolve(),
             created=True,
             content_hash=content_hash,
+            action="created",
+        )
+
+    def _apply_update(
+        self,
+        candidate: DedupCandidate,
+        *,
+        body: str,
+        content_hash: str,
+    ) -> WriteResult:
+        """Rewrite an existing entry's body in place; keep frontmatter + URI.
+
+        Preserves the `created:` date (this is still the same entry,
+        just refined) and updates the embedded content-hash comment. The
+        nkrdn parser keys entries by filename stem, so the URI is stable
+        across the update.
+        """
+        text = candidate.path.read_text(encoding="utf-8", errors="replace")
+        fm_match = _FRONTMATTER_BOUNDARY.match(text)
+        if fm_match is None:
+            # Defensive: candidate had to have had frontmatter to be loaded,
+            # but if the file changed underneath us, fall back to overwrite
+            logger.warning(
+                "Update path lost frontmatter for %s — rewriting whole file",
+                candidate.path.name,
+            )
+            new_text = _assemble_markdown("---\n---", body, content_hash)
+        else:
+            frontmatter = text[: fm_match.end()]
+            new_text = (
+                f"{frontmatter.rstrip()}\n\n"
+                f"<!-- cade-content-hash: {content_hash} -->\n\n"
+                f"{body}\n"
+            )
+        candidate.path.write_text(new_text, encoding="utf-8")
+        logger.info("Updated memory entry in place: %s", candidate.path.name)
+        return WriteResult(
+            uri_stem=candidate.stem,
+            path=candidate.path,
+            created=False,
+            content_hash=content_hash,
+            action="updated",
         )
 
     # -- record_decision ----------------------------------------------------

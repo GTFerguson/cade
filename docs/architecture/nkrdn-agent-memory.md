@@ -238,6 +238,14 @@ picking flow that warrants its own scope.
   CADE's `/api/memory/search` endpoint
 - Type-discriminated capture tools (Phase 4) — `record_decision`,
   `record_attempt`, `record_note` with content-hash idempotency
+- **Pluggable dedup judge at write time** (Phase 6) — `DedupJudge` interface
+  in `backend/memory/dedup.py` with two built-in implementations:
+  `ContentHashJudge` (Phase 4 baseline: skip on exact match) and
+  `TokenJaccardJudge` (adds Update detection — same-target rewrites with
+  ≥0.7 token-set Jaccard overlap refine the existing entry in place,
+  preserving its URI). The tool executor wires `TokenJaccardJudge` by
+  default. Verdict is one of Skip / Update / Supersede / New; a new
+  `WriteResult.action` field surfaces which path ran.
 - Memory-health surfacing — `nkrdn memory affected` reports entries whose
   `applies_to` URIs point at tombstoned or missing symbols, plus entries
   carrying `mem:unresolvedLink` literals. Renames are deliberately excluded:
@@ -254,9 +262,15 @@ picking flow that warrants its own scope.
 
 ## What's Not In Scope Yet
 
-- **LLM-judge dedup** — refinement vs supersedes detection at write time;
-  Phase 4 ships with content-hash exact-match only. The agent uses the
-  explicit `supersedes` parameter when it knows.
+- **LLM-backed Supersede detection** — the dedup `DedupJudge` interface
+  has a Supersede verdict but no built-in implementation produces it.
+  Detecting that a new Decision *contradicts* (rather than refines) an
+  existing one requires semantic understanding; the dedup module is
+  shaped so a future `LLMJudge` can plug in alongside the existing
+  `TokenJaccardJudge` without restructuring the writer. Until then,
+  contradictory same-target writes fall through to New (the safe
+  default), and the agent uses the explicit `supersedes` parameter
+  when it knows.
 - **Reflector pass** — session-end consolidation per ACE Generator-Reflector-
   Curator. Deferred until capture is in real use; needs provenance tracing
   to avoid the self-reinforcing reflection error failure mode.
@@ -280,14 +294,17 @@ picking flow that warrants its own scope.
 | `nkrdn/src/nkrdn/memory/store.py` | Park et al. triple-score retrieval |
 | `nkrdn/src/nkrdn/memory/retriever.py` | LLM-controlled iterative loop with `seen_ids` dedup |
 | `nkrdn/src/nkrdn/cli/commands/memory.py` | `nkrdn memory search/list/retire` |
-| `cade/backend/memory/writer.py` | Markdown emitter with content-hash idempotency |
-| `cade/backend/memory/tool_executor.py` | `record_decision`/`attempt`/`note` tool surface |
+| `cade/backend/memory/writer.py` | Markdown emitter; consults `DedupJudge` per write, supports Skip / Update-in-place / New / explicit-Supersede |
+| `cade/backend/memory/dedup.py` | `DedupJudge` interface + `ContentHashJudge` / `TokenJaccardJudge` implementations |
+| `cade/backend/memory/tool_executor.py` | `record_decision`/`attempt`/`note` tool surface; default-wires `TokenJaccardJudge` |
 | `cade/backend/memory/api.py` | `build_graph_message`, archive + retarget endpoints |
 | `cade/backend/providers/registry.py` | Wires the memory tools into the per-connection registry |
 | `cade/backend/nkrdn_service.py` | FileWatcher trigger for memory writes |
 | `cade/frontend/src/memory/graph-tree.ts` | Memory graph tree (left pane) |
-| `cade/frontend/src/memory/symbol-detail.ts` | Symbol detail pane (viewer) |
-| `cade/frontend/src/chat/chat-pane.ts` | Capture toast render path (`buildMemoryCaptureToast`) |
+| `cade/frontend/src/memory/symbol-detail.ts` | Symbol detail pane (viewer); `p` keybinding triggers promote-to-docs |
+| `cade/frontend/src/memory/presence-index.ts` | File-level memory presence index for ambient cues |
+| `cade/frontend/src/memory/promote-prompt.ts` | Builds the structured CoT prompt for promote-to-docs |
+| `cade/frontend/src/chat/chat-pane.ts` | Capture toast render + presence-cue decorator on file links |
 | `cade/frontend/styles/workspace/memory.css` | Tree, detail pane, and capture-toast styles |
 
 ## See Also

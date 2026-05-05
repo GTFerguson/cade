@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.memory.dedup import TokenJaccardJudge
 from backend.memory.tool_executor import MemoryToolExecutor, _ALL_DEFINITIONS
 from backend.memory.writer import (
     MEMORY_DIR_NAME,
@@ -724,3 +725,93 @@ def test_written_file_parses_under_nkrdn_parser(temp_dir: Path):
         "http://nkrdn.knowledge/memory#importance",
     }
     assert expected_some.issubset(predicates), f"missing predicates: {expected_some - predicates}"
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 P5: TokenJaccardJudge — refinement (Update) path
+# ---------------------------------------------------------------------------
+
+
+def test_jaccard_judge_skips_exact_match(temp_dir: Path):
+    writer = MemoryWriter(temp_dir, dedup_judge=TokenJaccardJudge())
+    first = writer.record_decision(
+        rationale="Use Result over throwing for explicit error handling everywhere.",
+        alternatives=["panic"],
+        applies_to=["AuthService"],
+        importance=5,
+    )
+    second = writer.record_decision(
+        rationale="Use Result over throwing for explicit error handling everywhere.",
+        alternatives=["panic"],
+        applies_to=["AuthService"],
+        importance=5,
+    )
+    assert first.action == "created"
+    assert second.action == "skipped"
+    assert second.created is False
+    assert first.path == second.path
+
+
+def test_jaccard_judge_updates_in_place_on_high_similarity(temp_dir: Path):
+    writer = MemoryWriter(temp_dir, dedup_judge=TokenJaccardJudge(update_threshold=0.6))
+    first = writer.record_decision(
+        rationale="Use Result over throwing for explicit error handling everywhere in this module.",
+        alternatives=["panic"],
+        applies_to=["AuthService"],
+        importance=5,
+    )
+    refined = writer.record_decision(
+        rationale="Use Result over throwing for explicit error handling everywhere in this module and propagate to telemetry.",
+        alternatives=["panic"],
+        applies_to=["AuthService"],
+        importance=5,
+    )
+    assert first.action == "created"
+    assert refined.action == "updated"
+    assert refined.created is False
+    # Same URI/path — the entry was refined in place
+    assert refined.path == first.path
+    # Only one file should exist on disk
+    files = list((temp_dir / MEMORY_DIR_NAME).glob("*.md"))
+    assert len(files) == 1
+    # The body should now reflect the refined text
+    assert "telemetry" in files[0].read_text(encoding="utf-8")
+
+
+def test_jaccard_judge_creates_new_when_dissimilar(temp_dir: Path):
+    writer = MemoryWriter(temp_dir, dedup_judge=TokenJaccardJudge(update_threshold=0.7))
+    first = writer.record_decision(
+        rationale="Use Result over throwing for auth errors.",
+        alternatives=["panic"],
+        applies_to=["AuthService"],
+        importance=5,
+    )
+    unrelated = writer.record_decision(
+        rationale="Token bucket rate limiting because predictable burst tolerance.",
+        alternatives=["sliding window"],
+        applies_to=["AuthService"],
+        importance=5,
+    )
+    assert first.action == "created"
+    assert unrelated.action == "created"
+    assert first.path != unrelated.path
+
+
+def test_jaccard_judge_only_considers_same_target(temp_dir: Path):
+    writer = MemoryWriter(temp_dir, dedup_judge=TokenJaccardJudge(update_threshold=0.5))
+    first = writer.record_decision(
+        rationale="Use Result over throwing for explicit error handling.",
+        alternatives=["panic"],
+        applies_to=["AuthService"],
+        importance=5,
+    )
+    # Same body but different target — must NOT trigger Update
+    elsewhere = writer.record_decision(
+        rationale="Use Result over throwing for explicit error handling.",
+        alternatives=["panic"],
+        applies_to=["RateLimiter"],
+        importance=5,
+    )
+    assert first.action == "created"
+    assert elsewhere.action == "created"
+    assert first.path != elsewhere.path

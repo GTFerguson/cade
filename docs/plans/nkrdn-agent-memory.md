@@ -352,48 +352,29 @@ sub-features cut from scope and rolled into Phase 6. See
 
 ### Phase 6 — Curate, browse, promote
 
-Capture and retrieval stay explicit. The Phase 4 evidence holds — see
-[[../reference/agent-memory-capture]] for why autonomous post-turn
-extraction and auto-injection at session start are documented failure
-modes (self-reinforcing reflection error, attentional dilution). Phase 6
-extends the verification posture Phase 5 shipped (capture toast, symbol
-detail pane) into discard, ambient awareness, and human-validated
-promotion to architecture docs.
+Shipped. Capture and retrieval stayed explicit; the verification posture
+from Phase 5 was extended into archive, ambient awareness, and
+human-validated promotion. See
+[[../architecture/nkrdn-agent-memory#What's In Scope]] for the
+graduated design.
 
-**P1 — Memory archive endpoint.** `POST /api/memory/archive` writes
-`archived_at: <ISO>` to the entry frontmatter; rebuild excludes archived
-entries from retrieval. Capture toast gains a discard action; symbol
-detail pane gains per-entry archive. Smallest scope; unblocks the
-discard control we deliberately shipped without.
+- P1 — `POST /api/memory/archive` + capture-toast discard + symbol-detail
+  archive keybinding (`c69ed5f`).
+- P2 — Retrieval trigger guidance in `agent-memory.md` and `nkrdn.md`
+  prompt modules (`3cc62d2`).
+- P3 — `MemoryPresenceIndex` + chat file-link cue + Neovim header chip
+  (`934cfc9`). Presence-only, low-distraction; HCI grounding in
+  [[../../../common-knowledge/ai-agents/ambient-cues-developer-tools]].
+- P4 — Promote-to-docs gesture (`p` on a Decision); structured CoT prompt
+  per Zhou et al. 2025 (arXiv:2504.20781) and Su et al. 2026
+  (arXiv:2602.07609). Synthesis logged in
+  [[../reference/agent-memory-capture#12-1-promote-to-docs-evidence-design-implications]].
+- P5 — Pluggable `DedupJudge` interface + `TokenJaccardJudge` for
+  Update-in-place detection. LLM-backed Supersede detection still
+  deferred — see [[../architecture/nkrdn-agent-memory#What's Not In Scope Yet]].
 
-**P2 — Retrieval-side prompt nudges.** Audit `agent-memory.md` and
-`nkrdn.md` prompt modules — write tools have explicit trigger guidance,
-read tools (`nkrdn memory search`) likely don't. The MemR³ iterative
-loop only fires if the agent decides to query. Evidence:
-[[../reference/agent-memory-capture#2-3-system-prompt-triggers]].
-
-**P3 — Ambient retrieval surfaces.** File-open hint ("3 memories attached
-to symbols in this file") in the gutter or statusline; chat hot-link
-extension so symbols mentioned in agent messages link to the detail
-pane. Surfaces *presence* without injecting content — respects the
-MemR³ iterative loop and avoids attentional dilution
-([[../reference/agent-memory-systems#documented-failure-modes]]).
-
-**P4 — Promote-to-docs gesture.** `p` on a Decision in the detail pane
-drafts a markdown section for an architecture doc; user reviews,
-accepts, writes; source memory gains `mem:evidence` back-link. Tier 2
-grounding from Zhou et al. 2025 (arXiv:2504.20781) — multi-agent LLM-ADR
-generation, human-validated.
-
-**P5 — Tighten dedup at write time.** Phase 4.0 ships content-hash exact
-match only. Add embedding-ANN + LLM-judge layer for the
-identical/refinement/supersedes/new matrix per
-[[../reference/agent-memory-capture#3-2-dedup-judge-rubric]]. Can ship
-parallel to anything else.
-
-Sequencing: P1 → P2 in parallel with P3 → P4. P5 any time.
-
-**Explicitly NOT in Phase 6** by the existing research:
+**Explicitly out of scope** by the existing research, unchanged through
+Phase 6:
 
 - Auto-inject relevant memories at session start — *attentional dilution*
   (Du 2026, arXiv:2603.07670).
