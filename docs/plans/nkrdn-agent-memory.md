@@ -350,6 +350,72 @@ and inline capture toast for `record_decision` / `record_attempt` /
 sub-features cut from scope and rolled into Phase 6. See
 [[../architecture/nkrdn-agent-memory#UI Layer (Phase 5)]].
 
+### Phase 6 — Curate, browse, promote
+
+Capture and retrieval stay explicit. The Phase 4 evidence holds — see
+[[../reference/agent-memory-capture]] for why autonomous post-turn
+extraction and auto-injection at session start are documented failure
+modes (self-reinforcing reflection error, attentional dilution). Phase 6
+extends the verification posture Phase 5 shipped (capture toast, symbol
+detail pane) into discard, ambient awareness, and human-validated
+promotion to architecture docs.
+
+**P1 — Memory archive endpoint.** `POST /api/memory/archive` writes
+`archived_at: <ISO>` to the entry frontmatter; rebuild excludes archived
+entries from retrieval. Capture toast gains a discard action; symbol
+detail pane gains per-entry archive. Smallest scope; unblocks the
+discard control we deliberately shipped without.
+
+**P2 — Retrieval-side prompt nudges.** Audit `agent-memory.md` and
+`nkrdn.md` prompt modules — write tools have explicit trigger guidance,
+read tools (`nkrdn memory search`) likely don't. The MemR³ iterative
+loop only fires if the agent decides to query. Evidence:
+[[../reference/agent-memory-capture#2-3-system-prompt-triggers]].
+
+**P3 — Ambient retrieval surfaces.** File-open hint ("3 memories attached
+to symbols in this file") in the gutter or statusline; chat hot-link
+extension so symbols mentioned in agent messages link to the detail
+pane. Surfaces *presence* without injecting content — respects the
+MemR³ iterative loop and avoids attentional dilution
+([[../reference/agent-memory-systems#documented-failure-modes]]).
+
+**P4 — Promote-to-docs gesture.** `p` on a Decision in the detail pane
+drafts a markdown section for an architecture doc; user reviews,
+accepts, writes; source memory gains `mem:evidence` back-link. Tier 2
+grounding from Zhou et al. 2025 (arXiv:2504.20781) — multi-agent LLM-ADR
+generation, human-validated.
+
+**P5 — Tighten dedup at write time.** Phase 4.0 ships content-hash exact
+match only. Add embedding-ANN + LLM-judge layer for the
+identical/refinement/supersedes/new matrix per
+[[../reference/agent-memory-capture#3-2-dedup-judge-rubric]]. Can ship
+parallel to anything else.
+
+Sequencing: P1 → P2 in parallel with P3 → P4. P5 any time.
+
+**Explicitly NOT in Phase 6** by the existing research:
+
+- Auto-inject relevant memories at session start — *attentional dilution*
+  (Du 2026, arXiv:2603.07670).
+- Conversation-end auto-extraction without provenance — *self-reinforcing
+  reflection error* (Du 2026); deferred until prerequisites met (see
+  Phase 6.1).
+- Auto-promote Decisions to docs — Zhou et al. 2025 specifically validate
+  the human-review step as load-bearing.
+
+### Phase 6.1 — Reflector pass (still deferred)
+
+Three prerequisites unchanged from Phase 4 deferral
+([[../reference/agent-memory-capture#7-reflector-pass-deferred]]):
+
+1. Real capture data accumulated — currently zero.
+2. Provenance tracing designed (Du 2026 self-reinforcing-reflection
+   mitigation).
+3. Multi-condition trigger framework
+   (`importance_sum ≥ 30 OR turns_since_last ≥ 15 OR session_end`).
+
+Don't pick up until P1–P5 ship and we have real-world memory data.
+
 ## Key Challenges
 
 **Identity matcher false positives** — two simultaneously renamed functions,
@@ -370,20 +436,33 @@ non-trivial revert. Tune from there.
 
 ## Open Questions
 
-1. **Identity-matcher ambiguity**: when heuristic can't choose, mint new UUID
-   and surface in delta — agreed in principle, exact UX not decided.
-2. **Memory location default**: `.cade/memory/` gitignored (personal) vs
-   committed (team-shared). Probably configurable; default TBD.
-3. **Promotion gesture**: UI button vs agent suggestion vs manual. TBD in
-   Phase 5.
-4. **Cross-language identity**: Python vs C++ matchers need separate
-   heuristics. Phase 1 can start Python-only.
+1. **Cross-language identity** — Python vs C++ matchers need separate
+   heuristics. Phase 1 shipped Python-only; nkrdn extension to other
+   languages still unscoped.
+2. **Archived-memory schema (Phase 6 P1)** — `archived_at` frontmatter vs
+   `.cade/memory/archived/` subdir vs tombstone-marker file. Tradeoffs:
+   audit trail, undo affordance, supersession-chain integrity. Decide
+   before P1 code lands.
+3. **Ambient-cue research gap (Phase 6 P3)** — existing PROVEN base is
+   strong on retrieval algorithms, silent on UI awareness-cue patterns
+   for dev tools. HCI/CHI literature pass needed before P3 design
+   solidifies. Layer-1 research underway — output will land in
+   `common-knowledge/`.
+4. **Promote-to-docs draft pattern (Phase 6 P4)** — Zhou et al. 2025
+   (arXiv:2504.20781) and Su et al. 2026 (arXiv:2602.07609) cited but
+   undersummarised in `agent-memory-capture.md`. Deeper read needed
+   before drafting prompt + workflow.
+5. **Empirical measurement hole** — zero data on actual capture rate,
+   retrieval-tool-use rate, or retrieval-result-use rate. Instrumentation
+   work, not a research question. Required to make Phase 6.1 (Reflector)
+   prerequisites measurable.
 
 ## Implementation Notes for Fresh Session
 
-Phases 1 through 5 are shipped. The next chunk is Phase 6 — proactive
-retrieval at session start, promote-to-docs, and a memory-delete endpoint.
-No active handoff yet.
+Phases 1 through 5 are shipped. The next chunk is Phase 6 — see the
+section above for priorities and explicit non-goals. Decide on the
+archived-memory schema (Open Question 2) before P1 code starts. No
+active handoff yet.
 
 Key files for Phase 4.1+:
 - `backend/prompts/modules/nkrdn.md` — where to add capture-tool guidance
