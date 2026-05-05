@@ -5,12 +5,17 @@ export class SymbolDetailPane {
   private expandedEntries: Set<string> = new Set();
   private showSuperseded = false;
   private selectedEntryIdx = 0;
+  private onPromoteCallback: ((memory: MemoryEntry, symbol: MemorySymbol) => void) | null = null;
 
   private headerEl: HTMLElement | null = null;
   private bodyEl: HTMLElement | null = null;
   private statusEl: HTMLElement | null = null;
 
   constructor(private container: HTMLElement, private projectPath: string = "") {}
+
+  setOnPromote(cb: ((memory: MemoryEntry, symbol: MemorySymbol) => void) | null): void {
+    this.onPromoteCallback = cb;
+  }
 
   initialize(): void {
     this.container.className = "memory-detail-pane";
@@ -270,6 +275,14 @@ export class SymbolDetailPane {
         e.preventDefault();
         const entry = active[this.selectedEntryIdx];
         if (entry) this.archiveEntry(entry.uuid);
+        break;
+      }
+      case "p": {
+        e.preventDefault();
+        const entry = active[this.selectedEntryIdx];
+        if (entry?.type === "decision" && this.onPromoteCallback) {
+          this.onPromoteCallback(entry, sym);
+        }
         break;
       }
     }

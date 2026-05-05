@@ -384,6 +384,80 @@ Drawn from cross-domain research and tied to the CADE Phase 4 surface:
 | Nygard 2011 | Tier 5 | Original ADR template |
 | MADR Project 2026 | Tier 5 | Markdown ADR formalisation |
 
+### 12.1 Promote-to-docs evidence — design implications
+
+The two papers on LLM-and-ADRs constrain how a "draft architecture doc
+section from a captured Decision" workflow should be shaped.
+
+**Zhou et al. 2025** (n=100 architecture problems from SO/GitHub; gpt-3.5,
+gpt-4, gemini, llama3-8B, mistral-7B; three prompting strategies)
+
+- Multi-agent (Aspect_Identifier → Information_Collector → Aspect_Analyst
+  → Aspect_Reviewer → Trade-off_Analyst, MetaGPT) achieved the best
+  scores: Recall 0.715, F1 0.389, Misleading rate 1.59%, Uncertain rate
+  4.12% — but at significant cost (multi-round LLM conversations,
+  external retrieval).
+- **Plain CoT** with the four-step rubric (understand decision →
+  advantages → disadvantages → trade-offs) was nearly as good on Recall
+  (0.684), reduced Misleading rate from zero-shot's 3.24% to 2.33%, and
+  is single-call. **For a UI gesture this is the right starting point**
+  — the marginal F1 gain of multi-agent (0.389 vs 0.351) does not
+  justify the cost.
+- LLMs generate ~2.3× more arguments than human experts (4.55–5.77 vs
+  1.98 average). Verbosity is a real failure mode — the draft template
+  needs explicit length guidance, not just CoT.
+- 64–69% of arguments not in the human ground truth were classified
+  "Helpful" (correct, but not the most critical). The implication: the
+  LLM-drafted section is a *useful starting point*, not a finished doc.
+  Human edit-pass is load-bearing.
+- Practitioner interviews (n=6, 2–25 yrs experience) — every participant
+  required substantial human review. Trust pattern: "draft → review →
+  accept", never auto-merge. 4 of 6 explicitly named project context
+  (business goals, dependencies, prior decisions) as a credibility
+  prerequisite.
+
+**Su et al. 2026** (n=980 ADRs across 109 GitHub repos; multi-LLM
+validation pipeline)
+
+- Multi-model validation (one detector + three independent validators)
+  reached >90% accuracy on the manually-validated sample for ADR
+  violation detection.
+- Strong on **explicit, code-inferable decisions** (decisions whose
+  rationale touches code symbols). Weak on **implicit, deployment, or
+  organisational decisions** (legal, business, infrastructure-shaped).
+- Failure taxonomy: misunderstanding the decision, missing information,
+  gaps in technical knowledge. Mitigation: feed the prompt rich
+  structured context (symbol signature, evidence URIs, rejected
+  alternatives) so the LLM doesn't have to infer.
+
+**Design implications for the CADE promote-to-docs gesture:**
+
+1. **CoT, single-call** — not multi-agent. Zhou's marginal F1 gain
+   (0.351 → 0.389) and Misleading-rate gain (2.33% → 1.59%) does not
+   justify the cost in a UI gesture; round-trips are visible to the
+   user.
+2. **Rich structured context in the prompt** — Decision body, rejected
+   alternatives, evidence URIs, applies_to symbol's FQN, file path.
+   Su et al. show LLMs fail when they have to infer; CADE already has
+   the context, so feed it.
+3. **Draft → preview → edit → accept** — never write directly. The
+   trust pattern is non-negotiable per Zhou §5.4 practitioner
+   interviews. CADE's existing chat permission flow already enforces
+   this for write operations.
+4. **Length guidance in the prompt** — explicit cap or "as concise as
+   the human expert would write" cue, to mitigate the documented 2.3×
+   verbosity drift.
+5. **Honest about LLM blind spots** — Su et al. show deployment / legal
+   / organisational decisions don't validate well. The promote gesture
+   should not surface for non-Decision entries (Notes, Attempts) and
+   should warn (not block) on Decisions whose rationale references
+   external constraints.
+6. **Back-link as evidence** — once the draft lands in a doc file, append
+   the doc path to the source memory's `evidence:` frontmatter
+   (`mem:evidence` predicate; nkrdn parser already supports this). The
+   round-trip closes the loop: future retrieval surfaces both the
+   memory and the doc.
+
 ## See Also
 
 - [[agent-memory-systems]] — retrieval scoring evidence

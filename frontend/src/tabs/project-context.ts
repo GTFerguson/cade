@@ -9,6 +9,8 @@ import { AgentManager, type AgentState } from "../agents";
 import { FileTree } from "../file-tree";
 import { MemoryGraphTree } from "../memory";
 import { MemoryPresenceIndex } from "../memory/presence-index";
+import { buildPromotePrompt } from "../memory/promote-prompt";
+import type { MemoryEntry, MemorySymbol } from "../memory/types";
 import type { PaneKeyHandler, PaneType } from "../input/keybindings";
 import { wrapIndex } from "@core/nav";
 import { Layout } from "../ui/layout";
@@ -383,6 +385,10 @@ export class ProjectContextImpl implements IProjectContext {
         detail?.clear();
         this.rightPane?.setMode("markdown");
       }
+    });
+
+    this.rightPane.getSymbolDetailPane()?.setOnPromote((memory, symbol) => {
+      this.promoteDecisionToDocs(memory, symbol);
     });
 
     this.fileTree.onExpandChange(() => {
@@ -896,6 +902,14 @@ export class ProjectContextImpl implements IProjectContext {
     if (!sym || !detail) return;
     this.rightPane?.setMode("memory-symbol");
     detail.showSymbol(sym);
+  }
+
+  private promoteDecisionToDocs(memory: MemoryEntry, symbol: MemorySymbol): void {
+    const prompt = buildPromotePrompt(memory, symbol);
+    this.terminalManager?.setMode("chat");
+    const chatPane = this.terminalManager?.getChatPane();
+    chatPane?.prefillInput(prompt);
+    chatPane?.focus();
   }
 
   private resolveAndFindFile(rawPath: string): string {
