@@ -336,6 +336,10 @@ class MemorySearchRequest(BaseModel):
     direct: bool = True  # Skip LLM retrieval — agent does its own ranking.
 
 
+class MemoryGraphRequest(BaseModel):
+    project: str
+
+
 async def _send_to_connections(connections: list, message: dict) -> int:
     """Send a message to a list of WebSocket connections.
 
@@ -931,6 +935,35 @@ def create_app(config: Config | None = None) -> FastAPI:
                 {"error": f"could not parse nkrdn output: {exc}",
                  "raw": stdout_b.decode("utf-8", errors="replace")[:500]},
                 status_code=502,
+            )
+
+        return JSONResponse(payload)
+
+    @app.post("/api/memory/graph")
+    async def memory_graph(body: MemoryGraphRequest) -> JSONResponse:
+        """Build and return the NkrdnGraphMessage for a project.
+
+        Reads .cade/graph.ttl and .cade/knowledge_base.db directly — no CLI
+        subprocess needed. Returns an empty-but-valid message if graph data
+        doesn't exist yet.
+        """
+        import asyncio as _asyncio
+
+        project_path = Path(body.project).expanduser().resolve()
+        if not project_path.is_dir():
+            return JSONResponse(
+                {"error": f"project path is not a directory: {project_path}"},
+                status_code=400,
+            )
+
+        try:
+            from backend.memory.api import build_graph_message
+            payload = await _asyncio.to_thread(build_graph_message, project_path)
+        except Exception as exc:
+            import traceback
+            return JSONResponse(
+                {"error": str(exc), "traceback": traceback.format_exc()},
+                status_code=500,
             )
 
         return JSONResponse(payload)
