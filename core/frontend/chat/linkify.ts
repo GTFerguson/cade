@@ -28,9 +28,17 @@ function isInsideSkippedElement(node: Node): boolean {
   return false;
 }
 
+/**
+ * Hook to append a presence cue (or any extra node) after a rendered file
+ * link. Called with the cleaned file path (line/col stripped); returns a
+ * node to insert immediately after the link, or null/undefined for no cue.
+ */
+export type FileLinkDecorator = (filePath: string) => Node | null | undefined;
+
 function tokenize(
   text: string,
   onOpenFile: (path: string) => void,
+  decorate?: FileLinkDecorator,
 ): Node[] {
   const nodes: Node[] = [];
   let lastIndex = 0;
@@ -59,6 +67,8 @@ function tokenize(
       span.title = `Open ${filePath}`;
       span.addEventListener("click", () => onOpenFile(filePath));
       nodes.push(span);
+      const cue = decorate?.(filePath);
+      if (cue) nodes.push(cue);
     }
 
     lastIndex = match.index + matched.length;
@@ -110,6 +120,7 @@ export function patchLinks(
 export function linkifyElement(
   el: HTMLElement,
   onOpenFile: (path: string) => void,
+  decorate?: FileLinkDecorator,
 ): void {
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   const textNodes: Text[] = [];
@@ -123,7 +134,7 @@ export function linkifyElement(
     if (!URL_PATTERN.test(text) && !FILE_PATH_PATTERN.test(text)) continue;
     if (isInsideSkippedElement(textNode)) continue;
 
-    const nodes = tokenize(text, onOpenFile);
+    const nodes = tokenize(text, onOpenFile, decorate);
     if (nodes.length === 1 && nodes[0] instanceof Text) continue;
 
     const frag = document.createDocumentFragment();

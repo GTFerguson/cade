@@ -14,9 +14,12 @@ import { DashboardPane } from "../dashboard";
 import type { PaneKeyHandler } from "../input/keybindings";
 import { MarkdownViewer } from "../markdown/markdown";
 import { SymbolDetailPane } from "../memory";
+import type { FileMemoryCounts } from "../memory/presence-index";
 import { NeovimPane } from "../neovim";
 import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
+
+type MemoryPresenceLookup = (path: string) => FileMemoryCounts | null;
 
 export type RightPaneMode = "markdown" | "neovim" | "agents" | "dashboard" | "memory-symbol";
 
@@ -34,6 +37,8 @@ export class RightPaneManager implements Component, PaneKeyHandler {
   private memoryContainer: HTMLElement;
   private onModeChangeCallback: (() => void) | null = null;
   private onAgentSelectCallback: ((agentId: string) => void) | null = null;
+  private memoryLookup: MemoryPresenceLookup | null = null;
+  private onShowMemoryForFileCallback: ((path: string) => void) | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -212,6 +217,16 @@ export class RightPaneManager implements Component, PaneKeyHandler {
     this.symbolDetailPane?.setProjectPath(projectPath);
   }
 
+  setMemoryPresenceLookup(lookup: MemoryPresenceLookup | null): void {
+    this.memoryLookup = lookup;
+    this.neovimPane?.setMemoryLookup(lookup);
+  }
+
+  setOnShowMemoryForFile(cb: ((path: string) => void) | null): void {
+    this.onShowMemoryForFileCallback = cb;
+    this.neovimPane?.setOnShowMemory(cb);
+  }
+
   /**
    * Open a file in Neovim for editing, returning to the viewer on exit.
    */
@@ -255,6 +270,8 @@ export class RightPaneManager implements Component, PaneKeyHandler {
 
     this.neovimPane = new NeovimPane(this.neovimContainer, this.ws);
     this.neovimPane.initialize();
+    this.neovimPane.setMemoryLookup(this.memoryLookup);
+    this.neovimPane.setOnShowMemory(this.onShowMemoryForFileCallback);
   }
 
   dispose(): void {

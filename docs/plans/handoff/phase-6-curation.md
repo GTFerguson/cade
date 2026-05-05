@@ -5,7 +5,7 @@ updated: 2026-05-05
 status: in-flight
 ---
 
-# Resume: Phase 6 — P1 + P2 shipped, start with P3 (ambient retrieval surfaces)
+# Resume: Phase 6 — P1 + P2 + P3 shipped, P4 next
 
 ## Active plans
 
@@ -27,7 +27,7 @@ This file is persistent working memory for one in-flight task. Procedure:
 
 ## Where we are
 
-Phase 5 (memory UI: graph tree, symbol detail pane, capture toast) is shipped, merged, graduated. **Phase 6 P1 (memory archive) and P2 (retrieval-side prompt nudges) are now shipped.** The natural next step is **P3 — ambient retrieval surfaces**, the first non-trivial design+code task in Phase 6.
+Phase 5 (memory UI: graph tree, symbol detail pane, capture toast) is shipped, merged, graduated. **Phase 6 P1 (memory archive), P2 (retrieval-side prompt nudges), and P3 (ambient retrieval surfaces) are now shipped.** Next step: **P4 — promote-to-docs gesture** (research-then-design before code).
 
 ### What the previous handoff got wrong about P1
 
@@ -64,7 +64,25 @@ The Phase 5 codebase had already shipped most of the P1 surface area — only th
 - In `common-knowledge`: `b50e142 ai-agents: ambient cues in developer tools` — PROVEN reference doc closing the HCI evidence gap for P3
 - `92d03fa` — plans: Phase 6 priorities and explicit non-goals (research-grounded)
 - `c69ed5f` — Phase 6 P1: discard action on memory capture toast
-- `3cc62d2` — **Phase 6 P2: retrieval trigger guidance in `agent-memory.md` and `nkrdn.md`**
+- `3cc62d2` — Phase 6 P2: retrieval trigger guidance in `agent-memory.md` and `nkrdn.md`
+- (this session) — **Phase 6 P3: ambient memory presence cues in chat + neovim header**
+
+### What P3 actually shipped
+
+Two presence-only surfaces driven by a tiny in-memory index that subscribes to the same `nkrdn-graph` WS broadcast the graph tree consumes:
+
+- `frontend/src/memory/presence-index.ts` (new) + `presence-index.test.ts` — `MemoryPresenceIndex` class with `getCountsForFile(path)`, `getFirstSymbolForFile(path)`, and `subscribe(cb)`. Handles relative + absolute path normalisation (Windows backslash, project-root strip). Excludes archived/superseded entries from counts. 10 unit tests.
+- `core/frontend/chat/linkify.ts` — generic `decorateFileLink?: (path) => Node | null | undefined` extension hook on `linkifyElement`. Decorator returns the cue node which gets inserted as a sibling immediately after the link span. Kept generic (not memory-specific) so future cues can reuse it.
+- `frontend/src/chat/chat-pane.ts` — passes a memory cue decorator to all four `linkifyElement` call sites (user message, post-stream targetEl, history assistant, history user). New ChatPaneOptions fields `onShowMemoryForFile`. New methods `setMemoryPresenceLookup(lookup)`, internal `buildMemoryCue` arrow.
+- `frontend/src/neovim/neovim-pane.ts` — added a `mem N` chip in the pane header next to the diff button via a new `.neovim-header-actions` flex wrapper. New methods `setMemoryLookup`, `setOnShowMemory`, `refreshMemoryBadge`. Hidden when no file is open or no memories present. Click → `onShowMemoryCallback(currentFile)`.
+- `frontend/src/right-pane/right-pane-manager.ts` — `setMemoryPresenceLookup`, `setOnShowMemoryForFile`. Wires the lookup through `ensureNeovimPane` so the chip is live whenever NeovimPane is constructed.
+- `frontend/src/terminal/terminal-manager.ts` — same pattern as the existing `setOnOpenFile`: stash, forward to ChatPane on lazy creation; new `setOnShowMemoryForFile`, `setMemoryPresenceLookup`.
+- `frontend/src/tabs/project-context.ts` — instantiates the index, sets the project root, wires `presenceLookup` and `showMemoryForFile` callbacks into both right-pane and terminal-manager. Subscribes to refresh events to push them into the neovim badge. New `openMemoryForFile(path)` method that uses the index to find the first memory-bearing symbol and routes through the existing `setMode("memory-symbol") + showSymbol` flow (same path as `memoryGraphTree.onSelect`).
+- `frontend/styles/workspace/memory.css` — `.memory-cue` ambient pill: muted gray border + grey text by default, lifts to `--accent-yellow` on hover. Aligns with the existing capture-toast pill colour language.
+- `frontend/styles/workspace/terminal.css` — `.neovim-memory-badge` matching the same muted→yellow pattern; `.neovim-header-actions` flex wrapper.
+- `frontend/src/demo.ts` — extended `PHASE5_CHAT` so two assistant messages mention `backend/auth/auth_service.py` explicitly, letting the cue render in the existing `?demo=phase5-memory` scenario without a new fixture.
+
+Verified in browser (`?demo=phase5-memory`): both messages mentioning the path show `· 4` muted cue (4 = the four active memories on AuthService and its `authenticate` method; the superseded mem-004 is correctly excluded). The path mentioning `rate_limiter.py` correctly has no cue. Click handler is wired to the same right-pane-mode flow Phase 5's graph-tree uses, so the navigation surface is verified at the framework level even though click was not exercised through scout-browse (cue spans aren't in the AX tree). Neovim chip code path is symmetric to the chat surface but not separately verified — needs a real backend to spawn neovim. Pre-existing `keybindings.test.ts` failures are unchanged from `main`.
 
 ### What P2 actually shipped
 
@@ -77,7 +95,7 @@ P2 is loaded by every mode that has `agent-memory` and/or `nkrdn` in `additional
 
 ## In flight (uncommitted work)
 
-**Mine (Phase 6):** none — P1 committed in `c69ed5f`, P2 committed this session.
+**Mine (Phase 6):** none — P1 committed in `c69ed5f`, P2 in `3cc62d2`, P3 in this session's last commit (see `git log`).
 
 **User's, untouched (separate triage feature in flight — DO NOT bundle with Phase 6 commits, DO NOT delete):**
 - `backend/memory/tool_executor.py` — adds `record_investigation` tool
@@ -101,13 +119,13 @@ P2 is loaded by every mode that has `agent-memory` and/or `nkrdn` in `additional
 
 ## Next actions (ordered)
 
-1. **P3 — ambient retrieval surfaces** `[design + code]` — design and implement file-open hint (gutter or statusline) and chat hot-link extension. The HCI evidence base at `common-knowledge/ai-agents/ambient-cues-developer-tools.md` constrains the design: presence cues (markers, counts, badges) over content injection; let the user pull. Practical entry points: extend the existing chat linkifier; add a gutter component to the editor pane. **Start by re-reading the HCI doc, then sketch a design before writing code** — this is the first non-trivial design call in Phase 6.
+1. **P4 — promote-to-docs gesture** `[research → design → code]` — read Zhou et al. 2025 (arXiv:2504.20781) and Su et al. 2026 (arXiv:2602.07609) deeply before designing the prompt + workflow (Open Question 4 in the plan). The summaries in `agent-memory-capture.md` §12 are too thin to design against. Likely surfaces: a per-Decision "promote" action in the symbol-detail pane that drafts an architecture-doc section via LLM, plus a destination picker. Defer code until research is logged.
 
-2. **P4 — promote-to-docs gesture** — read Zhou et al. 2025 (arXiv:2504.20781) and Su et al. 2026 (arXiv:2602.07609) more deeply before designing the prompt + workflow (Open Question 4 in the plan). The summaries in `agent-memory-capture.md` §12 are too thin.
+2. **P5 — tighten dedup at write time** — embedding-ANN + LLM-judge layer; can ship parallel to anything. Spec lives in `agent-memory-capture.md` §3.2.
 
-3. **P5 — tighten dedup at write time** — embedding-ANN + LLM-judge layer; can ship parallel to anything. Spec lives in `agent-memory-capture.md` §3.2.
+3. **(Future) Live presence updates** — P3's index loads once at session start and refreshes when a new `nkrdn-graph` arrives. If a memory is captured mid-session, the cue lags until the backend re-emits the graph (it does so after rebuilds — see `backend/websocket.py:_emit_nkrdn_graph`). Watch for stale-cue complaints; if real, add a `memory-write` WS event the index can listen for to trigger a partial refresh.
 
-P3 is the next major piece. P5 is independent and can run in any session.
+P5 is independent and can run in any session.
 
 ## Key design decisions
 
@@ -124,12 +142,24 @@ P3 is the next major piece. P5 is independent and can run in any session.
   - `frontend/src/tabs/project-context.ts` — wires project path to terminal manager
   - `frontend/styles/workspace/memory.css` — `.memory-capture-toast__archive` and `--discarded` state
   - `backend/tests/test_memory_graph.py` — three new archive endpoint tests
-- P2 shipped (this session):
+- P2 shipped (commit `3cc62d2`):
   - `backend/prompts/modules/agent-memory.md` — When to retrieve section
   - `backend/prompts/modules/nkrdn.md` — Project memory row + Memory Commands subsection
-- P3 targets (next):
-  - HCI evidence base to re-read: `/home/gary/projects/common-knowledge/ai-agents/ambient-cues-developer-tools.md`
-  - Likely code surfaces (TBD pending design): chat linkifier, editor gutter component, statusline. Identify by reading current `frontend/src/chat/` and `frontend/src/editor/` (or equivalent) before designing.
+- P3 shipped (this session):
+  - `frontend/src/memory/presence-index.ts` (new), `presence-index.test.ts` (new)
+  - `core/frontend/chat/linkify.ts` — `decorateFileLink` extension hook
+  - `frontend/src/chat/chat-pane.ts` — memory cue decorator wiring
+  - `frontend/src/neovim/neovim-pane.ts` — `mem N` chip + click handler
+  - `frontend/src/right-pane/right-pane-manager.ts` — lookup forwarding
+  - `frontend/src/terminal/terminal-manager.ts` — chat-pane wiring
+  - `frontend/src/tabs/project-context.ts` — index instantiation, `openMemoryForFile`
+  - `frontend/styles/workspace/memory.css` — `.memory-cue`
+  - `frontend/styles/workspace/terminal.css` — `.neovim-memory-badge`, `.neovim-header-actions`
+  - `frontend/src/demo.ts` — Phase5 chat fixture extended with explicit paths so cue is visible in `?demo=phase5-memory`
+- P4 targets (next):
+  - Read deeply: Zhou et al. 2025 (arXiv:2504.20781), Su et al. 2026 (arXiv:2602.07609)
+  - Update `docs/reference/agent-memory-capture.md` §12 with deeper synthesis before design
+  - Likely UI surface: action in `frontend/src/memory/symbol-detail.ts` to "promote" a Decision to docs
 
 ## Build & verify
 

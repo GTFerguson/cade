@@ -28,6 +28,7 @@ import { PermissionsButton } from "./permissions-button";
 import { MCPStatusIcon, type MCPEntry } from "./mcp-status-icon";
 import { basePath as chatBasePath } from "../config/config";
 import { linkifyElement, patchLinks } from "@core/chat/linkify";
+import type { FileMemoryCounts } from "../memory/presence-index";
 
 const CADE_MERMAID_CONFIG = {
   securityLevel: "loose" as const,
@@ -73,6 +74,17 @@ export interface ChatPaneOptions {
   readOnly?: boolean;
   agentId?: string;
   onOpenFile?: (path: string) => void;
+  onShowMemoryForFile?: (path: string) => void;
+}
+
+type MemoryPresenceLookup = (path: string) => FileMemoryCounts | null;
+
+function formatCountTooltip(c: FileMemoryCounts): string {
+  const parts: string[] = [];
+  if (c.decision) parts.push(`${c.decision} decision${c.decision === 1 ? "" : "s"}`);
+  if (c.attempt) parts.push(`${c.attempt} attempt${c.attempt === 1 ? "" : "s"}`);
+  if (c.note) parts.push(`${c.note} note${c.note === 1 ? "" : "s"}`);
+  return `Memory: ${parts.join(", ")} — click to open`;
 }
 
 export class ChatPane implements Component, PaneKeyHandler {
@@ -121,6 +133,8 @@ export class ChatPane implements Component, PaneKeyHandler {
   private readonly readOnly: boolean;
   private readonly agentId: string | null;
   private readonly onOpenFile: ((path: string) => void) | null;
+  private readonly onShowMemoryForFile: ((path: string) => void) | null;
+  private memoryPresence: MemoryPresenceLookup | null = null;
 
   // Scroll-lock: track whether new content should auto-scroll to bottom.
   // Disabled when the user manually scrolls up; re-enabled when they scroll
@@ -158,6 +172,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.readOnly = options?.readOnly ?? false;
     this.agentId = options?.agentId ?? null;
     this.onOpenFile = options?.onOpenFile ?? null;
+    this.onShowMemoryForFile = options?.onShowMemoryForFile ?? null;
     this.renderer = new MarkdownRenderer({
       mermaidConfig: CADE_MERMAID_CONFIG,
       selfCorrect: {
@@ -503,6 +518,27 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.projectPath = path;
   }
 
+  setMemoryPresenceLookup(lookup: MemoryPresenceLookup | null): void {
+    this.memoryPresence = lookup;
+  }
+
+  private buildMemoryCue = (filePath: string): Node | null => {
+    if (!this.memoryPresence) return null;
+    const counts = this.memoryPresence(filePath);
+    if (!counts || counts.total === 0) return null;
+    const cue = document.createElement("span");
+    cue.className = "memory-cue";
+    cue.textContent = `· ${counts.total}`;
+    cue.title = formatCountTooltip(counts);
+    if (this.onShowMemoryForFile) {
+      cue.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.onShowMemoryForFile!(filePath);
+      });
+    }
+    return cue;
+  };
+
   private cancelStream(): void {
     if (this.isStreaming) {
       this.queuedMessage = null;
@@ -648,7 +684,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     const textEl = document.createElement("div");
     textEl.className = "chat-message-text";
     textEl.textContent = content;
-    if (this.onOpenFile) linkifyElement(textEl, this.onOpenFile);
+    if (this.onOpenFile) linkifyElement(textEl, this.onOpenFile, this.buildMemoryCue);
     patchLinks(textEl, this.onOpenFile ?? undefined);
 
     userEl.appendChild(textEl);
@@ -1214,7 +1250,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.activeToolEls.clear();
     this.currentAssistantEl = null;
     if (targetEl && content) await this.renderer.renderRemainingDiagrams(targetEl, content);
-    if (targetEl && this.onOpenFile) linkifyElement(targetEl, this.onOpenFile);
+    if (targetEl && this.onOpenFile) linkifyElement(targetEl, this.onOpenFile, this.buildMemoryCue);
     if (targetEl) patchLinks(targetEl, this.onOpenFile ?? undefined);
 
     if (!msg.cancelled) {
@@ -1262,13 +1298,13 @@ export class ChatPane implements Component, PaneKeyHandler {
         this.messagesEl.appendChild(el);
         await this.renderer.render(contentEl, message.content);
         await this.renderer.renderRemainingDiagrams(contentEl, message.content);
-        if (this.onOpenFile) linkifyElement(contentEl, this.onOpenFile);
+        if (this.onOpenFile) linkifyElement(contentEl, this.onOpenFile, this.buildMemoryCue);
         patchLinks(contentEl, this.onOpenFile ?? undefined);
       } else if (message.role === "user") {
         const textEl = document.createElement("div");
         textEl.className = "chat-message-text";
         textEl.textContent = message.content;
-        if (this.onOpenFile) linkifyElement(textEl, this.onOpenFile);
+        if (this.onOpenFile) linkifyElement(textEl, this.onOpenFile, this.buildMemoryCue);
         patchLinks(textEl, this.onOpenFile ?? undefined);
         el.appendChild(textEl);
         this.messagesEl.appendChild(el);

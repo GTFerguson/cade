@@ -74,6 +74,12 @@
   text-transform: uppercase;
 }
 
+.neovim-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .neovim-diff-btn {
   padding: 2px 8px;
   background: transparent;
@@ -88,6 +94,23 @@
 .neovim-diff-btn:hover {
   background: rgba(255, 167, 36, 0.1);
   border-color: var(--accent-orange);
+}
+
+.neovim-memory-badge {
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 40%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+}
+
+.neovim-memory-badge:hover {
+  background: color-mix(in srgb, var(--accent-yellow) 12%, transparent);
+  border-color: var(--accent-yellow);
+  color: var(--accent-yellow);
 }
 
 .neovim-terminal-container {

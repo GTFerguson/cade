@@ -13,8 +13,19 @@ import type { PaneKeyHandler } from "../input/keybindings";
 import type { Component, ErrorMessage, NeovimDiffAvailableMessage, NeovimExitedMessage, NeovimOutputMessage, NeovimReadyMessage } from "../types";
 import { ErrorCode } from "@core/platform/protocol";
 import type { WebSocketClient } from "../platform/websocket";
+import type { FileMemoryCounts } from "../memory/presence-index";
+
+type MemoryPresenceLookup = (path: string) => FileMemoryCounts | null;
 
 type NeovimPaneState = "idle" | "starting" | "ready" | "exited" | "error";
+
+function formatMemoryTooltip(c: FileMemoryCounts): string {
+  const parts: string[] = [];
+  if (c.decision) parts.push(`${c.decision} decision${c.decision === 1 ? "" : "s"}`);
+  if (c.attempt) parts.push(`${c.attempt} attempt${c.attempt === 1 ? "" : "s"}`);
+  if (c.note) parts.push(`${c.note} note${c.note === 1 ? "" : "s"}`);
+  return `Memory: ${parts.join(", ")} — click to open`;
+}
 
 export class NeovimPane implements Component, PaneKeyHandler {
   private terminal: XTerm | null = null;
@@ -27,9 +38,13 @@ export class NeovimPane implements Component, PaneKeyHandler {
   private terminalContainer: HTMLElement;
   private headerEl: HTMLElement;
   private diffBtnEl: HTMLButtonElement;
+  private memoryBadgeEl: HTMLButtonElement;
   private lastSentSize: { cols: number; rows: number } | null = null;
   private exitCallback: (() => void) | null = null;
   private latestDiff: { filePath: string; added: number; removed: number } | null = null;
+  private currentFile: string | null = null;
+  private memoryLookup: MemoryPresenceLookup | null = null;
+  private onShowMemoryCallback: ((path: string) => void) | null = null;
   private boundHandlers = {
     output: (msg: NeovimOutputMessage) => this.handleOutput(msg),
     ready: (msg: NeovimReadyMessage) => this.handleReady(msg),
@@ -50,11 +65,26 @@ export class NeovimPane implements Component, PaneKeyHandler {
     title.textContent = "NEOVIM";
     this.headerEl.appendChild(title);
 
+    const headerActionsEl = document.createElement("div");
+    headerActionsEl.className = "neovim-header-actions";
+
+    this.memoryBadgeEl = document.createElement("button");
+    this.memoryBadgeEl.className = "neovim-memory-badge";
+    this.memoryBadgeEl.style.display = "none";
+    this.memoryBadgeEl.addEventListener("click", () => {
+      if (this.currentFile && this.onShowMemoryCallback) {
+        this.onShowMemoryCallback(this.currentFile);
+      }
+    });
+    headerActionsEl.appendChild(this.memoryBadgeEl);
+
     this.diffBtnEl = document.createElement("button");
     this.diffBtnEl.className = "neovim-diff-btn";
     this.diffBtnEl.style.display = "none";
     this.diffBtnEl.addEventListener("click", () => this.openDiff());
-    this.headerEl.appendChild(this.diffBtnEl);
+    headerActionsEl.appendChild(this.diffBtnEl);
+
+    this.headerEl.appendChild(headerActionsEl);
 
     this.terminalContainer = document.createElement("div");
     this.terminalContainer.className = "neovim-terminal-container";
@@ -167,6 +197,8 @@ export class NeovimPane implements Component, PaneKeyHandler {
   kill(): void {
     this.ws.neovimKill();
     this.state = "idle";
+    this.currentFile = null;
+    this.refreshMemoryBadge();
     this.showStatus("idle");
   }
 
@@ -179,7 +211,37 @@ export class NeovimPane implements Component, PaneKeyHandler {
     this.state = "starting";
     this.showStatus("starting");
     this.terminal?.clear();
+    this.currentFile = filePath;
+    this.refreshMemoryBadge();
     this.ws.neovimSpawn(filePath, this.terminal?.cols, this.terminal?.rows);
+  }
+
+  setMemoryLookup(lookup: MemoryPresenceLookup | null): void {
+    this.memoryLookup = lookup;
+    this.refreshMemoryBadge();
+  }
+
+  setOnShowMemory(cb: ((path: string) => void) | null): void {
+    this.onShowMemoryCallback = cb;
+  }
+
+  /**
+   * Re-evaluate the memory badge for the current file. Safe to call when no
+   * file is open or no lookup is wired — both result in a hidden badge.
+   */
+  refreshMemoryBadge(): void {
+    if (!this.currentFile || !this.memoryLookup) {
+      this.memoryBadgeEl.style.display = "none";
+      return;
+    }
+    const counts = this.memoryLookup(this.currentFile);
+    if (!counts || counts.total === 0) {
+      this.memoryBadgeEl.style.display = "none";
+      return;
+    }
+    this.memoryBadgeEl.textContent = `mem ${counts.total}`;
+    this.memoryBadgeEl.title = formatMemoryTooltip(counts);
+    this.memoryBadgeEl.style.display = "block";
   }
 
   /**

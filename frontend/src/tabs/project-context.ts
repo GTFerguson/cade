@@ -8,6 +8,7 @@
 import { AgentManager, type AgentState } from "../agents";
 import { FileTree } from "../file-tree";
 import { MemoryGraphTree } from "../memory";
+import { MemoryPresenceIndex } from "../memory/presence-index";
 import type { PaneKeyHandler, PaneType } from "../input/keybindings";
 import { wrapIndex } from "@core/nav";
 import { Layout } from "../ui/layout";
@@ -32,6 +33,7 @@ export class ProjectContextImpl implements IProjectContext {
   private agentManager: AgentManager | null = null;
   private fileTree: FileTree | null = null;
   private memoryGraphTree: MemoryGraphTree | null = null;
+  private memoryPresenceIndex: MemoryPresenceIndex | null = null;
   private rightPane: RightPaneManager | null = null;
   private splash: Splash | null = null;
   private saveTimeout: number | null = null;
@@ -282,11 +284,26 @@ export class ProjectContextImpl implements IProjectContext {
     this.memoryGraphTree.initialize();
     this.memoryGraphTree.mount();
 
+    this.memoryPresenceIndex = new MemoryPresenceIndex(this.ws);
+    this.memoryPresenceIndex.initialize();
+    this.memoryPresenceIndex.setProjectRoot(this.projectPath);
+
     this.rightPane = new RightPaneManager(viewerEl, this.ws);
     this.rightPane.initialize();
     this.rightPane.getViewer().setProjectPath(this.projectPath);
     this.rightPane.setMemoryProjectPath(this.projectPath);
     this.terminalManager?.setProjectPath(this.projectPath);
+
+    const presenceLookup = (path: string) =>
+      this.memoryPresenceIndex?.getCountsForFile(path) ?? null;
+    const showMemoryForFile = (path: string) => this.openMemoryForFile(path);
+    this.rightPane.setMemoryPresenceLookup(presenceLookup);
+    this.rightPane.setOnShowMemoryForFile(showMemoryForFile);
+    this.terminalManager?.setMemoryPresenceLookup(presenceLookup);
+    this.terminalManager?.setOnShowMemoryForFile(showMemoryForFile);
+    this.memoryPresenceIndex.subscribe(() => {
+      this.rightPane?.getNeovimPane()?.refreshMemoryBadge();
+    });
 
     // Wire agent overview pane in the right pane
     this.rightPane.setAgentManager(this.agentManager);
@@ -873,6 +890,14 @@ export class ProjectContextImpl implements IProjectContext {
    * Handles: absolute paths within the project (strips prefix), relative paths,
    * and fuzzy recovery when the file isn't in the known file tree.
    */
+  private openMemoryForFile(path: string): void {
+    const sym = this.memoryPresenceIndex?.getFirstSymbolForFile(path);
+    const detail = this.rightPane?.getSymbolDetailPane();
+    if (!sym || !detail) return;
+    this.rightPane?.setMode("memory-symbol");
+    detail.showSymbol(sym);
+  }
+
   private resolveAndFindFile(rawPath: string): string {
     // Normalize: strip projectPath prefix from absolute paths
     let normalized = rawPath;

@@ -25,6 +25,8 @@ export class TerminalManager implements Component {
   private mode: TerminalMode = "terminal";
   private enhanced = false;
   private onOpenFile: ((path: string) => void) | null = null;
+  private onShowMemoryForFile: ((path: string) => void) | null = null;
+  private memoryPresenceLookup: ((path: string) => any) | null = null;
   private projectPath = "";
   private statusIndicator: HTMLElement;
   private customKeyHandler: CustomKeyHandler | null = null;
@@ -130,9 +132,11 @@ export class TerminalManager implements Component {
       if (!this.chatPane) {
         const chatPaneOpts: ChatPaneOptions = {};
         if (this.onOpenFile) chatPaneOpts.onOpenFile = this.onOpenFile;
+        if (this.onShowMemoryForFile) chatPaneOpts.onShowMemoryForFile = this.onShowMemoryForFile;
         this.chatPane = new ChatPane(this.chatContainer, this.ws, chatPaneOpts);
         this.chatPane.initialize();
         if (this.projectPath) this.chatPane.setProjectPath(this.projectPath);
+        if (this.memoryPresenceLookup) this.chatPane.setMemoryPresenceLookup(this.memoryPresenceLookup);
         // Re-render status indicator when model name changes
         this.chatPane.onModelChange(() => this.updateStatusIndicator());
       }
@@ -214,6 +218,15 @@ export class TerminalManager implements Component {
 
   setOnOpenFile(callback: (path: string) => void): void {
     this.onOpenFile = callback;
+  }
+
+  setOnShowMemoryForFile(callback: (path: string) => void): void {
+    this.onShowMemoryForFile = callback;
+  }
+
+  setMemoryPresenceLookup(lookup: ((path: string) => any) | null): void {
+    this.memoryPresenceLookup = lookup;
+    this.chatPane?.setMemoryPresenceLookup(lookup);
   }
 
   /**

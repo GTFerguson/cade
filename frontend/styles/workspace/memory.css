@@ -572,3 +572,31 @@
 .memory-capture-toast--discarded .memory-capture-toast__target { color: var(--text-muted); }
 .memory-capture-toast--discarded .memory-capture-toast__status { color: var(--accent-red); }
 
+/* ── Ambient presence cues (Phase 6 P3) ────────────────────────────── */
+/* Tiny, glanceable, low-distraction — signals presence of memory for a
+ * file without injecting any content. Muted by default; lifts to the
+ * memory accent on hover so the user can pull the cue when it matters. */
+
+.memory-cue {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 40%, transparent);
+  border-radius: 3px;
+  cursor: pointer;
+  user-select: none;
+  vertical-align: baseline;
+  line-height: 1.4;
+  transition: background-color 120ms, color 120ms, border-color 120ms;
+}
+
+.memory-cue:hover {
+  color: var(--accent-yellow);
+  border-color: var(--accent-yellow);
+  background: color-mix(in srgb, var(--accent-yellow) 12%, transparent);
+}
+

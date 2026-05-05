@@ -358,9 +358,9 @@ const PHASE5_GRAPH = {
 
 const PHASE5_CHAT = [
   { role: "user" as const, content: "let's add rate limiting to the auth service" },
-  { role: "assistant" as const, content: "Looking at AuthService — there's a Decision attached from Jan 31 about using Result<T, AuthError> throughout this module. Rate-limit errors should follow the same pattern rather than throwing — keeps callers able to match on AuthError::RateLimited." },
+  { role: "assistant" as const, content: "Looking at backend/auth/auth_service.py — there's a Decision attached from Jan 31 about using Result<T, AuthError> throughout this module. Rate-limit errors should follow the same pattern rather than throwing — keeps callers able to match on AuthError::RateLimited." },
   { role: "user" as const, content: "good plan" },
-  { role: "assistant" as const, content: "I'll add a RateLimiter in backend/auth/rate_limiter.py, wire it into authenticate(), and surface AuthError::RateLimited as a Result variant. After that I'll record the decision so future sessions see the rationale." },
+  { role: "assistant" as const, content: "I'll add a RateLimiter in backend/auth/rate_limiter.py, wire it into authenticate() in backend/auth/auth_service.py, and surface AuthError::RateLimited as a Result variant. After that I'll record the decision so future sessions see the rationale." },
 ];
 
 function injectPhase5MemoryCaptures(ws: WebSocketClient): void {
