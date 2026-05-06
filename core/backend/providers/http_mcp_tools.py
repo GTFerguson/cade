@@ -21,6 +21,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# Per-step budget for the HTTP transport handshake and the MCP `initialize`
+# round-trip. The outer wrapper in `tool_executor.definitions_async` bounds
+# the whole connect-plus-list cycle to MCP_DISCOVERY_TIMEOUT_S, so this is the
+# defensive inner cap; if the outer fires first, that wins. Kept equal to the
+# discovery timeout so the documented worst-case block is one budget, not two.
+MCP_HANDSHAKE_TIMEOUT_S = 10.0
+
+
 # Process-wide registry of live adapter instances. Held weakly so adapters are
 # GC'd with their owning provider, but accessible so a fresh OAuth token can
 # invalidate the cached connect-failed state across every provider that wires
@@ -144,11 +152,11 @@ class HTTPMCPToolAdapter:
             return
         self._http_ctx = streamablehttp_client(self.url, headers=self.headers)
         read_stream, write_stream, _ = await asyncio.wait_for(
-            self._http_ctx.__aenter__(), timeout=8.0
+            self._http_ctx.__aenter__(), timeout=MCP_HANDSHAKE_TIMEOUT_S
         )
         self._session = ClientSession(read_stream, write_stream)
         await self._session.__aenter__()
-        await asyncio.wait_for(self._session.initialize(), timeout=8.0)
+        await asyncio.wait_for(self._session.initialize(), timeout=MCP_HANDSHAKE_TIMEOUT_S)
 
     async def _list_tools(self) -> dict[str, ToolDefinition]:
         if self._tools is not None:

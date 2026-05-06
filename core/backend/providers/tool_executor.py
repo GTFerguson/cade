@@ -8,6 +8,7 @@ import shutil
 import subprocess
 from typing import Protocol, runtime_checkable
 
+from core.backend.providers.http_mcp_tools import MCP_HANDSHAKE_TIMEOUT_S
 from core.backend.providers.types import ToolDefinition
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,7 @@ class ToolRegistry:
             seen.add(executor_id)
             if hasattr(executor, "_list_tools"):
                 try:
-                    tools: dict = await asyncio.wait_for(executor._list_tools(), timeout=10.0)
+                    tools: dict = await asyncio.wait_for(executor._list_tools(), timeout=MCP_HANDSHAKE_TIMEOUT_S)
                 except asyncio.TimeoutError:
                     logger.warning("MCP tool discovery timed out for %s", type(executor).__name__)
                     tools = {}
