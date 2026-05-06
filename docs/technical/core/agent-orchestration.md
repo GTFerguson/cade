@@ -1,344 +1,144 @@
 ---
 title: Agent Lifecycle & Orchestration
 created: 2026-01-31
-updated: 2026-04-23
+updated: 2026-05-06
 status: implemented
 tags: [agents, orchestration, lifecycle, architecture]
 ---
 
 # Agent Lifecycle & Orchestration
 
-Multi-agent coordination system enabling multiple Claude Code instances to work together within a project. Shipped as orchestrator mode (`/orch`) with two-gate approval flow, MCP-based agent spawning, and per-agent tabs.
+Multi-agent system where an orchestrator session spawns specialized worker agents to delegate work. Each worker is a fresh `APIProvider` running its own conversation loop in the same backend process, with output streamed to a dedicated tab in the orchestrator's UI. Two-gate approval (spawn → report) keeps the user in the loop, and a hierarchical parent/root model lets workers spawn workers without losing the routing path back to the original WS connection.
 
-## What Was Built
+## Surface area
 
-- Orchestrator mode via `/orch` slash command
-- Two-gate approval flow: spawn approval (in orchestrator chat) → agent executes → report approval (in agent tab)
-- Each worker agent gets its own tab with full ChatPane output
-- MCP server provides `spawn_agent` and `list_agents` tools to the orchestrator CC instance
-- Blocking lifecycle: MCP tool blocks until agent report is approved/rejected, then returns the result
-- Agent overview pane with state indicators and management controls
-- Modular prompt system — all mode-specific and capability instructions composed from `backend/prompts/modules/*.md`
+- `/orch` slash command toggles **orchestrator mode** for the active session.
+- The MCP server `cade-orchestrator` (`backend/orchestrator/mcp_server.py`) exposes `spawn_agent(name, task, mode)` and `list_agents()` to the orchestrator. Both are filtered out for non-orchestrator sessions via `APIProvider._ORCHESTRATOR_ONLY_TOOLS`.
+- HTTP routes under `/api/orchestrator/*` (`backend/main.py`): `spawn-and-wait`, `approve-agent`, `reject-agent`, `approve-report`, `reject-report`, `message`.
+- Frontend renders one tab per worker plus an agent overview pane with state pills.
 
-## Original Design
+## Lifecycle state machine
 
-> [!NOTE]
-> The sections below capture the original design thinking. Some details were implemented differently — the description above reflects what was actually shipped.
-
-## Core Components
-
-### 1. Agent State Detection
-
-Mechanically infer agent state from process IO without requiring explicit state signals from the model.
-
-**Detectable states:**
-
-| State | Detection Method |
-|-------|------------------|
-| `running` | Active stdout/stderr output within last N seconds |
-| `idle` | No output, stdin available, terminal shows prompt pattern |
-| `blocked` | No output, waiting on subprocess, file I/O, or tool completion |
-| `exited` | Process terminated, exit code available |
-
-**Implementation approach:**
-- Leverage Claude Code's existing hook system if available
-- Research what lifecycle hooks Claude Code provides
-- Fallback to creative solutions (pattern matching, subprocess tracking) if hooks are insufficient
-
-**Challenges:**
-- Distinguishing "waiting for user input" from "blocked on tool" is non-trivial
-- May need to detect Claude Code's prompt pattern or analyze subprocess activity
-
-### 2. Lifecycle Hooks
-
-Event-driven hooks that fire during agent state transitions.
-
-**Hook points:**
-
-| Hook | Trigger |
-|------|---------|
-| `on_output` | Agent writes to stdout/stderr |
-| `on_silence` | No output for configurable duration (e.g., 5s) |
-| `on_prompt_detected` | Terminal shows recognized prompt pattern |
-| `on_input_sent` | User or orchestrator sends input to agent |
-| `on_exit` | Agent process terminates |
-
-**Implementation:**
-- Leverage Claude Code's existing hook infrastructure if it provides lifecycle hooks
-- If Claude Code hooks are insufficient, implement custom detection in CADE
-
-**Potential consumers:**
-- UI updates (state indicators, progress animations)
-- User scripts (custom automation, notifications)
-- Orchestrator logic (task delegation, monitoring)
-
-### 3. Multi-Agent Single-Project Support
-
-Multiple Claude instances operating within the same project workspace.
-
-**Architecture:**
+`AgentState` (`backend/orchestrator/models.py`) drives both backend logic and UI state.
 
 ```
-Project "cade"
-├── Agent 1 (main)     - Terminal 1, shared file tree
-├── Agent 2 (tests)    - Terminal 2, shared file tree
-└── Agent 3 (docs)     - Terminal 3, shared file tree
+spawn_agent       approve_agent      stream         ChatDone
+   ↓                  ↓                ↓               ↓
+PENDING ─────────► STARTING ─────► BUSY ─────► REVIEW ─────► CLOSED
+   │                                  │            │
+   │ reject_agent                     │ ChatError  │ reject_report
+   ▼                                  ▼            ▼
+ERROR                              ERROR         CLOSED
 ```
 
-**Properties:**
-- All agents share the same file tree and project directory
-- Each agent has its own isolated terminal/PTY
-- Agents can read/write the same files (coordination left to orchestrator)
+- `PENDING` — record exists; awaiting user/auto approval.
+- `STARTING` → `BUSY` — provider is streaming; transitions on first `TextDelta`.
+- `REVIEW` — agent finished its turn; report awaiting approval (auto-approved when `auto_approve_reports` is on).
+- `CLOSED` — final report stored in `final_result`; `completion_event` set.
+- `ERROR` — fault path (provider error, kill, rejection); also sets `completion_event`.
 
-**Open questions:**
-- How does this change the current tab model? Multiple agents per tab, or agents span tabs?
-- Do agents share a single file tree UI instance, or does each have its own view?
-- How do we handle file conflicts when multiple agents edit the same file?
+`OrchestratorManager.await_completion()` blocks on the `completion_event`, so `spawn-and-wait` is a true blocking RPC for the orchestrator's tool call.
 
-### 4. Orchestrator Agent
+## Two-gate approval
 
-A specialized Claude instance that coordinates worker agents but doesn't directly manipulate terminals or files.
+Both gates send WS events to the **root** WS connection (not the calling agent), so user-facing prompts always land in the original tab.
 
-**Orchestrator capabilities:**
-- Observe state of all worker agents
-- Send task instructions to worker agents
-- Receive structured responses (summaries, diffs, questions)
-- Does NOT control terminals directly
-- Does NOT write code directly
+| Gate | Event sent | User action | Resolution |
+|------|------------|-------------|------------|
+| Spawn | `agent-approval-request` | Approve / reject | `approve_agent` creates the provider and starts streaming; `reject_agent` short-circuits to ERROR |
+| Report | `report-review-request` | Approve / reject | `approve_report` returns the report text to the MCP caller; `reject_report` returns the rejection message |
 
-**Communication flow:**
+Autonomous mode (`allow_subagents=True`) auto-approves the spawn gate in the `spawn-and-wait` route. Auto-approve reports is a separate per-connection toggle read in `_run_agent`.
 
-```
-User
-  ↓ task request
-Orchestrator
-  ↓ delegate subtasks
-Worker Agents (parallel execution)
-  ↓ structured responses
-Orchestrator
-  ↓ synthesized result
-User
-```
+## Worker provider construction
 
-**Open questions:**
-- What format for structured responses? JSON? Markdown with sections?
-- Does the orchestrator have its own UI pane, or is it headless?
-- How does the orchestrator send tasks - via stdin injection, API, or message queue?
-- What prevents autonomous agent-to-agent chatter (enforcement mechanism)?
+`_make_worker_provider()` builds an isolated `APIProvider` per worker:
 
-## Use Cases
+- Clones the default API provider config (or first API-type provider as fallback).
+- Composes the system prompt for the worker's mode via `compose_prompt(mode, working_dir)`.
+- Wires its own `ToolRegistry` via `_create_tool_registry`, scoped to the **worker's `agent_id`** as the connection id.
 
-**Parallel development:**
-```
-Orchestrator: "Implement user authentication"
-  → Agent 1: "Write backend auth endpoints"
-  → Agent 2: "Write frontend login form"
-  → Agent 3: "Write integration tests"
+That last point is the key isolation trick: the worker's `agent_id` doubles as its `PermissionManager` connection id, so `pm.set_mode(record.mode, connection_id=agent_id)` gives the worker its own mode without touching the parent. Tool executors (file ops, bash) read `pm.get_mode(connection_id)` and enforce read-only for `plan` / `architect` / `review` modes regardless of what the orchestrator's mode is.
+
+Permission prompts are forwarded to the owner's WS via `pm.register_broadcast(agent_id, owner_fn)`. When the worker exits, `_run_agent`'s `finally` calls `pm.drop_connection(agent_id)` to clean up.
+
+## Hierarchical spawning
+
+`AgentRecord.parent_agent_id` is set when the caller's `connection_id` is itself a registered agent. `_root_connection_id()` walks the chain to find the original WS connection — used everywhere we send a UI-facing message:
+
+```python
+def _root_connection_id(self, connection_id: str) -> str:
+    cur = connection_id
+    while cur not in self._connections:
+        record = self._agents.get(cur)
+        if record is None: break
+        cur = record.owner_connection_id
+    return cur
 ```
 
-**Long-running tasks:**
-```
-Agent 1: Running test suite (5 minutes)
-Agent 2: Available for user interaction
-UI: Shows Agent 1 as "running", Agent 2 as "idle"
-```
+This lets a worker call `spawn_agent` and have the approval dialog land in the user's tab, not in the worker's own (non-existent) WS connection.
 
-**Code review workflow:**
-```
-Agent 1: "Review this PR"
-  → Reads files, analyzes changes
-  → Returns structured feedback
-User: Reviews feedback, asks follow-up
-Agent 1: "Check if suggestion X would break Y"
-  → Tests locally, returns result
-```
+`kill_connection_agents()` uses the same walk to tear down a whole subtree when a connection drops.
 
-## UI Design
+## Multi-turn steering
 
-### Three-Pane Layout (Preserved)
+Each running agent has an `asyncio.Queue` in `_message_queues`. Inside `_run_agent`, after the provider yields `ChatDone`, the loop checks the queue:
 
-CADE's existing three-pane layout remains unchanged. The **right pane toggles** between two modes:
+- **Empty:** transition to `REVIEW`, send `report-review-request`, optionally auto-approve, return.
+- **Not empty:** pop the message, rebuild the conversation as `[orig_user, assistant_reply, new_user]`, restart the outer turn.
 
-**Standard Mode:**
-```
-┌──────────┬─────────────────────┬──────────────┐
-│          │                     │              │
-│   File   │   Active Agent      │   Markdown   │
-│   Tree   │   Terminal          │   Viewer     │
-│          │                     │              │
-└──────────┴─────────────────────┴──────────────┘
-```
+The `send_message_to_agent` HTTP route enqueues messages while the agent is `BUSY` or `STARTING`. Once the agent is in `REVIEW` or terminal, the route returns 400 — at that point the user goes through the report flow instead of steering.
 
-- Center: Active agent terminal (full screen)
-- Right: Markdown viewer (current behavior)
-- Toggle through agents like shell switching (Ctrl+Shift+Tab / Ctrl+Tab)
+## Cost & usage tracking
 
-**Orchestrator Mode:**
-```
-┌──────────┬─────────────────────┬──────────────┐
-│          │                     │ Agent 1      │
-│   File   │   Orchestrator      │ (main)       │
-│   Tree   │   Terminal          ├──────────────┤
-│          │                     │ Agent 2      │
-│          │                     │ (tests)      │
-│          │                     ├──────────────┤
-│          │                     │ Agent 3      │
-│          │                     │ (docs)       │
-└──────────┴─────────────────────┴──────────────┘
-```
+`APIProvider._compute_cost()` calls `litellm.cost_per_token(model, prompt_tokens, completion_tokens)` and yields the result on `ChatDone`. `_run_agent` writes `event.cost` and `event.usage` to the `AgentRecord`, and both are returned by `await_completion()` and `get_report()`.
 
-- Center: Orchestrator terminal (primary interaction)
-- Right: Vertically stacked worker agent terminals
-- User interacts with orchestrator, which delegates to workers
-- Can see all worker agents simultaneously
+Cost is per-turn — for multi-turn agents the field reflects the most recent turn. There is no aggregated cost across the full lifecycle.
 
-**Toggling modes:**
-- Keyboard shortcut or command palette
-- When orchestrator mode is active, right pane shows sub-agents instead of markdown viewer
-- File tree remains consistent on the left in both modes
+## Naming
 
-**Sub-agent pane features:**
-- **Scrollable** - Vertical scroll when more agents than can fit on screen
-- **Collapsible** - Click to expand/collapse individual agent terminals
-- **Reorderable** - Drag-and-drop to rearrange agent order
-- Allows users to customize workspace to their workflow
+Caller-supplied names are coerced to a kebab-case slug in `_slugify()` (lowercase, alnum-only, runs of separators collapsed to `-`, capped at 30 chars). `_resolve_name()` falls back to a slug of the task description, then to `"agent"`, when the supplied name produces an empty slug.
 
-### Agent State Indicators
+Display-name uniqueness is enforced only among **active** sub-agents (`PENDING / STARTING / BUSY / DONE / REVIEW`). On collision a numeric suffix is appended (`worker-2`, `worker-3`, …); names of `CLOSED` and `ERROR` agents are reusable. The full `agent_id` is always unique because of the trailing 6-char UUID hex (`agent-{name}-{uuid_hex[:6]}`).
 
-| State | Visual |
-|-------|--------|
-| Running | Animated spinner or pulsing indicator |
-| Idle | Neutral (ready for input) |
-| Blocked | Warning icon or amber color |
-| Exited | Grayed out or error indicator |
+## Configuration
 
-## Implementation Considerations
+Per-connection toggles in `PermissionManager`:
 
-### State Detection Mechanism
+| Toggle | Effect |
+|--------|--------|
+| `orchestrator` | Gates whether `spawn_agent` is callable at all |
+| `allowSubagents` | Required to actually spawn; when on, `spawn-and-wait` auto-approves the spawn gate |
+| `autoApproveReports` | Skips the report gate, closes the agent immediately on `ChatDone` |
+| `allow_write` (per worker connection-id) | Inherited at spawn time; `False` forces `accept_edits=False` for the worker |
 
-**Approach 1: Backend monitoring**
-- Backend tracks PTY I/O activity
-- Analyzes output patterns for prompt detection
-- Emits state change events via WebSocket
+Modes flow through unchanged: a worker spawned with `mode="plan"` is read-only regardless of the orchestrator's mode.
 
-**Approach 2: Frontend inference**
-- Frontend monitors terminal output
-- Uses timers to detect silence
-- Pattern matching on rendered terminal content
+## Boundaries
 
-**Approach 3: Hybrid**
-- Backend tracks process-level state (running/exited)
-- Frontend tracks terminal-level state (idle/blocked)
+What this system **doesn't** do:
 
-### Agent Communication Protocol
+- **No agent-to-agent direct messaging.** Workers can spawn workers but can't send arbitrary messages between siblings; coordination flows through the parent.
+- **No DAG traversal API.** `parent_agent_id` is recorded but no endpoint surfaces the spawn tree.
+- **No persistence across backend restarts.** `OrchestratorManager` state is in-memory only.
+- **No aggregated cost.** Cost is the last turn's cost, not a running total.
+- **No agent templates or perf metrics.** Listed as future enhancements; not in scope.
 
-**Hybrid approach using multiple channels:**
+## Key files
 
-**1. File-based knowledge base (primary)**
-- Obsidian-style markdown documents with YAML frontmatter
-- Stored in `.cade/agents/` directory
-- Searchable metadata via frontmatter
-- Shared knowledge base accessible to all agents
-
-Example task file (`.cade/agents/tasks/auth-backend.md`):
-```yaml
----
-task_id: auth-backend-001
-assigned_to: agent-1
-status: in_progress
-priority: high
-created: 2026-01-31T14:23:00Z
----
-
-# Implement Backend Auth Endpoints
-
-Create REST endpoints for user authentication...
-```
-
-**2. Stdin injection (when appropriate)**
-- Simple commands and queries
-- Interactive workflows
-- Note: Can have edge cases where input timing is unreliable
-
-**3. Side-channel API (WebSocket messages)**
-- Structured agent-to-agent messages separate from terminal I/O
-- Keeps terminal clean for user interaction
-- State updates, progress notifications
-- Requires custom WebSocket message types in CADE backend
-
-**Benefits of hybrid approach:**
-- File-based provides persistence and searchability
-- Stdin injection works for simple, immediate commands
-- Side-channel keeps terminal output readable
-- Markdown with frontmatter creates queryable knowledge base
-
-## Security & Safety
-
-**Prevent runaway agents:**
-- Rate limiting on agent spawning
-- Maximum concurrent agents per project
-- User approval for orchestrator → worker communication?
-
-**Isolation:**
-- Each agent maintains separate terminal session
-- No direct memory sharing between agents
-- File system is shared (requires coordination)
-
-## Migration Path
-
-**Phase 1: State detection**
-- Implement state detection for single agent
-- Add UI indicators for current tab
-- No multi-agent support yet
-
-**Phase 2: Lifecycle hooks**
-- Implement hook system
-- Allow user scripts to react to state changes
-- Test with single-agent workflows
-
-**Phase 3: Multi-agent support**
-- Allow multiple Claude instances per project
-- Shared file tree, isolated terminals
-- Manual task delegation by user
-
-**Phase 4: Orchestrator**
-- Implement orchestrator agent type
-- Structured communication protocol
-- Automated task delegation
-
-## Open Questions & Research Needed
-
-1. **Claude Code hooks:**
-   - What lifecycle hooks does Claude Code currently provide?
-   - Can we hook into process state changes, output events, prompt detection?
-   - Documentation: Research Claude Code's hook system capabilities
-
-2. **Hooks consumers:**
-   - Who consumes hooks? UI updates, user scripts, orchestrator, or all three?
-   - Should hooks be user-configurable or hardcoded?
-
-3. **File tree coordination:**
-   - All agents share the single file tree UI (left pane)
-   - How to handle conflicts when multiple agents edit the same file?
-   - Should we show indicators for which agent is editing which file (e.g., colored dots)?
-
-4. **Agent spawning:**
-   - How does user spawn additional agents in a project?
-   - UI for creating/managing agents (right-click menu, command palette, dedicated panel)?
-   - Should there be agent templates (e.g., "test runner", "documentation")?
-
-5. **Orchestrator enforcement:**
-   - How to prevent agents from autonomous agent-to-agent chatter?
-   - Technical enforcement vs relying on Claude Code's instruction following?
-   - Should worker agents even know other workers exist?
-
-6. **Knowledge base schema:**
-   - Standardized frontmatter fields for task documents?
-   - Response document format?
-   - How to handle task lifecycle (pending → in_progress → completed)?
+| File | Role |
+|------|------|
+| `backend/orchestrator/manager.py` | `OrchestratorManager`, slug/name helpers, worker provider factory |
+| `backend/orchestrator/models.py` | `AgentSpec`, `AgentRecord`, `AgentState` |
+| `backend/orchestrator/mcp_server.py` | stdio MCP server exposing `spawn_agent` / `list_agents` to the orchestrator |
+| `core/backend/providers/agent_spawner.py` | `AgentSpawnerTool` — tool definition surfaced inside the LiteLLM tool registry |
+| `backend/main.py` (`/api/orchestrator/*`) | HTTP routes wiring the manager to the frontend and to the MCP server |
+| `backend/prompts/modules/orchestrator.md` | Mode-specific system prompt for orchestrator sessions |
+| `backend/tests/test_orchestrator_manager.py` | Manager + naming + multi-turn coverage |
+| `backend/tests/test_agent_spawner.py` | `AgentSpawnerTool` interface tests |
 
 ## See Also
 
-- [[../technical/core/frontend-architecture|Frontend Architecture]]
-- [[../technical/core/backend-architecture|Backend Architecture]] (if exists)
-- [[state-management-refactor|State Management Refactor]]
+- [[frontend-architecture|Frontend Architecture]]
+- [[prompt-composition|Prompt Composition]]
+- [[agent-tools|Agent Tools]]

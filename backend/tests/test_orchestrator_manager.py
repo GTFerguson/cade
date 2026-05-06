@@ -38,6 +38,67 @@ async def _collect_broadcasts(manager: OrchestratorManager, connection_id: str) 
     return collected
 
 
+# ── name slugify / resolve ────────────────────────────────────────────────────
+
+class TestSlugify:
+    def test_basic_kebab_passes_through(self):
+        from backend.orchestrator.manager import _slugify
+        assert _slugify("test-writer") == "test-writer"
+
+    def test_uppercase_and_spaces(self):
+        from backend.orchestrator.manager import _slugify
+        assert _slugify("Test Writer") == "test-writer"
+
+    def test_collapses_special_chars(self):
+        from backend.orchestrator.manager import _slugify
+        assert _slugify("auth_refactor!! v2") == "auth-refactor-v2"
+
+    def test_strips_leading_trailing_separators(self):
+        from backend.orchestrator.manager import _slugify
+        assert _slugify("--hello--") == "hello"
+
+    def test_empty_returns_empty(self):
+        from backend.orchestrator.manager import _slugify
+        assert _slugify("") == ""
+        assert _slugify("!!!") == ""
+
+    def test_truncates_to_max_len(self):
+        from backend.orchestrator.manager import _slugify
+        out = _slugify("a" * 100, max_len=10)
+        assert out == "a" * 10
+
+    def test_truncate_does_not_leave_trailing_hyphen(self):
+        from backend.orchestrator.manager import _slugify
+        # Cut would land mid-separator; trailing '-' is stripped
+        out = _slugify("hello world foo", max_len=12)
+        assert out == "hello-world"
+
+
+class TestResolveName:
+    def test_uses_spec_name_when_clean(self):
+        from backend.orchestrator.manager import _resolve_name
+        assert _resolve_name("refactor", "long task", set()) == "refactor"
+
+    def test_falls_back_to_task_when_name_empty(self):
+        from backend.orchestrator.manager import _resolve_name
+        assert _resolve_name("", "Refactor the auth layer", set()) == "refactor-the-auth-layer"
+
+    def test_falls_back_to_default_when_all_empty(self):
+        from backend.orchestrator.manager import _resolve_name
+        assert _resolve_name("", "", set()) == "agent"
+        assert _resolve_name("???", "!!!", set()) == "agent"
+
+    def test_appends_suffix_on_collision(self):
+        from backend.orchestrator.manager import _resolve_name
+        assert _resolve_name("worker", "t", {"worker"}) == "worker-2"
+        assert _resolve_name("worker", "t", {"worker", "worker-2"}) == "worker-3"
+
+    def test_skips_used_suffixes(self):
+        from backend.orchestrator.manager import _resolve_name
+        taken = {"worker", "worker-2", "worker-3"}
+        assert _resolve_name("worker", "t", taken) == "worker-4"
+
+
 # ── spawn_agent ───────────────────────────────────────────────────────────────
 
 class TestSpawnAgent:
@@ -83,6 +144,76 @@ class TestSpawnAgent:
         assert record.state == AgentState.PENDING
         assert record.name == "worker"
         assert record.owner_connection_id == "conn-3"
+
+    @pytest.mark.asyncio
+    async def test_normalizes_name_to_kebab_case(self):
+        manager = _make_manager()
+        collected = await _collect_broadcasts(manager, "conn-norm")
+
+        from backend.permissions.manager import get_permission_manager
+        pm = get_permission_manager()
+        pm.set_orchestrator(True, connection_id="conn-norm")
+        pm.set_permission("allowSubagents", True, connection_id="conn-norm")
+
+        record = await manager.spawn_agent(
+            AgentSpec("Test Writer!", "Write tests"), connection_id="conn-norm"
+        )
+        assert record.name == "test-writer"
+        assert record.agent_id.startswith("agent-test-writer-")
+        # Approval-request event reflects the resolved name
+        approval = next(m for m in collected if m.get("event") == "agent-approval-request")
+        assert approval["name"] == "test-writer"
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_task_slug_when_name_empty(self):
+        manager = _make_manager()
+        await _collect_broadcasts(manager, "conn-fb")
+
+        from backend.permissions.manager import get_permission_manager
+        pm = get_permission_manager()
+        pm.set_orchestrator(True, connection_id="conn-fb")
+        pm.set_permission("allowSubagents", True, connection_id="conn-fb")
+
+        record = await manager.spawn_agent(
+            AgentSpec("", "Refactor auth layer"), connection_id="conn-fb"
+        )
+        assert record.name == "refactor-auth-layer"
+
+    @pytest.mark.asyncio
+    async def test_dedupes_active_agent_names(self):
+        manager = _make_manager()
+        await _collect_broadcasts(manager, "conn-dup")
+
+        from backend.permissions.manager import get_permission_manager
+        pm = get_permission_manager()
+        pm.set_orchestrator(True, connection_id="conn-dup")
+        pm.set_permission("allowSubagents", True, connection_id="conn-dup")
+
+        r1 = await manager.spawn_agent(AgentSpec("worker", "A"), connection_id="conn-dup")
+        r2 = await manager.spawn_agent(AgentSpec("worker", "B"), connection_id="conn-dup")
+        r3 = await manager.spawn_agent(AgentSpec("worker", "C"), connection_id="conn-dup")
+
+        assert r1.name == "worker"
+        assert r2.name == "worker-2"
+        assert r3.name == "worker-3"
+
+    @pytest.mark.asyncio
+    async def test_reuses_name_after_agent_closed(self):
+        manager = _make_manager()
+        await _collect_broadcasts(manager, "conn-reuse")
+
+        from backend.permissions.manager import get_permission_manager
+        pm = get_permission_manager()
+        pm.set_orchestrator(True, connection_id="conn-reuse")
+        pm.set_permission("allowSubagents", True, connection_id="conn-reuse")
+
+        r1 = await manager.spawn_agent(AgentSpec("worker", "A"), connection_id="conn-reuse")
+        assert r1.name == "worker"
+        # Mark the first agent as terminal
+        manager._agents[r1.agent_id].state = AgentState.CLOSED
+
+        r2 = await manager.spawn_agent(AgentSpec("worker", "B"), connection_id="conn-reuse")
+        assert r2.name == "worker"  # CLOSED agents free up the name
 
 
 # ── approve_agent — mode enforcement ─────────────────────────────────────────

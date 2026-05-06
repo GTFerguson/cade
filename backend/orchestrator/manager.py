@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
@@ -27,6 +28,45 @@ from core.backend.providers.types import (
 logger = logging.getLogger(__name__)
 
 BroadcastFn = Callable[[dict], Coroutine[Any, Any, None]]
+
+_NAME_MAX_LEN = 30
+_FALLBACK_NAME = "agent"
+_SLUG_NON_ALNUM = re.compile(r"[^a-z0-9]+")
+_ACTIVE_AGENT_STATES: frozenset[AgentState] = frozenset({
+    AgentState.PENDING,
+    AgentState.STARTING,
+    AgentState.BUSY,
+    AgentState.DONE,
+    AgentState.REVIEW,
+})
+
+
+def _slugify(text: str, max_len: int = _NAME_MAX_LEN) -> str:
+    """Coerce arbitrary text to a kebab-case slug, capped at max_len.
+
+    Returns "" if no alphanumeric content survives.
+    """
+    if not text:
+        return ""
+    slug = _SLUG_NON_ALNUM.sub("-", text.lower()).strip("-")
+    if len(slug) > max_len:
+        slug = slug[:max_len].rstrip("-")
+    return slug
+
+
+def _resolve_name(spec_name: str, task: str, taken: set[str]) -> str:
+    """Pick a kebab-case display name not already in taken.
+
+    Tries slug(spec_name) → slug(task) → "agent". On collision with an active
+    agent, appends -2, -3, … until free.
+    """
+    base = _slugify(spec_name) or _slugify(task) or _FALLBACK_NAME
+    if base not in taken:
+        return base
+    n = 2
+    while f"{base}-{n}" in taken:
+        n += 1
+    return f"{base}-{n}"
 
 
 def _make_worker_provider(
@@ -150,21 +190,25 @@ class OrchestratorManager:
         from backend.permissions.manager import get_permission_manager
         perms = get_permission_manager()
 
-        short_id = uuid.uuid4().hex[:6]
-        agent_id = f"agent-{spec.name}-{short_id}"
-
         if not perms.get_orchestrator(connection_id):
             logger.warning(
-                "spawn_agent blocked: orchestrator toggle is off (agent_id=%s)", agent_id,
+                "spawn_agent blocked: orchestrator toggle is off (caller=%s)", connection_id,
             )
             raise ValueError("Subagent spawning requires orchestrator mode to be enabled")
 
         if not perms.get_allow_subagents(connection_id):
-            logger.warning("spawn_agent blocked: allow_subagents=False (agent_id=%s)", agent_id)
+            logger.warning("spawn_agent blocked: allow_subagents=False (caller=%s)", connection_id)
             raise ValueError("Subagent spawning is disabled")
 
+        active_names = {
+            r.name for r in self._agents.values() if r.state in _ACTIVE_AGENT_STATES
+        }
+        name = _resolve_name(spec.name, spec.task, active_names)
+        agent_id = f"agent-{name}-{uuid.uuid4().hex[:6]}"
+
         logger.info(
-            "spawn_agent: id=%s name=%s connection=%s", agent_id, spec.name, connection_id
+            "spawn_agent: id=%s name=%s requested=%s connection=%s",
+            agent_id, name, spec.name, connection_id,
         )
 
         # If the caller is itself an agent, record it as the parent and route
@@ -174,7 +218,7 @@ class OrchestratorManager:
 
         record = AgentRecord(
             agent_id=agent_id,
-            name=spec.name,
+            name=name,
             task=spec.task,
             mode=spec.mode,
             state=AgentState.PENDING,
@@ -187,7 +231,7 @@ class OrchestratorManager:
             "type": MessageType.CHAT_STREAM,
             "event": "agent-approval-request",
             "targetAgentId": agent_id,
-            "name": spec.name,
+            "name": name,
             "task": spec.task,
             "mode": spec.mode,
         })
