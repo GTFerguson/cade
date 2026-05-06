@@ -342,6 +342,49 @@ class MemoryRetargetRequest(BaseModel):
     target_name: str   # symbol name to retarget to (e.g. "AuthServiceV2")
 
 
+class PermissionPromptRequest(BaseModel):
+    tool_name: str
+    description: str
+    tool_input: dict = {}
+
+
+class AcceptEditsRequest(BaseModel):
+    enabled: bool
+
+
+class SetPermissionRequest(BaseModel):
+    name: str
+    value: bool
+
+
+class MCPOAuthStartRequest(BaseModel):
+    server: str
+    serverUrl: str
+
+
+class ProjectFiltersResponse(BaseModel):
+    include: list[str] = []
+    exclude: list[str] = []
+
+
+class ProjectFiltersRequest(BaseModel):
+    project: str
+    include: list[str] = []
+    exclude: list[str] = []
+
+
+class PushPanelRequest(BaseModel):
+    id: str
+    title: str
+    component: str
+    data: list[dict] = []
+
+
+class NotifyRequest(BaseModel):
+    message: str
+    style: str = "info"
+
+
 async def _send_to_connections(connections: list, message: dict) -> int:
     """Send a message to a list of WebSocket connections.
 
@@ -739,11 +782,6 @@ def create_app(config: Config | None = None) -> FastAPI:
     _READ_TOOLS = frozenset({"Read", "Glob", "Grep", "LS", "list_directory", "View", "Cat"})
     _WRITE_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "Create", "Delete", "Move", "Rename"})
 
-    class PermissionPromptRequest(BaseModel):
-        tool_name: str
-        description: str
-        tool_input: dict = {}
-
     @app.post("/api/permissions/prompt-and-wait")
     async def permission_prompt_and_wait(request: Request, body: PermissionPromptRequest) -> JSONResponse:
         """Request user permission for a tool use.
@@ -800,9 +838,6 @@ def create_app(config: Config | None = None) -> FastAPI:
             return JSONResponse({"error": "Request not found"}, status_code=400)
         return JSONResponse({"status": "denied"})
 
-    class AcceptEditsRequest(BaseModel):
-        enabled: bool
-
     @app.post("/api/permissions/accept-edits")
     async def set_accept_edits(request: Request, body: AcceptEditsRequest) -> JSONResponse:
         """Toggle accept-edits (alias for allow_write)."""
@@ -810,10 +845,6 @@ def create_app(config: Config | None = None) -> FastAPI:
         connection_id = request.headers.get("X-Connection-Id", "")
         get_permission_manager().set_accept_edits(body.enabled, connection_id=connection_id)
         return JSONResponse({"acceptEdits": body.enabled})
-
-    class SetPermissionRequest(BaseModel):
-        name: str
-        value: bool
 
     @app.post("/api/permissions/set")
     async def set_permission(request: Request, body: SetPermissionRequest) -> JSONResponse:
@@ -838,10 +869,6 @@ def create_app(config: Config | None = None) -> FastAPI:
         })
 
     # --- MCP OAuth API ---
-
-    class MCPOAuthStartRequest(BaseModel):
-        server: str
-        serverUrl: str
 
     @app.post("/api/mcp/oauth/start")
     async def mcp_oauth_start(
@@ -903,15 +930,6 @@ def create_app(config: Config | None = None) -> FastAPI:
         return HTMLResponse(content=body)
 
     # --- Project config API ---
-
-    class ProjectFiltersResponse(BaseModel):
-        include: list[str] = []
-        exclude: list[str] = []
-
-    class ProjectFiltersRequest(BaseModel):
-        project: str
-        include: list[str] = []
-        exclude: list[str] = []
 
     @app.get("/api/project/filters")
     async def get_project_filters(project: str) -> JSONResponse:
@@ -1097,19 +1115,6 @@ def create_app(config: Config | None = None) -> FastAPI:
         return JSONResponse({"ok": True})
 
     # --- UI Tools API (called by MCP tools) ---
-
-    class ViewFileRequest(BaseModel):
-        path: str
-
-    class PushPanelRequest(BaseModel):
-        id: str
-        title: str
-        component: str
-        data: list[dict] = []
-
-    class NotifyRequest(BaseModel):
-        message: str
-        style: str = "info"
 
     @app.post("/api/ui/view-file")
     async def ui_view_file(body: ViewFileRequest) -> JSONResponse:
