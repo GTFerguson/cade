@@ -6,8 +6,8 @@
 import type { Component, LayoutProportions } from "./types";
 
 const DEFAULT_PROPORTIONS: LayoutProportions = {
-  fileTree: 0.2,
-  terminal: 0.5,
+  fileTree: 0.13,
+  terminal: 0.57,
   viewer: 0.3,
 };
 

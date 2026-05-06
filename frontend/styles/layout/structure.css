@@ -72,7 +72,7 @@
 /* App container - three pane layout */
 .app-container {
   display: grid;
-  grid-template-columns: 20% 4px 50% 4px 30%;
+  grid-template-columns: 13% 4px 57% 4px 30%;
   height: 100%;
   overflow: hidden;
 }
