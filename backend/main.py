@@ -380,6 +380,11 @@ class PushPanelRequest(BaseModel):
     data: list[dict] = []
 
 
+class StreamEventRequest(BaseModel):
+    channel: str
+    event: dict
+
+
 class NotifyRequest(BaseModel):
     message: str
     style: str = "info"
@@ -1151,6 +1156,28 @@ def create_app(config: Config | None = None) -> FastAPI:
             except Exception:
                 pass
         return JSONResponse({"status": "ok", "panelId": body.id})
+
+    @app.post("/api/ui/stream-event")
+    async def ui_stream_event(body: StreamEventRequest) -> JSONResponse:
+        """Append an event to a stream-typed dashboard data source.
+
+        The dashboard config declares a source with ``type: stream`` and
+        a ``channel:`` name. Anything POSTed here with a matching channel
+        becomes a new row appended to that source's data on the client.
+        Components see new rows the same way they'd see polled data.
+        """
+        from backend.connection_registry import get_connection_registry
+        registry = get_connection_registry()
+        for ws_conn in registry.get_all_connections():
+            try:
+                await ws_conn.send_json({
+                    "type": "dashboard-stream-event",
+                    "channel": body.channel,
+                    "event": body.event,
+                })
+            except Exception:
+                pass
+        return JSONResponse({"status": "ok", "channel": body.channel})
 
     class FixDiagramRequest(BaseModel):
         code: str

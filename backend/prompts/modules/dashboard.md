@@ -52,6 +52,37 @@ views:
 | `directory` | Scans all `.md` files in `path`, extracts frontmatter as rows |
 | `file` | Single file — use with `markdown` component |
 | `rest` | HTTP endpoint returning JSON array. Add `refresh_interval: 60` (seconds) |
+| `stream` | Agent push channel. Declare with `channel: <name>` and optional `buffer: 100` (rolling cap). Initial state is empty; rows appear as the agent emits events. |
+
+## Streaming Live Updates
+
+For live agent → dashboard updates (progress logs, token-by-token output, work-in-progress), declare a `type: stream` source:
+
+```yaml
+data_sources:
+  research_log:
+    type: stream
+    channel: research        # name agents emit to; defaults to source name
+    buffer: 100              # rolling cap, oldest events fall off
+
+views:
+  - id: research
+    title: "Research"
+    panels:
+      - component: timeline
+        source: research_log
+        fields: [timestamp, message]
+```
+
+Emit events from anywhere (the agent's own bash, a worker, a script):
+
+```bash
+curl -s -X POST http://localhost:$CADE_PORT/api/ui/stream-event \
+  -H 'Content-Type: application/json' \
+  -d '{"channel":"research","event":{"timestamp":"now","message":"fetched job description"}}'
+```
+
+Each POST appends one row. Components render new rows the same way they'd render polled data — `timeline`, `cards`, `table`, and `checklist` all work without modification.
 
 ## Example: Add a temporary agent view
 

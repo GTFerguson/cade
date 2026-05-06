@@ -16,6 +16,9 @@ export interface DataSourceConfig {
   parse?: string;
   entity?: EntityConfig;
   headers?: Record<string, string>;
+  // Catch-all for type-specific keys (e.g. `channel` and `buffer` on
+  // stream sources). Mirrors `extra:` on the Python dataclass.
+  extra?: Record<string, unknown>;
 }
 
 export interface StatConfig {

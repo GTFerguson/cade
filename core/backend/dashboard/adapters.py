@@ -950,6 +950,23 @@ class ModelUsageAdapter(BaseAdapter):
 
 
 # ---------------------------------------------------------------------------
+# Stream adapter — agent push channel, no initial fetch
+# ---------------------------------------------------------------------------
+
+class StreamAdapter(BaseAdapter):
+    """No-op adapter for type: stream sources.
+
+    Stream sources are populated client-side as DASHBOARD_STREAM_EVENT
+    frames arrive over the WebSocket. Agents emit events via
+    ``POST /api/ui/stream-event``. The adapter exists so the source
+    validates and so the polling loop has nothing to fetch.
+    """
+
+    async def fetch(self, config: DataSourceConfig, project_root: Path) -> list[dict[str, Any]]:
+        return []
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 
@@ -963,6 +980,7 @@ _ADAPTERS: dict[str, BaseAdapter] = {
     "markdown": MarkdownAdapter(),
     "model_usage": ModelUsageAdapter(),
     "vault": VaultAdapter(),
+    "stream": StreamAdapter(),
 }
 
 

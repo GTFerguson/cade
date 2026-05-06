@@ -486,6 +486,12 @@ export class ProjectContextImpl implements IProjectContext {
       this.dashboardFullPane?.pushAgentPanel(msg.panel, msg.data);
     });
 
+    // Stream-source events — agent appends a row to a `type: stream` source
+    this.ws.on("dashboard-stream-event", (msg) => {
+      this.rightPane?.getDashboardPane()?.appendStreamEvent(msg.channel, msg.event);
+      this.dashboardFullPane?.appendStreamEvent(msg.channel, msg.event);
+    });
+
     // Notifications
     this.ws.on("notification", (msg) => {
       this.showNotification(msg.message, msg.style);

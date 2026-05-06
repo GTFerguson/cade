@@ -1,16 +1,22 @@
 /**
- * Table component — sortable columns, filterable, searchable.
- *
- * Phase 1: sort + filter + search. Inline editing deferred.
+ * Table component — sortable columns, filterable, searchable,
+ * inline-editable cells and expandable detail rows.
  */
 
 import { BaseDashboardComponent } from "./base-component";
+import type { EntityConfig, PanelConfig } from "../types";
+
+interface ExpandableConfig {
+  fields?: string[];
+  editable?: string[];
+}
 
 export class TableComponent extends BaseDashboardComponent {
   private sortColumn: string | null = null;
   private sortAsc = true;
   private searchQuery = "";
   private activeFilters: Record<string, string> = {};
+  private expandedRows = new Set<string>();
 
   protected build(): void {
     if (!this.container || !this.props) return;
@@ -19,11 +25,9 @@ export class TableComponent extends BaseDashboardComponent {
     const columns = panel.columns as string[];
     const wrapper = this.el("div", "dash-table-wrapper");
 
-    // Filters bar
     if (panel.filterable.length > 0 || panel.searchable.length > 0) {
       const filtersEl = this.el("div", "dash-table-filters");
 
-      // Search input
       if (panel.searchable.length > 0) {
         const input = document.createElement("input");
         input.type = "text";
@@ -37,7 +41,6 @@ export class TableComponent extends BaseDashboardComponent {
         filtersEl.appendChild(input);
       }
 
-      // Filter dropdowns
       for (const filterField of panel.filterable) {
         const values = this.uniqueValues(data, filterField);
         const select = document.createElement("select");
@@ -72,8 +75,12 @@ export class TableComponent extends BaseDashboardComponent {
   }
 
   private buildTable(wrapper: HTMLElement, columns: string[]): void {
-    // Remove old table if rebuilding
     wrapper.querySelector(".dash-table")?.remove();
+
+    if (!this.props) return;
+    const panel = this.props.panel;
+    const expandable = panel.expandable as ExpandableConfig | undefined;
+    const inlineEditable = new Set(panel.inline_edit ?? []);
 
     const filteredData = this.getFilteredData();
     const sortedData = this.getSortedData(filteredData);
@@ -83,9 +90,12 @@ export class TableComponent extends BaseDashboardComponent {
     // Header
     const thead = this.el("thead");
     const headerRow = this.el("tr");
+    if (expandable) {
+      headerRow.appendChild(this.el("th", "dash-table-expand-cell"));
+    }
     for (const col of columns) {
       const th = this.el("th", undefined, col);
-      if (this.props?.panel.sortable) {
+      if (panel.sortable) {
         if (this.sortColumn === col) {
           const indicator = this.el("span", "dash-sort-indicator", this.sortAsc ? "▴" : "▾");
           th.appendChild(indicator);
@@ -105,17 +115,20 @@ export class TableComponent extends BaseDashboardComponent {
     thead.appendChild(headerRow);
     table.appendChild(thead);
 
-    // Body
+    const totalCols = columns.length + (expandable ? 1 : 0);
     const tbody = this.el("tbody");
     for (const item of sortedData) {
+      const rowKey = String(item["id"] ?? `${item["_file"] ?? ""}`);
       const row = this.el("tr");
       const filePath = String(item["_file"] ?? "");
-      if (filePath && this.props?.onAction) {
+
+      // Whole-row click navigates to the underlying file when one is
+      // present and there's no expandable detail (which would conflict).
+      if (filePath && !expandable) {
         row.classList.add("dash-table-row--clickable");
         const activate = () => {
-          this.props!.onAction({
+          this.emitAction({
             action: "view_file",
-            source: typeof this.props!.panel.source === "string" ? this.props!.panel.source : "",
             entityId: String(item["id"] ?? ""),
             patch: { path: filePath },
           });
@@ -128,14 +141,161 @@ export class TableComponent extends BaseDashboardComponent {
         row.setAttribute("tabindex", "0");
         row.setAttribute("role", "button");
       }
+
+      if (expandable) {
+        const td = this.el("td", "dash-table-expand-cell");
+        const btn = this.el(
+          "button",
+          "dash-table-expand-toggle",
+          this.expandedRows.has(rowKey) ? "▾" : "▸",
+        );
+        btn.setAttribute("aria-label", "Toggle row details");
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (this.expandedRows.has(rowKey)) {
+            this.expandedRows.delete(rowKey);
+          } else {
+            this.expandedRows.add(rowKey);
+          }
+          this.rebuildTable(wrapper, columns);
+        });
+        td.appendChild(btn);
+        row.appendChild(td);
+      }
+
       for (const col of columns) {
-        const td = this.el("td", undefined, this.fieldValue(item, col));
+        const td = this.el("td");
+        if (inlineEditable.has(col)) {
+          td.appendChild(this.buildEditor(item, col));
+        } else {
+          td.textContent = this.fieldValue(item, col);
+        }
         row.appendChild(td);
       }
       tbody.appendChild(row);
+
+      if (expandable && this.expandedRows.has(rowKey)) {
+        tbody.appendChild(this.buildDetailRow(item, expandable, totalCols));
+      }
     }
     table.appendChild(tbody);
     wrapper.appendChild(table);
+  }
+
+  private buildEditor(
+    item: Record<string, unknown>,
+    field: string,
+  ): HTMLElement {
+    const current = item[field];
+    const entity = this.entityForSource();
+
+    // Status fields with declared enum → select.
+    if (field === "status" && entity && entity.statuses.length > 0) {
+      const select = document.createElement("select");
+      select.className = "dash-table-edit dash-table-edit--select";
+      for (const opt of entity.statuses) {
+        const o = document.createElement("option");
+        o.value = opt;
+        o.textContent = opt;
+        if (String(current ?? "") === opt) o.selected = true;
+        select.appendChild(o);
+      }
+      select.addEventListener("click", (e) => e.stopPropagation());
+      select.addEventListener("change", () => {
+        this.patchEntity(item, { [field]: select.value });
+      });
+      return select;
+    }
+
+    // Numeric fields → number input.
+    const isNumeric = typeof current === "number";
+    const input = document.createElement("input");
+    input.type = isNumeric ? "number" : "text";
+    input.className = "dash-table-edit dash-table-edit--input";
+    input.value = current == null ? "" : String(current);
+    input.addEventListener("click", (e) => e.stopPropagation());
+    input.addEventListener("keydown", (e: Event) => {
+      const key = (e as KeyboardEvent).key;
+      if (key === "Enter") { e.preventDefault(); input.blur(); }
+    });
+    input.addEventListener("change", () => {
+      const raw = input.value;
+      const next: unknown = isNumeric && raw !== "" ? Number(raw) : raw;
+      this.patchEntity(item, { [field]: next });
+    });
+    return input;
+  }
+
+  private buildDetailRow(
+    item: Record<string, unknown>,
+    expandable: ExpandableConfig,
+    colspan: number,
+  ): HTMLElement {
+    const tr = this.el("tr", "dash-table-detail-row");
+    const td = this.el("td", "dash-table-detail-cell");
+    td.setAttribute("colspan", String(colspan));
+
+    const editable = new Set(expandable.editable ?? []);
+    const fields = expandable.fields ?? [];
+    const grid = this.el("dl", "dash-table-detail-grid");
+    for (const field of fields) {
+      const dt = this.el("dt", "dash-table-detail-key", field);
+      const dd = this.el("dd", "dash-table-detail-value");
+      if (editable.has(field)) {
+        const ta = document.createElement("textarea");
+        ta.className = "dash-table-detail-textarea";
+        ta.value = String(item[field] ?? "");
+        ta.rows = 4;
+        ta.addEventListener("click", (e) => e.stopPropagation());
+        ta.addEventListener("blur", () => {
+          if (ta.value !== String(item[field] ?? "")) {
+            this.patchEntity(item, { [field]: ta.value });
+          }
+        });
+        dd.appendChild(ta);
+      } else {
+        dd.textContent = this.fieldValue(item, field);
+      }
+      grid.appendChild(dt);
+      grid.appendChild(dd);
+    }
+    td.appendChild(grid);
+    tr.appendChild(td);
+    return tr;
+  }
+
+  private patchEntity(
+    item: Record<string, unknown>,
+    patch: Record<string, unknown>,
+  ): void {
+    this.emitAction({
+      action: "patch",
+      entityId: String(item["id"] ?? ""),
+      patch,
+    });
+  }
+
+  private emitAction(partial: {
+    action: string;
+    entityId?: string;
+    patch?: Record<string, unknown>;
+  }): void {
+    if (!this.props) return;
+    const sourceName =
+      typeof this.props.panel.source === "string" ? this.props.panel.source : "";
+    this.props.onAction({
+      source: sourceName,
+      ...partial,
+    });
+  }
+
+  private entityForSource(): EntityConfig | undefined {
+    if (!this.props) return undefined;
+    const panel = this.props.panel as PanelConfig;
+    const sourceName = typeof panel.source === "string" ? panel.source : "";
+    if (!sourceName) return undefined;
+    const src = this.props.config.data_sources[sourceName];
+    return src?.entity;
   }
 
   private rebuildTable(wrapper: HTMLElement, columns: string[]): void {
@@ -146,12 +306,10 @@ export class TableComponent extends BaseDashboardComponent {
     if (!this.props) return [];
     let data = this.props.data;
 
-    // Apply active filters
     for (const [field, value] of Object.entries(this.activeFilters)) {
       data = data.filter((item) => String(item[field] ?? "") === value);
     }
 
-    // Apply search
     if (this.searchQuery && this.props.panel.searchable.length > 0) {
       const fields = this.props.panel.searchable;
       data = data.filter((item) =>

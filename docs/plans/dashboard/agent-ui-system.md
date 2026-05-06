@@ -1,7 +1,7 @@
 ---
 title: Agent UI System
 status: partially-shipped
-verified: 2026-05-05
+verified: 2026-05-06
 created: 2026-03-24
 tags: [dashboard, agent-ui, components, config-driven]
 ---
@@ -492,11 +492,23 @@ Everything needed to render a working dashboard from a YAML config with real dat
 
 **Delivers:** agent writes a YAML config, CADE renders a live interactive dashboard with real data. No agent intelligence needed yet — dashboard is self-sufficient for basic workflows.
 
-### Phase 2: Migrate an existing dashboard
+### Phase 2: Migrate an existing dashboard — Partially shipped 2026-05
 
-Rebuild job-finder or socials dashboard in config. Stress-test the framework with a more complex case (sorting, filtering, inline editing, SSE push, score visualisations). Expand component vocabulary as needed.
+`.cade/dashboard.yml` configs have been authored alongside (not replacing) the original standalone HTML dashboards:
 
-**Delivers:** proof the framework generalises beyond business-manager. Identifies gaps in the component set and config schema.
+- **job-finder** — `~/projects/job-finder/.cade/dashboard.yml`. REST adapter against the existing FastAPI server (`http://127.0.0.1:8787`). Views: dashboard (key_value vitals + hot jobs cards + actions checklist with on_check patch + recruiters-to-contact filtered cards), jobs table (sortable/searchable/filterable), recruiters card grid, activity timeline.
+- **socials** — `~/projects/socials/.cade/dashboard.yml`. JSON-file adapter against `data/posts.json`. Views: feed (cards w/ filters), by-status (table), top-scored (limit 10).
+
+Original dashboards left in place. Stress-test surfaced gaps; most have since been closed:
+
+- ✓ `inline_edit` on tables — `frontend/src/dashboard/components/table.ts` renders selects (when `entity.statuses` is declared) or inputs and emits `patch` actions on change
+- ✓ `expandable` rows on tables — chevron toggles a detail row showing `expandable.fields` plus `<textarea>` editors for `expandable.editable` (textarea blur emits a patch)
+- ✓ `on_click: detail` for cards — `dashboard-pane.ts` hoists view-level `detail:` into the panel when no panel-level detail is set; `cards.ts` renders both single-component and multi-`sections:` shapes
+- ✓ Top-level `stats:` — `frontend/src/dashboard/stats.ts` evaluates `count`, `count(<src>, <pred>)`, `ratio`, `field(<src>, <name>)`; renders as a strip above the view nav; `format: percent` supported
+- ✓ Push panels (live agent → dashboard updates) — `type: stream` data source declares a channel; `POST /api/ui/stream-event {channel, event}` appends a row; `DashboardPane.appendStreamEvent` routes by channel and trims to `buffer:` (default 100). Existing components (timeline, cards, table, checklist) consume stream rows without modification.
+- Score-radar visualisations (5-dimension persona scores) — still need a new component
+
+**Delivers:** the framework generalises beyond business-manager. Remaining gaps are net-new components rather than schema/UI plumbing.
 
 ### Phase 3: Agent interaction (tiers 2 + 3)
 

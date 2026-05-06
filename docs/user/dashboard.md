@@ -1,7 +1,7 @@
 ---
 title: Dashboard Guide
 created: 2026-04-22
-updated: 2026-04-26
+updated: 2026-05-06
 status: active
 tags: [dashboard, yaml, configuration, hot-reload]
 ---
@@ -41,12 +41,13 @@ Open CADE and click the **Dashboard** button (or press `Ctrl-a d`) to open the d
 
 ## Config Structure
 
-A dashboard config has five top-level keys:
+A dashboard config has six top-level keys:
 
 ```yaml
 dashboard:      # Required. Metadata (title, subtitle, theme).
 data_sources:   # Required. Where data comes from.
 views:          # Required. How data is displayed.
+stats:          # Optional. Top-strip KPIs computed from data sources.
 extra_roots:    # Optional. Additional directories for the file tree.
 watches:        # Optional. File watchers that trigger shell commands.
 ```
@@ -245,6 +246,28 @@ data_sources:
 
 `refresh_interval` is in seconds. Omit or set to `0` to disable polling. File-based sources never need this — they update automatically via file watching.
 
+### `stream` — agent push channel
+
+Live-update sources fed by external scripts or agents — no polling, no file backing. The dashboard buffers a rolling window of events client-side and renders them through any list-shaped component (`timeline`, `cards`, `checklist`, `table`).
+
+```yaml
+data_sources:
+  research_log:
+    type: stream
+    channel: research        # name to emit to; defaults to the source name
+    buffer: 100              # rolling cap, oldest events fall off
+```
+
+Emit events from a shell, a worker, an agent — anything that can POST JSON:
+
+```bash
+curl -X POST http://localhost:$CADE_PORT/api/ui/stream-event \
+  -H 'Content-Type: application/json' \
+  -d '{"channel":"research","event":{"timestamp":"now","message":"fetched job"}}'
+```
+
+Each POST appends one row. Existing UI state (search query, filters, scroll position, expanded rows) is preserved across events — components diff in place rather than re-rendering. Reload starts the buffer empty; persistence is not server-side.
+
 ### `model_usage` — LLM call log analytics
 
 Aggregates LLM usage from a server log file into per-model, per-project statistics.
@@ -261,6 +284,37 @@ data_sources:
 ```
 
 Use with the `model_stats` component to render usage dashboards.
+
+---
+
+## Top-Strip Stats
+
+Optional `stats:` block at the root renders a horizontal strip of KPI cells above the view nav. Each entry computes a value from the configured data sources via a tiny expression DSL.
+
+```yaml
+stats:
+  - { id: tracked,     label: "Tracked",     source: "field(stats, total_jobs)" }
+  - { id: applied,     label: "Applied",     source: "field(stats, applied)" }
+  - { id: interviews,  label: "Interviews",  source: "field(stats, interviews)" }
+  - { id: hit_rate,    label: "Hit Rate",    source: "ratio(interviews, applied)", format: percent }
+  - { id: open_actions, label: "Open Actions", source: "count(actions)" }
+```
+
+**Expressions:**
+
+| Form | Result |
+|------|--------|
+| `count(<source>)` | Total rows of the named source |
+| `count(<source>, <field> == <value>)` | Rows where `field` equals `value` |
+| `count(<source>, <field> != <value>)` | Rows where `field` does not equal `value` |
+| `count(<source>, <field> in [a, b, c])` | Rows where `field` is in the list |
+| `count(<source>, <field> not in [a, b])` | Rows where `field` is not in the list |
+| `field(<source>, <fieldName>)` | Scalar lookup on the first row — use with single-object REST endpoints |
+| `ratio(<statId>, <statId>)` | Numerator/denominator of two earlier `id`s in the list |
+
+**Format:** `format: percent` multiplies by 100 and appends `%`. Otherwise integers render as-is and floats round to two decimals.
+
+The bar refreshes automatically whenever any source's data changes.
 
 ---
 
@@ -371,6 +425,44 @@ on_click:
 
 `badges` renders the named field as a coloured pill. `searchable` adds a live-filter input above the grid.
 
+**Inline detail expansion** — adding a `detail:` block to the panel makes each card click-expandable. Two shapes are supported:
+
+```yaml
+# Single-component detail
+- component: cards
+  source: jobs
+  detail:
+    component: markdown
+    field: description
+
+# Multi-section detail (renders sections in order)
+- component: cards
+  source: posts
+  detail:
+    sections:
+      - { component: key_value, fields: [brand, platform, average_score] }
+      - { component: markdown,  field: content }
+```
+
+**View-level `detail:`** — declare the detail config once on a view and let panels opt in via `on_click: detail`:
+
+```yaml
+views:
+  - id: feed
+    title: "Feed"
+    detail:
+      sections:
+        - { component: key_value, fields: [brand, platform, average_score] }
+        - { component: markdown,  field: content }
+    panels:
+      - component: cards
+        source: posts
+        on_click: detail            # uses the view's detail block
+        fields: [brand, content]
+```
+
+When `on_click: detail` is set and the panel has no `detail:` of its own, the renderer hoists `view.detail` into the panel automatically.
+
 ### `cards_paged` — infinite-scroll card grid
 
 A virtual-windowed variant of `cards` for large datasets. Only renders visible cards, loading more as you scroll.
@@ -404,6 +496,39 @@ columns:
   - { field: status, label: "Stage" }
   - { field: deadline, label: "Due" }
 ```
+
+**Inline editing:** `inline_edit: [field, …]` makes those columns editable in-place. Fields named `status` render as a `<select>` populated from the source's `entity.statuses`; everything else renders as an `<input>` (number for numeric values, text for strings). Each change emits a `patch` to the source.
+
+```yaml
+data_sources:
+  jobs:
+    type: rest
+    endpoint: http://127.0.0.1:8787/api/jobs
+    entity:
+      id_field: id
+      statuses: [new, reviewing, applying, applied, interview, offer, rejected]
+
+views:
+  - id: jobs
+    panels:
+      - component: table
+        source: jobs
+        columns: [priority, status, total_score, title, company]
+        inline_edit: [status, priority]
+```
+
+**Expandable rows:** `expandable: { fields, editable }` adds a chevron column. Clicking opens a sub-row with a key/value grid of `expandable.fields`; any field listed in `expandable.editable` renders as a `<textarea>` that emits a `patch` on blur.
+
+```yaml
+- component: table
+  source: jobs
+  columns: [priority, status, title, company]
+  expandable:
+    fields: [url, description, posted_date, source, notes]
+    editable: [notes]
+```
+
+Expanding does not trigger row-click navigation, so `expandable` and `_file`-driven row clicks are mutually exclusive — when both are present, expansion wins.
 
 ### `kanban` — status board with drag-drop
 
@@ -536,6 +661,7 @@ Some components can write back to source files on user interaction (checkbox tog
 | `json_directory` | Yes | The individual `.json` file |
 | `markdown` | No | Not supported |
 | `rest` | Yes | `PATCH {endpoint}/{id}` |
+| `stream` | No | Append-only — no write-back path |
 
 For frontmatter patching to work, the markdown file must have a valid `---` frontmatter block.
 

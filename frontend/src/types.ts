@@ -649,5 +649,6 @@ export type ServerMessage =
   | DashboardDataMessage
   | DashboardClearedMessage
   | { type: "dashboard-push-panel"; panel: { id: string; title: string; component: string }; data: Record<string, unknown>[] }
+  | { type: "dashboard-stream-event"; channel: string; event: Record<string, unknown> }
   | { type: "notification"; message: string; style: string };
 

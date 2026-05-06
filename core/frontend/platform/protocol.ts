@@ -102,6 +102,7 @@ export const MessageType = {
   DASHBOARD_DATA: "dashboard-data",
   DASHBOARD_CLEARED: "dashboard-cleared",
   DASHBOARD_PUSH_PANEL: "dashboard-push-panel",
+  DASHBOARD_STREAM_EVENT: "dashboard-stream-event",
 
   // UI - Server -> Client
   NOTIFICATION: "notification",

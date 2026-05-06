@@ -1,7 +1,7 @@
 ---
 title: Interactive Dashboard Primitives
 created: 2026-04-17
-updated: 2026-04-17
+updated: 2026-05-06
 status: complete
 tags: [reference, dashboard, protocol, components]
 ---
@@ -64,6 +64,15 @@ Server-pushed frames that drive dashboard UX without being a direct response to 
 | Frame                       | Client message             | Frontend handler                      | Effect |
 |-----------------------------|----------------------------|---------------------------------------|--------|
 | `{type: "dashboard_focus", view_id}` | `MessageType.DASHBOARD_FOCUS_VIEW` | `DashboardPane.focusView(view_id)` | Switches the active tab to `view_id` if it's declared by the current config; silent no-op otherwise. |
+| `{type: "dashboard-push-panel", panel, data}` | `DASHBOARD_PUSH_PANEL` | `DashboardPane.pushAgentPanel(panel, data)` | Materialises a synthetic panel at the top of the active view from a fully-formed `{id, title, component}` plus a row array. Use when the panel doesn't need to live in the config. |
+| `{type: "dashboard-stream-event", channel, event}` | `DASHBOARD_STREAM_EVENT` | `DashboardPane.appendStreamEvent(channel, event)` | Appends `event` as a new row to the `type: stream` data source whose `channel:` matches. Buffer trims to `extra.buffer` (default 100). Active components diff in place — no full re-render, no UI state loss. |
+
+The push-panel and stream-event frames also have HTTP entry points so external scripts and agent bash can drive the dashboard without speaking the WS protocol:
+
+| Endpoint | Body | Effect |
+|----------|------|--------|
+| `POST /api/ui/push-panel` | `{id, title, component, data}` | Broadcasts a `dashboard-push-panel` frame to every connected client. |
+| `POST /api/ui/stream-event` | `{channel, event}` | Broadcasts a `dashboard-stream-event` frame to every connected client. |
 
 More server → client signals can be added the same way: new case in `_route_frame`, new case in `_on_unsolicited_provider_event`, new `MessageType`, new handler call on the frontend pane. Keep the signals narrow — each frame type should correspond to exactly one UX affordance.
 
@@ -75,6 +84,8 @@ Built-in components that emit actions:
 |---------------|-------------------------------------|-------|
 | `checklist`   | `patch`                             | Toggle a row's done state. |
 | `kanban`      | `patch`                             | Move a card between columns. |
+| `table`       | `patch`                             | Inline-editable cells (`inline_edit: [field, …]`) emit `patch` per change. Expandable detail rows (`expandable: { fields, editable }`) emit `patch` on textarea blur. |
+| `cards`       | `patch` (via `panel.detail` toggle) | Inline detail expansion; supports `panel.detail.component` (single-section) and `panel.detail.sections: […]` (multi-section). When a panel sets `on_click: detail` without its own `panel.detail`, `DashboardPane.renderPanel` hoists the view-level `view.detail` into the panel before render. |
 | `basket`      | `provider_message` or user-defined  | Two-column stepper basket with balance + Confirm. |
 | `cards_paged` | `provider_message` or user-defined  | Windowed infinite-scroll card list. Favourite toggle + expandable detail panel. |
 
@@ -148,3 +159,43 @@ Used by Padarax for barter; usable in an IDE for moving files/tasks between pool
 4. Document the `panel.options` schema your component reads in its own source-file docstring — it's the panel author's user-facing API.
 
 No changes to `DashboardPane.handleAction` are needed unless a genuinely new action routing model is required (beyond client-side / backend-patch / provider-forward). Add a new branch in `handleAction` + `DashboardHandler.handle_action` in that case.
+
+## Stream data sources
+
+`type: stream` declares a panel data source whose initial state is empty and whose rows are appended by `dashboard-stream-event` frames. The adapter (`StreamAdapter` in `core/backend/dashboard/adapters.py`) is a no-op on initial fetch; everything happens client-side in `DashboardPane.appendStreamEvent`.
+
+```yaml
+data_sources:
+  research_log:
+    type: stream
+    channel: research        # name agents emit to; defaults to source name
+    buffer: 100              # rolling cap, oldest events fall off (default 100)
+```
+
+The Python config dataclass routes unknown keys (`channel`, `buffer`) into `DataSourceConfig.extra`, which the frontend reads via `src.extra.channel` / `src.extra.buffer` when matching incoming events. Any list-shaped component (`timeline`, `cards`, `checklist`, `table`) consumes stream rows without modification — append-on-event uses the same diff path as polled-data updates, so component UI state (search, filters, scroll position, expanded rows) survives across events.
+
+Emit shape (HTTP):
+
+```bash
+curl -X POST http://localhost:$CADE_PORT/api/ui/stream-event \
+  -H 'Content-Type: application/json' \
+  -d '{"channel":"research","event":{"timestamp":"...","message":"fetched job"}}'
+```
+
+The endpoint broadcasts to every connected websocket; per-channel routing is the client's job. Buffer cap is enforced after each append (`splice` from the front when length > cap).
+
+## Top-level `stats:` evaluator
+
+`DashboardConfig.stats` renders a horizontal strip above the view nav. Each stat has an `id`, `label`, `source` expression, and optional `format`. The expression evaluator (`frontend/src/dashboard/stats.ts`) supports:
+
+| Expression                                | Resolves to |
+|-------------------------------------------|-------------|
+| `count(<source>)`                         | Row count of the named source |
+| `count(<source>, <field> == <value>)`     | Filtered row count, equality |
+| `count(<source>, <field> != <value>)`     | Filtered row count, inequality |
+| `count(<source>, <field> in [a, b, c])`   | Filtered row count, membership |
+| `count(<source>, <field> not in [a, b])`  | Filtered row count, exclusion |
+| `field(<source>, <fieldName>)`            | Scalar lookup on the first row of `<source>` (works with single-object REST endpoints) |
+| `ratio(<statId>, <statId>)`               | Ratio of two previously-evaluated stat IDs; `null`-safe |
+
+`format: percent` multiplies the result by 100 and appends `%`. The bar refreshes whenever a new `dashboard-data` frame or `dashboard-stream-event` lands.

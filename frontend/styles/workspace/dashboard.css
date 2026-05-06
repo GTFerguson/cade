@@ -43,6 +43,39 @@
   text-transform: lowercase;
 }
 
+/* ═══ Stats strip ═══
+ * Top-level `stats:` config becomes a horizontal strip of label/value
+ * cells above the view nav. Hidden when no stats are configured. */
+.dashboard-stats-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 6px 16px 10px;
+  font-family: var(--font-mono);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.dashboard-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 80px;
+}
+
+.dashboard-stat-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.dashboard-stat-value {
+  font-size: 16px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 /* ═══ View tabs ═══
  *
  * Nav is a horizontally-scrollable strip: when tabs overflow the pane
@@ -1122,6 +1155,111 @@
 .dash-table-filter option {
   background: var(--bg-primary);
   color: var(--text-primary);
+}
+
+/* Inline editors */
+.dash-table-edit {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: transparent;
+  color: var(--text-primary);
+  border: none;
+  border-bottom: 1px dashed var(--border-color);
+  outline: none;
+  padding: 2px 4px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dash-table-edit:focus {
+  border-bottom-color: var(--accent-green);
+  border-bottom-style: solid;
+}
+
+.dash-table-edit--select {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  padding-right: 16px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+                    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position: calc(100% - 7px) 50%, calc(100% - 3px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+/* Expandable rows */
+.dash-table-expand-cell {
+  width: 24px;
+  padding: 0 4px !important;
+}
+
+.dash-table-expand-toggle {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.dash-table-expand-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.dash-table-detail-row td {
+  background: var(--bg-secondary);
+  padding: 12px 16px !important;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.dash-table-detail-row:hover td {
+  background: var(--bg-secondary) !important;
+}
+
+.dash-table-detail-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.dash-table-detail-key {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+  padding-top: 4px;
+}
+
+.dash-table-detail-value {
+  color: var(--text-primary);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.dash-table-detail-textarea {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 2px;
+  padding: 6px 8px;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.dash-table-detail-textarea:focus {
+  border-color: var(--accent-green);
 }
 
 /* ═══════════════════════════════════════════════

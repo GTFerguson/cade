@@ -1,7 +1,7 @@
 ---
 title: "Config-Driven UI: Live Rendering from Declarative Configuration"
 created: 2026-04-28
-updated: 2026-04-28
+updated: 2026-05-06
 status: active
 tags: [research, dashboard, ui, configuration, hot-reload]
 ---
@@ -182,6 +182,7 @@ When underlying data changes but config stays the same, only affected panels re-
 - **File watching** — for local files (markdown, YAML frontmatter)
 - **Polling with backoff** — for REST sources (e.g., every 5 min, exponential backoff on errors)
 - **WebSocket push** — for server-driven updates (CADE uses this for server-initiated dashboard focus)
+- **Append-only streams** — `type: stream` declares a source whose initial state is empty and whose rows arrive as `dashboard-stream-event` frames. Components diff in place per event, so search query, filters, and scroll position survive across appends. Useful for live agent output (progress logs, token-by-token writes, work-in-progress).
 
 ### Live Update Propagation
 

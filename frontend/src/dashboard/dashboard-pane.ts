@@ -10,6 +10,7 @@ import { MessageType } from "@core/platform/protocol";
 import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 import { createDefaultRegistry, type ComponentRegistry } from "./registry";
+import { evaluateStats } from "./stats";
 import type {
   DashboardAction,
   DashboardComponent,
@@ -30,6 +31,7 @@ export class DashboardPane implements Component {
   private activeGroupId: string | null = null;
 
   private headerEl: HTMLElement;
+  private statsBarEl: HTMLElement;
   private viewNavEl: HTMLElement;
   private subNavEl: HTMLElement;
   private contentEl: HTMLElement;
@@ -43,6 +45,10 @@ export class DashboardPane implements Component {
 
     this.headerEl = document.createElement("div");
     this.headerEl.className = "dashboard-header";
+
+    this.statsBarEl = document.createElement("div");
+    this.statsBarEl.className = "dashboard-stats-bar";
+    this.statsBarEl.style.display = "none";
 
     this.viewNavEl = document.createElement("div");
     this.viewNavEl.className = "dashboard-view-nav";
@@ -58,6 +64,7 @@ export class DashboardPane implements Component {
     this.emptyEl.textContent = "No dashboard configured";
 
     this.container.appendChild(this.headerEl);
+    this.container.appendChild(this.statsBarEl);
     this.container.appendChild(this.viewNavEl);
     this.container.appendChild(this.subNavEl);
     this.container.appendChild(this.contentEl);
@@ -83,6 +90,7 @@ export class DashboardPane implements Component {
       this.headerEl.appendChild(sub);
     }
     this.buildViewNav();
+    this.renderStatsBar();
     this.emptyEl.style.display = "none";
     this.headerEl.style.display = "";
     this.viewNavEl.style.display = "";
@@ -104,6 +112,7 @@ export class DashboardPane implements Component {
     for (const [key, value] of Object.entries(sources)) {
       this.data[key] = value;
     }
+    this.renderStatsBar();
     if (!this.activeViewId) return;
     // When components are already mounted, push new props via update()
     // so they can diff in-place without losing UI state (search query,
@@ -134,6 +143,52 @@ export class DashboardPane implements Component {
         config: this.config!,
         onAction: (action) => this.handleAction(action),
       });
+    }
+  }
+
+  /**
+   * Append an event to a `type: stream` data source identified by its
+   * `channel:` name. Routed from a server-pushed
+   * ``dashboard-stream-event`` frame. Components render the new event
+   * the same way they'd render any other row.
+   *
+   * Buffer cap defaults to 100 most-recent events per source; the
+   * config can override via ``buffer:`` on the source. Older entries
+   * fall off the front so the buffer never grows unbounded.
+   */
+  appendStreamEvent(channel: string, event: Record<string, unknown>): void {
+    if (!this.config) return;
+
+    let touchedSource: string | null = null;
+    for (const [name, src] of Object.entries(this.config.data_sources)) {
+      if (src.type !== "stream") continue;
+      const extra = src.extra ?? {};
+      const srcChannel =
+        typeof extra["channel"] === "string"
+          ? (extra["channel"] as string)
+          : name;
+      if (srcChannel !== channel) continue;
+
+      const bufferRaw = extra["buffer"];
+      const buffer = typeof bufferRaw === "number" ? bufferRaw : 100;
+
+      const current = this.data[name] ?? [];
+      const next = [...current, event];
+      if (buffer > 0 && next.length > buffer) {
+        next.splice(0, next.length - buffer);
+      }
+      this.data[name] = next;
+      touchedSource = name;
+      break;
+    }
+
+    if (!touchedSource) return;
+    this.renderStatsBar();
+    if (!this.activeViewId) return;
+    if (this.activeComponents.size > 0) {
+      this.updateActiveComponents();
+    } else {
+      this.renderView(this.activeViewId);
     }
   }
 
@@ -370,6 +425,41 @@ export class DashboardPane implements Component {
   // Rendering
   // -------------------------------------------------------------------
 
+  private renderStatsBar(): void {
+    if (!this.config) {
+      this.statsBarEl.style.display = "none";
+      this.statsBarEl.replaceChildren();
+      return;
+    }
+    const stats = this.config.stats ?? [];
+    if (stats.length === 0) {
+      this.statsBarEl.style.display = "none";
+      this.statsBarEl.replaceChildren();
+      return;
+    }
+
+    const resolved = evaluateStats(stats, this.data);
+    this.statsBarEl.replaceChildren();
+    for (const stat of resolved) {
+      const cell = document.createElement("div");
+      cell.className = "dashboard-stat";
+      cell.dataset["statId"] = stat.id;
+
+      const label = document.createElement("div");
+      label.className = "dashboard-stat-label";
+      label.textContent = stat.label;
+      cell.appendChild(label);
+
+      const value = document.createElement("div");
+      value.className = "dashboard-stat-value";
+      value.textContent = stat.display;
+      cell.appendChild(value);
+
+      this.statsBarEl.appendChild(cell);
+    }
+    this.statsBarEl.style.display = "";
+  }
+
   private renderView(viewId: string): void {
     if (!this.config) return;
 
@@ -392,8 +482,19 @@ export class DashboardPane implements Component {
   private renderPanel(
     container: HTMLElement,
     panel: PanelConfig,
-    _view: ViewConfig,
+    view: ViewConfig,
   ): void {
+    // When a panel opts into `on_click: detail` but doesn't provide its
+    // own `detail:` block, fall back to the view-level `detail:` config.
+    // This lets configs declare the detail layout once per view and have
+    // every panel in that view use it.
+    if (
+      panel.on_click === "detail" &&
+      !panel.detail &&
+      view.detail
+    ) {
+      panel = { ...panel, detail: view.detail };
+    }
     // Create panel wrapper
     const panelEl = document.createElement("div");
     panelEl.className = "dashboard-panel";

@@ -398,7 +398,11 @@ export class CardsComponent extends BaseDashboardComponent {
         }
 
         const detailCfg = panel.detail;
-        if (detailCfg && typeof detailCfg["component"] === "string") {
+        const hasDetail =
+          !!detailCfg &&
+          (typeof detailCfg["component"] === "string" ||
+            Array.isArray(detailCfg["sections"]));
+        if (detailCfg && hasDetail) {
           const cardKey = String(item["id"] ?? "");
           const isOpen = cardKey ? this.expanded.has(cardKey) : false;
           const chevron = this.el(
@@ -561,40 +565,53 @@ export class CardsComponent extends BaseDashboardComponent {
     row: Record<string, unknown>,
   ): void {
     if (!this.props) return;
-    const componentName = String(detailCfg["component"] ?? "");
-    if (!componentName) return;
+
+    // Two shapes: { component, ... } for a single-section detail, or
+    // { sections: [{ component, ... }, ...] } for a stack of sections.
+    const sections = Array.isArray(detailCfg["sections"])
+      ? (detailCfg["sections"] as Record<string, unknown>[])
+      : detailCfg["component"]
+        ? [detailCfg]
+        : [];
+    if (sections.length === 0) return;
+
     const registry = createDefaultRegistry();
-    if (!registry.has(componentName)) return;
-    try {
-      const comp = registry.create(componentName);
-      const detailPanel = {
-        component: componentName,
-        fields: Array.isArray(detailCfg["fields"])
-          ? (detailCfg["fields"] as string[])
-          : [],
-        columns: [],
-        badges: [],
-        filter: {},
-        sortable: false,
-        filterable: [],
-        searchable: [],
-        inline_edit: [],
-        options:
-          (detailCfg["options"] as Record<string, unknown>) ?? detailCfg,
-        extra: {},
-        ...(this.props.panel.source !== undefined
-          ? { source: this.props.panel.source }
-          : {}),
-      };
-      comp.render(host, {
-        panel: detailPanel,
-        data: [row],
-        allData: this.props.allData,
-        config: this.props.config,
-        onAction: this.props.onAction,
-      });
-    } catch {
-      // Silently skip — broken detail config shouldn't break the card list.
+    for (const section of sections) {
+      const componentName = String(section["component"] ?? "");
+      if (!componentName || !registry.has(componentName)) continue;
+      const sectionEl = this.el("div", "dash-card-detail-section");
+      host.appendChild(sectionEl);
+      try {
+        const comp = registry.create(componentName);
+        const detailPanel = {
+          component: componentName,
+          fields: Array.isArray(section["fields"])
+            ? (section["fields"] as string[])
+            : [],
+          columns: [],
+          badges: [],
+          filter: {},
+          sortable: false,
+          filterable: [],
+          searchable: [],
+          inline_edit: [],
+          options:
+            (section["options"] as Record<string, unknown>) ?? section,
+          extra: {},
+          ...(this.props.panel.source !== undefined
+            ? { source: this.props.panel.source }
+            : {}),
+        };
+        comp.render(sectionEl, {
+          panel: detailPanel,
+          data: [row],
+          allData: this.props.allData,
+          config: this.props.config,
+          onAction: this.props.onAction,
+        });
+      } catch {
+        // Broken section shouldn't break the rest of the detail render.
+      }
     }
   }
 }
