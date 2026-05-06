@@ -13,18 +13,27 @@ from typing import Any
 import yaml
 
 
-# Component types the renderer knows about
+# Component types the renderer knows about. Keep in sync with the frontend
+# registry in `frontend/src/dashboard/registry.ts:createDefaultRegistry`.
+# Padarax-specific components (`claims`, `split_markdown`) are listed here too
+# because they live in the shared dashboard tree and are wired into the same
+# registry; they're general dashboard primitives, just not advertised to
+# agents in the prompt module.
 KNOWN_COMPONENTS = frozenset({
+    "basket",
     "cards",
+    "cards_paged",
     "checklist",
-    "timeline",
+    "claims",
+    "entity_detail",
+    "graph",
     "kanban",
     "key_value",
-    "table",
     "markdown",
-    "grouped_cards",
-    "feedback_list",
-    "post_preview",
+    "model_stats",
+    "split_markdown",
+    "table",
+    "timeline",
 })
 
 CONFIG_FILENAMES = ("dashboard.yml", "dashboard.yaml")

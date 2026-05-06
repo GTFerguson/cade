@@ -28,10 +28,6 @@ Intent before code exists. Plans are ephemeral — once the work ships and desig
 |------|-------|
 | [[dashboard/dashboard-schema-overhaul]] | ~40% features exist; layout/expressions/new components unbuilt |
 
-## Quick Fixes
-
-Small, well-scoped issues found during plan audits: [[quick-fixes/]].
-
 ## Design
 
 Active designs and mockups: [[design/]].
