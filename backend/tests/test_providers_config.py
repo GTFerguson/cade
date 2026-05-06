@@ -8,7 +8,14 @@ from textwrap import dedent
 
 import pytest
 
-from core.backend.providers.config import load_providers_config
+from core.backend.providers.config import (
+    DEFAULT_CONTEXT_BUDGET_HARD_LIMIT,
+    DEFAULT_CONTEXT_BUDGET_THRESHOLD,
+    DEFAULT_CONTEXT_WINDOW,
+    ProviderConfig,
+    get_context_budget,
+    load_providers_config,
+)
 
 
 @pytest.fixture
@@ -147,3 +154,47 @@ def test_invalid_toml(tmp_path: Path):
 
     config = load_providers_config(config_file)
     assert len(config.providers) == 0
+
+
+def test_context_budget_defaults_when_unset():
+    """Without overrides, get_context_budget returns the documented defaults."""
+    cfg = ProviderConfig(name="x", type="api", model="claude-sonnet-4-5-20250929")
+    budget = get_context_budget(cfg)
+    assert budget["warn"] == DEFAULT_CONTEXT_BUDGET_THRESHOLD
+    assert budget["danger"] == DEFAULT_CONTEXT_BUDGET_HARD_LIMIT
+    # litellm has Claude Sonnet 4.5 in its catalog with a 200k input window.
+    assert budget["window"] == 200_000
+
+
+def test_context_budget_reads_from_extra():
+    """context_budget_threshold / hard_limit / window in providers.toml flow through."""
+    cfg = ProviderConfig(
+        name="x", type="api", model="claude-sonnet-4-6",
+        extra={
+            "context_budget_threshold": 0.6,
+            "context_budget_hard_limit": 0.85,
+            "context_window": 500_000,
+        },
+    )
+    budget = get_context_budget(cfg)
+    assert budget["warn"] == 0.6
+    assert budget["danger"] == 0.85
+    assert budget["window"] == 500_000
+
+
+def test_context_budget_clamps_invalid_thresholds():
+    """Out-of-range thresholds are clamped to [0.0, 1.0]."""
+    cfg = ProviderConfig(
+        name="x", type="api", model="claude-sonnet-4-6",
+        extra={"context_budget_threshold": 5.0, "context_budget_hard_limit": -0.2},
+    )
+    budget = get_context_budget(cfg)
+    assert budget["warn"] == 1.0
+    assert budget["danger"] == 0.0
+
+
+def test_context_budget_falls_back_when_model_unknown():
+    """Unknown models fall back to DEFAULT_CONTEXT_WINDOW."""
+    cfg = ProviderConfig(name="x", type="api", model="bogus/model-does-not-exist")
+    budget = get_context_budget(cfg)
+    assert budget["window"] == DEFAULT_CONTEXT_WINDOW

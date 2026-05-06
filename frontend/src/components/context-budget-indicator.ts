@@ -9,38 +9,31 @@
 
 const NUM_SEGMENTS = 8;
 
-// Known context window sizes (in tokens) keyed by model name substring.
-// Matched in order; first match wins.
-const CONTEXT_WINDOWS: [string, number][] = [
-  ["claude", 200_000],
-  ["gpt-4o", 128_000],
-  ["gpt-4-turbo", 128_000],
-  ["gpt-4", 8_192],
-  ["gpt-3.5", 16_385],
-  ["gemini-1.5", 1_000_000],
-  ["gemini", 32_760],
-];
+// Default context window when the backend can't resolve one (litellm
+// has no entry and providers.toml doesn't override). Frontend fallback
+// only — the backend authoritatively resolves this from litellm's catalog
+// and any per-provider context_window override in providers.toml.
+const FALLBACK_CONTEXT_WINDOW = 200_000;
 
-function lookupContextWindow(model: string): number {
-  const lower = model.toLowerCase();
-  for (const [key, size] of CONTEXT_WINDOWS) {
-    if (lower.includes(key)) return size;
-  }
-  return 200_000;
-}
+const DEFAULT_WARN_PCT = 75;
+const DEFAULT_DANGER_PCT = 90;
+// "Half full" threshold for the green tier — the backend doesn't carry an
+// explicit value for this since it's purely a visual cue.
+const HEALTHY_PCT = 50;
 
-function getSegmentColor(pct: number): string {
-  if (pct >= 90) return "var(--accent-red)";
-  if (pct >= 75) return "var(--accent-orange)";
-  if (pct >= 50) return "var(--accent-green)";
-  return "var(--accent-blue)";
+export interface ContextBudgetConfig {
+  warn?: number;   // 0..1 fraction (e.g. 0.75)
+  danger?: number; // 0..1 fraction
+  window?: number; // tokens
 }
 
 export class ContextBudgetIndicator {
   private el: HTMLElement;
   private segments: HTMLElement[] = [];
   private labelEl: HTMLElement;
-  private contextWindow = 200_000;
+  private contextWindow = FALLBACK_CONTEXT_WINDOW;
+  private warnPct = DEFAULT_WARN_PCT;
+  private dangerPct = DEFAULT_DANGER_PCT;
 
   constructor() {
     this.el = document.createElement("div");
@@ -68,8 +61,30 @@ export class ContextBudgetIndicator {
     return this.el;
   }
 
-  setModel(model: string): void {
-    this.contextWindow = lookupContextWindow(model);
+  setModel(_model: string): void {
+    // Window is supplied authoritatively via setBudget() from the backend.
+    // Kept for callers that only have a model name; window stays at its
+    // current value (default or last-set-by-backend).
+  }
+
+  setBudget(budget: ContextBudgetConfig | undefined): void {
+    if (!budget) return;
+    if (typeof budget.window === "number" && budget.window > 0) {
+      this.contextWindow = budget.window;
+    }
+    if (typeof budget.warn === "number" && budget.warn > 0 && budget.warn <= 1) {
+      this.warnPct = budget.warn * 100;
+    }
+    if (typeof budget.danger === "number" && budget.danger > 0 && budget.danger <= 1) {
+      this.dangerPct = budget.danger * 100;
+    }
+  }
+
+  private getSegmentColor(pct: number): string {
+    if (pct >= this.dangerPct) return "var(--accent-red)";
+    if (pct >= this.warnPct) return "var(--accent-orange)";
+    if (pct >= HEALTHY_PCT) return "var(--accent-green)";
+    return "var(--accent-blue)";
   }
 
   update(promptTokens: number): void {
@@ -77,7 +92,7 @@ export class ContextBudgetIndicator {
 
     const pct = Math.min(100, (promptTokens / this.contextWindow) * 100);
     const filledCount = Math.ceil((pct / 100) * NUM_SEGMENTS);
-    const color = getSegmentColor(pct);
+    const color = this.getSegmentColor(pct);
 
     for (let i = 0; i < NUM_SEGMENTS; i++) {
       const seg = this.segments[i];

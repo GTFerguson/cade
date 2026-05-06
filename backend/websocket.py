@@ -40,7 +40,13 @@ from backend.files.tree import (
 from core.backend.watcher import FileWatcher
 from backend.neovim.manager import get_neovim_manager
 from backend.protocol import ErrorCode, MessageType, SessionKey
-from core.backend.providers.config import get_providers_config
+from core.backend.providers.config import (
+    DEFAULT_CONTEXT_BUDGET_HARD_LIMIT,
+    DEFAULT_CONTEXT_BUDGET_THRESHOLD,
+    get_context_budget,
+    get_providers_config,
+    resolve_context_window,
+)
 from backend.providers.registry import ProviderRegistry
 from backend.providers.claude_code_provider import ClaudeCodeProvider
 from backend.modes import MODE_SLASH_MAP, MODES
@@ -71,6 +77,22 @@ def _extract_google_token(query_string: str) -> str | None:
                 from urllib.parse import unquote_plus
                 return unquote_plus(value) or None
     return None
+
+
+def _resolve_context_budget(provider, model: str) -> dict:
+    """Resolve warn/danger thresholds and context window for a session.
+
+    Falls back to defaults + a litellm catalog lookup when the provider has
+    no `_config` (e.g. ClaudeCodeProvider, FailoverProvider).
+    """
+    cfg = getattr(provider, "_config", None)
+    if cfg is not None:
+        return get_context_budget(cfg)
+    return {
+        "warn": DEFAULT_CONTEXT_BUDGET_THRESHOLD,
+        "danger": DEFAULT_CONTEXT_BUDGET_HARD_LIMIT,
+        "window": resolve_context_window(model),
+    }
 
 
 class ConnectionHandler:
@@ -1617,6 +1639,7 @@ class ConnectionHandler:
                             name: {"label": cfg.label, "color": cfg.color}
                             for name, cfg in MODES.items()
                         },
+                        "contextBudget": _resolve_context_budget(provider, event.model),
                     })
                 elif isinstance(event, TextDelta):
                     self._chat_session.append_response_chunk(event.content)

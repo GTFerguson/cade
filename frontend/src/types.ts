@@ -477,6 +477,7 @@ export interface ChatStreamMessage extends BaseMessage {
   tools?: string[];
   slashCommands?: Array<{ name: string; description: string }>;
   modes?: Record<string, { label: string; color: string }>;
+  contextBudget?: { warn: number; danger: number; window: number };
   version?: string;
   // agent approval fields
   targetAgentId?: string;

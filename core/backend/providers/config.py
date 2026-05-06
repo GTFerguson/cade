@@ -64,6 +64,66 @@ class ProvidersConfig:
     default_provider: str = ""
 
 
+# Default warn / danger thresholds for the context-budget indicator,
+# expressed as fractions of the model's input window. Override per-provider
+# in providers.toml: context_budget_threshold = 0.75 / context_budget_hard_limit = 0.9
+DEFAULT_CONTEXT_BUDGET_THRESHOLD = 0.75
+DEFAULT_CONTEXT_BUDGET_HARD_LIMIT = 0.9
+DEFAULT_CONTEXT_WINDOW = 200_000
+
+
+def _coerce_float(value, fallback: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _coerce_int(value, fallback: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def resolve_context_window(model: str) -> int:
+    """Look up max input tokens for a model via litellm. Falls back to 200k."""
+    if not model:
+        return DEFAULT_CONTEXT_WINDOW
+    try:
+        import litellm
+        info = litellm.get_model_info(model)
+        max_in = info.get("max_input_tokens") if isinstance(info, dict) else None
+        if max_in:
+            return int(max_in)
+    except Exception as e:
+        logger.debug("get_model_info failed for %s: %s", model, e)
+    return DEFAULT_CONTEXT_WINDOW
+
+
+def get_context_budget(cfg: ProviderConfig) -> dict:
+    """Return the warn/danger thresholds and context window for a provider.
+
+    Reads `context_budget_threshold`, `context_budget_hard_limit`, and an
+    optional `context_window` override from the provider's extra fields.
+    Falls back to litellm's catalog for the window, and to 0.75 / 0.9 for
+    the thresholds when not configured.
+    """
+    extra = cfg.extra or {}
+    warn = _coerce_float(
+        extra.get("context_budget_threshold"), DEFAULT_CONTEXT_BUDGET_THRESHOLD,
+    )
+    danger = _coerce_float(
+        extra.get("context_budget_hard_limit"), DEFAULT_CONTEXT_BUDGET_HARD_LIMIT,
+    )
+    window = _coerce_int(extra.get("context_window"), 0) or resolve_context_window(cfg.model)
+    return {
+        "warn": max(0.0, min(warn, 1.0)),
+        "danger": max(0.0, min(danger, 1.0)),
+        "window": window,
+    }
+
+
 def _get_providers_config_path() -> Path:
     """Get the path to the providers config file."""
     return Path.home() / ".cade" / "providers.toml"

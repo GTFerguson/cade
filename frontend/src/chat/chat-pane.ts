@@ -700,6 +700,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     if (msg.model) {
       this.providerEl.textContent = msg.model;
       this.contextBudget?.setModel(msg.model);
+      this.contextBudget?.setBudget(msg.contextBudget);
       this.contextBudget?.reset();
       if (modelChanged && this.onModelNameChange) {
         this.onModelNameChange();

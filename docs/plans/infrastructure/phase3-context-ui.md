@@ -11,9 +11,9 @@ verified: 2026-05-05
 
 ### Phase 3a — Context Budget Indicator — Completed 2026-04-22
 
-Token usage gauge in the chat pane input row. 8-block segmented display matching the splash screen loading bar aesthetic, color progression (blue → orange 75% → red 90%). Usage data flows through `ChatDone` events, not global state. Context window sizes are hard-coded by model name substring match — `context_budget_threshold` / `context_budget_hard_limit` config knobs are not yet wired (see quick-fix `config-thresholds-not-wired`).
+Token usage gauge in the chat pane input row. 8-block segmented display matching the splash screen loading bar aesthetic, color progression (blue → orange at warn → red at danger). Usage data flows through `ChatDone` events, not global state. Context window and warn/danger thresholds resolve on the backend (`get_context_budget` reads `context_budget_threshold` / `context_budget_hard_limit` / `context_window` from each provider's `providers.toml` block; window falls back to litellm's catalog) and ship to the frontend on the `system-info` event.
 
-Key code: `frontend/src/components/context-budget-indicator.ts`, `frontend/src/chat/chat-pane.ts`
+Key code: `frontend/src/components/context-budget-indicator.ts`, `frontend/src/chat/chat-pane.ts`, `core/backend/providers/config.py:get_context_budget`
 
 ## Remaining Work
 
