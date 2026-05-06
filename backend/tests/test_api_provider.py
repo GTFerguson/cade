@@ -614,6 +614,52 @@ async def test_usage_empty_when_provider_omits_it(provider: APIProvider):
 
     done = next(e for e in events if isinstance(e, ChatDone))
     assert done.usage == {}
+    assert done.cost == 0.0
+
+
+@pytest.mark.asyncio
+async def test_cost_computed_from_usage(provider: APIProvider):
+    """ChatDone.cost reflects litellm.cost_per_token output for the model."""
+    text_chunk = MockChunk("Hi", finish_reason="stop")
+    last_chunk = MockChunk(None, usage=MockUsage(prompt_tokens=1000, completion_tokens=500))
+
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm:
+        mock_litellm.acompletion = AsyncMock(
+            return_value=MockStreamResponse([text_chunk, last_chunk])
+        )
+        mock_litellm.cost_per_token.return_value = (0.003, 0.0075)
+
+        events = []
+        async for event in provider.stream_chat([ChatMessage(role="user", content="Hi")]):
+            events.append(event)
+
+    done = next(e for e in events if isinstance(e, ChatDone))
+    assert done.usage == {"prompt_tokens": 1000, "completion_tokens": 500}
+    assert done.cost == pytest.approx(0.0105)
+    mock_litellm.cost_per_token.assert_called_once_with(
+        model="claude-sonnet-4-6", prompt_tokens=1000, completion_tokens=500,
+    )
+
+
+@pytest.mark.asyncio
+async def test_cost_zero_when_model_unknown_to_litellm(provider: APIProvider):
+    """If litellm.cost_per_token raises (unknown model), cost falls back to 0.0."""
+    text_chunk = MockChunk("Hi", finish_reason="stop")
+    last_chunk = MockChunk(None, usage=MockUsage(prompt_tokens=10, completion_tokens=20))
+
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm:
+        mock_litellm.acompletion = AsyncMock(
+            return_value=MockStreamResponse([text_chunk, last_chunk])
+        )
+        mock_litellm.cost_per_token.side_effect = Exception("model not in catalog")
+
+        events = []
+        async for event in provider.stream_chat([ChatMessage(role="user", content="Hi")]):
+            events.append(event)
+
+    done = next(e for e in events if isinstance(e, ChatDone))
+    assert done.cost == 0.0
+    assert done.usage["prompt_tokens"] == 10
 
 
 def _make_orchestrator_registry() -> ToolRegistry:

@@ -66,6 +66,27 @@ def _extract_usage(last_chunk) -> dict:
     return {}
 
 
+def _compute_cost(model: str, usage: dict) -> float:
+    """Compute USD cost from token usage via litellm's price table.
+
+    Returns 0.0 when the model isn't in litellm's catalog or usage is empty.
+    """
+    pt = usage.get("prompt_tokens", 0) or 0
+    ct = usage.get("completion_tokens", 0) or 0
+    if not pt and not ct:
+        return 0.0
+    try:
+        prompt_cost, completion_cost = litellm.cost_per_token(
+            model=model,
+            prompt_tokens=pt,
+            completion_tokens=ct,
+        )
+        return float(prompt_cost) + float(completion_cost)
+    except Exception as e:
+        logger.debug("cost_per_token failed for model=%s: %s", model, e)
+        return 0.0
+
+
 class APIProvider(BaseProvider):
     """Provider that calls LLM APIs via LiteLLM."""
 
@@ -171,6 +192,8 @@ class APIProvider(BaseProvider):
                 kwargs["tool_choice"] = "auto"
 
         tool_turn_count = 0
+        total_prompt_tokens = 0
+        total_completion_tokens = 0
 
         while True:
             t_request = time.monotonic()
@@ -277,6 +300,11 @@ class APIProvider(BaseProvider):
                         if tc.function and tc.function.arguments:
                             pending_tool_calls[idx]["arguments"] += tc.function.arguments
 
+            # Roll this turn's token usage into the running totals before
+            # handling the tool call or finish branch.
+            total_prompt_tokens += accumulated_prompt_tokens
+            total_completion_tokens += accumulated_completion_tokens
+
             # Handle tool calls or finish
             if finish_reason == "tool_calls" and self._tool_registry and pending_tool_calls:
                 tool_names = [
@@ -363,20 +391,27 @@ class APIProvider(BaseProvider):
                 continue
 
             else:
-                # Non-tool finish
-                if accumulated_prompt_tokens or accumulated_completion_tokens:
+                # Non-tool finish — fall back to last_chunk if no usage was
+                # streamed mid-turn (some providers only emit usage there).
+                if not accumulated_prompt_tokens and not accumulated_completion_tokens:
+                    fallback = _extract_usage(last_chunk)
+                    total_prompt_tokens += fallback.get("prompt_tokens", 0) or 0
+                    total_completion_tokens += fallback.get("completion_tokens", 0) or 0
+
+                if total_prompt_tokens or total_completion_tokens:
                     usage = {
-                        "prompt_tokens": accumulated_prompt_tokens,
-                        "completion_tokens": accumulated_completion_tokens,
+                        "prompt_tokens": total_prompt_tokens,
+                        "completion_tokens": total_completion_tokens,
                     }
                 else:
-                    usage = _extract_usage(last_chunk)
+                    usage = {}
+                cost = _compute_cost(self._model, usage)
                 logger.info(
-                    "[%s] stream_chat done: finish_reason=%s, total=%.2fs, usage=%s",
+                    "[%s] stream_chat done: finish_reason=%s, total=%.2fs, usage=%s, cost=$%.6f",
                     self._config.name, finish_reason,
-                    time.monotonic() - t_start, usage,
+                    time.monotonic() - t_start, usage, cost,
                 )
-                yield ChatDone(usage=usage)
+                yield ChatDone(usage=usage, cost=cost)
                 return
 
     def get_capabilities(self) -> ProviderCapabilities:
