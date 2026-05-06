@@ -2,11 +2,21 @@
 title: Dynamic Permission Management
 created: 2026-04-22
 status: planning
+verified: 2026-05-05
 ---
 
 # Dynamic Permission Management
 
 Read and update `.claude` permission allowlists to streamline tool execution and reduce permission prompts.
+
+## Infrastructure Readiness
+
+Nothing from this plan has shipped yet, but the prerequisite foundation is 7/10 ready:
+- `PermissionManager` (`backend/permissions/manager.py`, 296 lines) — session-scoped permission state, approval/deny decisions, per-connection `approved_paths`/`approved_commands` cache
+- `ClaudeSettings` (`backend/hooks/settings.py`, 175 lines) — can load/save `settings.json`; missing only the allowlist integration
+- `settings.local.json` (`/home/gary/projects/cade/.claude/settings.local.json`) — 234 allow entries as a working reference for the format
+
+The missing piece is wiring the two together: load allowlists from `settings.json` at session start and check them before issuing permission prompts.
 
 ## Overview
 

@@ -1,13 +1,24 @@
 ---
 title: CADE Agent Context — System Prompt Affordances
 created: 2026-04-23
-status: planning
+status: partially-shipped
+verified: 2026-05-05
 tags: [agent, system-prompt, ux, dashboard, context]
 ---
 
 # CADE Agent Context
 
 The CADE system prompt must tell the agent what makes CADE different from a generic IDE or terminal. An agent unaware of these affordances will default to chat responses when better surfaces exist, and miss interaction patterns unique to the environment.
+
+## Shipped
+
+Core affordances are live as of 2026-04-23:
+- **Output channel decision tree** — `backend/prompts/modules/base.md` (rule: "If response exceeds paragraphs → docs/plans/")
+- **Dashboard as interactive surface** — `backend/prompts/modules/dashboard.md` (71 lines: schema reference, component list, data source types, example config)
+- **Prompt compose system** — `backend/prompts/compose.py` (base → rules → always → mode → project)
+- **docs/plans/ as first-class output** — base.md instructs agent to write there; frontend auto-opens created files
+
+Not shipped: custom component API (agent can only edit `dashboard.yml`, cannot programmatically register new components). The four open questions below remain unanswered in code.
 
 ## Core Principle
 

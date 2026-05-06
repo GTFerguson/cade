@@ -1,11 +1,15 @@
 ---
 title: "Dashboard Schema Overhaul"
 created: 2026-01-20
-status: draft
+status: deferred
 tags: [dashboard, schema, UI, agent-tooling]
 ---
 
 # Dashboard Schema Overhaul
+
+## Status (2026-05-05)
+
+Deferred. The current schema (as implemented in `core/backend/dashboard/config.py`) covers ~40% of what this plan proposes: named data sources, per-source refresh intervals, and basic interactions (on_click/on_move/on_check) are shipped. The layout system (grid/stack/tabs/split), visibility expressions, eval/shell sources, chart/form/iframe/metric/log/custom components, and nkrdn source type are not implemented. Pick this up when the agent-ui-system Phase 1 gaps are resolved and a second consumer drives the need.
 
 ## Context
 

@@ -1,8 +1,8 @@
 ---
 title: APIProvider Tool Support + FailoverProvider
 created: 2026-04-22
-status: in-progress
-verified: 2026-04-24
+status: partially-shipped
+verified: 2026-05-05
 tags: [cade, providers, tools, litellm]
 ---
 

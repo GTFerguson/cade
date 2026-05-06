@@ -1,8 +1,8 @@
 ---
 title: Phase 3 implementation — start with context budget UI
 created: 2026-04-22
-status: in-progress
-verified: 2026-04-24
+status: partially-shipped
+verified: 2026-05-05
 ---
 
 # Phase 3 Implementation
@@ -11,7 +11,7 @@ verified: 2026-04-24
 
 ### Phase 3a — Context Budget Indicator — Completed 2026-04-22
 
-Token usage gauge in the statusline. 8-block display matching the splash screen loading bar aesthetic, color progression (normal → warn → danger). Usage data flows through `ChatDone` events, not global state. Thresholds are config-driven (`context_budget_threshold`, `context_budget_hard_limit`) per provider.
+Token usage gauge in the chat pane input row. 8-block segmented display matching the splash screen loading bar aesthetic, color progression (blue → orange 75% → red 90%). Usage data flows through `ChatDone` events, not global state. Context window sizes are hard-coded by model name substring match — `context_budget_threshold` / `context_budget_hard_limit` config knobs are not yet wired (see quick-fix `config-thresholds-not-wired`).
 
 Key code: `frontend/src/components/context-budget-indicator.ts`, `frontend/src/chat/chat-pane.ts`
 

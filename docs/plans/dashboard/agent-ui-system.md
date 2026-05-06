@@ -1,6 +1,7 @@
 ---
 title: Agent UI System
-status: draft
+status: partially-shipped
+verified: 2026-05-05
 created: 2026-03-24
 tags: [dashboard, agent-ui, components, config-driven]
 ---
@@ -8,6 +9,16 @@ tags: [dashboard, agent-ui, components, config-driven]
 # Agent UI System
 
 Config-driven dashboard framework where agents create and modify interactive interfaces by writing configuration, not code. CADE renders the configs, users interact through them, agents adapt on the fly.
+
+## Completed Phases
+
+### Phase 1 — Config Schema + Component Library + Data Adapters + Tier 1 Interactions — Completed 2026-04
+
+Config schema with full validation: `core/backend/dashboard/config.py` (frozen dataclasses — `DashboardConfig`, `ViewConfig`, `PanelConfig`, `DataSourceConfig`, `EntityConfig`). Component library in `frontend/src/dashboard/components/`: cards, checklist, timeline, kanban, key-value, table, markdown-panel (from plan), plus additional: basket, claims, entity-detail, graph, model-stats, split-markdown, cards-paged. Data adapters: rest, json_file, directory, markdown, vault, model_usage. Tier 1 interactions: direct mutation via on_click/on_move/on_check handlers (PATCH/file update). Config watcher + hot-reload on `.cade/dashboard.yml`. Tab integration via `extra_roots` mechanism. Theming via `theme` field in DashboardMeta.
+
+Key code: `core/backend/dashboard/config.py` (schema + validation), `core/backend/dashboard/adapters.py` (data adapters), `frontend/src/dashboard/components/` (component library)
+
+Gotcha: `chart`, `form`, `iframe` components from the plan spec below are **not implemented**. `feedback_list`, `post_preview` exist in config schema but not in the component library. The 5 extra components (basket, claims, entity-detail, graph, model-stats) are undocumented — see quick-fix `dashboard-undocumented-components`.
 
 ## Context
 

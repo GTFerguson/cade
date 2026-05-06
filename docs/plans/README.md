@@ -1,6 +1,7 @@
 ---
 title: Plans
 created: 2026-03-24
+updated: 2026-05-05
 status: active
 tags: [index, plans]
 ---
@@ -9,20 +10,28 @@ tags: [index, plans]
 
 Intent before code exists. Plans are ephemeral — once the work ships and design knowledge graduates to architecture docs, the plan is deleted.
 
-## Active WIP
+## Active Plans
 
-Work in active progress, tracked in [[handoff/]].
+| Plan | Status | Remaining work |
+|------|--------|----------------|
+| [[base-prompt-and-tooling]] | partially-shipped | Phase 2e: auto-trigger handoff on budget threshold |
+| [[infrastructure/tool-support-and-failover]] | partially-shipped | Phase 2e: same as above |
+| [[infrastructure/phase3-context-ui]] | partially-shipped | 3b (permissions), 3c (orchestration) |
+| [[multi-agent/agent-orchestration-framework]] | partially-shipped | Phase 4: smart naming + uniqueness |
+| [[system-prompt/cade-agent-context]] | partially-shipped | Custom component API; 4 open questions |
+| [[dashboard/agent-ui-system]] | partially-shipped | Phases 2–4; missing components |
+| [[permissions/dynamic-permission-management]] | planning | All phases (foundation ready) |
 
-## Planning
+## Deferred
 
-Feature designs in [[planning/]].
+| Plan | Notes |
+|------|-------|
+| [[dashboard/dashboard-schema-overhaul]] | ~40% features exist; layout/expressions/new components unbuilt |
 
-## Shipped
+## Quick Fixes
 
-Completed work in [[shipped/]].
+Small, well-scoped issues found during plan audits: [[quick-fixes/]].
 
 ## Design
 
-Active designs and mockups in [[design/]].
-
-- [[design/dashboard-schema-overhaul|Dashboard Schema Overhaul]] — agent-authored, project-specific UI layer
+Active designs and mockups: [[design/]].
