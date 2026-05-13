@@ -1286,10 +1286,12 @@
   padding: 4px 0;
 }
 
+/* Auto fallback renderer — matches the surrounding hv-* visual language:
+   monospace, zero border-radius, terminal-rooted. No web-app card chrome. */
 .hv-auto {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
 }
 
 .hv-auto-block {
@@ -1298,51 +1300,94 @@
   gap: 6px;
 }
 
+/* Matches .hv-section-head — 10px uppercase muted with letter-spacing,
+   the same convention crossrefs and other section labels already use. */
 .hv-auto-block-head {
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 11px;
+  letter-spacing: 1.2px;
   color: var(--text-muted);
-  font-weight: 600;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--bg-secondary);
 }
 
 .hv-auto-block-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-left: 10px;
-  border-left: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  gap: 6px;
 }
 
+/* Bullet list for arrays of strings — no native list markers; a muted
+   chevron prefix gives the bracket/terminal feel without dot bullets. */
 .hv-auto-list {
-  list-style: disc;
+  list-style: none;
   margin: 0;
-  padding-left: 20px;
+  padding: 0;
+}
+
+.hv-auto-list-item {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--bg-secondary);
+  display: flex;
+  gap: 8px;
+}
+.hv-auto-list-item:last-child { border-bottom: none; }
+.hv-auto-list-item::before {
+  content: "›";
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Card stack for arrays of objects — background contrast, no border,
+   no border-radius. Matches dashboard cards spec. */
+.hv-auto-cards {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.hv-auto-list-item { line-height: 1.4; }
-
-.hv-auto-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .hv-auto-card {
+  background: var(--bg-secondary);
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px 10px;
-  border-radius: 4px;
-  background: var(--bg-secondary, rgba(255,255,255,0.03));
-  border: 1px solid var(--border-color, rgba(255,255,255,0.06));
 }
 
+/* The first kv row in a card reads as the anchor — kept at default kv
+   styling, but subsequent rows step down to text-secondary so the eye
+   lands on the identifier first. Mirrors the dashboard card spec. */
+.hv-auto-card .hv-kv-row:not(:first-child) .hv-kv-value {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* Prose blocks inside a card lose their bottom margin so the card
+   keeps a tight rhythm. */
+.hv-auto-card .hv-prose-wrap .hv-prose { margin-bottom: 4px; }
+.hv-auto-card .hv-prose-wrap .hv-prose:last-child { margin-bottom: 0; }
+
+/* Block headers nested inside a card are quieter — no bottom border,
+   tighter spacing. The card itself provides the visual grouping. */
+.hv-auto-card .hv-auto-block-head {
+  border-bottom: none;
+  padding-bottom: 0;
+  font-size: 10px;
+}
+
+.hv-auto-card .hv-auto-block {
+  gap: 2px;
+}
+
+/* Nested objects render inline, no chrome — just a small left inset so
+   the relationship to the parent label is visible. */
 .hv-auto-nested {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  padding-left: 12px;
+  border-left: 1px solid var(--bg-secondary);
 }
