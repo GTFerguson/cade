@@ -358,15 +358,31 @@ function renderAutoEntry(
   if (Array.isArray(value)) {
     const allStrings = value.every((v) => typeof v === "string");
     if (allStrings) {
+      const strings = value as string[];
+      const isLongProse = strings.some((s) => s.length >= longThreshold || s.includes("\n"));
       renderAutoBlock(container, key, (body) => {
-        const list = ctx.el("ul", "hv-auto-list");
-        for (const item of value as string[]) {
-          const li = ctx.el("li", "hv-auto-list-item");
-          li.appendChild(renderProseWithRefs(item));
-          ctx.attachRefHandlers(li, section, record);
-          list.appendChild(li);
+        if (isLongProse) {
+          const stack = ctx.el("div", "hv-auto-prose-stack");
+          strings.forEach((item, idx) => {
+            const row = ctx.el("div", "hv-auto-prose-row");
+            row.appendChild(ctx.el("span", "hv-auto-prose-index", String(idx + 1).padStart(2, "0")));
+            const p = ctx.el("p", "hv-prose");
+            p.appendChild(renderProseWithRefs(item));
+            ctx.attachRefHandlers(p, section, record);
+            row.appendChild(p);
+            stack.appendChild(row);
+          });
+          body.appendChild(stack);
+        } else {
+          const list = ctx.el("ul", "hv-auto-list");
+          for (const item of strings) {
+            const li = ctx.el("li", "hv-auto-list-item");
+            li.appendChild(renderProseWithRefs(item));
+            ctx.attachRefHandlers(li, section, record);
+            list.appendChild(li);
+          }
+          body.appendChild(list);
         }
-        body.appendChild(list);
       }, ctx);
       return true;
     }
