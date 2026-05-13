@@ -254,12 +254,197 @@ const renderTabs: SectionRenderer = (container, section, record, ctx) => {
   container.appendChild(wrap);
 };
 
+// Generic fallback renderer. Walks an arbitrary record and produces a
+// readable layout without requiring a bespoke section configuration —
+// short strings render as key/value rows, long strings as prose,
+// arrays of objects as cards, nested objects as labelled blocks.
+// Refs (@type:id) inside strings are resolved through the same machinery
+// the prose/cross_refs renderers use, so colour-coding and click-to-open
+// behave identically.
+//
+// Config (all optional):
+//   fields:  whitelist of top-level keys to render
+//   exclude: extra keys to skip in addition to internals
+//   title:   heading shown above the auto block
+//   long_text_threshold: char count above which a string renders as prose
+const renderAuto: SectionRenderer = (container, section, record, ctx) => {
+  const userExclude = (section["exclude"] as string[] | undefined) ?? [];
+  const longThreshold = Number(section["long_text_threshold"] ?? 80);
+  const allowed = section.fields;
+  const wrap = ctx.el("div", "hv-auto");
+  if (section.title) {
+    wrap.appendChild(ctx.el("div", "hv-section-head", String(section.title)));
+  }
+  let any = false;
+  for (const [key, value] of orderedEntries(record, allowed, userExclude, "root")) {
+    if (renderAutoEntry(wrap, key, value, longThreshold, section, record, ctx)) {
+      any = true;
+    }
+  }
+  if (any) container.appendChild(wrap);
+};
+
+function orderedEntries(
+  record: Record<string, unknown>,
+  allowed: string[] | undefined,
+  userExclude: string[],
+  scope: "root" | "nested",
+): Array<[string, unknown]> {
+  const rootOnly = scope === "root"
+    ? ["id", "type", "_file", "_folder", "_sibling", "_world_id"]
+    : [];
+  const skip = new Set([
+    ...rootOnly,
+    "_ref_status", "_target_id",
+    ...userExclude,
+  ]);
+  const keys = allowed ?? Object.keys(record);
+  return keys
+    .filter((k) => !skip.has(k) && !k.startsWith("_"))
+    .map((k) => [k, record[k]] as [string, unknown])
+    .filter(([, v]) => !isEmpty(v));
+}
+
+function isEmpty(v: unknown): boolean {
+  if (v === null || v === undefined) return true;
+  if (typeof v === "string") return v.trim() === "";
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === "object") return Object.keys(v as object).length === 0;
+  return false;
+}
+
+function humanLabel(key: string): string {
+  return key.replace(/_/g, " ");
+}
+
+function renderAutoEntry(
+  container: HTMLElement,
+  key: string,
+  value: unknown,
+  longThreshold: number,
+  section: SectionConfig,
+  record: Record<string, unknown>,
+  ctx: SectionContext,
+): boolean {
+  if (isEmpty(value)) return false;
+
+  if (typeof value === "string") {
+    if (value.length >= longThreshold || value.includes("\n")) {
+      renderAutoBlock(container, key, (body) => {
+        for (const para of value.split(/\n\n+/)) {
+          if (!para.trim()) continue;
+          const p = ctx.el("p", "hv-prose");
+          p.appendChild(renderProseWithRefs(para));
+          ctx.attachRefHandlers(p, section, record);
+          body.appendChild(p);
+        }
+      }, ctx);
+      return true;
+    }
+    renderAutoKv(container, key, (val) => {
+      val.appendChild(renderProseWithRefs(value));
+      ctx.attachRefHandlers(val, section, record);
+    }, ctx);
+    return true;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    renderAutoKv(container, key, (val) => {
+      val.textContent = String(value);
+    }, ctx);
+    return true;
+  }
+
+  if (Array.isArray(value)) {
+    const allStrings = value.every((v) => typeof v === "string");
+    if (allStrings) {
+      renderAutoBlock(container, key, (body) => {
+        const list = ctx.el("ul", "hv-auto-list");
+        for (const item of value as string[]) {
+          const li = ctx.el("li", "hv-auto-list-item");
+          li.appendChild(renderProseWithRefs(item));
+          ctx.attachRefHandlers(li, section, record);
+          list.appendChild(li);
+        }
+        body.appendChild(list);
+      }, ctx);
+      return true;
+    }
+    renderAutoBlock(container, key, (body) => {
+      const cards = ctx.el("div", "hv-auto-cards");
+      for (const item of value) {
+        const card = ctx.el("div", "hv-auto-card");
+        if (item && typeof item === "object" && !Array.isArray(item)) {
+          for (const [k2, v2] of orderedEntries(item as Record<string, unknown>, undefined, [], "nested")) {
+            renderAutoEntry(card, k2, v2, longThreshold, section, record, ctx);
+          }
+        } else {
+          const p = ctx.el("p", "hv-prose");
+          p.appendChild(renderProseWithRefs(String(item)));
+          ctx.attachRefHandlers(p, section, record);
+          card.appendChild(p);
+        }
+        cards.appendChild(card);
+      }
+      body.appendChild(cards);
+    }, ctx);
+    return true;
+  }
+
+  if (typeof value === "object") {
+    renderAutoBlock(container, key, (body) => {
+      const inner = ctx.el("div", "hv-auto-nested");
+      for (const [k2, v2] of orderedEntries(value as Record<string, unknown>, undefined, [], "nested")) {
+        renderAutoEntry(inner, k2, v2, longThreshold, section, record, ctx);
+      }
+      body.appendChild(inner);
+    }, ctx);
+    return true;
+  }
+
+  return false;
+}
+
+function renderAutoKv(
+  container: HTMLElement,
+  key: string,
+  fill: (valEl: HTMLElement) => void,
+  ctx: SectionContext,
+): void {
+  let grid = container.lastElementChild as HTMLElement | null;
+  if (!grid || !grid.classList.contains("hv-kv")) {
+    grid = ctx.el("div", "hv-kv");
+    container.appendChild(grid);
+  }
+  const row = ctx.el("div", "hv-kv-row");
+  row.appendChild(ctx.el("span", "hv-kv-label", humanLabel(key)));
+  const val = ctx.el("span", "hv-kv-value");
+  fill(val);
+  row.appendChild(val);
+  grid.appendChild(row);
+}
+
+function renderAutoBlock(
+  container: HTMLElement,
+  key: string,
+  fill: (body: HTMLElement) => void,
+  ctx: SectionContext,
+): void {
+  const block = ctx.el("div", "hv-auto-block");
+  block.appendChild(ctx.el("div", "hv-auto-block-head", humanLabel(key)));
+  const body = ctx.el("div", "hv-auto-block-body");
+  fill(body);
+  block.appendChild(body);
+  container.appendChild(block);
+}
+
 registerSectionRenderer("header", renderHeader);
 registerSectionRenderer("key_value", renderKeyValue);
 registerSectionRenderer("prose", renderProse);
 registerSectionRenderer("cross_refs", renderCrossRefs);
 registerSectionRenderer("claims", renderClaims);
 registerSectionRenderer("tabs", renderTabs);
+registerSectionRenderer("auto", renderAuto);
 
 // --- Component ---
 
@@ -273,7 +458,10 @@ export class EntityDetailComponent extends BaseDashboardComponent {
       return;
     }
 
-    const sections = (this.props.panel.options["sections"] ?? []) as SectionConfig[];
+    const configured = (this.props.panel.options["sections"] ?? []) as SectionConfig[];
+    const sections = configured.length > 0
+      ? configured
+      : [{ type: "auto" } as SectionConfig];
     const shell = this.el("div", "hv-wrap");
     const ctx = this.makeContext();
 

@@ -28,6 +28,9 @@ export function preferEnrichedPath(path: string): string {
   const npcM = path.match(/^(.*\/npcs\/)(?!generated\/)([^/]+\.json)$/);
   if (npcM) return `${npcM[1]}generated/enriched/${npcM[2]}`;
 
+  const bibleM = path.match(/^(.*\/bibles\/)(?!generated\/).*?([^/]+\.json)$/);
+  if (bibleM) return `${bibleM[1]}generated/enriched/${bibleM[2]}`;
+
   return path;
 }
 
@@ -44,6 +47,7 @@ export class KnowledgeEntityResolver implements EntityResolver {
 
   resolve(type: string, id: string): string | null {
     if (type === "npc") return `content/worlds/padarax/npcs/generated/enriched/${id}.json`;
+    if (type === "bible") return `content/worlds/padarax/bibles/generated/enriched/${id}.json`;
     if (type === "location" || type === "room") return null; // resolved via world viewer
     return `${this.knowledgeBase}/${id}.json`;
   }

@@ -25,6 +25,12 @@ const HISTORY_SECTIONS = [
   { type: "claims",     field: "claims" },
 ] as const;
 
+const BIBLE_SECTIONS = [
+  { type: "header",     fields: ["name", "id", "scope", "tier"] },
+  { type: "cross_refs", field: "cross_refs" },
+  { type: "auto",       exclude: ["name", "scope", "tier", "cross_refs"] },
+] as const;
+
 const NPC_SECTIONS = [
   { type: "frontmatter_strip" },
   { type: "tabs", tabs: [
@@ -103,6 +109,27 @@ const VIEWER_FACTORIES: Record<string, ViewerFactory> = {
     const comp = new EntityDetailComponent();
     const props: DashboardComponentProps = {
       panel:    makePanel({ sections: HISTORY_SECTIONS, path }),
+      data:     [data],
+      allData:  {},
+      config:   EMPTY_CONFIG,
+      onAction: ({ action, patch }) => {
+        if (action === "view_file") {
+          const p = String(patch?.["path"] ?? "");
+          if (p) navigateTo(p);
+        } else if (action === "entity_ref_click") {
+          const id  = String(patch?.["ref_id"]   ?? "");
+          const p   = `${enrichedDirForPath(path ?? "")}/${id}.json`;
+          if (id) navigateTo(p);
+        }
+      },
+    };
+    comp.render(container, props);
+    return { dispose: () => comp.dispose() };
+  },
+  bible: (container, data, navigateTo, path) => {
+    const comp = new EntityDetailComponent();
+    const props: DashboardComponentProps = {
+      panel:    makePanel({ sections: BIBLE_SECTIONS, path }),
       data:     [data],
       allData:  {},
       config:   EMPTY_CONFIG,
