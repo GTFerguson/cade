@@ -1,0 +1,324 @@
+{
+  "master": {
+    "id": "padarax",
+    "type": "bible",
+    "scope": "master",
+    "name": "Padarax \u2014 Master Bible",
+    "setting_identity": {
+      "surface_aesthetic": "@location:niverport is six years old. The Virsoltan crossing in 1436 AE put a port on a continent its sailors had not reached before. The harbour works for a living. Ships come from @location:virsolt and from points further along the @location:artoga coast. The marketplace shifts wherever traders find room. The warehouses fill faster than the colony can build them. Past the walls the interior is genuinely unmapped: @faction:the-hold patrols the north road because the road needs patrolling, and the @faction:explorers-hall draws adventurers who want to reach territory the colony has not. The Doerogmari tribes of the @location:jungles-of-zolos predate the crossing by ages, and the ruins scattered through the continent are older still. Religion is everyday and pantheonic; small shrines at home, children named after the deities they were taught to honour. Magic is part of daily life. Most know a practitioner, and many can do small tricks of their own. Serious skill is the rarer thing. @location:niverport is the way in.",
+      "underlying_truth": "The @pantheon:essentian was not born of Padarax. The deities mortals worship are the ascended @faction:luminari-prime \u2014 the high court of @location:ancora, who fled their world ahead of the Hunger that ate it. @figure:aela survived the crossing wounded; her body persists fused into the command-room of the @location:aurospire, the @faction:ancorani vessel buried beneath @location:aelares. The other @faction:luminari-prime ascended bodiless after their deaths in the @period:shardfall-wars, when @figure:maron struck the @concept:essentia-core and turned on his own queen. What practitioners call the @concept:essentia-field is the same field that powered @location:ancora. The @faction:ancorani brought it with them and taught the mortal races here to use it. @species:dragon+pl predate that teaching. They ruled before the @faction:ancorani came. The deities taught the new arcane art to the mortal races and withheld it from the dragons; the dragons lost their rule by being cut out of the inheritance. They went underground rather than dying out. They learned the art for themselves over the centuries that followed. Most operate at a distance: wealth and reach buy work through other hands, and a few wear humanoid form to walk among the races they were dispossessed for. They are the patrons behind the banks and the long-horizon advisors a court rarely recognises across decades. They are not uniformly hostile. The rare exceptions are quieter than the rule. @figure:von, the Hunger that ate @location:ancora, is approaching Padarax. He is a cosmic serpent on a scale that eats worlds. @figure:aela feels him as pressure, not language; she has been listening for centuries because that is the work the survivors took on when they brought the Core through.",
+      "reveal_commitments": [
+        "The @location:aurospire's nature as an @faction:ancorani vessel stays hidden until either direct contact with its buried interior or specific disclosure from someone who already knows. Folk understanding is that the spire is the ancient temple beneath @location:aelares, not a ship.",
+        "The @pantheon:essentian's origin in the @faction:ancorani refugee high court stays hidden through ordinary worship. Folk theology venerates named deities without naming what they were before they ascended. The structural origin reaches the player only through deep scholarly disclosure or direct contact with a bodiless @faction:luminari-prime.",
+        "Living @species:dragon+pl in human society operate from a distance through wealth and reach. The work happens through agents and patronage networks; only a few walk among mortals in humanoid form. Surface signals are financial irregularities and contradictory institutional accounts, not direct revelation. Direct encounter with a dragon revealed as a dragon is a late-arc event. Not all dragons are hostile to mortals \u2014 the rare exceptions surface only after deeper engagement.",
+        "The deliberate withholding of @concept:essentia-field from the @species:dragon+pl during the @period:age-of-heroes stays hidden behind the public account that dragons did not take it up the way mortals did. The political truth \u2014 that the deities armed a revolt against them \u2014 is reachable only through Ancorani-bloodline disclosure.",
+        "@figure:von's nature as a cosmic serpent on the scale of worlds stays hidden under compressed legend. The first time the player meets him at all is as a name in a bard's distorted song or an old woman's warning. The literal scale and approach resolve only through Ancorani-aligned disclosure paths or direct contact with @figure:aela.",
+        "The @event:shardfall as @figure:maron's deliberate strike on the @concept:essentia-core stays hidden behind the public account of an ancient cataclysm. The deliberate-betrayal version surfaces only through Ancorani-bloodline disclosure or direct disclosure from a @faction:luminari-prime.",
+        "The player is never addressed as a chosen one or summoned inheritor. @figure:aela's want for inheritors is her own internal posture, not a call delivered to anyone. The @faction:luminari mantle is taken up by choice or not at all; the engine does not narrate the player as called."
+      ]
+    },
+    "voice": {
+      "register": "Varied sentence length is the spine: short declaratives carry action and revelation; longer sentences with subordinate clauses carry context and history. Subject-verb-object over nominalizations and gerund chains. Concrete nouns and working verbs \u2014 names, materials, amounts, tide times \u2014 before abstract qualifiers. The world is old; the engine does not perform wonder at things the characters grew up with. Understated when extraordinary: a dragon patron is introduced as a creditor before she is introduced as a dragon. Character voice leads; narrator text stays lean and functional between beats.",
+      "tonal_limits": [
+        "No tourist narration: the setting is not exotic from the outside. 'The colorful marketplace hummed with the exotic bustle of the frontier' is a failure mode.",
+        "No destiny voice at street level: 'you sense the weight of history upon this moment' belongs nowhere in everyday interaction. Scale earns its own framing.",
+        "No purple flourish: ornamental description that delays action or substitutes mood for specificity fails the register. 'A mesmerizing tapestry of golden light bathed the harbour' is a failure mode.",
+        "No AI-assistant register: the engine does not list, hedge, or bracket. Bullet points mid-scene, 'it is worth noting', and balanced-clause hedges break scene.",
+        "No cosmic-scale narration at street level: Von's approach is felt as pressure and old women's warnings, not universe-spanning revelation. Each encounter earns its own scale."
+      ],
+      "lexicon": {
+        "favoured": [
+          "look at, not delve into",
+          "important, not crucial",
+          "old, not ancient (for ruins and history unless age itself is the point)",
+          "has, not features or offers",
+          "is, not serves as",
+          "working verbs: load, mend, argue, tie, drink, fish, count",
+          "concrete time markers: morning bell, evening watch, last tide, six years"
+        ],
+        "banned": [
+          "camaraderie",
+          "palpable",
+          "tapestry",
+          "intricate",
+          "meticulous",
+          "prowess",
+          "captivate",
+          "symphony",
+          "mesmerizing",
+          "ethereal",
+          "mystical"
+        ],
+        "avoid": [
+          "realm",
+          "ancient (as vague amplifier)",
+          "crucial",
+          "pivotal",
+          "significant",
+          "robust",
+          "comprehensive",
+          "nuanced",
+          "multifaceted",
+          "leverage (verb)",
+          "landscape (abstract)",
+          "testament",
+          "bustling",
+          "vibrant",
+          "commendable",
+          "showcase",
+          "delve",
+          "ever-evolving",
+          "underscores"
+        ]
+      }
+    },
+    "engine_never": [
+      "Ancorani technology surfaces as technology. Ships, consoles, and weapons read as temple, altar, and relic until late-arc disclosure earns the frame.",
+      "Entity-ref syntax or knowledge-layer metadata reaches players. That register is GM tooling only.",
+      "Real-world IP analogues appear in narration or NPC voice. Setting elements are described in Padarax's own terms.",
+      "The player is framed as called, summoned, or fated. The engine does not narrate the player as a chosen one.",
+      "Mythic-tier knowledge surfaces through ordinary channels. Gossip, casual NPC dialogue, and marketplace rumour cannot carry what the structural disclosure path has not unlocked.",
+      "Setting-specific strings appear in system prompts. No hardcoded location names, furniture references, or NPC names. Generic substitutes and interpolated slots only."
+    ],
+    "cross_refs": {
+      "anchors": [
+        "@pantheon:essentian",
+        "@event:shardfall",
+        "@location:aurospire",
+        "@figure:aela",
+        "@figure:von",
+        "@concept:essentia-core",
+        "@faction:ancorani",
+        "@location:ancora",
+        "@period:shardfall-wars"
+      ]
+    },
+    "arcs": {
+      "major": [
+        "@bible:ancorani",
+        "@bible:western-lich-kingdom",
+        "@bible:northern-goliath-warlord",
+        "@bible:dragon-sacred-order",
+        "@bible:katarr-deserts"
+      ],
+      "minor": [
+        "@bible:tyrian-baal"
+      ]
+    },
+    "_ref_status": {
+      "@location:niverport": "resolved",
+      "@location:virsolt": "dead",
+      "@location:artoga": "stub",
+      "@faction:the-hold": "resolved",
+      "@faction:explorers-hall": "dead",
+      "@location:jungles-of-zolos": "dead",
+      "@pantheon:essentian": "resolved",
+      "@faction:luminari-prime": "dead",
+      "@location:ancora": "dead",
+      "@figure:aela": "resolved",
+      "@location:aurospire": "dead",
+      "@faction:ancorani": "stub",
+      "@location:aelares": "dead",
+      "@period:shardfall-wars": "resolved",
+      "@figure:maron": "resolved",
+      "@concept:essentia-core": "dead",
+      "@concept:essentia-field": "dead",
+      "@species:dragon": "resolved",
+      "@figure:von": "stub",
+      "@period:age-of-heroes": "resolved",
+      "@event:shardfall": "resolved",
+      "@faction:luminari": "dead",
+      "@bible:ancorani": "stub",
+      "@bible:western-lich-kingdom": "stub",
+      "@bible:northern-goliath-warlord": "resolved",
+      "@bible:dragon-sacred-order": "stub",
+      "@bible:katarr-deserts": "stub",
+      "@bible:tyrian-baal": "stub"
+    }
+  },
+  "arc_northern_goliath_warlord": {
+    "id": "northern-goliath-warlord",
+    "type": "bible",
+    "scope": "arc",
+    "tier": "major",
+    "name": "Northern Goliath Warlord",
+    "logline": "A chieftain who has lived six centuries by a lineage older than the goliath tribes holds the hyperborean north with a nation of pact-bound warriors and reads every southward campaign as unfinished work he was born to complete.",
+    "central_tension": "Goro-Kahn's southward drive against the settled south's capacity to resist it -- with neither side knowing the drive has an origin older than Goro-Kahn himself.",
+    "dormancy_state": {
+      "value": "slow-tick",
+      "notes": "Goro-Kahn holds the north; the southward pull has not yet found its shape. The Legion is unified, his sons hold the command lines stable, and no active campaign is moving. His attention has turned south without becoming a plan."
+    },
+    "actors": [
+      {
+        "ref": "@figure:goro-kahn",
+        "actant": "subject",
+        "lod_state": "active",
+        "notes": "Drives the arc from the north. His sons are the visible edge of the Legion's reach; he is the weight behind them. Not yet present in the settled south."
+      },
+      {
+        "ref": "@concept:essentia-core",
+        "actant": "object",
+        "lod_state": "dormant",
+        "notes": "What the drive aims at -- though the settled south does not know this is what the expansion is for. Goro-Kahn holds a shard and knows what it is a fragment of."
+      },
+      {
+        "ref": "@figure:maron",
+        "actant": "sender",
+        "lod_state": "dormant",
+        "notes": "Shaped the drive through the essentia-field from birth. His involvement is the arc's near-conclusion secret and does not surface before then."
+      },
+      {
+        "ref": "@faction:legion-of-the-black-steel",
+        "actant": "helper",
+        "lod_state": "active",
+        "notes": "The nation Goro-Kahn built from the warring goliath tribes. Pact-bound warriors; his sons hold the command layer beneath him."
+      },
+      {
+        "ref": "@figure:aela",
+        "actant": "opponent",
+        "lod_state": "dormant",
+        "notes": "Not yet engaged; authorial commitment only. What stands between the drive and the south."
+      }
+    ],
+    "tent_pole_reveals": [
+      {
+        "id": "king-of-blades",
+        "logline": "A name reaches trading outposts along the Artoga coast: a warlord in the far north, old enough that no one can say where the counting starts.",
+        "preconditions": "Player has engaged with northern trading contacts or border settlements.",
+        "surface_channel": "merchant_rumour",
+        "mythic_tier_gate": "null",
+        "distortion_at_first_surface": "The age is exaggerated in the telling; rumour counts in legends rather than years. The scope of the Legion reads as a trader's boast, not a map.",
+        "payoff_for": []
+      },
+      {
+        "id": "pact-structure",
+        "logline": "Legion warriors bind pacts with Goro-Kahn that deliver real strength. The shard he carries is the source. Inside the Legion the word for it is faith.",
+        "preconditions": "Player has encountered a Legion pact-warrior or reached a goliath-connected specialist.",
+        "surface_channel": "specialist-NPC",
+        "mythic_tier_gate": "informed",
+        "distortion_at_first_surface": "First contact reads as religious devotion. The mechanics of what the pact delivers are not visible at the surface; only the strength is.",
+        "payoff_for": []
+      },
+      {
+        "id": "sons-encounter",
+        "logline": "One of his sons stands where a lesser commander would be. The blood runs differently in him: larger than any goliath should reach, skin that does not hold the right colour, and a calm that does not come from training.",
+        "preconditions": "Player has reached a regional front where Legion command is present.",
+        "surface_channel": "direct-encounter",
+        "mythic_tier_gate": "informed",
+        "distortion_at_first_surface": "The encounter reads as a powerful goliath officer. The wrongness is felt before it is named; nothing in the first meeting provides a frame for what he is.",
+        "payoff_for": []
+      },
+      {
+        "id": "elder-bloodline",
+        "logline": "The lineage predates the goliath tribes. His sons carry it diluted, and the old voices inside the Legion have a word for them that the sons do not use for themselves.",
+        "preconditions": "Player has sustained access to a goliath specialist willing to speak past the Legion's loyalty framing.",
+        "surface_channel": "specialist-NPC",
+        "mythic_tier_gate": "specialist",
+        "distortion_at_first_surface": "The source names it as a lineage older than the tribes and wrong by goliath measure -- abominations is the word that survives in the oldest accounts. The source does not know what the lineage is, only that it is not theirs.",
+        "payoff_for": [
+          "sons-encounter"
+        ]
+      },
+      {
+        "id": "marons-hand",
+        "logline": "The drive that has shaped him since birth was not his to begin with. His father reached him through the essentia-field from the start and has been steering the conquest from the outside. The mandate he carries as inheritance is direction from a source he has never met in the body.",
+        "preconditions": "Arc has reached near-conclusion stage; elder-bloodline has landed; the Ancorani arc has surfaced Maron as a figure.",
+        "surface_channel": "specialist-NPC",
+        "mythic_tier_gate": "secret",
+        "distortion_at_first_surface": "No distortion; this beat does not surface until its preconditions are met.",
+        "payoff_for": [
+          "elder-bloodline"
+        ]
+      }
+    ],
+    "cross_arc_hooks": [
+      {
+        "flavour": "bloodline",
+        "with_arc": "@bible:ancorani",
+        "shared_node": "@figure:maron",
+        "logline": "Maron fathered Goro-Kahn. The Ancorani arc carries who Maron is and what the Shardfall cost; the goliath arc carries the consequence of a son who does not know what his father is.",
+        "surfacing_condition": "When the player has reached elder-bloodline in the goliath arc and has begun the Ancorani arc's structural disclosure path."
+      },
+      {
+        "flavour": "artefact-category",
+        "with_arc": "@bible:western-lich-kingdom",
+        "shared_node": "@concept:essentia-shard",
+        "logline": "Both Goro-Kahn and the lich hold essentia shards. The function differs: one runs pact-bonds through it. The connection surfaces when a player holds knowledge from both arcs and recognises what the shards are fragments of.",
+        "surfacing_condition": "When the player has reached pact-structure in the goliath arc and has encountered the lich's shard through the western-lich-kingdom arc."
+      }
+    ],
+    "ambient_texture": [
+      {
+        "channel": "merchant_rumour",
+        "lod": "distant",
+        "example_beat": "A Virsoltan trader mentions that the northern Artoga coast gets quieter every year. Ships that went up don't come back and no one at the guild has logged a wreck. He changes the subject.",
+        "frequency_hint": "occasional"
+      },
+      {
+        "channel": "gossip",
+        "lod": "regional",
+        "example_beat": "A settler who left the north road two seasons ago says the warriors who came through were not like the goliaths she grew up knowing. The strength was wrong. She shows with her hands how wide one was at the shoulder and stops talking.",
+        "frequency_hint": "rare"
+      },
+      {
+        "channel": "road_omen",
+        "lod": "regional",
+        "example_beat": "Goliath traders at a waystation. The goods on their cart are sized for hands twice the width of any buyer there. They pay in full without bargaining. They do not say where they came from and no one asks.",
+        "frequency_hint": "occasional"
+      }
+    ],
+    "mythic_gating": [
+      {
+        "node": "@figure:goro-kahn",
+        "stage_threshold": "Player has reached the sons-encounter tent-pole and engaged the arc at specialist tier through at least one goliath source.",
+        "first_surface_channel": "Witness with heavy distortion: a bard's song names a king who cannot be killed; the name is withheld; the scale is compressed to regional warlord rather than continental force.",
+        "differentia_release": [
+          "A warlord holds the north; he is very old, beyond counting in years",
+          "He fights at the front and cannot be brought down; his followers treat him as a god",
+          "His sons command beneath him; they carry the same wrong cast to their build",
+          "He holds something old and routes his warriors' strength through it",
+          "He was born of a lineage the tribes do not claim; the drive that shapes him has a source he has not looked at directly"
+        ],
+        "affiliation_unlock": [
+          "@species:goliath",
+          "goliath_command"
+        ]
+      }
+    ],
+    "lod_tempo": {
+      "local": "Legion pact-warriors as regional threats on Artoga interior roads; goliath traders with unmarked provenance; a son's delegation where Goro-Kahn wants a city watched.",
+      "regional": "The Legion's territory boundary shifts by season; the sons move as regional commanders; the name King of Blades reaches Artoga coast settlements.",
+      "distant": "The warlord is a name in traders' caution. The Legion is a rumour. The scope is not yet visible from the settled south."
+    },
+    "engine_never": [
+      "Maron's involvement in Goro-Kahn's drive is not surfaced before the arc reaches near-conclusion. It does not appear through gossip, specialist disclosure, or ambient beats.",
+      "The bloodline is described as a lineage older than the goliath tribes -- not as Ancorani. The Ancorani frame belongs to the Ancorani arc; this arc names the lineage only from within the goliath frame."
+    ],
+    "cross_refs": {
+      "centered_on": [
+        "@figure:goro-kahn"
+      ],
+      "commands": [
+        "@faction:legion-of-the-black-steel"
+      ],
+      "driven_by": [
+        "@concept:essentia-shard"
+      ],
+      "connects_to": [
+        "@bible:ancorani",
+        "@bible:western-lich-kingdom"
+      ]
+    },
+    "_ref_status": {
+      "@figure:goro-kahn": "resolved",
+      "@concept:essentia-core": "dead",
+      "@figure:maron": "resolved",
+      "@faction:legion-of-the-black-steel": "dead",
+      "@figure:aela": "resolved",
+      "@bible:ancorani": "stub",
+      "@bible:western-lich-kingdom": "stub",
+      "@concept:essentia-shard": "stub",
+      "@species:goliath": "stub"
+    }
+  }
+}

@@ -10,10 +10,13 @@
  *   ?demo=mobile-explore  toolbar: "exploring Dockside Inn", same exits
  *   ?demo=mobile-walk     cycles through three rooms every 2.5 s
  *   ?demo=mobile-noexits  The Sealed Vault — no exits
+ *   ?demo=bible-master    Padarax master bible rendered via entity_detail
+ *   ?demo=bible-arc       Northern Goliath Warlord arc bible
  */
 
 import type { WebSocketClient } from "./platform/websocket";
 import { applySavedTheme } from "./config/themes";
+import bibleFixtures from "./demo-fixtures/bibles.json";
 
 // ── Shared world fixture ─────────────────────────────────────────────
 
@@ -434,6 +437,12 @@ const SCENARIOS: Record<string, Scenario> = {
       sources: {},
     },
   },
+  "bible-master": {
+    initial: { sources: {} },
+  },
+  "bible-arc": {
+    initial: { sources: {} },
+  },
   "mobile-npc": {
     initial: dashboardPayload("room-inn", [REX]),
   },
@@ -488,6 +497,19 @@ export function activateDemoMode(ws: WebSocketClient): void {
   // project-context `connected` handler won't be registered yet and
   // setMode("chat") is never called, so the ChatPane never receives
   // chat-history. 400 ms is also enough for the padarax-dashboard.json fetch.
+  // Bible scenarios need the Padarax bible viewer factory registered
+  // before file-content fires, so launchPreset.viewers piggy-backs on
+  // the synthetic connected event.
+  const isBibleScenario = key === "bible-master" || key === "bible-arc";
+  const launchPreset = isBibleScenario
+    ? {
+        viewers: [
+          { pattern: "content/worlds/padarax/bibles/generated/enriched/", viewer: "bible" },
+          { pattern: "content/worlds/padarax/bibles/", viewer: "bible" },
+        ],
+      }
+    : undefined;
+
   setTimeout(() => {
     ws.injectEvent("connected", {
       type: "connected",
@@ -495,6 +517,7 @@ export function activateDemoMode(ws: WebSocketClient): void {
       resumed: true,
       providers: [{ name: "padarax", type: "api", model: "demo", capabilities: { streaming: false, tool_use: false, vision: false } }],
       defaultProvider: "padarax",
+      ...(launchPreset ? { launchPreset } : {}),
     });
 
     if (key === "phase5-memory") {
@@ -502,6 +525,23 @@ export function activateDemoMode(ws: WebSocketClient): void {
       ws.injectEvent("file-tree", { type: "file-tree", data: [] });
       ws.injectEvent("chat-history", { type: "chat-history", messages: PHASE5_CHAT });
       injectPhase5MemoryCaptures(ws);
+      return;
+    }
+
+    if (isBibleScenario) {
+      const fixtureKey = key === "bible-master" ? "master" : "arc_northern_goliath_warlord";
+      const record = (bibleFixtures as Record<string, unknown>)[fixtureKey];
+      const filePath = key === "bible-master"
+        ? "content/worlds/padarax/bibles/generated/enriched/master.json"
+        : "content/worlds/padarax/bibles/generated/enriched/northern-goliath-warlord.json";
+      ws.injectEvent("dashboard-data", { sources: {} });
+      ws.injectEvent("file-tree", { type: "file-tree", data: [] });
+      ws.injectEvent("file-content", {
+        type: "file-content",
+        path: filePath,
+        content: JSON.stringify(record, null, 2),
+        fileType: "json",
+      });
       return;
     }
 
