@@ -71,7 +71,15 @@ const DEFAULT_LABELS: Record<BalanceKey, string> = {
 };
 
 export class BasketComponent extends BaseDashboardComponent {
+  // Keyed by `side:id`, not `id` alone: the same archetype can sit on
+  // both sides (a shop that buys and sells the same tome), and the buy
+  // quantity must stay independent of the sell quantity. Keying by id
+  // alone cross-contaminates the two columns and nets their prices.
   private basket: Map<string, number> = new Map();
+
+  private bkey(side: string, id: string): string {
+    return `${side}:${id}`;
+  }
 
   protected build(): void {
     if (!this.container || !this.props) return;
@@ -147,7 +155,7 @@ export class BasketComponent extends BaseDashboardComponent {
     for (const row of rows) {
       const id = String(row["id"] ?? "");
       const stock = Number(row[countField]) || 0;
-      const qty = this.basket.get(id) ?? 0;
+      const qty = this.basket.get(this.bkey(side, id)) ?? 0;
 
       const rowEl = this.el("div", "dash-basket-row");
       rowEl.appendChild(this.el("span", "dash-basket-name", this.fieldValue(row, nameField)));
@@ -155,26 +163,31 @@ export class BasketComponent extends BaseDashboardComponent {
         this.el("span", "dash-basket-value", `${String(row[valueField] ?? "—")}${unit}`),
       );
       rowEl.appendChild(this.el("span", "dash-basket-stock", `×${stock}`));
-      rowEl.appendChild(this.renderStepper(id, qty, stock));
+      rowEl.appendChild(this.renderStepper(side, id, qty, stock));
 
       col.appendChild(rowEl);
     }
     return col;
   }
 
-  private renderStepper(id: string, qty: number, max: number): HTMLElement {
+  private renderStepper(
+    side: "left" | "right",
+    id: string,
+    qty: number,
+    max: number,
+  ): HTMLElement {
     const stepper = this.el("div", "dash-basket-stepper");
 
     const minus = this.el("button", "dash-basket-step", "−") as HTMLButtonElement;
     minus.disabled = qty <= 0;
-    minus.addEventListener("click", () => this.step(id, -1, max));
+    minus.addEventListener("click", () => this.step(side, id, -1, max));
     stepper.appendChild(minus);
 
     stepper.appendChild(this.el("span", "dash-basket-qty", String(qty)));
 
     const plus = this.el("button", "dash-basket-step", "+") as HTMLButtonElement;
     plus.disabled = qty >= max;
-    plus.addEventListener("click", () => this.step(id, 1, max));
+    plus.addEventListener("click", () => this.step(side, id, 1, max));
     stepper.appendChild(plus);
 
     return stepper;
@@ -263,19 +276,26 @@ export class BasketComponent extends BaseDashboardComponent {
     let rightGain = 0;
     for (const row of data) {
       const id = String(row["id"] ?? "");
-      const qty = this.basket.get(id) ?? 0;
+      const side = String(row["side"] ?? "");
+      const qty = this.basket.get(this.bkey(side, id)) ?? 0;
       if (qty === 0) continue;
       const value = Number(row[valueField]) || 0;
-      if (row["side"] === "left") leftCost += value * qty;
-      else if (row["side"] === "right") rightGain += value * qty;
+      if (side === "left") leftCost += value * qty;
+      else if (side === "right") rightGain += value * qty;
     }
     return { leftCost, rightGain };
   }
 
-  private step(id: string, delta: number, max: number): void {
-    const next = Math.max(0, Math.min(max, (this.basket.get(id) ?? 0) + delta));
-    if (next === 0) this.basket.delete(id);
-    else this.basket.set(id, next);
+  private step(
+    side: "left" | "right",
+    id: string,
+    delta: number,
+    max: number,
+  ): void {
+    const k = this.bkey(side, id);
+    const next = Math.max(0, Math.min(max, (this.basket.get(k) ?? 0) + delta));
+    if (next === 0) this.basket.delete(k);
+    else this.basket.set(k, next);
     this.rebuild();
   }
 
@@ -292,10 +312,11 @@ export class BasketComponent extends BaseDashboardComponent {
     const rightBasket: BasketEntry[] = [];
     for (const row of data) {
       const id = String(row["id"] ?? "");
-      const qty = this.basket.get(id) ?? 0;
+      const side = String(row["side"] ?? "");
+      const qty = this.basket.get(this.bkey(side, id)) ?? 0;
       if (qty === 0) continue;
-      if (row["side"] === "left") leftBasket.push({ id, qty });
-      else if (row["side"] === "right") rightBasket.push({ id, qty });
+      if (side === "left") leftBasket.push({ id, qty });
+      else if (side === "right") rightBasket.push({ id, qty });
     }
 
     const message = {
