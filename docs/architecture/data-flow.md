@@ -76,18 +76,18 @@ Sending a chat message opens a provider stream and fans chat events to the clien
 sequenceDiagram
     participant B as Browser
     participant WS as ConnectionHandler
-    participant PROV as Provider (e.g. ClaudeCodeProvider)
-    participant CC as Claude CLI
+    participant PROV as APIProvider
+    participant LLM as LiteLLM / Model API
 
     B->>WS: CHAT_MESSAGE {content: "refactor X"}
 
     WS->>WS: compose_prompt(mode)
     WS->>PROV: stream_chat(messages, system_prompt)
 
-    PROV->>CC: spawn subprocess with --output-format stream-json
+    PROV->>LLM: streaming completion request (LiteLLM)
 
     loop Streaming
-        CC-->>PROV: NDJSON event line
+        LLM-->>PROV: response chunk
         PROV-->>WS: TextDelta / ThinkingDelta / ToolUseStart / ToolResult / ChatDone
         WS-->>B: CHAT_STREAM {event: "text-delta", content: "..."}
     end
@@ -106,35 +106,32 @@ When the LLM calls a file-editing tool, the request passes through permission ch
 
 ```mermaid
 sequenceDiagram
-    participant CC as Claude Code CLI
-    participant HOOK as Permission Hook (HTTP)
+    participant PROV as APIProvider tool loop
+    participant FT as FileToolExecutor
     participant PERM as PermissionManager
     participant B as Browser
     participant FS as File System
 
-    CC->>HOOK: POST /api/permissions/prompt-and-wait {tool, path}
+    PROV->>FT: call write_file / edit_file {path}
+    FT->>PERM: request_permission(tool, path)
 
-    HOOK->>PERM: request_approval(tool, path)
-
-    alt Category toggle ON (auto-allow)
-        PERM-->>HOOK: approved
-    else Path already cached
-        PERM-->>HOOK: approved (from cache)
+    alt Mode forbids write (plan/research)
+        PERM-->>FT: denied (mode gate)
+    else allow_write ON or path already cached
+        PERM-->>FT: approved
     else Requires interactive approval
         PERM->>B: PERMISSION_REQUEST {requestId, tool, path}
         B->>B: Show approval modal
-        B->>HOOK: POST /api/permissions/approve/{requestId}
-        HOOK->>PERM: resolve(approved)
+        B->>PERM: POST /api/permissions/approve/{requestId}
         PERM->>PERM: cache path directory
-        PERM-->>HOOK: approved
+        PERM-->>FT: approved
     end
 
-    HOOK-->>CC: {approved: true}
-    CC->>FS: edit file
-    CC-->>PERM: tool result (via stream)
+    FT->>FS: edit file
+    FT-->>PROV: tool result
 ```
 
-If the user denies, `ClaudeCodeProvider` receives `{approved: false}` and the tool call fails gracefully, which Claude Code handles by reporting the denial in its response.
+If the user denies, `FileToolExecutor` returns an error string instead of writing; the API provider's tool loop feeds that back to the model, which reports the denial in its response.
 
 ---
 
@@ -171,10 +168,10 @@ Spawning an AI sub-agent follows a two-gate approval flow before the agent runs.
 
 ```mermaid
 sequenceDiagram
-    participant ORCH_CC as Orchestrator (ClaudeCodeProvider)
+    participant ORCH_CC as Orchestrator (APIProvider + MCP)
     participant ORCH_M as OrchestratorManager
     participant B as Browser
-    participant AGENT as Agent (ClaudeCodeProvider)
+    participant AGENT as Agent (APIProvider worker)
     participant FS as File System
 
     ORCH_CC->>ORCH_M: spawn_agent(name, task, mode)
@@ -184,7 +181,7 @@ sequenceDiagram
     B->>B: Show approval card
     B->>ORCH_M: POST /api/orchestrator/approve/{agentId}
 
-    ORCH_M->>AGENT: start ClaudeCodeProvider subprocess
+    ORCH_M->>AGENT: start APIProvider worker (_make_worker_provider)
     ORCH_M->>ORCH_M: AgentRecord → RUNNING
     ORCH_M->>B: AGENT_STATE_CHANGED {state: "running"}
 

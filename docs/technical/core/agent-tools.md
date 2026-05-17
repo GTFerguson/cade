@@ -10,8 +10,7 @@ tags: [agents, tools, litellm, permissions, bash, file-tools]
 
 File, discovery, and shell tools available to LiteLLM-backed agents in CADE.
 Tools are registered per-session in a `ToolRegistry` and dispatched through
-`APIProvider`'s async tool loop. The `ClaudeCodeProvider` path does not use
-these — Claude Code handles tool access natively via CLI flags.
+`APIProvider`'s async tool loop.
 
 ## What Was Built
 

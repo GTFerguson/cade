@@ -83,11 +83,11 @@ stateDiagram-v2
 **Key methods:**
 
 - `spawn_agent(spec)` → `AgentRecord` in PENDING state
-- `approve_agent(agent_id)` → starts `ClaudeCodeProvider` subprocess
+- `approve_agent(agent_id)` → starts an `APIProvider` worker via `_make_worker_provider()`
 - `await_completion(agent_id)` → blocks until COMPLETED/FAILED
 - `approve_report()` / `reject_report()` → gate on final summary review
 
-**Depends on:** `PermissionManager`, `ClaudeCodeProvider`
+**Depends on:** `PermissionManager`, `APIProvider`
 
 **Depended on by:** `ConnectionHandler`, orchestrator HTTP router
 
@@ -142,26 +142,6 @@ graph TD
 
 ---
 
-### ClaudeCodeProvider
-
-| Field | Value |
-|-------|-------|
-| File | `backend/providers/claude_code_provider.py` |
-| Responsibility | Spawns `claude` CLI as a subprocess with `--output-format stream-json`; parses NDJSON event stream; emits typed `ChatEvent` objects |
-
-**Supported CLI flags:**
-
-- `--resume <session-id>` — Resume existing CC session
-- `--permission-prompt-tool` — Route permission prompts to CADE's HTTP endpoint
-- `--allowedTools` / `--disallowedTools` — Mode-aware tool filtering
-- `--permission-mode acceptEdits` — Auto-approve file edits when `allow_write=True`
-
-**Emitted event types:** `TextDelta`, `ThinkingDelta`, `ToolUseStart`, `ToolResult`, `ChatDone`, `ChatError`, `SystemInfo`
-
-**Depended on by:** `ProviderRegistry`, `OrchestratorManager`
-
----
-
 ### SubprocessProvider
 
 | Field | Value |
@@ -203,7 +183,7 @@ graph TD
 
 **Depends on:** `PermissionManager`
 
-**Depended on by:** MCP tool registry passed to `ClaudeCodeProvider`
+**Depended on by:** MCP tool registry passed to `APIProvider`
 
 ---
 
@@ -404,15 +384,15 @@ graph TD
     WS_H --> NV[NeovimManager]
     WS_H --> CHAT_S[ChatSession]
 
-    PROV_R --> CC[ClaudeCodeProvider]
+    PROV_R --> API[APIProvider]
     PROV_R --> SP[SubprocessProvider]
     PROV_R --> WSP[WebSocketProvider]
 
-    CC --> CLAUDE[claude CLI]
-    CLAUDE -->|MCP stdio| MCP[MCP Servers]
+    API -->|LiteLLM| LLM[LLM APIs]
+    API -->|MCP stdio| MCP[MCP Servers]
 
     ORCH_M --> PERM_M
-    ORCH_M --> CC
+    ORCH_M --> API
 
     PERM_M --> FILE_T[FileToolExecutor]
 

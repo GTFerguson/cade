@@ -90,11 +90,15 @@ docs/plans/ (active) --> docs/technical/ (complete)
 
 ## Provider Architecture
 
-CADE supports two provider paths. **Check `~/.cade/providers.toml` before touching any provider code** — the active path determines where a fix belongs.
+CADE runs LLM sessions through **LiteLLM API providers** (`type = "api"`). The
+config also accepts `cli`, `failover`, `subprocess`, and `websocket` provider
+types, but `api` is the path that serves chat. **Check `~/.cade/providers.toml`
+before touching provider code** — the active provider determines where a fix
+belongs.
 
 ### LiteLLM API providers (`type = "api"`)
 
-The user's live session. All providers are LiteLLM-backed (Mistral, Cerebras, Groq, Minimax, etc.).
+All providers are LiteLLM-backed (Mistral, Cerebras, Groq, Minimax, etc.).
 
 | Concern | Where it lives |
 |---------|---------------|
@@ -104,33 +108,15 @@ The user's live session. All providers are LiteLLM-backed (Mistral, Cerebras, Gr
 | Permission enforcement | `PermissionManager` (checked in file tools + `prompt-and-wait` endpoint) |
 | Orchestrator tools | `_create_tool_registry()` wires the orchestrator MCP adapter; hidden from non-orchestrator sessions via `_ORCHESTRATOR_ONLY_TOOLS` filter |
 
-### ClaudeCodeProvider (`type = "claude-code"`)
-
-Used for spawned subagents in orchestrator mode. CC is a **black box** — it handles tool routing, MCP, permission prompts, and mode natively via CLI flags.
-
-**Do not re-implement in CC what it already does natively:**
-
-| CC already handles natively | Do NOT add CADE logic for |
-|-----------------------------|--------------------------|
-| Tool use and MCP servers | Manual tool registration |
-| Permission prompts via `--permission-prompt-tool` | Duplicate permission checks |
-| Mode-aware tool access via `--allowedTools` / `--disallowedTools` | Python-side tool filtering |
-| Session and context management | Session state tracking |
-
-When adding a capability that both paths need, implement it in the LiteLLM path first (explicit, testable), then wire the equivalent CLI flag in `ClaudeCodeProvider` — don't add Python logic that CC already does for free.
-
-**CC permission mode is driven by CADE's `allow_write` toggle:**
-
-| CADE `allow_write` | CC `--permission-mode` | Effect |
-|--------------------|----------------------|--------|
-| `True` | `acceptEdits` | CC auto-approves all file edits |
-| `False` | `default` | CC routes edits through CADE's `--permission-prompt-tool` |
-
-CADE does NOT pass `--permission-mode plan` — CADE's own `can_write(mode)` check enforces the read-only constraint for architect/review modes, so CC doesn't need to know about plan mode.
+Orchestrator subagents are spawned through `_make_worker_provider()`, which
+always builds an `APIProvider` — orchestration does not depend on any external
+agent runtime.
 
 ### Shared state
 
-`PermissionManager` is the single source of truth for current mode and permission flags — both paths read it. The frontend permissions panel writes to it via `/api/permissions/set`.
+`PermissionManager` is the single source of truth for current mode and
+permission flags. The frontend permissions panel writes to it via
+`/api/permissions/set`.
 
 ## Building the Desktop App
 

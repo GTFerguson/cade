@@ -160,7 +160,7 @@ class TestBaseProviderCancel:
 
 
 class TestMakeWorkerProvider:
-    """_make_worker_provider returns an APIProvider, not ClaudeCodeProvider."""
+    """_make_worker_provider always returns a LiteLLM APIProvider."""
 
     def test_returns_api_provider(self, tmp_path):
         from unittest.mock import patch, MagicMock
@@ -216,10 +216,10 @@ class TestMakeWorkerProvider:
         from unittest.mock import patch
         from core.backend.providers.config import ProviderConfig, ProvidersConfig
 
-        cc_cfg = ProviderConfig(name="cc", type="claude-code", model="sonnet")
+        non_api_cfg = ProviderConfig(name="shell", type="cli", model="")
         providers_cfg = ProvidersConfig(
-            providers={"cc": cc_cfg},
-            default_provider="cc",
+            providers={"shell": non_api_cfg},
+            default_provider="shell",
         )
 
         with patch("core.backend.providers.config.get_providers_config", return_value=providers_cfg):

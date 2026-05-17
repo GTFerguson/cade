@@ -83,7 +83,7 @@ if _resource_dir:
             )
 
     # If claude is not installed on the machine, inject the bundled Claude CLI
-    # so all subprocesses (terminal, ClaudeCodeProvider) can find it.
+    # so the terminal shell can find it.
     import shutil as _shutil
     if not _shutil.which("claude"):
         _claude_bundle = Path(_resource_dir) / "claude-bundle"

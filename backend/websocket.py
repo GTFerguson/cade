@@ -48,7 +48,6 @@ from core.backend.providers.config import (
     resolve_context_window,
 )
 from backend.providers.registry import ProviderRegistry
-from backend.providers.claude_code_provider import ClaudeCodeProvider
 from backend.modes import MODE_SLASH_MAP, MODES
 from backend.prompts import BUNDLED_SKILLS_DIR, build_slash_commands, compose_prompt
 from core.backend.providers.types import ChatDone, ChatError, ChatMessage, SystemInfo, TextDelta, ThinkingDelta, ToolResult, ToolUseStart
@@ -83,7 +82,7 @@ def _resolve_context_budget(provider, model: str) -> dict:
     """Resolve warn/danger thresholds and context window for a session.
 
     Falls back to defaults + a litellm catalog lookup when the provider has
-    no `_config` (e.g. ClaudeCodeProvider, FailoverProvider).
+    no `_config` (e.g. FailoverProvider).
     """
     cfg = getattr(provider, "_config", None)
     if cfg is not None:
@@ -424,13 +423,11 @@ class ConnectionHandler:
                 logger.warning("Failed to register project-local provider: %s", e)
 
         # Tell PermissionManager which provider path is active so the frontend
-        # can show the right permissions UI (single toggle for CC, full panel for API).
+        # can show the right permissions UI.
         if self._provider_registry is not None:
-            default_provider = self._provider_registry.get_default()
-            from backend.providers.claude_code_provider import ClaudeCodeProvider
             from backend.permissions.manager import get_permission_manager
             get_permission_manager().set_provider_type(
-                "cc" if isinstance(default_provider, ClaudeCodeProvider) else "api",
+                "api",
                 connection_id=self._connection_id,
             )
 
@@ -1462,7 +1459,7 @@ class ConnectionHandler:
             return ("", "")
 
     async def _handle_mode_switch(self, mode: str) -> None:
-        """Switch the active Claude Code provider's mode and notify the client."""
+        """Switch the active provider's mode and notify the client."""
         self._current_mode = mode
         from backend.permissions.manager import get_permission_manager
         get_permission_manager().set_mode(mode, connection_id=self._connection_id)
@@ -1471,9 +1468,7 @@ class ConnectionHandler:
         if self._provider_registry is not None:
             provider = self._provider_registry.get_default()
 
-        if isinstance(provider, ClaudeCodeProvider):
-            provider.set_mode(mode)
-        elif hasattr(provider, "set_mode"):
+        if provider is not None and hasattr(provider, "set_mode"):
             provider.set_mode(mode)
 
         await self._send({
@@ -1492,10 +1487,8 @@ class ConnectionHandler:
         if self._provider_registry is not None:
             provider = self._provider_registry.get_default()
 
-        # Reset CC session so MCP tools reload with updated state
-        if isinstance(provider, ClaudeCodeProvider):
-            provider._has_session = False
-        elif provider is not None and hasattr(provider, "set_orchestrator"):
+        # Notify the provider so its tool set reflects the new orchestrator state
+        if provider is not None and hasattr(provider, "set_orchestrator"):
             provider.set_orchestrator(self._orchestrator_on)
 
         # Turning off: kill any worker agents this connection owns
@@ -1602,23 +1595,11 @@ class ConnectionHandler:
         if self._chat_session is None:
             return
 
-        # Set working directory and MCP config for ClaudeCodeProvider
-        if isinstance(provider, ClaudeCodeProvider):
-            provider.set_working_dir(self._working_dir)
-            if provider._mcp_config_path is None:
-                from backend.orchestrator.mcp_config import create_mcp_config
-                mcp_path = create_mcp_config(
-                    self._config.port,
-                    auth_token=self._config.auth_token,
-                    connection_id=self._connection_id,
-                )
-                provider.set_mcp_config(mcp_path)
-
         self._chat_session.start_response()
 
         try:
             messages = self._chat_session.get_messages()
-            system_prompt = None if isinstance(provider, ClaudeCodeProvider) else compose_prompt(self._current_mode, self._working_dir, orchestrator=self._orchestrator_on)
+            system_prompt = compose_prompt(self._current_mode, self._working_dir, orchestrator=self._orchestrator_on)
             async for event in provider.stream_chat(messages, system_prompt):
                 if self._closed:
                     break
@@ -1688,7 +1669,7 @@ class ConnectionHandler:
         except asyncio.CancelledError:
             logger.debug("Chat stream cancelled")
             self._compact_pending = False
-            if isinstance(provider, ClaudeCodeProvider):
+            if provider is not None:
                 await provider.cancel()
         except Exception as e:
             logger.exception("Chat stream error: %s", e)

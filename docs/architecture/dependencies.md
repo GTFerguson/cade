@@ -14,8 +14,8 @@ External services, key libraries, and configuration points that CADE depends on.
 
 | Service | Protocol | Purpose | Required? |
 |---------|----------|---------|-----------|
-| Claude Code CLI (`claude`) | subprocess + NDJSON | Primary LLM agent execution | Yes (for ClaudeCodeProvider) |
-| Anthropic API | HTTPS via LiteLLM | LLM inference | Yes (for API providers) |
+| Claude Code CLI (`claude`) | interactive PTY | Primary terminal shell (CADE centerpiece) | Recommended (terminal) |
+| LLM APIs (Anthropic, Mistral, etc.) | HTTPS via LiteLLM | Chat + agent inference | Yes (API providers) |
 | MCP servers | stdio | Tool extensions (file system, web fetch, etc.) | No (configured per-project) |
 | nkrdn | local binary | Code structure + doc knowledge graph | No (optional indexing) |
 | Google OAuth | HTTPS | Browser auth for remote deployments | No (auth optional) |

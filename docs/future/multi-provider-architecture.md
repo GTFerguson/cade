@@ -144,10 +144,6 @@ type = "api"
 model = "vertex_ai/gemini-pro"
 project = "my-gcp-project"
 
-[providers.claude-code]
-type = "cli"
-auto_start = true
-
 [defaults]
 provider = "bedrock"
 ```

@@ -8,7 +8,6 @@ from core.backend.providers.api_provider import APIProvider
 from core.backend.providers.base import BaseProvider
 from core.backend.providers.failover_provider import FailoverProvider
 from core.backend.providers.tool_executor import ToolRegistry
-from backend.providers.claude_code_provider import ClaudeCodeProvider
 from backend.providers.handoff_compactor import HandoffCompactor
 from backend.prompts import compose_prompt
 from core.backend.providers.config import ProvidersConfig
@@ -149,9 +148,7 @@ class ProviderRegistry:
         result = []
         for name, provider in self._providers.items():
             caps = provider.get_capabilities()
-            if isinstance(provider, ClaudeCodeProvider):
-                provider_type = "claude-code"
-            elif isinstance(provider, SubprocessProvider):
+            if isinstance(provider, SubprocessProvider):
                 provider_type = "subprocess"
             elif isinstance(provider, WebsocketProvider):
                 provider_type = "websocket"
@@ -188,9 +185,6 @@ class ProviderRegistry:
                     mode = provider_config.extra.get("mode", "code")
                     provider_config.system_prompt = compose_prompt(mode, working_dir)
                 provider = APIProvider(provider_config, tool_registry)
-                registry.register(name, provider)
-            elif provider_config.type == "claude-code":
-                provider = ClaudeCodeProvider(provider_config, connection_id=connection_id)
                 registry.register(name, provider)
             elif provider_config.type == "cli":
                 # CLI providers are not managed through the registry —

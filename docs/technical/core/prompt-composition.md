@@ -91,12 +91,7 @@ Switching mode sends `/plan`, `/code`, `/research`, `/review`, or `/orch` as a c
 
 ## Provider Integration
 
-Both provider types use `compose_prompt`:
-
-| Provider | How prompt is injected |
-|----------|------------------------|
-| `ClaudeCodeProvider` | `--append-system-prompt` CLI flag |
-| `APIProvider` | `system_prompt` field on `ProviderConfig` (set at registry creation if not explicitly configured) |
+`APIProvider` consumes the composed prompt via the `system_prompt` field on `ProviderConfig`, set at registry creation if not explicitly configured.
 
 The `mode` for APIProvider defaults to `"code"` unless overridden via `mode = "..."` in the provider's `[provider.name]` TOML config block.
 

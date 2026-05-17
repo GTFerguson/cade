@@ -39,13 +39,14 @@ graph TB
     end
 
     subgraph Providers["LLM Providers"]
-        CC["ClaudeCodeProvider\n(claude subprocess)"]
+        API["APIProvider\n(LiteLLM)"]
         SP["SubprocessProvider\n(CLI agent)"]
         WS_P["WebSocketProvider\n(remote engine)"]
     end
 
     subgraph External["External Systems"]
-        CLAUDE["Claude Code CLI"]
+        CLAUDE["Claude Code CLI (terminal)"]
+        LLM["LLM APIs (via LiteLLM)"]
         MCP["MCP Servers"]
         NKRDN["nkrdn Knowledge Graph"]
         FS["File System"]
@@ -60,16 +61,17 @@ graph TB
     WS --- DASH_BE
     WS --- NV_BE
 
-    PROV --> CC
+    PROV --> API
     PROV --> SP
     PROV --> WS_P
 
-    CC -->|subprocess| CLAUDE
-    CLAUDE <-->|MCP stdio| MCP
+    API -->|HTTPS| LLM
+    API <-->|MCP stdio| MCP
+    PTY -->|runs| CLAUDE
     CLAUDE -->|PostToolUse hook| HOOK
 
     PTY <--> FS
-    ORCH -->|spawns| CC
+    ORCH -->|spawns| API
     NKRDN --> Backend
 ```
 
@@ -155,7 +157,7 @@ cade/
 │   ├── tools/          # FileToolExecutor — read/write/edit tools
 │   ├── orchestrator/   # OrchestratorManager — agent spawn + approval flow
 │   ├── permissions/    # PermissionManager — mode + category gate
-│   ├── providers/      # ProviderRegistry + ClaudeCodeProvider
+│   ├── providers/      # ProviderRegistry + handoff compactor
 │   ├── prompts/        # Prompt composition + skill loading
 │   ├── wsl/            # WSL path translation utilities
 │   └── tests/          # pytest test suite (36 files)

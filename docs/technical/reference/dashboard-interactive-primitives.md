@@ -47,7 +47,6 @@ The component is responsible for reading its own `on_<event>` keys out of `panel
 | `WebsocketProvider`   | Writes `json.dumps(frame)` to the persistent WS connection; lazy-connects if closed. |
 | `SubprocessProvider`  | Default (raises). Per-turn subprocess has no persistent channel. |
 | `APIProvider`         | Default (raises). Request/response only. |
-| `ClaudeCodeProvider`  | Default (raises). No custom engine link. |
 
 `DashboardHandler` receives the active provider at construction (from `ProviderRegistry.get_default()` in `ConnectionHandler._setup`). When an interactive panel emits `provider_message` but the active provider doesn't support `send_frame`, the handler logs a warning and drops the action — the frontend gets no explicit rejection signal today.
 

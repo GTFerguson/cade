@@ -51,20 +51,22 @@ This opens a browser to authenticate with your Anthropic account. Once done, Cla
 
 The provider configuration tells CADE which AI models to use for the chat panel and agent features. Create the file at `~/.cade/providers.toml`.
 
-### Simplest setup — Claude Code only
+### Simplest setup — one API provider
 
-If you only want the built-in Claude terminal (no separate API providers), create a minimal config:
+The chat panel and agent features run through a LiteLLM API provider. A minimal config needs one provider block and a `default`:
 
 ```toml
-default = "claude-code"
+default = "mistral"
 
-[provider.claude-code]
-type = "claude-code"
+[provider.mistral]
+type = "api"
+model = "mistral/mistral-large-latest"
+api-key = "${MISTRAL_API_KEY}"
 ```
 
-This routes everything through the authenticated `claude` CLI.
+The built-in Claude terminal (Step 2) is independent of this — it uses the system `claude` CLI directly and needs no provider entry.
 
-### Full setup — API providers
+### Full setup — multiple API providers
 
 For the LiteLLM API path (faster responses, multiple models, failover), add provider blocks for the services you have keys for. API keys can be set as environment variables (recommended) or written directly.
 
