@@ -1091,6 +1091,11 @@ class App {
         const id = getSavedThemeId();
         return themes.find((t) => t.id === id)?.name ?? id;
       },
+      getDashboardContainer: () =>
+        this.tabManager.getActiveTab()?.context?.getDashboardFullContainer() ??
+        null,
+      dashboardHasConfig: () =>
+        this.tabManager.getActiveTab()?.context?.hasDashboard() ?? false,
     });
     this.mobileUI.initialize();
 

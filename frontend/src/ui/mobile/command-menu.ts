@@ -25,6 +25,8 @@ export interface CommandMenuCallbacks {
   onSwitchTab: (id: string) => void;
   onFiles: () => void;
   onViewer: () => void;
+  onDashboard: () => void;
+  isDashboardAvailable: () => boolean;
   onReconnect: () => void;
   onTheme: () => void;
   onBack: () => void;
@@ -115,6 +117,13 @@ export class CommandMenu implements MobileScreen {
       currentFile ?? "no file",
       () => this.callbacks.onViewer()
     );
+
+    // [dashboard] — only when the tab has a dashboard config
+    if (this.callbacks.isDashboardAvailable()) {
+      this.addOption(list, "[dashboard]", "", () =>
+        this.callbacks.onDashboard()
+      );
+    }
 
     // Divider + tabs section
     list.appendChild(this.createDivider());

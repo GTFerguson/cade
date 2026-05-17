@@ -693,6 +693,15 @@ export class ProjectContextImpl implements IProjectContext {
   }
 
   /**
+   * The WS-synced full-width dashboard container, for the mobile screen to
+   * borrow. Null when no dashboard config has loaded.
+   */
+  getDashboardFullContainer(): HTMLElement | null {
+    if (!this.hasDashboard()) return null;
+    return this.dashboardFullContainer;
+  }
+
+  /**
    * Show a toast notification.
    */
   /**

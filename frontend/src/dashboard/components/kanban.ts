@@ -59,23 +59,26 @@ export class KanbanComponent extends BaseDashboardComponent {
         e.preventDefault();
         cardsEl.classList.remove("drag-over");
         if (this.dragCard && this.dragItem) {
-          cardsEl.appendChild(this.dragCard);
-          this.updateCounts(wrapper);
-
-          // Fire mutation action
-          const sourceName =
-            typeof panel.source === "string" ? panel.source : "";
-          onAction({
-            action: "patch",
-            source: sourceName,
-            entityId: String(this.dragItem["id"] ?? ""),
-            patch: { status: col.status },
-          });
+          this.applyMove(
+            cardsEl,
+            this.dragCard,
+            this.dragItem,
+            panel,
+            onAction,
+            wrapper,
+          );
         }
       });
 
       for (const item of items) {
-        const card = this.createCard(item, columns, col.status, panel, onAction);
+        const card = this.createCard(
+          item,
+          columns,
+          col.status,
+          panel,
+          onAction,
+          wrapper,
+        );
         cardsEl.appendChild(card);
       }
 
@@ -92,6 +95,7 @@ export class KanbanComponent extends BaseDashboardComponent {
     currentStatus: string,
     panel: NonNullable<typeof this.props>["panel"],
     onAction: (action: DashboardAction) => void,
+    wrapper: HTMLElement,
   ): HTMLElement {
     const card = this.el("div", "dash-kanban-card");
     card.draggable = true;
@@ -118,12 +122,115 @@ export class KanbanComponent extends BaseDashboardComponent {
       this.dragItem = null;
     });
 
-    // Click fallback: context menu for move
+    // Touch drag: HTML5 DnD doesn't fire on touch. Track finger movement;
+    // a small move is treated as a tap (falls through to the click handler
+    // which opens the move menu), a larger one as a drag. The threshold
+    // and elementFromPoint hit-testing mirror the desktop drop logic.
+    let startX = 0;
+    let startY = 0;
+    let touchDragging = false;
+    const clearDropTargets = () =>
+      wrapper
+        .querySelectorAll(".dash-kanban-cards")
+        .forEach((c) => c.classList.remove("drag-over"));
+
+    card.addEventListener(
+      "touchstart",
+      (e) => {
+        const t = e.touches[0];
+        if (!t) return;
+        startX = t.clientX;
+        startY = t.clientY;
+        touchDragging = false;
+      },
+      { passive: true },
+    );
+
+    card.addEventListener(
+      "touchmove",
+      (e) => {
+        const t = e.touches[0];
+        if (!t) return;
+        const moved = Math.hypot(t.clientX - startX, t.clientY - startY);
+        if (!touchDragging && moved < 8) return;
+        if (!touchDragging) {
+          touchDragging = true;
+          this.dragCard = card;
+          this.dragItem = item;
+          card.classList.add("dragging");
+        }
+        // Prevent the screen from scrolling while dragging a card.
+        e.preventDefault();
+        const under = document.elementFromPoint(t.clientX, t.clientY);
+        const target = under?.closest(
+          ".dash-kanban-cards",
+        ) as HTMLElement | null;
+        clearDropTargets();
+        target?.classList.add("drag-over");
+      },
+      { passive: false },
+    );
+
+    card.addEventListener(
+      "touchend",
+      (e) => {
+        if (!touchDragging) {
+          // A tap — let the click handler open the move menu.
+          return;
+        }
+        card.classList.remove("dragging");
+        clearDropTargets();
+        const t = e.changedTouches[0];
+        const under = t
+          ? document.elementFromPoint(t.clientX, t.clientY)
+          : null;
+        const target = under?.closest(
+          ".dash-kanban-cards",
+        ) as HTMLElement | null;
+        if (target && this.dragItem) {
+          this.applyMove(target, card, this.dragItem, panel, onAction, wrapper);
+        }
+        this.dragCard = null;
+        this.dragItem = null;
+        touchDragging = false;
+        // Suppress the synthetic click so the move menu doesn't open
+        // right after a successful drag.
+        e.preventDefault();
+      },
+      { passive: false },
+    );
+
+    // Click fallback: context menu for move (also the primary tap path
+    // on touch when the finger doesn't travel far enough to drag).
     card.addEventListener("click", () => {
       this.showMoveMenu(card, item, columns, currentStatus, panel, onAction);
     });
 
     return card;
+  }
+
+  /**
+   * Move a card into a column and fire the patch mutation. Shared by the
+   * desktop HTML5 drop handler and the touch-drag handler.
+   */
+  private applyMove(
+    targetCardsEl: HTMLElement,
+    card: HTMLElement,
+    item: Record<string, unknown>,
+    panel: NonNullable<typeof this.props>["panel"],
+    onAction: (action: DashboardAction) => void,
+    wrapper: HTMLElement,
+  ): void {
+    const status = targetCardsEl.dataset["status"] ?? "";
+    targetCardsEl.appendChild(card);
+    this.updateCounts(wrapper);
+    const sourceName = typeof panel.source === "string" ? panel.source : "";
+    onAction({
+      action: "patch",
+      source: sourceName,
+      entityId: String(item["id"] ?? ""),
+      patch: { status },
+    });
   }
 
   private updateCounts(wrapper: HTMLElement): void {

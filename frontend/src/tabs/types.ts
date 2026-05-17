@@ -70,6 +70,7 @@ export interface ProjectContext {
   toggleViewMode(): void;
   getViewMode(): import("./project-context").TabViewMode;
   hasDashboard(): boolean;
+  getDashboardFullContainer(): HTMLElement | null;
   switchToAgent(agentId: string | null): void;
   cycleAgent(direction: "next" | "prev"): void;
   getAgentManager(): AgentManager | null;

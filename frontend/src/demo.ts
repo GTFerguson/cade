@@ -126,6 +126,8 @@ function resolveMockPath(path: string): string {
 interface Scenario {
   /** Fire once on load */
   initial: unknown;
+  /** If set, injected as dashboard-config so the dashboard renders views */
+  config?: unknown;
   /** If set, cycle through these payloads on the given interval (ms) */
   walk?: { payloads: unknown[]; intervalMs: number };
 }
@@ -470,6 +472,116 @@ const SCENARIOS: Record<string, Scenario> = {
       ],
     },
   },
+  "mobile-dashboard": {
+    initial: {
+      sources: {
+        tasks: [
+          { id: "t1", title: "Wire mobile screen", status: "todo" },
+          { id: "t2", title: "Responsive CSS", status: "todo" },
+          { id: "t3", title: "Touch drag-drop", status: "doing" },
+          { id: "t4", title: "Trace WS wiring", status: "done" },
+          { id: "t5", title: "Production build", status: "done" },
+        ],
+        inventory: [
+          { item: "Iron Ingot", qty: 12, value: "8g" },
+          { item: "Silk Bolt", qty: 3, value: "21g" },
+          { item: "Healing Tonic", qty: 7, value: "15g" },
+        ],
+        crew: [
+          { name: "Rex", role: "Captain", status: "Aboard" },
+          { name: "Mira", role: "Navigator", status: "Ashore" },
+        ],
+        meta: [
+          { key: "Port", value: "Dockside" },
+          { key: "Gold", value: "342g" },
+          { key: "Day", value: "17" },
+        ],
+      },
+    },
+    config: {
+      dashboard: { title: "Mobile Dashboard Demo" },
+      data_sources: {},
+      stats: [],
+      views: [
+        {
+          id: "overview",
+          title: "Overview",
+          layout: "grid-2col",
+          panels: [
+            {
+              component: "kanban",
+              title: "Tasks",
+              source: "tasks",
+              fields: [],
+              columns: [
+                { status: "todo", label: "To Do" },
+                { status: "doing", label: "Doing" },
+                { status: "done", label: "Done" },
+              ],
+              badges: [],
+              filter: {},
+              sortable: false,
+              filterable: [],
+              searchable: [],
+              inline_edit: [],
+              options: {},
+              extra: {},
+              sidebar_filters: [],
+            },
+            {
+              component: "table",
+              title: "Inventory",
+              source: "inventory",
+              fields: [],
+              columns: ["item", "qty", "value"],
+              badges: [],
+              filter: {},
+              sortable: true,
+              filterable: [],
+              searchable: [],
+              inline_edit: [],
+              options: {},
+              extra: {},
+              sidebar_filters: [],
+            },
+            {
+              component: "cards",
+              title: "Crew",
+              source: "crew",
+              fields: ["role", "status"],
+              columns: [],
+              badges: [],
+              filter: {},
+              sortable: false,
+              filterable: [],
+              searchable: [],
+              inline_edit: [],
+              options: {},
+              extra: {},
+              sidebar_filters: [],
+            },
+            {
+              component: "key-value",
+              title: "Voyage",
+              source: "meta",
+              fields: [],
+              columns: [],
+              badges: [],
+              filter: {},
+              sortable: false,
+              filterable: [],
+              searchable: [],
+              inline_edit: [],
+              options: {},
+              extra: {},
+              sidebar_filters: [],
+            },
+          ],
+          sidebar_filters: [],
+        },
+      ],
+    },
+  },
 };
 
 // ── Activation ───────────────────────────────────────────────────────
@@ -546,6 +658,12 @@ export function activateDemoMode(ws: WebSocketClient): void {
     }
 
     ws.injectEvent("dashboard-data", scenario.initial);
+    if (scenario.config) {
+      ws.injectEvent("dashboard-config", {
+        type: "dashboard-config",
+        config: scenario.config,
+      });
+    }
     ws.injectEvent("chat-history", { type: "chat-history", messages: DEMO_CHAT });
 
     if (key === "viewer") {

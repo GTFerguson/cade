@@ -13,6 +13,7 @@ import { ScreenManager } from "./mobile/screen-manager";
 import { CommandMenu, type OverflowTab } from "./mobile/command-menu";
 import { FileExplorer } from "./mobile/file-explorer";
 import { FileViewer } from "./mobile/file-viewer";
+import { DashboardScreen } from "./mobile/dashboard-screen";
 
 const MOBILE_BREAKPOINT = 768;
 
@@ -23,6 +24,10 @@ export interface MobileUICallbacks {
   getActiveWs: () => WebSocketClient;
   onTheme: () => void;
   getCurrentThemeName: () => string;
+  /** Active tab's `.dashboard-full-container`, or null if none. */
+  getDashboardContainer: () => HTMLElement | null;
+  /** Whether the active tab has a dashboard config loaded. */
+  dashboardHasConfig: () => boolean;
 }
 
 export class MobileUI implements Component {
@@ -87,6 +92,15 @@ export class MobileUI implements Component {
         );
       }
     });
+
+    // Dashboard config/data arriving while on mobile flags the [cmd]
+    // button so the user can open it from the command menu. The dot is
+    // cleared when the command menu opens (clearUpdateIndicator).
+    const flagDashboard = () => {
+      if (MobileUI.isMobile()) this.toolbar?.showCmdIndicator();
+    };
+    this.ws.on("dashboard-config", flagDashboard);
+    this.ws.on("dashboard-data", flagDashboard);
   }
 
   private updateVisibility(): void {
@@ -128,6 +142,8 @@ export class MobileUI implements Component {
       },
       onFiles: () => this.openFileExplorer(),
       onViewer: () => this.openFileViewer(),
+      onDashboard: () => this.openDashboard(),
+      isDashboardAvailable: () => this.callbacks.dashboardHasConfig(),
       onReconnect: () => {
         this.screenManager.popToRoot();
         this.activeViewer = null;
@@ -201,6 +217,17 @@ export class MobileUI implements Component {
     } else {
       viewer.showEmpty();
     }
+  }
+
+  private openDashboard(): void {
+    const screen = new DashboardScreen({
+      getContainer: () => this.callbacks.getDashboardContainer(),
+      onBack: () => {
+        this.screenManager.pop();
+        this.focusTerminal();
+      },
+    });
+    this.screenManager.push(screen);
   }
 
   private focusTerminal(): void {

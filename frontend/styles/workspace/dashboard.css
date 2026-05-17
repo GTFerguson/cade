@@ -2814,3 +2814,79 @@
   outline: 1px solid var(--accent-green);
   outline-offset: 2px;
 }
+
+/* ═══════════════════════════════════════════════
+   Mobile (≤768px)
+
+   The dashboard reaches mobile by borrowing
+   .dashboard-full-container into a full-pane screen.
+   These overrides make the desktop-first layout usable
+   on a narrow touch viewport: single-column flow,
+   bigger tap targets, vertically stacked kanban.
+   ═══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Multi-column masonry → single column. */
+  .dashboard-layout-grid-2col,
+  .dashboard-layout-grid-3col {
+    column-count: 1;
+  }
+  .dashboard-panel--full-width {
+    column-span: none;
+  }
+
+  /* Reclaim horizontal space; momentum-scroll the content. */
+  .dashboard-view-content {
+    padding-left: 10px;
+    padding-right: 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* View/sub-view tabs need a finger-sized hit area. */
+  .dashboard-view-tab,
+  .dashboard-view-subtab {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  /* Tables stay tabular but scroll horizontally with momentum
+     rather than overflowing the screen. */
+  .dash-table-wrapper {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Basket: side-by-side buy/sell columns don't fit; stack them
+     and grow the steppers to a real touch target. */
+  .dash-basket-cols {
+    grid-template-columns: 1fr;
+  }
+  .dash-basket-step {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+  .dash-basket-qty {
+    min-width: 32px;
+    font-size: 14px;
+  }
+
+  /* Kanban: horizontal lanes are unusable on a phone. Stack the
+     columns vertically (full width each) and enlarge cards so
+     they can be dragged by touch (see DashKanban touch handlers). */
+  .dash-kanban {
+    flex-direction: column;
+    overflow-x: visible;
+  }
+  .dash-kanban-column {
+    min-width: 0;
+  }
+  .dash-kanban-card {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  /* Long unbroken values (ids, paths) must not force the whole
+     dashboard to scroll sideways. */
+  .dashboard-view-content {
+    overflow-wrap: anywhere;
+  }
+}
