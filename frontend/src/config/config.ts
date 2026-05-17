@@ -6,23 +6,32 @@
 // Strip the trailing slash so concatenation is clean: basePath + "/ws"
 export const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+// A page served over https cannot open an insecure ws:// socket — browsers
+// block it as mixed content before the request leaves the tab. Match the
+// socket scheme to the page so reverse-proxied TLS deployments work.
+const wsScheme = (): string =>
+  typeof window !== "undefined" && window.location.protocol === "https:"
+    ? "wss"
+    : "ws";
+
 // Build WebSocket URL based on environment.
 // Re-evaluated on each call so Tauri's async eval() injection is picked up.
 const getWsUrl = (): string => {
   // 1. Check for environment variable (remote backend)
   const envBackendUrl = import.meta.env.VITE_BACKEND_URL;
   if (envBackendUrl) {
-    return `ws://${envBackendUrl.replace('http://', '').replace('https://', '')}/ws`;
+    const scheme = envBackendUrl.startsWith("https://") ? "wss" : "ws";
+    return `${scheme}://${envBackendUrl.replace(/^https?:\/\//, "")}/ws`;
   }
 
-  // 2. Check for Tauri injection
+  // 2. Check for Tauri injection (desktop app, localhost backend)
   const backendUrl = (window as any).__BACKEND_URL__;
   if (backendUrl) {
     return `ws://${backendUrl.replace('http://', '')}/ws`;
   }
 
   // 3. Default: use current host (works with Vite proxy in dev)
-  return `ws://${window.location.host}${basePath}/ws`;
+  return `${wsScheme()}://${window.location.host}${basePath}/ws`;
 };
 
 // Detect Tauri production environment where the backend URL

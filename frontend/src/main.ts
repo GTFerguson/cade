@@ -914,8 +914,10 @@ class App {
     if (this.startSplash?.isVisible()) return;
     if (!this.tabContentContainer) return;
 
-    // Remote browser/mobile: require auth before showing menu
-    if (isRemoteBrowserAccess() && !getAuthToken()) {
+    // Remote browser/mobile: require auth before showing menu — but only when
+    // the backend actually wants it. If /api/auth/check already accepted this
+    // session (auth disabled, or valid cookie) the token splash is a dead end.
+    if (isRemoteBrowserAccess() && !getAuthToken() && !serverAuthSatisfied) {
       this.showAuthSplash("Server", (token) => {
         if (token) {
           setAuthToken(token);
@@ -1119,6 +1121,12 @@ class App {
 
 const app = new App();
 
+// Set once the backend confirms it accepts this session (auth disabled, or a
+// valid session cookie). When true, the frontend must not impose its own
+// remote-access token gate — the backend isn't asking for one (e.g. CADE sat
+// behind an external auth proxy with CADE_AUTH_ENABLED=false).
+let serverAuthSatisfied = false;
+
 /**
  * Check HTTP-level auth before loading the app.
  * Redirects to /login if the server rejects the session.
@@ -1139,6 +1147,7 @@ async function checkAuth(): Promise<boolean> {
       window.location.href = basePath + "/login";
       return false;
     }
+    serverAuthSatisfied = true;
     return true;
   } catch {
     // Network error — let the app try to connect anyway;
