@@ -1,9 +1,9 @@
 ---
 title: Frontend Architecture
 created: 2026-01-17
-updated: 2026-04-22
+updated: 2026-05-17
 status: active
-tags: [technical, frontend, architecture, wiki-links, tabs, session-persistence, keybindings, state-machine]
+tags: [technical, frontend, architecture, wiki-links, tabs, session-persistence, keybindings, state-machine, mobile, dashboard]
 ---
 
 # Frontend Architecture
@@ -259,62 +259,24 @@ Resolution rules:
 
 ### MobileUI (`mobile.ts`)
 
-Orchestrates all mobile-specific interface elements. Lazy-initializes components on first use.
+Orchestrates mobile-specific UI. Lazy-initialized per tab on the first WebSocket connection.
 
-**Components:**
+**Screen stack model:**
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| MobileUI | `mobile.ts` | Orchestrator: slideout panel, file explorer, content viewer |
-| TouchToolbar | `touch-toolbar.ts` | Bottom-fixed button bar with common keys |
-| OverflowMenu | `overflow-menu.ts` | Bottom sheet for tab switching and actions |
+Mobile navigation is a stack of full-pane screens managed by `ScreenManager` (`ui/mobile/screen-manager.ts`). The terminal is the implicit base layer — never pushed. Each screen implements the `MobileScreen` interface (`element`, `onShow()`, `onHide()`, `dispose()`); `push()` shows a screen and hides the one beneath it, `pop()` / `popToRoot()` reverse it. Crossing the breakpoint back to desktop empties the stack.
 
-**Slideout Panel — Dual Mode:**
-
-The slideout panel slides in from the right and operates in two modes:
-
-| Mode | Trigger | Content |
-|------|---------|---------|
-| `explorer` | File Explorer button in overflow menu | Nested file tree with back button navigation |
-| `content` | MD button or file selection | Markdown/code viewer with auto-refresh |
+| Screen | File | Purpose |
+|--------|------|---------|
+| CommandMenu | `ui/mobile/command-menu.ts` | Full-pane menu: files, viewer, dashboard, tab list, reconnect, theme. Vim-style `MenuNav` keys. Replaces the former bottom-sheet overflow menu. |
+| FileExplorer | `ui/mobile/file-explorer.ts` | Nested file-tree browser; tapping a file pushes a FileViewer |
+| FileViewer | `ui/mobile/file-viewer.ts` | Syntax-highlighted code / rendered markdown |
+| DashboardScreen | `ui/mobile/dashboard-screen.ts` | Config-driven dashboard (see [Dashboard on Mobile](#dashboard-on-mobile)) |
 
 **Touch Toolbar (`touch-toolbar.ts`):**
 
-Fixed bar at the bottom of the screen with 6 buttons:
+Fixed 6-button bar at the bottom: `esc`, `tab`, `^c`, `^d`, `↑`, `[cmd]`. The first five send the corresponding key to the terminal; `[cmd]` opens the CommandMenu (and toggles it closed if already open). A notification dot on `[cmd]` signals a changed markdown file or a newly arrived dashboard payload; opening the menu clears it. The toolbar repositions above the virtual keyboard via the `visualViewport` API.
 
-| Button | Action | Purpose |
-|--------|--------|---------|
-| ↑ | Arrow Up | Command history |
-| Tab | Tab key | Autocomplete |
-| Esc | Escape | Cancel/exit |
-| ^C | Ctrl+C | Interrupt |
-| ^D | Ctrl+D | EOF/logout |
-| ⋯ | Overflow menu | Open actions menu |
-
-The toolbar repositions above the virtual keyboard using the `visualViewport` API.
-
-**Overflow Menu (`overflow-menu.ts`):**
-
-Bottom sheet that slides up with a drag handle affordance:
-
-- List of open tabs with active indicator
-- File Explorer action
-- Current File viewer action
-- Reconnect action
-- Notification indicator dot when files change
-
-**MD Button States:**
-
-- **Outline** (default): No new content available
-- **Solid Blue** (`has-update` class): Markdown file changed, pulsing animation
-
-**File Explorer Behavior:**
-
-1. Open via overflow menu → "File Explorer"
-2. Slideout enters `explorer` mode with nested file tree
-3. Navigate folders — back button returns to parent
-4. Tap a file → slideout switches to `content` mode to view it
-5. FileTree component is lazy-initialized on first explorer open
+**Back navigation:** every screen supports swipe-right-from-edge and the `h` / `Backspace` / `Escape` keys.
 
 ## Keyboard Input Handling
 
@@ -609,6 +571,20 @@ Mobile and desktop clients can connect to the same server session simultaneously
 - Synchronized file tree updates
 - Real-time file change notifications across all clients
 - Independent file viewing per client
+
+### Dashboard on Mobile
+
+The config-driven dashboard (`dashboard/dashboard-pane.ts`) is desktop-first: it renders into the right pane (hidden < 768px) and into a full-width `.dashboard-full-container` used by the desktop "dashboard view" toggle. `DashboardScreen` (`ui/mobile/dashboard-screen.ts`) makes it reachable on a phone as a screen on the stack.
+
+**Borrow, don't fork.** `tabs/project-context.ts` already feeds every `dashboard-*` WebSocket event to *two* `DashboardPane` instances — the right-pane one and the always-synced full-width one (`dashboardFullPane`, rendered into `.dashboard-full-container`, `display:none` until the desktop toggle). Rather than create a third instance and a third WS feed, `DashboardScreen.onShow()` reparents the existing `.dashboard-full-container` into its screen body and `onHide()` returns it to its original parent with `display:none` restored. Consequence: dashboard state, scroll position, and the single WS subscription are preserved across open/close, and there is exactly one place dashboard data is wired.
+
+`ProjectContext.getDashboardFullContainer()` exposes the element (null until a config loads); `MobileUI` reaches it through `MobileUICallbacks` set in `main.ts`. The `[dashboard]` command-menu entry only appears when `hasDashboard()` is true. Arrival of `dashboard-config` / `dashboard-data` while mobile flags the existing `[cmd]` indicator — consistent with the file-change pattern, chosen over auto-opening so the dashboard never interrupts the terminal.
+
+**Responsive layout.** `styles/workspace/dashboard.css` is otherwise desktop-only; a single `@media (max-width: 768px)` block at the end of that file (kept co-located since the file is self-contained) collapses the masonry `grid-2col`/`grid-3col` layouts to one column, unsets `column-span` on full-width panels, stacks kanban lanes vertically (horizontal lanes are unusable on a phone), enlarges basket steppers to real touch targets, and gives tables momentum scroll.
+
+**Touch interaction.** HTML5 drag-and-drop events do not fire on touch. `dashboard/components/kanban.ts` adds touch-drag (track finger travel; a short move falls through to the existing tap → move-menu, a longer one drags with `elementFromPoint` hit-testing) that *coexists* with the desktop HTML5 DnD path — the shared move logic is factored into `applyMove()`. Basket and entity-detail were already click-driven, so they work on touch unchanged; the responsive CSS only enlarges their hit areas.
+
+**Boundary:** this covers the dashboard *container and layout*. Individual component internals live with each component in `dashboard/components/`. The interactive `world_detail` / `npc_detail` components are Padarax-owned (`frontend/src/padarax/`) and are not modified here — they inherit the responsive CSS and their existing click handlers.
 
 ## File Structure
 
