@@ -24,7 +24,7 @@
       "digestAlgorithm": "sha256",
       "timestampUrl": ""
     },
-    "resources": ["resources/**"],
+    "resources": ["resources/**/*"],
     "externalBin": [
       "resources/cade-backend",
       "resources/nkrdn",

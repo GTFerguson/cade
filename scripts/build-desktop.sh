@@ -4,6 +4,21 @@ set -e
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 
+# Prefer the project venv (where PyInstaller and backend deps live).
+# Put the venv on PATH so child processes (Tauri's beforeBuildCommand, npm,
+# etc.) also see venv-provided `python` / `python3` / `pip`.
+if [ -x "$PROJECT_ROOT/.venv/bin/python3" ]; then
+    PYTHON="$PROJECT_ROOT/.venv/bin/python3"
+    export VIRTUAL_ENV="$PROJECT_ROOT/.venv"
+    export PATH="$PROJECT_ROOT/.venv/bin:$PATH"
+elif [ -x "$PROJECT_ROOT/.venv/Scripts/python.exe" ]; then
+    PYTHON="$PROJECT_ROOT/.venv/Scripts/python.exe"
+    export VIRTUAL_ENV="$PROJECT_ROOT/.venv"
+    export PATH="$PROJECT_ROOT/.venv/Scripts:$PATH"
+else
+    PYTHON=""
+fi
+
 echo "==================================="
 echo "Building CADE Desktop Application"
 echo "==================================="
@@ -27,13 +42,16 @@ if ! command -v cargo &> /dev/null; then
     exit 1
 fi
 
-if ! command -v python3 &> /dev/null; then
-    echo "Error: Python 3 is not installed"
+if [ -z "$PYTHON" ]; then
+    echo "Error: project venv not found at $PROJECT_ROOT/.venv"
+    echo "       Run scripts/setup-dev.sh to create it."
     exit 1
 fi
 
-if ! python3 -c "import PyInstaller" 2> /dev/null; then
-    echo "Error: PyInstaller is not installed. Run: pip install pyinstaller"
+if ! "$PYTHON" -c "import PyInstaller" 2> /dev/null; then
+    echo "Error: PyInstaller is not installed in the project venv."
+    echo "       Run: $PYTHON -m pip install pyinstaller"
+    echo "       (or re-run scripts/setup-dev.sh)"
     exit 1
 fi
 
@@ -56,7 +74,7 @@ echo "✓ Frontend built successfully"
 echo ""
 echo "Step 2/4: Packaging Python backend..."
 cd "$PROJECT_ROOT"
-python3 -m PyInstaller scripts/pyinstaller.spec --clean --noconfirm
+"$PYTHON" -m PyInstaller scripts/pyinstaller.spec --clean --noconfirm
 
 # Check for the backend executable
 if [ "$OSTYPE" == "msys" ] || [ "$OSTYPE" == "win32" ]; then
