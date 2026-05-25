@@ -219,6 +219,15 @@ if command -v rsync >/dev/null 2>&1; then
         "$PROJECT_ROOT/backend/" \
         "${SSH_HOST}:${INSTALL_DIR}/backend/"
 
+    # backend imports the top-level `core` package (core.backend.*), so it must
+    # ship too — otherwise the service dies with ModuleNotFoundError: 'core'.
+    rsync -az --delete \
+        --exclude '__pycache__' \
+        --exclude '*.pyc' \
+        --exclude '.pytest_cache' \
+        "$PROJECT_ROOT/core/" \
+        "${SSH_HOST}:${INSTALL_DIR}/core/"
+
     rsync -az --delete \
         "$PROJECT_ROOT/frontend/dist/" \
         "${SSH_HOST}:${INSTALL_DIR}/frontend/dist/"
@@ -238,16 +247,17 @@ else
     # scp fallback for Windows/Git Bash where rsync isn't available.
     # Clean remote first to approximate rsync --delete behavior.
     echo "  (rsync not found, using scp fallback)"
-    ssh "$SSH_HOST" "rm -rf ${INSTALL_DIR}/backend ${INSTALL_DIR}/frontend/dist"
+    ssh "$SSH_HOST" "rm -rf ${INSTALL_DIR}/backend ${INSTALL_DIR}/core ${INSTALL_DIR}/frontend/dist"
     ssh "$SSH_HOST" "mkdir -p ${INSTALL_DIR}/frontend"
 
     scp -rq "$PROJECT_ROOT/backend" "${SSH_HOST}:${INSTALL_DIR}/"
+    scp -rq "$PROJECT_ROOT/core" "${SSH_HOST}:${INSTALL_DIR}/"
     scp -rq "$PROJECT_ROOT/frontend/dist" "${SSH_HOST}:${INSTALL_DIR}/frontend/"
     scp -q "$PROJECT_ROOT/requirements.txt" "${SSH_HOST}:${INSTALL_DIR}/requirements.txt"
     scp -q "$PROJECT_ROOT/scripts/setup-remote.sh" "${SSH_HOST}:${INSTALL_DIR}/scripts/setup-remote.sh"
 
     # scp copies __pycache__ too — clean it on remote
-    ssh "$SSH_HOST" "find ${INSTALL_DIR}/backend -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true"
+    ssh "$SSH_HOST" "find ${INSTALL_DIR}/backend ${INSTALL_DIR}/core -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true"
 
     if [ -n "$NKRDN_WHEEL" ]; then
         scp -q "$NKRDN_WHEEL" "${SSH_HOST}:${INSTALL_DIR}/vendor/"
