@@ -73,13 +73,13 @@ export class ProjectContextImpl implements IProjectContext {
         );
         if (defaultProv?.type === "claude-code") {
           this.terminalManager?.setEnhanced(true);
-          const chatMode = msg.chatMode ?? "code";
-          this.terminalManager?.getChatPane()?.setMode(chatMode);
-        } else if (defaultProv?.type === "api") {
-          this.terminalManager?.setMode("chat");
-          const chatMode = msg.chatMode ?? "code";
-          this.terminalManager?.getChatPane()?.setMode(chatMode);
         }
+        // Default landing view is the Claude Code CLI terminal. The API
+        // "enhanced chat" is opt-in via the Alt+e enhanced-mode toggle rather
+        // than taking over the view on connect. Seed the chat pane's mode so
+        // it renders correctly whenever the user switches to it.
+        const chatMode = msg.chatMode ?? "code";
+        this.terminalManager?.getChatPane()?.setMode(chatMode);
       }
 
       // Seed the chat `/` completion list before the first chat turn.
