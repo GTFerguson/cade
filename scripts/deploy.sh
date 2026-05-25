@@ -172,26 +172,32 @@ if [ -n "$NKRDN_PROJECT" ]; then
         else
             echo -e "${YELLOW}⤳${NC} No nkrdn wheel found, skipping"
         fi
-    elif ! command -v hatch >/dev/null 2>&1; then
-        # hatch isn't installed. Under `set -euo pipefail` the build line below
-        # would abort the whole deploy, so handle the missing tool explicitly:
-        # reuse a previously built wheel if present, otherwise skip nkrdn.
-        NKRDN_WHEEL=$(ls "$NKRDN_PROJECT"/build/nkrdn-*.whl 2>/dev/null | head -1)
-        if [ -n "$NKRDN_WHEEL" ]; then
-            echo -e "${YELLOW}⤳${NC} hatch not installed — using existing wheel $(basename "$NKRDN_WHEEL")"
-        else
-            echo -e "${YELLOW}⤳${NC} hatch not installed and no prebuilt wheel — skipping nkrdn"
-        fi
-    else
+    elif python3 -m build --version >/dev/null 2>&1 || command -v hatch >/dev/null 2>&1; then
         echo -e "${CYAN}[1b/5]${NC} Building nkrdn wheel..."
-        # '|| true' keeps a build failure from tripping `set -e`; the wheel
+        # Prefer PEP 517 `python -m build`: it builds in its own isolated venv,
+        # which works under Debian/Ubuntu PEP 668 externally-managed Python where
+        # `hatch build` fails. Fall back to hatch only where `build` is absent.
+        # '|| true' keeps a build failure from tripping `set -e` — the wheel
         # check below decides success and we continue without it on failure.
-        (cd "$NKRDN_PROJECT" && hatch build -t wheel 2>&1 | tail -1) || true
+        if python3 -m build --version >/dev/null 2>&1; then
+            (cd "$NKRDN_PROJECT" && python3 -m build --wheel --outdir build . 2>&1 | tail -2) || true
+        else
+            (cd "$NKRDN_PROJECT" && hatch build -t wheel 2>&1 | tail -1) || true
+        fi
         NKRDN_WHEEL=$(ls "$NKRDN_PROJECT"/build/nkrdn-*.whl 2>/dev/null | head -1)
         if [ -n "$NKRDN_WHEEL" ]; then
             echo -e "${GREEN}✓${NC} Built $(basename "$NKRDN_WHEEL")"
         else
             echo -e "${YELLOW}⚠${NC} nkrdn wheel build failed, continuing without it"
+        fi
+    else
+        # Neither `python -m build` nor hatch is available — reuse a prebuilt
+        # wheel if present, else skip. Never abort over a missing build tool.
+        NKRDN_WHEEL=$(ls "$NKRDN_PROJECT"/build/nkrdn-*.whl 2>/dev/null | head -1)
+        if [ -n "$NKRDN_WHEEL" ]; then
+            echo -e "${YELLOW}⤳${NC} No build tool (python-build/hatch) — using existing wheel $(basename "$NKRDN_WHEEL")"
+        else
+            echo -e "${YELLOW}⤳${NC} No build tool and no prebuilt wheel — skipping nkrdn"
         fi
     fi
     echo ""
