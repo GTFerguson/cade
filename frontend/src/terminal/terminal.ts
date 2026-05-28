@@ -128,6 +128,16 @@ export class Terminal implements Component {
       // the overflow corrupts adjacent cells in the WebGL atlas, producing
       // flickering black blocks on neighbouring chars. Added in xterm v5.5.
       rescaleOverlappingGlyphs: true,
+      // Route OSC 8 hyperlink clicks (used by Claude Code CLI for file and
+      // web links) through openExternal. Without this, xterm falls back to
+      // window.confirm() which is a no-op in the Tauri webview.
+      linkHandler: {
+        activate: (_event, uri) => {
+          if (/^https?:\/\//.test(uri)) {
+            void openExternal(uri);
+          }
+        },
+      },
       ...(this.rowsOverride != null ? { rows: this.rowsOverride } : {}),
       theme,
       disableStdin: this.readOnly,
