@@ -78,10 +78,15 @@ export class KeybindingManager implements Component {
   private boundHandleKeydown: (e: KeyboardEvent) => void;
   private boundHandleKeyup: (e: KeyboardEvent) => void;
   private readonly prefix: PrefixController;
+  private boundHandleKeypress: (e: KeyboardEvent) => void;
+  // Physical key code of the most recently intercepted keydown, used to
+  // suppress the corresponding keypress in case preventDefault() didn't.
+  private interceptedKeyCode: string | null = null;
 
   constructor() {
     this.boundHandleKeydown = this.handleKeydown.bind(this);
     this.boundHandleKeyup = this.handleKeyup.bind(this);
+    this.boundHandleKeypress = this.handleKeypress.bind(this);
     this.prefix = new PrefixController({
       getTimeout: () => this.getPrefixTimeout(),
       onChange: (active) => {
@@ -122,6 +127,11 @@ export class KeybindingManager implements Component {
     // Use capture phase to intercept before xterm.js handles the event
     document.addEventListener("keydown", this.boundHandleKeydown, true);
     document.addEventListener("keyup", this.boundHandleKeyup, true);
+    // keypress guard: preventDefault() on keydown is not guaranteed to suppress
+    // keypress on all browsers (Firefox Linux with Alt keys, some IME setups).
+    // Intercept keypress at the document capture level for the same global
+    // shortcuts so xterm's capture-phase keypress handler never sees them.
+    document.addEventListener("keypress", this.boundHandleKeypress, true);
     console.log("[keybindings] Event listener added");
   }
 
@@ -155,6 +165,7 @@ export class KeybindingManager implements Component {
 
     // Ctrl+g: View latest plan file (intercept before prefix check)
     if (e.ctrlKey && e.key === "g" && !isInput) {
+      this.interceptedKeyCode = e.code;
       e.preventDefault();
       e.stopPropagation();
       this.callbacks?.viewLatestPlan();
@@ -163,6 +174,7 @@ export class KeybindingManager implements Component {
 
     // Ctrl+p: theme selector (palette)
     if (e.ctrlKey && e.key === "p" && !isInput) {
+      this.interceptedKeyCode = e.code;
       e.preventDefault();
       e.stopPropagation();
       this.callbacks?.showThemeSelector();
@@ -175,6 +187,7 @@ export class KeybindingManager implements Component {
       if (isInput && !target.dataset.kbPrefix) {
         return;
       }
+      this.interceptedKeyCode = e.code;
       this.prefix.keyHeld();
       this.prefix.activate();
       e.preventDefault();
@@ -184,6 +197,7 @@ export class KeybindingManager implements Component {
 
     // If prefix active, handle global shortcuts
     if (this.prefix.isActive()) {
+      this.interceptedKeyCode = e.code;
       this.handlePrefixShortcut(e);
       e.stopPropagation();
       return;
@@ -197,6 +211,7 @@ export class KeybindingManager implements Component {
     if (e.altKey && !e.ctrlKey && !e.metaKey) {
       const action = this.resolveAltShortcut(e);
       if (action) {
+        this.interceptedKeyCode = e.code;
         e.preventDefault();
         e.stopPropagation();
         action();
@@ -539,10 +554,34 @@ export class KeybindingManager implements Component {
   }
 
   /**
+   * Keypress guard: kill any keypress that corresponds to a global shortcut.
+   *
+   * preventDefault() on keydown suppresses keypress in most cases, but not
+   * all — Firefox Linux with Alt keys can still fire keypress, and some IME
+   * setups bypass the suppression. This capture-phase handler catches those
+   * stragglers before xterm's own capture-phase keypress listener runs.
+   *
+   * Uses interceptedKeyCode (set in handleKeydown) rather than re-evaluating
+   * the shortcut, because e.key can differ between keydown and keypress for
+   * the same physical key (e.g. Alt+1 → keydown e.key="1", keypress e.key="¡"
+   * on some macOS keyboard layouts).
+   */
+  private handleKeypress(e: KeyboardEvent): void {
+    if (this.interceptedKeyCode !== null && e.code === this.interceptedKeyCode) {
+      this.interceptedKeyCode = null;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    this.interceptedKeyCode = null;
+  }
+
+  /**
    * Dispose of resources.
    */
   dispose(): void {
     document.removeEventListener("keydown", this.boundHandleKeydown, true);
+    document.removeEventListener("keypress", this.boundHandleKeypress, true);
     document.removeEventListener("keyup", this.boundHandleKeyup, true);
     this.prefix.dispose();
   }
