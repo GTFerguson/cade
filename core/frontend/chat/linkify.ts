@@ -6,6 +6,8 @@
  * <a>, <code>, and <pre> elements to avoid double-wrapping.
  */
 
+import { isDesktop, openExternal } from "../platform/tauri-bridge";
+
 const URL_PATTERN = /https?:\/\/[^\s<>"'()\[\]{}]+/;
 // Three alternatives in priority order:
 //   1. bare relative: word-char prefix + slash (e.g. docs/plans/file.md, src/index.ts)
@@ -18,6 +20,20 @@ const COMBINED_RE = new RegExp(
 );
 
 const SKIPPED_TAGS = new Set(["a", "code", "pre", "script", "style"]);
+
+/**
+ * In the desktop build the webview swallows `target=_blank` navigation, so
+ * external links look dead. Intercept the click and hand the URL to the native
+ * browser. In a normal browser tab the anchor's `target=_blank` already works,
+ * so we leave it untouched there.
+ */
+function interceptExternalClick(a: HTMLAnchorElement, url: string): void {
+  if (!isDesktop()) return;
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    void openExternal(url);
+  });
+}
 
 function isInsideSkippedElement(node: Node): boolean {
   let el: Node | null = node.parentNode;
@@ -58,6 +74,7 @@ function tokenize(
       a.target = "_blank";
       a.rel = "noopener noreferrer";
       a.textContent = matched;
+      interceptExternalClick(a, matched);
       nodes.push(a);
     } else {
       const filePath = matched.replace(/:\d+(?::\d+)?$/, "");
@@ -103,6 +120,7 @@ export function patchLinks(
     if (/^https?:\/\//.test(href)) {
       a.target = "_blank";
       a.rel = "noopener noreferrer";
+      interceptExternalClick(a, href);
     } else if (
       onOpenFile &&
       !href.startsWith("#") &&

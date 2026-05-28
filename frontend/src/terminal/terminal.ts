@@ -6,6 +6,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SessionKey, type AnySessionKey } from "@core/platform/protocol";
+import { openExternal } from "@core/platform/tauri-bridge";
 import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 import { getSavedThemeId, getThemeById } from "../config/themes";
@@ -134,7 +135,13 @@ export class Terminal implements Component {
 
     this.fitAddon = new FitAddon();
     this.terminal.loadAddon(this.fitAddon);
-    this.terminal.loadAddon(new WebLinksAddon());
+    // Route link clicks through openExternal so they reach the OS browser in
+    // the desktop build (the default handler's window.open is a no-op there).
+    this.terminal.loadAddon(
+      new WebLinksAddon((_event, uri) => {
+        void openExternal(uri);
+      }),
+    );
 
     this.terminal.open(this.container);
 

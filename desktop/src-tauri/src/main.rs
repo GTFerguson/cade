@@ -40,6 +40,21 @@ fn stop_ssh_tunnel(
     state.tunnels.stop(tunnel_pid)
 }
 
+/// Open a URL in the user's default browser. The webview itself can't host a
+/// new tab, so the frontend routes link clicks here. Restricted to web/mail
+/// schemes so a crafted link can't launch arbitrary local programs (e.g.
+/// file:// or a custom protocol handler) through the OS opener.
+#[tauri::command]
+fn open_external(url: String) -> Result<(), String> {
+    let allowed = url.starts_with("http://")
+        || url.starts_with("https://")
+        || url.starts_with("mailto:");
+    if !allowed {
+        return Err(format!("refusing to open URL with disallowed scheme: {url}"));
+    }
+    open::that(&url).map_err(|e| format!("failed to open {url}: {e}"))
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -48,6 +63,7 @@ fn main() {
             remote_profiles::save_remote_profiles,
             start_ssh_tunnel,
             stop_ssh_tunnel,
+            open_external,
         ])
         .setup(|app| {
             // Load configuration

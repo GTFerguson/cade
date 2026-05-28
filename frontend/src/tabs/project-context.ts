@@ -20,6 +20,7 @@ import { Splash } from "../ui/splash";
 import { TerminalManager } from "../terminal/terminal-manager";
 import type { CustomKeyHandler } from "../terminal/terminal";
 import { ErrorCode } from "@core/platform/protocol";
+import { openExternal } from "@core/platform/tauri-bridge";
 import type { ConnectedMessage, PtyExitedMessage, SessionState } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 import type { ProjectContext as IProjectContext } from "./types";
@@ -733,7 +734,7 @@ export class ProjectContextImpl implements IProjectContext {
         if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`));
         const data = await res.json();
         if (!data.authUrl) throw new Error("backend did not return authUrl");
-        window.open(data.authUrl, "_blank", "noopener,noreferrer");
+        void openExternal(data.authUrl);
         label.textContent = `${serverName}: continue in browser`;
         action.style.display = "none";
       } catch (err) {

@@ -6,6 +6,38 @@
 const isTauri = (): boolean => (window as any).__TAURI__ === true;
 
 /**
+ * Whether the app is running inside the Tauri desktop shell rather than a
+ * plain browser tab. Callers use this to decide when native fallbacks (e.g.
+ * opening links via the OS) are required.
+ */
+export function isDesktop(): boolean {
+  return isTauri();
+}
+
+/**
+ * Open a URL in the user's default browser.
+ *
+ * In the desktop build the webview swallows `window.open` / `<a target=_blank>`
+ * (there is no browser chrome to host a new tab), so links appear dead. We hand
+ * the URL to the native shell via the `open_external` command instead. In
+ * browser mode we fall back to a normal new-tab open.
+ */
+export async function openExternal(url: string): Promise<void> {
+  if (isTauri()) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("open_external", { url });
+      return;
+    } catch (e) {
+      console.error("[tauri-bridge] Failed to open external URL:", e);
+      return;
+    }
+  }
+
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+/**
  * Open a native folder picker dialog.
  * Falls back to window.prompt() in browser mode.
  * Returns the selected path, or null if cancelled.

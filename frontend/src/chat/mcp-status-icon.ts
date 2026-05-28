@@ -5,6 +5,8 @@
  * Clicking opens a flyout listing each server; clicking a row opens its auth URL.
  */
 
+import { openExternal } from "@core/platform/tauri-bridge";
+
 export interface MCPEntry {
   name: string;
   authenticated: boolean;
@@ -167,7 +169,7 @@ export class MCPStatusIcon {
           btn.textContent = "Opening browser…";
           try {
             const url = await this.startAuth(entry);
-            window.open(url, "_blank", "noopener,noreferrer");
+            void openExternal(url);
             para.textContent = `Continue in your browser. When auth completes, ${entry.name} tools become available immediately — no reload needed.`;
             btn.style.display = "none";
           } catch (err) {

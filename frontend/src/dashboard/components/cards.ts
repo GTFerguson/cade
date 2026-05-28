@@ -27,6 +27,7 @@
 
 import { BaseDashboardComponent } from "./base-component";
 import { createDefaultRegistry } from "../registry";
+import { openExternal } from "@core/platform/tauri-bridge";
 
 export class CardsComponent extends BaseDashboardComponent {
   // Per-instance set of expanded card ids — preserved across re-renders
@@ -511,7 +512,7 @@ export class CardsComponent extends BaseDashboardComponent {
           );
           card.style.cursor = "pointer";
           const activate = () => {
-            window.open(url, "_blank");
+            void openExternal(url);
           };
           card.addEventListener("click", activate);
           card.addEventListener("keydown", (e: Event) => {
