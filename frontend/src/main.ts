@@ -28,7 +28,7 @@ import type { TabState } from "./tabs";
 import type { LaunchPreset } from "./types";
 import { SessionKey } from "@core/platform/protocol";
 import { pickProjectFolder, getUserHomePath } from "@core/platform/tauri-bridge";
-import { setUserConfig, getUserConfig, matchesKeybinding } from "./config/user-config";
+import { setUserConfig } from "./config/user-config";
 import { applySavedTheme, onThemeChange, getSavedThemeId, themes } from "./config/themes";
 import { RemoteProfileManager } from "./remote/profile-manager";
 import { RemoteProjectSelector } from "./remote/RemoteProjectSelector";
@@ -722,18 +722,11 @@ class App {
       tab.ws.connect();
     }
 
-    // Set up terminal key handler for prefix key interception
+    // Set up terminal key handler so global shortcuts don't leak into the shell.
+    // Returning true makes xterm ignore the key (the KeybindingManager, running
+    // on document in the capture phase, performs the actual action).
     context.setTerminalKeyHandler((e) => {
-      // Intercept configured prefix key
-      const prefixKey = getUserConfig().keybindings.global.prefix;
-      if (matchesKeybinding(e, prefixKey)) {
-        return true; // Prevent terminal from handling, let keybinding manager handle it
-      }
-      // If prefix is active, intercept all keys
-      if (this.keybindingManager.isPrefixActive()) {
-        return true;
-      }
-      return false;
+      return this.keybindingManager.wouldHandleGlobally(e);
     });
 
     if (this.tabManager.getActiveTabId() === tab.id) {

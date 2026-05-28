@@ -27,9 +27,15 @@ export function shouldDelegateToPaneHandler(
   if (focusedPane == null || focusedPane === "terminal") return false;
   if (focusedPane === "chat") return true;
 
+  // An xterm textarea may hold DOM focus while focusedPane is stale (e.g. the
+  // user clicked into the terminal after focusing the file-tree by keyboard).
+  // In that case the keystroke belongs to xterm — routing it to the file-tree
+  // or viewer handler would steal keys like j/k. The terminal pane keeps its
+  // own input; Neovim forwards its own via onData.
   const isXtermTextarea = target.classList.contains("xterm-helper-textarea");
   const isNeovimXterm = isXtermTextarea && target.closest(".right-pane-neovim") != null;
-  return !isNeovimXterm;
+  const isTerminalXterm = isXtermTextarea && target.closest(".terminal-pane") != null;
+  return !isNeovimXterm && !isTerminalXterm;
 }
 
 export interface KeybindingCallbacks {
@@ -183,150 +189,17 @@ export class KeybindingManager implements Component {
       return;
     }
 
-    // Alt shortcuts: tab management + dashboard (no prefix needed)
+    // Alt shortcuts: tab/pane/agent/mode management (no prefix needed).
+    // stopPropagation is essential here: xterm.js listens for keydown on its
+    // textarea in the capture phase and ignores defaultPrevented, so without
+    // stopping propagation the keypress is *also* sent to the shell (e.g.
+    // Alt+1 would switch tab and leak "1" into Claude Code).
     if (e.altKey && !e.ctrlKey && !e.metaKey) {
-      const key = e.key.toLowerCase();
-
-      // Alt+1-9: jump to tab by number
-      if (/^[1-9]$/.test(e.key)) {
+      const action = this.resolveAltShortcut(e);
+      if (action) {
         e.preventDefault();
-        this.callbacks?.goToTab(parseInt(e.key, 10) - 1);
-        return;
-      }
-      if (e.key === "0") {
-        e.preventDefault();
-        this.callbacks?.goToTab(9);
-        return;
-      }
-
-      // Alt+d/f: previous/next tab
-      if (key === "d") {
-        e.preventDefault();
-        this.callbacks?.previousTab();
-        return;
-      }
-      if (key === "f") {
-        e.preventDefault();
-        this.callbacks?.nextTab();
-        return;
-      }
-
-      // Alt+t: new tab
-      if (key === "t") {
-        e.preventDefault();
-        this.callbacks?.createTab();
-        return;
-      }
-
-      // Alt+w: close tab
-      if (key === "w") {
-        e.preventDefault();
-        this.callbacks?.closeTab();
-        return;
-      }
-
-      // Alt+q: toggle dashboard
-      if (key === "q") {
-        e.preventDefault();
-        this.callbacks?.toggleDashboard();
-        return;
-      }
-
-      // Alt+h/l: focus pane left/right
-      // Note: Alt+H may conflict with Firefox Help menu on Linux
-      if (e.key === "h") {
-        e.preventDefault();
-        this.callbacks?.focusPane("left");
-        return;
-      }
-      if (e.key === "l") {
-        e.preventDefault();
-        this.callbacks?.focusPane("right");
-        return;
-      }
-
-      // Alt+H/L: resize pane left/right
-      if (e.key === "H") {
-        e.preventDefault();
-        this.callbacks?.resizePane("left");
-        return;
-      }
-      if (e.key === "L") {
-        e.preventDefault();
-        this.callbacks?.resizePane("right");
-        return;
-      }
-
-      // Alt+s: toggle terminal
-      if (key === "s") {
-        e.preventDefault();
-        this.callbacks?.toggleTerminal();
-        return;
-      }
-
-      // Alt+v: toggle viewer
-      // Note: Alt+V may conflict with Firefox View menu on Linux
-      if (key === "v") {
-        e.preventDefault();
-        this.callbacks?.toggleViewerCycle();
-        return;
-      }
-
-      // Alt+e: toggle enhanced mode
-      if (key === "e") {
-        e.preventDefault();
-        this.callbacks?.toggleEnhanced();
-        return;
-      }
-
-      // Alt+[/]: cycle agent prev/next
-      if (e.key === "[") {
-        e.preventDefault();
-        this.callbacks?.cycleAgentPrev();
-        return;
-      }
-      if (e.key === "]") {
-        e.preventDefault();
-        this.callbacks?.cycleAgentNext();
-        return;
-      }
-
-      // Alt+m/M: cycle mode next/prev
-      if (e.key === "m") {
-        e.preventDefault();
-        this.callbacks?.cycleModeNext();
-        return;
-      }
-      if (e.key === "M") {
-        e.preventDefault();
-        this.callbacks?.cycleModePrev();
-        return;
-      }
-
-      // Alt+y/n: approve/reject agent
-      if (key === "y") {
-        e.preventDefault();
-        this.callbacks?.approveAgent();
-        return;
-      }
-      if (key === "n") {
-        e.preventDefault();
-        this.callbacks?.rejectAgent();
-        return;
-      }
-
-      // Alt+r: create remote tab
-      if (key === "r") {
-        e.preventDefault();
-        this.callbacks?.createRemoteTab();
-        return;
-      }
-
-
-      // Alt+i: focus chat input from any pane
-      if (key === "i") {
-        e.preventDefault();
-        this.callbacks?.focusChatInput();
+        e.stopPropagation();
+        action();
         return;
       }
     }
@@ -367,6 +240,72 @@ export class KeybindingManager implements Component {
         e.stopPropagation();
       }
     }
+  }
+
+  /**
+   * Resolve a no-prefix Alt shortcut to the action it triggers, or null when
+   * the Alt combination isn't bound (e.g. Alt+j, which should pass through to
+   * the terminal as a meta-key sequence). Centralising the match lets both
+   * handleKeydown (which runs the action) and wouldHandleGlobally (which tells
+   * the terminal to suppress the key) agree on exactly which keys are reserved.
+   */
+  private resolveAltShortcut(e: KeyboardEvent): (() => void) | null {
+    const cb = this.callbacks;
+    if (!cb) return null;
+
+    // Alt+1-9 / Alt+0: jump to tab by number (1-indexed; 0 = tab 10)
+    if (/^[1-9]$/.test(e.key)) return () => cb.goToTab(parseInt(e.key, 10) - 1);
+    if (e.key === "0") return () => cb.goToTab(9);
+
+    // Case-sensitive: lowercase focuses a pane, uppercase resizes it.
+    // Note: Alt+H/Alt+V may conflict with Firefox menus on Linux.
+    if (e.key === "h") return () => cb.focusPane("left");
+    if (e.key === "l") return () => cb.focusPane("right");
+    if (e.key === "H") return () => cb.resizePane("left");
+    if (e.key === "L") return () => cb.resizePane("right");
+
+    // Case-sensitive: cycle mode forward / backward
+    if (e.key === "m") return () => cb.cycleModeNext();
+    if (e.key === "M") return () => cb.cycleModePrev();
+
+    // Cycle agent prev/next
+    if (e.key === "[") return () => cb.cycleAgentPrev();
+    if (e.key === "]") return () => cb.cycleAgentNext();
+
+    switch (e.key.toLowerCase()) {
+      case "d": return () => cb.previousTab();
+      case "f": return () => cb.nextTab();
+      case "t": return () => cb.createTab();
+      case "w": return () => cb.closeTab();
+      case "q": return () => cb.toggleDashboard();
+      case "s": return () => cb.toggleTerminal();
+      case "v": return () => cb.toggleViewerCycle();
+      case "e": return () => cb.toggleEnhanced();
+      case "y": return () => cb.approveAgent();
+      case "n": return () => cb.rejectAgent();
+      case "r": return () => cb.createRemoteTab();
+      case "i": return () => cb.focusChatInput();
+      default: return null;
+    }
+  }
+
+  /**
+   * Whether handleKeydown will consume this event as a global shortcut. The
+   * terminal's custom key handler consults this so xterm doesn't also forward
+   * the key to the shell. (Capture-phase stopPropagation already stops most of
+   * these before they reach xterm; this keeps the terminal handler honest if
+   * that ordering ever changes.)
+   */
+  wouldHandleGlobally(e: KeyboardEvent): boolean {
+    if (this.isPrefixKey(e)) return true;
+    if (this.prefix.isActive()) return true;
+    if (e.ctrlKey && !e.altKey && !e.metaKey && (e.key === "g" || e.key === "p")) {
+      return true;
+    }
+    if (e.altKey && !e.ctrlKey && !e.metaKey) {
+      return this.resolveAltShortcut(e) != null;
+    }
+    return false;
   }
 
   /**
