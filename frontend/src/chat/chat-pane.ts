@@ -28,6 +28,7 @@ import { PermissionsButton } from "./permissions-button";
 import { MCPStatusIcon, type MCPEntry } from "./mcp-status-icon";
 import { basePath as chatBasePath } from "../config/config";
 import { linkifyElement, patchLinks } from "@core/chat/linkify";
+import { registerCallouts } from "../markdown/callouts";
 import type { FileMemoryCounts } from "../memory/presence-index";
 
 const CADE_MERMAID_CONFIG = {
@@ -173,6 +174,9 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.agentId = options?.agentId ?? null;
     this.onOpenFile = options?.onOpenFile ?? null;
     this.onShowMemoryForFile = options?.onShowMemoryForFile ?? null;
+    // Chat doesn't load the viewer's markdown module, so register callout
+    // blocks here too — idempotent, shares the marked singleton.
+    registerCallouts();
     this.renderer = new MarkdownRenderer({
       mermaidConfig: CADE_MERMAID_CONFIG,
       selfCorrect: {

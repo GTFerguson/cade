@@ -153,6 +153,57 @@ def solve_mystery():
 \`\`\`
 `;
 
+// ── Callout (admonition) showcase fixture ────────────────────────────
+
+const CALLOUTS_MD = `# Callout Showcase
+
+Obsidian-style callouts rendered as ASCII box-drawing panels. A normal
+blockquote is left untouched for contrast:
+
+> "There are questions that don't get asked twice in Niverport."
+
+## The six core types
+
+> [!NOTE]
+> All three selection keys (**l/space/enter**) should work everywhere
+> across every screen.
+
+> [!TIP]
+> Use semantic CSS variables, not raw hex. Themes override custom
+> properties on \`:root\` at runtime.
+
+> [!IMPORTANT]
+> Section headers must be **13px** — an 11px header below 13px options
+> looks broken.
+
+> [!WARNING]
+> Never use only one key for selection. Always support l/space/enter.
+
+> [!CAUTION]
+> Avoid modern web UI patterns — modals, shadows, and rounded corners
+> clash with the terminal aesthetic.
+
+> [!EXAMPLE]
+> Headers render as \`[ REMOTE CONNECTIONS ]\`; options as \`[local project]\`.
+
+## Custom titles, aliases, and nested content
+
+> [!TIP] Pro tip: pin the line numbers
+> The code viewer keeps line numbers \`position: sticky\` so they stay put
+> during horizontal scroll.
+
+> [!BUG] Known issue
+> Shares the red CAUTION treatment but keeps its own label.
+
+> [!NOTE] Body can hold real markdown
+> Including lists:
+>
+> - first item
+> - second item
+>
+> …and inline \`code\`, **bold**, and *emphasis*.
+`;
+
 // ── Phase 5 memory graph fixture ─────────────────────────────────────
 
 const PHASE5_GRAPH = {
@@ -439,6 +490,11 @@ const SCENARIOS: Record<string, Scenario> = {
       sources: {},
     },
   },
+  "callouts": {
+    initial: {
+      sources: {},
+    },
+  },
   "bible-master": {
     initial: { sources: {} },
   },
@@ -687,6 +743,16 @@ export function activateDemoMode(ws: WebSocketClient): void {
         type: "file-content",
         path: "docs/dockside-inn.md",
         content: VIEWER_MD,
+        fileType: "markdown",
+      });
+    }
+
+    if (key === "callouts") {
+      ws.injectEvent("file-tree", { type: "file-tree", data: [] });
+      ws.injectEvent("file-content", {
+        type: "file-content",
+        path: "docs/callout-showcase.md",
+        content: CALLOUTS_MD,
         fileType: "markdown",
       });
     }

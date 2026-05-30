@@ -20,6 +20,7 @@ import { extractFrontmatter, renderFrontmatter } from "./frontmatter";
 import { renderCode } from "./code-highlight";
 import { renderJsonTree } from "./json-tree";
 import { wikiLinkExtension, attachWikiLinkHandlers, resolveMarkdownLinkHref } from "./wiki-links";
+import { registerCallouts } from "./callouts";
 import { patchLinks } from "@core/chat/linkify";
 import { handleViewModeScroll, scrollCodeBlocksHorizontally, createScrollState } from "./scroll";
 import type { ScrollState } from "./scroll";
@@ -47,6 +48,9 @@ declare global {
 
 // Register wiki-link extension with marked
 marked.use({ extensions: [wikiLinkExtension] });
+
+// Register Obsidian-style callout blocks (> [!NOTE], > [!WARNING], …)
+registerCallouts();
 
 // Make libraries available globally for mertex.md AFTER extensions are registered
 if (typeof window !== "undefined") {

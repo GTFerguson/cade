@@ -461,6 +461,111 @@
   color: var(--text-secondary);
 }
 
+/* ═══ Obsidian-style callouts (admonitions) ═══
+ *
+ * Emitted by the callout marked extension (src/markdown/callouts.ts) for
+ * blockquotes whose first line is a marker — `> [!NOTE]`, `> [!WARNING]`,
+ * etc. CADE renders them as ASCII box-drawing panels: a thin accent
+ * border with the type label notched into the top edge, like a terminal
+ * fieldset legend. Per-type accent rides on --c via .callout-<key>.
+ *
+ * Selectors are intentionally unscoped — the same markup renders in both
+ * the file viewer and the chat pane, which both sit on --bg-primary (the
+ * background the notch legend masks the border against).
+ */
+.callout {
+  --c: var(--accent-blue);
+  position: relative;
+  margin: 20px 0 12px;
+  padding: 12px 14px 11px;
+  border: 1px solid color-mix(in srgb, var(--c) 55%, var(--border-color));
+  background: transparent;
+}
+
+.callout-title {
+  position: absolute;
+  top: -8px;
+  left: 12px;
+  /* Never let a long title outgrow the frame — clip it with an ellipsis
+   * rather than spilling past the right edge (narrow panes especially). */
+  max-width: calc(100% - 24px);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  /* Mask the border behind the legend; both surfaces are --bg-primary. */
+  background: var(--bg-primary);
+  padding: 0 8px;
+  color: var(--c);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.callout-glyph {
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.callout-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A custom author title keeps its own casing and tighter spacing — only
+ * the default type labels (NOTE, WARNING, …) shout in uppercase. */
+.callout--titled .callout-label {
+  text-transform: none;
+  letter-spacing: 0.5px;
+}
+
+.callout-body {
+  color: var(--text-secondary);
+}
+
+/* The frame hugs its content — drop the leading/trailing child margins. */
+.callout-body > :first-child {
+  margin-top: 0;
+}
+.callout-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* Per-type accent map — keys mirror the META table in callouts.ts. */
+.callout-note {
+  --c: var(--accent-blue);
+}
+.callout-tip {
+  --c: var(--accent-green);
+}
+.callout-success {
+  --c: var(--accent-green);
+}
+.callout-important {
+  --c: var(--accent-yellow);
+}
+.callout-question {
+  --c: var(--accent-cyan);
+}
+.callout-abstract {
+  --c: var(--accent-cyan);
+}
+.callout-warning {
+  --c: var(--accent-orange);
+}
+.callout-caution {
+  --c: var(--accent-red);
+}
+.callout-example {
+  --c: var(--accent-purple);
+}
+.callout-quote {
+  --c: var(--text-muted);
+}
+
 .viewer-content a {
   color: var(--accent-blue);
   text-decoration: none;

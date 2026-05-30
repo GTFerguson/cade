@@ -1,7 +1,7 @@
 ---
 title: Visual Design Philosophy
 created: 2026-02-04
-updated: 2026-03-25
+updated: 2026-05-30
 status: complete
 tags: [design, ui, ux, philosophy]
 ---
@@ -160,19 +160,19 @@ CADE uses a theme system with 5 built-in palettes. All themes share the same acc
 ```
 frontend/styles/
 ├── main.css              ← @import index only
+├── fonts.css             ← @font-face — self-hosted JetBrains Mono
 ├── mobile.css            ← Mobile/touch overrides (cross-cutting)
-├── base/
-│   ├── variables.css     ← :root custom properties
-│   └── reset.css         ← Reset, html/body, scrollbar
 ├── layout/
 │   ├── structure.css     ← App wrapper, 3-pane grid, resize handles
 │   └── tabs.css          ← Tab bar, tab states
 ├── workspace/
 │   ├── file-tree.css     ← Tree hierarchy, chevrons, type colors
-│   ├── viewer.css        ← Code/markdown viewer, frontmatter, tables
+│   ├── viewer.css        ← Code/markdown viewer, callouts, frontmatter, tables
 │   ├── editor.css        ← Milkdown overrides, cursor styling
 │   ├── terminal.css      ← Terminal, neovim, agent multi-terminal
-│   └── chat.css          ← Chat pane, tool blocks, thinking blocks
+│   ├── chat.css          ← Chat pane, tool blocks, thinking blocks
+│   ├── dashboard.css     ← Config-driven dashboard components
+│   └── memory.css        ← Memory graph tree, presence panels
 └── screens/
     ├── dialogs.css       ← File creation, auth token, settings
     ├── splash.css        ← Splash screen, scramble effect phases
@@ -180,12 +180,14 @@ frontend/styles/
     └── remote.css        ← Remote profiles, project selector, big-toggle
 ```
 
+The foundational layer — `base/variables.css` (`:root` tokens) and `base/reset.css` — lives in the shared **core** package (`core/frontend/styles/base/`) and is imported ahead of these CADE-specific layers, so CADE and Padarax share one reset and one token contract.
+
 Import order = cascade order. Add new component styles to the appropriate file; add new files to the index in the correct layer.
 
 ### Typography
 
 **Monospace everywhere:**
-- Font stack: `'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace`
+- Font stack: `"JetBrains Mono", "Fira Code", Consolas, monospace` — JetBrains Mono is **self-hosted** (`frontend/styles/fonts.css`) so the terminal and chat render against byte-identical glyph metrics on every machine (avoids xterm.js WebGL atlas corruption from OS font variance)
 - Line height: `1.5` for readability (code viewer uses `1.6`)
 - Letter spacing: `0.5px` (slightly looser for clarity)
 
@@ -391,6 +393,37 @@ Markdown files render with mertex.md (marked + highlight.js). Embedded code bloc
 - `NORMAL` — Milkdown editor in navigation mode (vim motions)
 - `EDIT` — Milkdown editor in insert mode
 
+#### Callouts (Admonitions)
+
+Obsidian-style callouts — blockquotes whose first line is a marker (`> [!NOTE]`, `> [!WARNING] Custom title`) — render as **ASCII box-drawing panels**, not the pastel rounded boxes Obsidian ships. A thin accent border frames the block with the type label **notched into the top edge**, like a terminal fieldset legend. Admonitions stay terminal-native: differentiated by accent colour and a geometric glyph, never emoji.
+
+Each type maps to a CADE accent and a marker glyph:
+
+| Type | Accent | Glyph | Folds in |
+|------|--------|-------|----------|
+| NOTE | blue | `▸` | info, todo |
+| TIP / SUCCESS | green | `✓` | hint / check, done |
+| IMPORTANT | yellow | `◆` | — |
+| QUESTION / ABSTRACT | cyan | `?` / `▪` | help, faq / summary, tldr |
+| WARNING | orange | `△` | attention |
+| CAUTION | red | `▲` | danger, error, failure, bug |
+| EXAMPLE | purple | `❯` | — |
+| QUOTE | muted | `"` | cite |
+
+**Design details:**
+
+- **Severity rides in the glyph** — hollow `△` (WARNING) vs filled `▲` (CAUTION) encodes escalation without relying on colour alone.
+- **Custom titles keep their casing**; the default type labels shout in uppercase (bracket-notation convention). A long title clips with an ellipsis inside the frame rather than spilling past a narrow pane.
+- **Aliases fold onto colour keys** — `[!BUG]` shares the red CAUTION treatment but keeps its own label. Unknown types fall back to the NOTE treatment.
+- **Bodies parse nested markdown** — lists, code, tables, and wiki-links all work inside a callout.
+- **Foldable markers** (`[!NOTE]-` / `+`) are parsed onto `data-fold` for forward compatibility, but the frame is static — collapsing isn't wired up.
+
+> [!NOTE]
+> One implementation serves both the file viewer and the chat pane — both render through mertex.md, so the marked extension registers on each surface and the `.callout` CSS is unscoped. Both sit on `--bg-primary`, which the notched legend masks the border against. The shared core renderer (`core/frontend/chat/markdown-renderer.ts`) stays neutral; CADE registers its own callout styling.
+
+Extension: `frontend/src/markdown/callouts.ts` (registered in `markdown.ts` + `chat-pane.ts`)
+CSS: `.callout`, `.callout-title`, `.callout-body`, `.callout-<key>` (`workspace/viewer.css`)
+
 ### Viewer Header & Statusline
 
 **Header:** Bracket notation, centered, uppercase.
@@ -419,7 +452,10 @@ Markdown files render with mertex.md (marked + highlight.js). Embedded code bloc
 
 ### Chat Pane
 
-The chat pane renders LLM conversations with markdown output via mertex.md. Used in both API mode (LiteLLM providers) and enhanced CC mode (Claude Code subprocess with `--output-format stream-json`).
+The chat pane renders LLM conversations with markdown output via mertex.md. The live path is **API mode** — LiteLLM providers (`type = "api"`), the only chat path CADE currently serves.
+
+> [!WARNING]
+> **Enhanced CC mode is deprecated.** It drove chat through a Claude Code subprocess (`--output-format stream-json`), but Claude Code's headless `-p` now bills against the API rather than the subscription plan, so the subprocess path no longer functions on a CC plan. The mode plumbing still exists in the code but is non-functional pending a workaround — treat the chat pane as API-mode-only.
 
 **Text hierarchy — assistant output takes focus:**
 
@@ -454,12 +490,12 @@ The user's own messages are deliberately de-emphasized. Focus belongs on the mod
 
 **Stream renderer lifecycle:** When tool calls or thinking blocks interrupt text, the current `StreamRenderer` is finalized before inserting the block. A new renderer is created for subsequent text, inside a `.chat-text-segment` wrapper to prevent markdown interference across boundaries.
 
-**Mode switching** — slash commands (`/code`, `/plan`, `/review`, `/orch`) change the CC subprocess's tool permissions and system prompt. The statusline reflects the active mode.
+**Mode switching** — slash commands (`/code`, `/plan`, `/review`, `/orch`) change the active API provider's tool filtering and system prompt (via `APIProvider.set_mode`). The statusline reflects the active mode.
 
 **Agent approval blocks** — inline within the assistant message flow (same DOM parent as tool blocks). Rendered chronologically between the tool call that triggered the spawn and the synthesis text that follows.
 
 **Statusline:** Vim-style, bottom-pinned.
-- Mode: `CHAT` (API mode) or `CLAUDE CODE` (enhanced CC mode), `--accent-blue`
+- Mode: `CHAT` (API mode), `--accent-blue` — the `CLAUDE CODE` label belonged to the now-deprecated enhanced CC mode
 - Provider: model name, `--accent-cyan`
 - Tokens: cumulative count, right-aligned
 
