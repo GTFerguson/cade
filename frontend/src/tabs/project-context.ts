@@ -67,21 +67,13 @@ export class ProjectContextImpl implements IProjectContext {
         this.splash.setProgress(3, "starting shell");
       }
 
-      // Switch to appropriate mode based on default provider type
-      if (msg.providers && msg.defaultProvider) {
-        const defaultProv = msg.providers.find(
-          (p) => p.name === msg.defaultProvider,
-        );
-        if (defaultProv?.type === "claude-code") {
-          this.terminalManager?.setEnhanced(true);
-        }
-        // Default landing view is the Claude Code CLI terminal. The API
-        // "enhanced chat" is opt-in via the Alt+e enhanced-mode toggle rather
-        // than taking over the view on connect. Seed the chat pane's mode so
-        // it renders correctly whenever the user switches to it.
-        const chatMode = msg.chatMode ?? "code";
-        this.terminalManager?.getChatPane()?.setMode(chatMode);
-      }
+      // Default landing view is the Claude Code CLI terminal. The API
+      // "enhanced chat" is opt-in via the Alt+e enhanced-mode toggle (or the
+      // ?enhanced=1 URL param) rather than taking over the view on connect.
+      // Seed the chat pane's mode so it renders correctly whenever the user
+      // switches to it.
+      const chatMode = msg.chatMode ?? "code";
+      this.terminalManager?.getChatPane()?.setMode(chatMode);
 
       // Seed the chat `/` completion list before the first chat turn.
       // The provider's SystemInfo event refreshes this on stream start,
