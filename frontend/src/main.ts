@@ -407,11 +407,14 @@ class App {
         const hasAgents = activeTab?.context?.getAgentManager()?.hasAgents();
         const hasDashboard = rightPane?.getDashboardPane()?.hasConfig();
 
-        if (currentMode === "markdown" && hasDashboard) {
-          // Markdown → dashboard (when config exists)
+        if (currentMode === "markdown") {
+          // Markdown → Plans & Handoffs
+          activeTab?.context?.setRightPaneMode("plans");
+          rightPane?.getPlansPane().refresh();
+        } else if (currentMode === "plans" && hasDashboard) {
           activeTab?.context?.setRightPaneMode("dashboard");
-        } else if ((currentMode === "markdown" || currentMode === "dashboard") && hasAgents) {
-          // Markdown/dashboard → agents (when agents exist)
+        } else if ((currentMode === "plans" || currentMode === "dashboard") && hasAgents) {
+          // Plans/dashboard → agents (when agents exist)
           activeTab?.context?.setRightPaneMode("agents");
         } else {
           // Last mode → hidden
@@ -506,11 +509,35 @@ class App {
     window.addEventListener("beforeunload", () => {
       this.dispose();
     });
+
+    // Dev-only handle so demo scenarios (demo.ts) can drive the UI, e.g.
+    // switch the right pane to the Plans mode after injecting a plans-list.
+    if (import.meta.env.DEV) {
+      (window as any).__cadeApp = this;
+    }
   }
 
   /**
    * Initialize context for a tab.
    */
+  /**
+   * Spawn a new tab in the same project, primed on a plan/handoff doc.
+   * "cli" boots the Claude Code CLI with an initial prompt; "chat" opens the
+   * enhanced chat seeded with the handoff.
+   */
+  private launchPlanInTab(
+    projectPath: string,
+    relPath: string,
+    kind: "cli" | "chat",
+  ): void {
+    const opts =
+      kind === "cli"
+        ? { initialPrompt: `Read \`${relPath}\` and continue the work described there.` }
+        : { chatHandoff: relPath };
+    const tab = this.tabManager.createTab(projectPath, opts);
+    this.tabManager.switchTab(tab.id);
+  }
+
   private async initializeTabContext(tab: TabState): Promise<void> {
     if (tab.context != null || this.tabContentContainer == null) {
       return;
@@ -525,6 +552,27 @@ class App {
     );
 
     tab.context = context;
+
+    // Plans pane → spawn a primed tab (CLI or enhanced chat).
+    context.setOnLaunchPlan((relPath, kind) =>
+      this.launchPlanInTab(tab.projectPath, relPath, kind),
+    );
+
+    // A chat-seeded tab opens straight into enhanced chat and primes the agent
+    // with the chosen handoff. Sent as a normal chat message so it works for
+    // any provider; one-shot so a reconnect doesn't re-fire it.
+    if (tab.chatHandoff) {
+      const seedRel = tab.chatHandoff;
+      let primed = false;
+      tab.ws.on("connected", () => {
+        if (primed) return; // one-shot: don't re-fire on reconnect
+        primed = true;
+        tab.context?.getTerminalManager()?.setEnhanced(true);
+        tab.ws.sendChatMessage(
+          `Read \`${seedRel}\` and continue the work described there.`,
+        );
+      });
+    }
 
     // Demo mode: synthetic events injected by demo.ts; no server contact.
     const isDemoTab =
@@ -713,6 +761,8 @@ class App {
         tab.id,
         matches ? (this.dashboardOverride ?? undefined) : undefined,
         matches ? (this.providerOverride ?? undefined) : undefined,
+        tab.initialPrompt,
+        tab.chatHandoff,
       );
 
       // Auth is project-driven now: connect first; if the project's launch.yml

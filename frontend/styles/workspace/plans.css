@@ -1,0 +1,190 @@
+/* Plans & Handoffs pane — terminal-native, statusline (vim-airline / tmux
+   powerline) layout. A hard status block rides the left edge of every row:
+   ACTIVE filled accent-red for the latest handoff, age in a grey block
+   otherwise. Header is bracket notation (matches .viewer-header); section
+   labels are accent-red (panel-title convention); .md titles ride markup
+   green (file-tree convention). Zero radius, zero shadow, monospace. */
+
+.right-pane-plans {
+  box-sizing: border-box;
+}
+
+.plans-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+/* Header — bracket notation, centered, matches .viewer-header */
+.plans-pane__header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex: 0 0 auto;
+}
+
+.plans-pane__title {
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--accent-red);
+}
+
+.plans-pane__refresh {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.plans-pane__refresh:hover {
+  color: var(--accent-green);
+}
+
+.plans-pane__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0 0 12px;
+}
+
+.plans-pane__body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.plans-pane__body::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+}
+
+.plans-pane__empty {
+  padding: 16px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Section label — accent-red uppercase (panel-title convention; a visual
+   anchor, never muted). */
+.plans-section {
+  margin-top: 8px;
+}
+
+.plans-section__heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 12px 4px;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.plans-section__heading .lbl {
+  color: var(--accent-red);
+}
+
+.plans-section__heading .cnt {
+  color: var(--text-muted);
+}
+
+.plans-section__none {
+  padding: 0 12px 4px 24px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* Row — powerline strip: [status block] [title] [actions] */
+.plans-row {
+  display: flex;
+  align-items: stretch;
+  min-height: 30px;
+  border-bottom: 1px solid var(--bg-secondary);
+  cursor: pointer;
+}
+
+.plans-row:hover {
+  background: var(--bg-hover);
+}
+
+/* Left-edge status segment — the hard color block. */
+.plans-row__seg {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  padding: 0 9px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.plans-row__seg--active {
+  background: var(--accent-red);
+  color: var(--bg-primary);
+  font-weight: 700;
+}
+
+.plans-row__seg--age {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  min-width: 44px;
+  justify-content: center;
+}
+
+/* Title region — fills the middle; .md green, ellipsis on overflow. */
+.plans-row__main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  padding: 0 10px;
+  color: var(--accent-green);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.plans-row__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Inline actions — bracket options, muted, accent-on-the-verb on hover. */
+.plans-row__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+}
+
+.plans-row__action {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.plans-row__action:hover {
+  color: var(--accent-blue);
+}

@@ -31,6 +31,7 @@ export const MessageType = {
   SAVE_SESSION: "save-session",
   SET_PROJECT: "set-project",
   GET_LATEST_PLAN: "get-latest-plan",
+  GET_PLANS_LIST: "get-plans-list",
   GET_CHILDREN: "get-children",
   BROWSE_CHILDREN: "browse-children",
 
@@ -43,6 +44,7 @@ export const MessageType = {
   FILE_WRITTEN: "file-written",
   FILE_CREATED: "file-created",
   VIEW_FILE: "view-file",
+  PLANS_LIST: "plans-list",
   ERROR: "error",
   CONNECTED: "connected",
   SESSION_RESTORED: "session-restored",

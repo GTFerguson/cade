@@ -183,6 +183,7 @@ class SessionRegistry:
         auto_start_claude: bool = False,
         dummy_mode: bool = False,
         network_timeout: float = 15.0,
+        initial_prompt: str | None = None,
     ) -> tuple[PTYSession, bool]:
         """Get an existing session or create a new one.
 
@@ -217,6 +218,7 @@ class SessionRegistry:
                 auto_start_claude,
                 dummy_mode,
                 network_timeout,
+                initial_prompt,
             )
             self._sessions[session_id] = session
             logger.info("Created new session: %s at %s", session_id, project_path)
@@ -231,6 +233,7 @@ class SessionRegistry:
         auto_start_claude: bool,
         dummy_mode: bool,
         network_timeout: float,
+        initial_prompt: str | None = None,
     ) -> PTYSession:
         """Create a new PTY session with the primary (claude) terminal."""
         pty = PTYManager()
@@ -274,7 +277,13 @@ class SessionRegistry:
             # runs the network check as a non-blocking background task and writes
             # the command after the connection is established
             if "wsl" not in shell_command.lower():
-                await pty.write("claude\n")
+                # A Plans-pane "▶ CLI" launch seeds the CLI with an initial
+                # prompt so the agent starts already working on the doc.
+                if initial_prompt:
+                    import shlex
+                    await pty.write(f"claude {shlex.quote(initial_prompt)}\n")
+                else:
+                    await pty.write("claude\n")
 
         return session
 

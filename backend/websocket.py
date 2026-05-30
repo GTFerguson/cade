@@ -348,6 +348,9 @@ class ConnectionHandler:
                                 "Provider override from client: %s",
                                 self._provider_override,
                             )
+                        initial_prompt = data.get("initialPrompt")
+                        if isinstance(initial_prompt, str) and initial_prompt.strip():
+                            self._initial_prompt = initial_prompt
                         self._project_set.set()
                         return
                 except asyncio.TimeoutError:
@@ -447,6 +450,7 @@ class ConnectionHandler:
                 auto_start_claude=self._config.auto_start_claude,
                 dummy_mode=self._config.dummy_mode,
                 network_timeout=self._user_config.behavior.session.network_timeout,
+                initial_prompt=self._initial_prompt,
             )
             self._session.connected_clients.add(self._ws)
             # On resume, restore the session's original working directory if the
@@ -1060,6 +1064,8 @@ class ConnectionHandler:
                 await self._handle_browse_children(data)
             elif msg_type == MessageType.GET_LATEST_PLAN:
                 await self._handle_get_latest_plan()
+            elif msg_type == MessageType.GET_PLANS_LIST:
+                await self._handle_get_plans_list(data)
             elif msg_type == MessageType.CHAT_MESSAGE:
                 await self._handle_chat_message(data)
             elif msg_type == MessageType.CHAT_CANCEL:
@@ -1310,6 +1316,84 @@ class ConnectionHandler:
         save_session(
             self._working_dir, state, getattr(self, "_dashboard_filename", None),
         )
+
+    async def _handle_get_plans_list(self, data: dict | None = None) -> None:
+        """List active plan and handoff docs for the current project.
+
+        Plans live in ``docs/plans/*.md`` and handoffs in
+        ``docs/plans/handoff/*.md`` (where ``/compact`` writes them). Both are
+        scanned relative to the project root so the Plans & Handoffs pane can
+        show what's in flight and let the user open or resume any of them.
+        """
+        root = self._resolve_root(data.get("root") if data else None)
+
+        def _title(path: Path) -> str:
+            # Prefer a frontmatter `title:` or the first `# ` heading; fall back
+            # to the filename so every row has a human-readable label.
+            try:
+                with path.open(encoding="utf-8") as fh:
+                    in_frontmatter = False
+                    for i, raw in enumerate(fh):
+                        line = raw.rstrip("\n")
+                        if i == 0 and line.strip() == "---":
+                            in_frontmatter = True
+                            continue
+                        if in_frontmatter:
+                            if line.strip() == "---":
+                                in_frontmatter = False
+                                continue
+                            if line.lower().startswith("title:"):
+                                t = line.split(":", 1)[1].strip().strip("\"'")
+                                if t:
+                                    return t
+                            continue
+                        if line.startswith("# "):
+                            return line[2:].strip()
+                        if i > 40:  # title lives near the top; stop scanning
+                            break
+            except OSError:
+                pass
+            return path.stem
+
+        def _entry(path: Path) -> dict:
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                mtime = 0.0
+            return {
+                "name": path.name,
+                "relPath": str(path.relative_to(root)),
+                "modified": mtime,
+                "title": _title(path),
+            }
+
+        plans_dir = root / "docs" / "plans"
+        handoff_dir = plans_dir / "handoff"
+
+        # docs/plans/*.md (top level only) — README indexes aren't work items
+        plans = [
+            _entry(p)
+            for p in plans_dir.glob("*.md")
+            if p.is_file() and p.name.lower() != "readme.md"
+        ] if plans_dir.is_dir() else []
+
+        handoffs = [
+            _entry(p) for p in handoff_dir.glob("*.md") if p.is_file()
+        ] if handoff_dir.is_dir() else []
+
+        plans.sort(key=lambda e: e["modified"], reverse=True)
+        handoffs.sort(key=lambda e: e["modified"], reverse=True)
+
+        # The most recently written handoff is the live one to resume from.
+        if handoffs:
+            handoffs[0]["isLatest"] = True
+
+        await self._send({
+            "type": MessageType.PLANS_LIST,
+            "root": str(root),
+            "plans": plans,
+            "handoffs": handoffs,
+        })
 
     async def _handle_get_latest_plan(self) -> None:
         """Handle request for plan file associated with current project.
@@ -1708,6 +1792,8 @@ class ConnectionHandler:
             file_path = handoff_dir / f"{slug}.md"
             file_path.write_text(handoff_text)
             rel_path = str(file_path.relative_to(self._working_dir))
+            # Refresh the Plans & Handoffs pane so the new handoff shows up live.
+            await self._handle_get_plans_list({})
 
         # Send preview and wait for user approval
         self._compact_preview_future = asyncio.get_event_loop().create_future()
@@ -2084,7 +2170,11 @@ class ConnectionHandler:
             if self._closed or self._session is None:
                 return
 
-            await self._session.pty.write("claude\n")
+            if self._initial_prompt:
+                import shlex
+                await self._session.pty.write(f"claude {shlex.quote(self._initial_prompt)}\n")
+            else:
+                await self._session.pty.write("claude\n")
         except asyncio.CancelledError:
             pass
         except Exception as e:

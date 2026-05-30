@@ -133,6 +133,8 @@ export class WebSocketClient extends BaseWSClient {
   private pendingSessionId: string | null = null;
   private pendingDashboardFile: string | null = null;
   private pendingProviderOverride: string | null = null;
+  private pendingInitialPrompt: string | null = null;
+  private pendingChatHandoff: string | null = null;
 
   // Bridged subscribers for events that aren't just message-type passthrough.
   private connectedHandlers = new Set<EventHandler<ConnectedMessage>>();
@@ -293,6 +295,14 @@ export class WebSocketClient extends BaseWSClient {
       if (this.pendingProviderOverride !== null) {
         message.providerOverride = this.pendingProviderOverride;
       }
+      // One-shot seeds for Plans-pane-spawned tabs (read by the backend on
+      // SET_PROJECT). Cast-set so SetProjectMessage needn't carry them.
+      if (this.pendingInitialPrompt !== null) {
+        (message as unknown as Record<string, unknown>)["initialPrompt"] = this.pendingInitialPrompt;
+      }
+      if (this.pendingChatHandoff !== null) {
+        (message as unknown as Record<string, unknown>)["chatHandoff"] = this.pendingChatHandoff;
+      }
       this.send(message);
     }
   }
@@ -436,6 +446,16 @@ export class WebSocketClient extends BaseWSClient {
     if (showIgnored !== undefined) {
       message.showIgnored = showIgnored;
     }
+    if (root !== undefined) {
+      message.root = root;
+    }
+    this.send(message as ClientMessage);
+  }
+
+  requestPlansList(root?: string): void {
+    const message: { type: string; root?: string } = {
+      type: MessageType.GET_PLANS_LIST,
+    };
     if (root !== undefined) {
       message.root = root;
     }
@@ -630,11 +650,15 @@ export class WebSocketClient extends BaseWSClient {
     sessionId?: string,
     dashboardFile?: string,
     providerOverride?: string,
+    initialPrompt?: string,
+    chatHandoff?: string,
   ): void {
     this.pendingProjectPath = path;
     this.pendingSessionId = sessionId ?? null;
     this.pendingDashboardFile = dashboardFile ?? null;
     this.pendingProviderOverride = providerOverride ?? null;
+    this.pendingInitialPrompt = initialPrompt ?? null;
+    this.pendingChatHandoff = chatHandoff ?? null;
     if (this.isConnected()) {
       const message: SetProjectMessage = {
         type: MessageType.SET_PROJECT,

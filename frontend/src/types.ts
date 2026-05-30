@@ -320,6 +320,23 @@ export interface FileCreatedMessage extends BaseMessage {
 }
 
 /**
+ * One plan or handoff doc surfaced in the Plans & Handoffs pane.
+ */
+export interface PlanEntry {
+  name: string;
+  relPath: string;
+  modified: number;
+  title: string;
+  isLatest?: boolean;
+}
+
+export interface PlansListMessage extends BaseMessage {
+  root: string;
+  plans: PlanEntry[];
+  handoffs: PlanEntry[];
+}
+
+/**
  * Neovim spawn request (client -> server).
  */
 export interface NeovimSpawnMessage extends BaseMessage {

@@ -29,6 +29,7 @@ The protocol is defined in `backend/protocol.py` (server) and `frontend/src/plat
 | `create-file` | C->S | `{ path, content? }` | Create new file |
 | `get-children` | C->S | `{ path, showIgnored? }` | Request directory children |
 | `browse-children` | C->S | `{ path }` | Browse absolute filesystem path |
+| `get-plans-list` | C->S | `{ root? }` | Request the project's plans/handoffs index |
 | `file-tree` | S->C | `{ data: FileNode[] }` | File tree response |
 | `file-children` | S->C | `{ path, children }` | Directory children response |
 | `file-content` | S->C | `{ path, content, fileType }` | File content |
@@ -36,13 +37,14 @@ The protocol is defined in `backend/protocol.py` (server) and `frontend/src/plat
 | `file-created` | S->C | `{ path }` | Create confirmation |
 | `file-change` | S->C | `{ event, path }` | Filesystem change notification |
 | `view-file` | S->C | `{ path, content, fileType, isPlan? }` | External view request (e.g. plan overlay) |
+| `plans-list` | S->C | `{ root, plans: PlanEntry[], handoffs: PlanEntry[] }` | Plans/handoffs index (see [[frontend-architecture#Plans & Handoffs Pane]]). `PlanEntry = { name, relPath, modified, title, isLatest? }`. Re-emitted after `/compact` writes a handoff. |
 
 ## Session
 
 | Type | Direction | Payload | Description |
 |------|-----------|---------|-------------|
 | `connected` | S->C | `{ workingDir }` | Connection established |
-| `set-project` | C->S | `{ path, sessionId? }` | Set project directory |
+| `set-project` | C->S | `{ path, sessionId?, dashboardFile?, providerOverride?, initialPrompt?, chatHandoff? }` | Set project directory. `initialPrompt` seeds a new Claude Code CLI session (`claude "<prompt>"`); `chatHandoff` is a one-shot path the frontend uses to prime enhanced chat — both set only for a tab spawned from the Plans pane. See [[frontend-architecture#Plans & Handoffs Pane]]. |
 | `save-session` | C->S | `{ state }` | Persist session state |
 | `session-restored` | S->C | `{ sessionId, scrollback }` | Session reattached after reconnect |
 | `startup-status` | S->C | `{ message }` | Startup progress indicator |

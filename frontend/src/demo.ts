@@ -495,6 +495,11 @@ const SCENARIOS: Record<string, Scenario> = {
       sources: {},
     },
   },
+  "plans-pane": {
+    initial: {
+      sources: {},
+    },
+  },
   "bible-master": {
     initial: { sources: {} },
   },
@@ -755,6 +760,56 @@ export function activateDemoMode(ws: WebSocketClient): void {
         content: CALLOUTS_MD,
         fileType: "markdown",
       });
+    }
+
+    if (key === "plans-pane") {
+      const now = Date.now() / 1000;
+      ws.injectEvent("plans-list", {
+        type: "plans-list",
+        root: "/demo",
+        handoffs: [
+          {
+            name: "compact-2026-05-30-1430.md",
+            relPath: "docs/plans/handoff/compact-2026-05-30-1430.md",
+            title: "Plans & Handoffs pane — session handoff",
+            modified: now - 600,
+            isLatest: true,
+          },
+          {
+            name: "compact-2026-05-28-0915.md",
+            relPath: "docs/plans/handoff/compact-2026-05-28-0915.md",
+            title: "Desktop OSC 8 link handling",
+            modified: now - 200000,
+          },
+        ],
+        plans: [
+          {
+            name: "plans-and-handoffs-pane.md",
+            relPath: "docs/plans/plans-and-handoffs-pane.md",
+            title: "Plans & Handoffs Pane",
+            modified: now - 90000,
+          },
+        ],
+      });
+      ws.injectEvent("file-content", {
+        type: "file-content",
+        path: "docs/plans/handoff/compact-2026-05-30-1430.md",
+        content:
+          "# Plans & Handoffs pane — session handoff\n\n## State\n\n" +
+          "Backend GET_PLANS_LIST shipped; the pane renders as a right-pane mode.\n",
+        fileType: "markdown",
+      });
+      // Reveal the Plans pane (the apply fn has no app handle, so reach it
+      // via the global set in main.ts) once the tab context exists. All access
+      // is optional so it degrades to "populated but not auto-shown".
+      setTimeout(() => {
+        const app = (window as any).__cadeApp;
+        const ctx =
+          app?.getActiveTabContext?.() ??
+          app?.tabManager?.getActiveTab?.()?.context;
+        ctx?.setRightPaneMode?.("plans");
+        ctx?.getRightPane?.()?.getPlansPane?.()?.refresh?.();
+      }, 500);
     }
 
     if (scenario.walk) {

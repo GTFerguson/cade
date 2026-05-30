@@ -19,7 +19,7 @@ import { RightPaneManager, type RightPaneMode } from "../right-pane";
 import { Splash } from "../ui/splash";
 import { TerminalManager } from "../terminal/terminal-manager";
 import type { CustomKeyHandler } from "../terminal/terminal";
-import { ErrorCode } from "@core/platform/protocol";
+import { ErrorCode, SessionKey } from "@core/platform/protocol";
 import { openExternal } from "@core/platform/tauri-bridge";
 import type { ConnectedMessage, PtyExitedMessage, SessionState } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
@@ -47,6 +47,8 @@ export class ProjectContextImpl implements IProjectContext {
   connectionId = "";
   private dashboardFullContainer: HTMLElement | null = null;
   private dashboardFullPane: import("../dashboard").DashboardPane | null = null;
+  // Set by main.ts so the Plans pane can spawn a primed tab (CLI or chat).
+  private onLaunchPlanCb: ((relPath: string, kind: "cli" | "chat") => void) | null = null;
   private boundHandlers = {
     startupStatus: (_msg: any) => {
       // Progress bar handles visual feedback; no per-message status updates
@@ -369,6 +371,39 @@ export class ProjectContextImpl implements IProjectContext {
       this.scheduleSave();
     });
 
+    // Plans & Handoffs pane (right-pane "plans" mode): open a doc in the
+    // viewer, inject its path into the active input, or hand the launch
+    // request up to main.ts to spawn a primed tab.
+    const plansPane = this.rightPane.getPlansPane();
+    plansPane.onOpen((relPath) => {
+      this.rightPane?.setMode("markdown");
+      const viewer = this.rightPane?.getViewer();
+      if (viewer) {
+        // Reuse the viewer's return affordance (the dashboard's [← dash]
+        // back button + Esc): offer [← plans] back to the Plans pane.
+        viewer.setDashboardReturn(() => {
+          viewer.setDashboardReturn(null);
+          this.rightPane?.setMode("plans");
+        }, "plans");
+        viewer.loadFile(relPath, undefined, null);
+      }
+      this.fileTree?.revealFile(relPath);
+      this.scheduleSave();
+    });
+    plansPane.onInject((relPath) => {
+      // Insert the path into whichever input is live, without submitting.
+      if (this.terminalManager?.isEnhanced()) {
+        const chat = this.terminalManager.getChatPane();
+        chat?.prefillInput(relPath);
+        chat?.focus();
+      } else {
+        this.ws.sendInput(relPath, SessionKey.CLAUDE);
+        this.focusPane("terminal");
+      }
+    });
+    plansPane.onLaunchCli((relPath) => this.onLaunchPlanCb?.(relPath, "cli"));
+    plansPane.onLaunchChat((relPath) => this.onLaunchPlanCb?.(relPath, "chat"));
+
     this.memoryGraphTree.onSelect((sym) => {
       const detail = this.rightPane?.getSymbolDetailPane();
       if (sym && detail) {
@@ -631,6 +666,13 @@ export class ProjectContextImpl implements IProjectContext {
    */
   getRightPane(): RightPaneManager | null {
     return this.rightPane;
+  }
+
+  /**
+   * Register the handler that spawns a new tab primed on a plan/handoff.
+   */
+  setOnLaunchPlan(cb: (relPath: string, kind: "cli" | "chat") => void): void {
+    this.onLaunchPlanCb = cb;
   }
 
 

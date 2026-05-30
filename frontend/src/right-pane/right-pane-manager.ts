@@ -16,12 +16,13 @@ import { MarkdownViewer } from "../markdown/markdown";
 import { SymbolDetailPane } from "../memory";
 import type { FileMemoryCounts } from "../memory/presence-index";
 import { NeovimPane } from "../neovim";
+import { PlansPane } from "../plans/plans-pane";
 import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 
 type MemoryPresenceLookup = (path: string) => FileMemoryCounts | null;
 
-export type RightPaneMode = "markdown" | "neovim" | "agents" | "dashboard" | "memory-symbol";
+export type RightPaneMode = "markdown" | "neovim" | "agents" | "dashboard" | "memory-symbol" | "plans";
 
 export class RightPaneManager implements Component, PaneKeyHandler {
   private mode: RightPaneMode = "markdown";
@@ -30,11 +31,13 @@ export class RightPaneManager implements Component, PaneKeyHandler {
   private agentPane: AgentOverviewPane | null = null;
   private dashboardPane: DashboardPane | null = null;
   private symbolDetailPane: SymbolDetailPane | null = null;
+  private plansPane: PlansPane;
   private neovimContainer: HTMLElement;
   private viewerContainer: HTMLElement;
   private agentsContainer: HTMLElement;
   private dashboardContainer: HTMLElement;
   private memoryContainer: HTMLElement;
+  private plansContainer: HTMLElement;
   private onModeChangeCallback: (() => void) | null = null;
   private onAgentSelectCallback: ((agentId: string) => void) | null = null;
   private memoryLookup: MemoryPresenceLookup | null = null;
@@ -75,20 +78,30 @@ export class RightPaneManager implements Component, PaneKeyHandler {
     this.memoryContainer.style.height = "100%";
     this.memoryContainer.style.display = "none";
 
+    this.plansContainer = document.createElement("div");
+    this.plansContainer.className = "right-pane-plans";
+    this.plansContainer.style.width = "100%";
+    this.plansContainer.style.height = "100%";
+    this.plansContainer.style.display = "none";
+
     this.container.appendChild(this.viewerContainer);
     this.container.appendChild(this.neovimContainer);
     this.container.appendChild(this.agentsContainer);
     this.container.appendChild(this.dashboardContainer);
     this.container.appendChild(this.memoryContainer);
+    this.container.appendChild(this.plansContainer);
 
     this.symbolDetailPane = new SymbolDetailPane(this.memoryContainer);
     this.symbolDetailPane.initialize();
+
+    this.plansPane = new PlansPane(this.plansContainer, this.ws);
 
     this.viewer = new MarkdownViewer(this.viewerContainer, this.ws);
   }
 
   initialize(): void {
     this.viewer.initialize();
+    this.plansPane.initialize();
   }
 
   /**
@@ -113,6 +126,7 @@ export class RightPaneManager implements Component, PaneKeyHandler {
     this.agentsContainer.style.display = mode === "agents" ? "" : "none";
     this.dashboardContainer.style.display = mode === "dashboard" ? "" : "none";
     this.memoryContainer.style.display = mode === "memory-symbol" ? "" : "none";
+    this.plansContainer.style.display = mode === "plans" ? "" : "none";
 
     if (mode === "agents") {
       this.agentPane?.render();
@@ -213,6 +227,13 @@ export class RightPaneManager implements Component, PaneKeyHandler {
     return this.symbolDetailPane;
   }
 
+  /**
+   * Get the Plans & Handoffs pane.
+   */
+  getPlansPane(): PlansPane {
+    return this.plansPane;
+  }
+
   setMemoryProjectPath(projectPath: string): void {
     this.symbolDetailPane?.setProjectPath(projectPath);
   }
@@ -279,5 +300,6 @@ export class RightPaneManager implements Component, PaneKeyHandler {
     this.neovimPane?.dispose();
     this.agentPane?.dispose();
     this.dashboardPane?.dispose();
+    this.plansPane.dispose();
   }
 }

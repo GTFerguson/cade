@@ -144,11 +144,16 @@ export class TabManager {
   /**
    * Create a new tab for a project.
    */
-  createTab(projectPath: string): TabState {
+  createTab(
+    projectPath: string,
+    opts?: { initialPrompt?: string; chatHandoff?: string },
+  ): TabState {
     const id = generateId();
     const name = getProjectName(projectPath);
 
     const tabInfo: TabInfo = { id, projectPath, name };
+    if (opts?.initialPrompt) tabInfo.initialPrompt = opts.initialPrompt;
+    if (opts?.chatHandoff) tabInfo.chatHandoff = opts.chatHandoff;
     const tabState = this.createTabState(tabInfo);
 
     this.tabs.set(id, tabState);

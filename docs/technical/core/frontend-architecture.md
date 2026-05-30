@@ -239,6 +239,10 @@ Renders file content with syntax highlighting.
 | `[[path]]` | Link using path as display text |
 | `[[path\|display]]` | Link with custom display text |
 
+**Return affordance — `setDashboardReturn(fn, label?)`:**
+
+Registers a callback that returns the user to wherever they opened the current file from, rendering a `[← <label>]` button in the viewer header and wiring **Esc** to it. `label` defaults to `"dash"`. This single mechanism is reused by every surface that opens a file into the viewer — the dashboard (`[← dash]`) and the Plans & Handoffs pane (`[← plans]`) both call it; passing `null` clears the affordance (e.g. file-tree selection, which has no "back"). One button, one Esc handler, parameterised label.
+
 **Wiki-link Path Resolution:**
 
 Wiki-links are resolved relative to the current file's directory.
@@ -256,6 +260,25 @@ Resolution rules:
 2. **Directory links**: Paths ending with `/` resolve to `README.md` in that directory
 3. **Relative paths**: `..` and `.` segments are normalized correctly
 4. **Absolute paths**: Paths starting with `/` are used as-is (from project root)
+
+### Plans & Handoffs Pane (`plans/plans-pane.ts`)
+
+A right-pane mode (alongside markdown/neovim/agents/dashboard/memory-symbol in `RightPaneManager`) that surfaces the project's in-flight work: plan docs (`docs/plans/*.md`) and handoff briefs (`docs/plans/handoff/*.md`, where `/compact` writes them). It answers "what's in flight, and how do I resume it" without hunting the file tree.
+
+**Layout** — a vim-airline / tmux-powerline *statusline* row: a hard status block on the left edge (the latest handoff is `ACTIVE` filled accent-red; the rest show a compact age in a grey `bg-tertiary` block), the `.md` title in markup-green, then inline `[path] [cli] [chat]` bracket actions. Bracket header `[ PLANS & HANDOFFS ]`, accent-red section labels — all per [[../design/visual-design-philosophy|the design bible]].
+
+**Data** — `ws.requestPlansList()` ↔ the `plans-list` event (see [[../reference/websocket-protocol#Files]]). The backend (`_handle_get_plans_list`) globs both directories, derives a display title (frontmatter `title:` / first `# ` heading / filename), sorts each group newest-first, and flags the newest handoff `isLatest`. After `/compact` writes a handoff the backend re-emits `plans-list`, so the pane refreshes live.
+
+**Row actions** (wired in `project-context.ts`):
+
+| Action | Effect |
+|--------|--------|
+| click title | Opens the doc in the markdown viewer; offers `[← plans]` return (reuses `setDashboardReturn`) |
+| `[path]` | Injects the relative path into the live input (CLI terminal, or chat box in enhanced mode) without submitting |
+| `[cli]` | Spawns a **new tab** running the Claude Code CLI, seeded via `claude "Read <path> and continue…"` |
+| `[chat]` | Spawns a **new tab** in enhanced chat, primed with the handoff as the opening message |
+
+**New-tab priming** extends tab creation: `TabManager.createTab(path, { initialPrompt?, chatHandoff? })` carries one-shot seeds (never persisted to localStorage) via `set-project`. The CLI seed is consumed backend-side in the `claude` launch (`terminal/sessions.py` + the WSL deferred-start path); the chat seed is replayed frontend-side as a normal `chat-message` on `connected`, so it works for any provider rather than depending on a specific chat backend.
 
 ### MobileUI (`mobile.ts`)
 

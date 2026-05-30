@@ -75,6 +75,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   private isPlanOverlayActive = false;
   private editorState: EditorModeState = createEditorModeState();
   private dashboardReturnCallback: (() => void) | null = null;
+  private dashboardReturnLabel = "dash";
   private previewEl: HTMLElement | null = null;
   private locked = false;
   private projectPath: string | null = null;
@@ -183,11 +184,14 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   }
 
   /**
-   * Register a callback that returns the user to the dashboard.
-   * Pass null to clear (e.g. when the viewer is opened from the file tree).
+   * Register a callback that returns the user to wherever they opened this file
+   * from (the dashboard, the plans pane, …). Renders a `[← <label>]` button in
+   * the viewer header and wires Esc to it. Pass null to clear (e.g. when the
+   * viewer is opened from the file tree).
    */
-  setDashboardReturn(fn: (() => void) | null): void {
+  setDashboardReturn(fn: (() => void) | null, label = "dash"): void {
     this.dashboardReturnCallback = fn;
+    this.dashboardReturnLabel = label;
     if (this.currentPath !== null) {
       this.render();
     }
@@ -351,8 +355,8 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     } else if (this.dashboardReturnCallback) {
       const backBtn = document.createElement("button");
       backBtn.className = "viewer-close-btn";
-      backBtn.textContent = "[← dash]";
-      backBtn.title = "Return to dashboard (Esc)";
+      backBtn.textContent = `[← ${this.dashboardReturnLabel}]`;
+      backBtn.title = `Return to ${this.dashboardReturnLabel} (Esc)`;
       backBtn.addEventListener("click", () => this.dashboardReturnCallback?.());
       headerRight.appendChild(backBtn);
     }

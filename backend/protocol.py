@@ -20,6 +20,7 @@ class MessageType:
     SAVE_SESSION = "save-session"  # Save session state: { type, state: SessionState }
     SET_PROJECT = "set-project"  # Set project directory: { type, path: str, sessionId?: str }
     GET_LATEST_PLAN = "get-latest-plan"  # Request most recent plan file: { type }
+    GET_PLANS_LIST = "get-plans-list"  # Request plans/handoffs index: { type, root?: str }
     GET_CHILDREN = "get-children"  # Request directory children: { type, path: str, showIgnored?: bool }
     BROWSE_CHILDREN = "browse-children"  # Browse absolute filesystem path: { type, path: str }
 
@@ -37,6 +38,7 @@ class MessageType:
     FILE_WRITTEN = "file-written"  # File written successfully: { type, path: str }
     FILE_CREATED = "file-created"  # File created successfully: { type, path: str }
     VIEW_FILE = "view-file"  # External view request: { type, path: str, content: str }
+    PLANS_LIST = "plans-list"  # Plans/handoffs index: { type, root, plans: [...], handoffs: [...] }
     ERROR = "error"  # Error message: { type, code: str, message: str }
     CONNECTED = "connected"  # Connection established: { type, working_dir: str }
     SESSION_RESTORED = "session-restored"  # Session reattached: { type, sessionId: str, scrollback: str }

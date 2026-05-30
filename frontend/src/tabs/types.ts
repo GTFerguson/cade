@@ -21,6 +21,10 @@ export interface TabInfo {
   isRemote?: boolean;
   remoteProfileId?: string;
   remoteUrl?: string;
+  // One-shot seeds for a tab spawned from the Plans pane. Consumed on first
+  // connect and never persisted to localStorage.
+  initialPrompt?: string;
+  chatHandoff?: string;
 }
 
 /**
@@ -63,6 +67,7 @@ export interface ProjectContext {
   getViewer(): MarkdownViewer | null;
   getTerminalManager(): TerminalManager | null;
   getRightPane(): RightPaneManager | null;
+  setOnLaunchPlan(cb: (relPath: string, kind: "cli" | "chat") => void): void;
   setTerminalKeyHandler(handler: CustomKeyHandler | null): void;
   toggleTerminal(): void;
 
