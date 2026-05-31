@@ -117,6 +117,10 @@ class ConnectionHandler:
         # (session uses CADE's default Claude Code chat). Set via
         # ?provider= URL param.
         self._provider_override: str | None = None
+        # Optional prompt to feed to Claude Code on launch, sent by the client
+        # in SET_PROJECT when a tab is primed from the Plans/Handoffs pane
+        # (resumable handoff launch). None for an ordinary connection.
+        self._initial_prompt: str | None = None
         self._watcher: FileWatcher | None = None
         self._closed = False
         self._suppress_output = False
