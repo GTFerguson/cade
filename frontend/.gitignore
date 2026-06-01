@@ -1,1 +1,4 @@
 .cade/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
