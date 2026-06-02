@@ -32,16 +32,27 @@ def _get_headers() -> dict[str, str]:
 
 @mcp.tool()
 async def spawn_agent(name: str, task: str, mode: str = "code") -> str:
-    """Spawn a new agent to work on a task. Blocks until the agent completes and returns its report.
+    """Spawn a CADE worker agent (LiteLLM/API) to execute a task on your behalf.
 
-    The user will see an approval dialog before the agent starts. After the agent
-    finishes, the user reviews and approves/rejects the report. The report text
-    is returned directly.
+    Use this to delegate implementation work while you stay on your Max plan for
+    planning and review. The worker runs in CADE with file/bash tools; you receive
+    its report when it finishes.
+
+    Delegate: implementation, refactors, test writing, multi-file edits, grep-heavy
+    exploration, research-with-files.
+    Keep on Claude Code: planning, architecture, brainstorming, ambiguous requirements,
+    final sign-off review.
+
+    Each task must be self-contained with goal, relevant files, constraints, and
+    acceptance criteria. Parallel independent tasks with concurrent spawn_agent calls.
+    Spawns and reports are auto-approved for Claude Code CLI — no user confirmation.
 
     Args:
         name: Short identifier for the agent (e.g. "test-writer", "refactor")
         task: Full task description — what the agent should do
-        mode: Agent mode — "code" (full access), "plan" (read-only), "research" (PROVEN research pipeline), "review" (code review), "orchestrator" (spawn further sub-agents)
+        mode: Agent mode — "code" (full access), "plan" (read-only), "research"
+            (PROVEN research pipeline), "review" (code review), "orchestrator"
+            (spawn further sub-agents)
 
     Returns:
         Agent report text (approved), rejection message, or error

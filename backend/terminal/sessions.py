@@ -93,6 +93,8 @@ class PTYSession:
     last_activity: float = field(default_factory=time.time)
     connected_clients: set[WebSocket] = field(default_factory=set)
     created_at: float = field(default_factory=time.time)
+    # CLI orchestrator MCP config written for this session, removed on teardown.
+    mcp_config_path: str | None = None
 
     @property
     def pty(self) -> PTYManager:
@@ -184,6 +186,7 @@ class SessionRegistry:
         dummy_mode: bool = False,
         network_timeout: float = 15.0,
         initial_prompt: str | None = None,
+        pty_env: dict[str, str] | None = None,
     ) -> tuple[PTYSession, bool]:
         """Get an existing session or create a new one.
 
@@ -219,6 +222,7 @@ class SessionRegistry:
                 dummy_mode,
                 network_timeout,
                 initial_prompt,
+                pty_env,
             )
             self._sessions[session_id] = session
             logger.info("Created new session: %s at %s", session_id, project_path)
@@ -234,6 +238,7 @@ class SessionRegistry:
         dummy_mode: bool,
         network_timeout: float,
         initial_prompt: str | None = None,
+        pty_env: dict[str, str] | None = None,
     ) -> PTYSession:
         """Create a new PTY session with the primary (claude) terminal."""
         pty = PTYManager()
@@ -241,11 +246,13 @@ class SessionRegistry:
             shell_command,
             project_path,
             size or TerminalSize(cols=80, rows=24),
+            env=pty_env,
         )
 
         session = PTYSession(
             id=session_id,
             project_path=project_path,
+            mcp_config_path=(pty_env or {}).get("CADE_CLI_MCP_CONFIG"),
         )
         session.add_terminal(SessionKey.CLAUDE, pty)
 
@@ -284,7 +291,12 @@ class SessionRegistry:
                 from backend.config import get_config
                 from backend.terminal.agent_launch import build_launch_command
 
-                cmd = build_launch_command(initial_prompt, get_config().cli_agent)
+                mcp_path = (pty_env or {}).get("CADE_CLI_MCP_CONFIG")
+                cmd = build_launch_command(
+                    initial_prompt,
+                    get_config().cli_agent,
+                    mcp_path,
+                )
                 await pty.write(cmd + "\n")
 
         return session
@@ -380,6 +392,10 @@ class SessionRegistry:
                 except asyncio.CancelledError:
                     pass
             await terminal.pty.close()
+
+        if session.mcp_config_path:
+            from backend.orchestrator.mcp_config import remove_mcp_config
+            remove_mcp_config(session.mcp_config_path)
 
     async def _cleanup_loop(self) -> None:
         """Periodically clean up orphaned sessions."""

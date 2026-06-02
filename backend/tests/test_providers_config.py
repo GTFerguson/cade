@@ -15,6 +15,7 @@ from core.backend.providers.config import (
     ProviderConfig,
     get_context_budget,
     load_providers_config,
+    resolve_worker_provider,
 )
 
 
@@ -198,3 +199,60 @@ def test_context_budget_falls_back_when_model_unknown():
     cfg = ProviderConfig(name="x", type="api", model="bogus/model-does-not-exist")
     budget = get_context_budget(cfg)
     assert budget["window"] == DEFAULT_CONTEXT_WINDOW
+
+
+def test_load_worker_provider_and_cli_orchestrator_flags(tmp_path: Path):
+    config_file = tmp_path / "providers.toml"
+    config_file.write_text(dedent("""\
+        default = "mistral"
+        worker_provider = "minimax"
+        cli_orchestrator = false
+
+        [provider.mistral]
+        type = "api"
+        model = "mistral/large"
+
+        [provider.minimax]
+        type = "api"
+        model = "minimax/MiniMax-M2.7"
+    """))
+
+    config = load_providers_config(config_file)
+    assert config.worker_provider == "minimax"
+    assert config.cli_orchestrator is False
+    assert resolve_worker_provider(config).name == "minimax"
+
+
+def test_minimax_model_ok_on_anthropic_endpoint(tmp_path: Path, caplog: pytest.LogCaptureFixture):
+    """anthropic/minimax-* + anthropic messages api_base is the correct pairing."""
+    config_file = tmp_path / "providers.toml"
+    config_file.write_text(dedent("""\
+        [provider.minimax]
+        type = "api"
+        model = "anthropic/minimax-m2.7"
+        api-key = "sk-test"
+        api_base = "https://api.minimax.io/anthropic/v1/messages"
+    """))
+
+    with caplog.at_level("WARNING"):
+        config = load_providers_config(config_file)
+
+    assert config.providers["minimax"].model == "anthropic/minimax-m2.7"
+    assert not any("Provider minimax" in r.message for r in caplog.records)
+
+
+def test_minimax_model_warning_on_mismatched_endpoint(tmp_path: Path, caplog: pytest.LogCaptureFixture):
+    """minimax/MiniMax-* with anthropic messages api_base 404s — warn at load."""
+    config_file = tmp_path / "providers.toml"
+    config_file.write_text(dedent("""\
+        [provider.minimax]
+        type = "api"
+        model = "minimax/MiniMax-M2.7"
+        api-key = "sk-test"
+        api_base = "https://api.minimax.io/anthropic/v1/messages"
+    """))
+
+    with caplog.at_level("WARNING"):
+        load_providers_config(config_file)
+
+    assert any("anthropic/minimax-m2.7" in r.message for r in caplog.records)

@@ -59,7 +59,7 @@ class TestPTYManagerSpawn:
             await manager.spawn("bash", Path("/tmp"), TerminalSize(80, 24))
 
         mock_pty.spawn.assert_awaited_once_with(
-            "bash", Path("/tmp"), TerminalSize(80, 24)
+            "bash", Path("/tmp"), TerminalSize(80, 24), env=None
         )
         assert manager.is_alive()
 

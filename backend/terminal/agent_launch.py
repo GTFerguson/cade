@@ -95,14 +95,19 @@ __cade_resume_brief() {{
 
 # Run the agent once, applying the configured seed convention. "$1" is the
 # starting prompt (empty -> plain launch). `command` reaches the real binary
-# even if a same-named shell function exists.
+# even if a same-named shell function exists. An array carries the optional
+# --mcp-config so a config path with spaces survives word splitting.
 __cade_agent() {{
+    local -a mcp=()
+    if [ -n "${{CADE_CLI_MCP_CONFIG:-}}" ] && [ -f "$CADE_CLI_MCP_CONFIG" ]; then
+        mcp=(--mcp-config "$CADE_CLI_MCP_CONFIG")
+    fi
     if [ -z "$1" ]; then
-        command "$__CADE_AGENT_CMD"
+        command "$__CADE_AGENT_CMD" "${{mcp[@]}}"
     elif [ "$__CADE_SEED_STYLE" = "flag" ]; then
-        command "$__CADE_AGENT_CMD" "$__CADE_SEED_FLAG" "$1"
+        command "$__CADE_AGENT_CMD" "${{mcp[@]}}" "$__CADE_SEED_FLAG" "$1"
     else
-        command "$__CADE_AGENT_CMD" "$1"
+        command "$__CADE_AGENT_CMD" "${{mcp[@]}}" "$1"
     fi
 }}
 
@@ -158,7 +163,11 @@ def install_resume_script(
     return path
 
 
-def build_launch_command(initial_prompt: str | None, agent: "CliAgent") -> str:
+def build_launch_command(
+    initial_prompt: str | None,
+    agent: "CliAgent",
+    mcp_config_path: str | Path | None = None,
+) -> str:
     """The line typed into the PTY to start the agent with resume-on-exit.
 
     Sources the resume wrapper and hands off to ``__cade_run``. If sourcing
@@ -166,7 +175,7 @@ def build_launch_command(initial_prompt: str | None, agent: "CliAgent") -> str:
     directly so a broken resume install can never leave a blank terminal.
     """
     seed = f" {shlex.quote(initial_prompt)}" if initial_prompt else ""
-    direct = agent.direct_command(initial_prompt)
+    direct = agent.direct_command(initial_prompt, mcp_config_path)
     return (
         f". {SHELL_SCRIPT_PATH} 2>/dev/null; "
         f"if command -v __cade_run >/dev/null 2>&1; then __cade_run{seed}; "

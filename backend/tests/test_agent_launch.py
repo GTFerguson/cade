@@ -72,6 +72,17 @@ def test_build_launch_command_respects_agent_descriptor():
     assert "else kimi -p go; fi" in cmd
 
 
+def test_build_launch_command_includes_mcp_config_in_fallback():
+    cmd = build_launch_command("go", CLAUDE, "/tmp/mcp.json")
+    assert "else claude --mcp-config /tmp/mcp.json go; fi" in cmd
+
+
+def test_resume_script_honours_cade_cli_mcp_config():
+    script = render_resume_script(CLAUDE)
+    assert "CADE_CLI_MCP_CONFIG" in script
+    assert "--mcp-config" in script
+
+
 # --- resume guards (run the rendered bash) --------------------------------
 
 bash_required = pytest.mark.skipif(

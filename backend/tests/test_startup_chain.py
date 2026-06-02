@@ -207,7 +207,7 @@ class TestStartupFlow:
         assert is_new
         assert session.has_terminal(SessionKey.CLAUDE)
         mock_pty.spawn.assert_awaited_once_with(
-            "bash", temp_dir, TerminalSize(80, 24)
+            "bash", temp_dir, TerminalSize(80, 24), env=None
         )
         # Auto-start launches the agent through the handoff resume wrapper,
         # with a bare `claude` fallback if the wrapper can't be sourced.

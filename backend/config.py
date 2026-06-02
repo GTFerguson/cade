@@ -85,7 +85,7 @@ class CliAgent:
             seed_flag=os.getenv("CADE_CLI_AGENT_SEED_FLAG", "-p"),
         )
 
-    def direct_command(self, prompt: str | None) -> str:
+    def direct_command(self, prompt: str | None, mcp_config_path: str | Path | None = None) -> str:
         """A single shell-safe invocation of the agent, optionally seeded.
 
         Used as the fallback typed into the PTY when the resume wrapper can't
@@ -93,11 +93,16 @@ class CliAgent:
         """
         import shlex
 
+        parts = [shlex.quote(self.command)]
+        if mcp_config_path:
+            parts.extend(["--mcp-config", shlex.quote(str(mcp_config_path))])
         if not prompt:
-            return shlex.quote(self.command)
+            return " ".join(parts)
         if self.seed_style == "flag":
-            return f"{shlex.quote(self.command)} {shlex.quote(self.seed_flag)} {shlex.quote(prompt)}"
-        return f"{shlex.quote(self.command)} {shlex.quote(prompt)}"
+            parts.extend([shlex.quote(self.seed_flag), shlex.quote(prompt)])
+        else:
+            parts.append(shlex.quote(prompt))
+        return " ".join(parts)
 
 
 @dataclass

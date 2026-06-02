@@ -129,6 +129,21 @@ class TestSpawnAgent:
             await manager.spawn_agent(AgentSpec("bot", "Do X"), connection_id="conn-2")
 
     @pytest.mark.asyncio
+    async def test_cli_autonomous_bypasses_subagents_disabled(self):
+        manager = _make_manager()
+        collected = await _collect_broadcasts(manager, "conn-cli")
+
+        from backend.permissions.manager import get_permission_manager
+        pm = get_permission_manager()
+        pm.set_orchestrator(True, connection_id="conn-cli")
+        pm.set_permission("allowSubagents", False, connection_id="conn-cli")
+        pm.set_cli_autonomous(True, connection_id="conn-cli")
+
+        record = await manager.spawn_agent(AgentSpec("worker", "Do X"), connection_id="conn-cli")
+        assert record.state == AgentState.PENDING
+        assert not any(m.get("event") == "agent-approval-request" for m in collected)
+
+    @pytest.mark.asyncio
     async def test_creates_record_in_pending_state(self):
         manager = _make_manager()
         await _collect_broadcasts(manager, "conn-3")

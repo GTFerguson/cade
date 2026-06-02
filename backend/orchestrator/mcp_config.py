@@ -1,14 +1,17 @@
-"""Generate temporary MCP config for the orchestrator."""
+"""Generate MCP config for Claude Code CLI orchestration."""
 
 from __future__ import annotations
 
 import json
+import logging
+import os
 import sys
-import tempfile
 from pathlib import Path
 
 MCP_SERVER_SCRIPT = Path(__file__).parent / "mcp_server.py"
 PERMISSION_SERVER_SCRIPT = Path(__file__).parent.parent / "permissions" / "mcp_server.py"
+
+logger = logging.getLogger(__name__)
 
 # The venv Python has mcp/httpx installed; sys.executable may not if the
 # backend was launched outside the venv.
@@ -22,23 +25,40 @@ def _get_python() -> str:
     return sys.executable
 
 
-def create_mcp_config(
-    backend_port: int, auth_token: str = "", connection_id: str = ""
-) -> Path:
-    """Create a temp MCP config JSON pointing to the orchestrator server.
+def mcp_config_dir() -> Path:
+    """Directory for per-connection Claude Code MCP config files."""
+    return Path.home() / ".cade" / "mcp"
 
-    Returns the path to the temp file (caller should not delete it
-    while CC is running).
+
+def mcp_config_path(session_id: str | None, connection_id: str) -> Path:
+    """Stable path for a tab's MCP config.
+
+    Prefer ``session_id`` so reconnecting websockets can refresh the baked-in
+    ``CADE_CONNECTION_ID`` without changing the path Claude Code already has in
+    its PTY environment.
     """
+    key = session_id or connection_id
+    prefix = "session-" if session_id else "conn-"
+    return mcp_config_dir() / f"{prefix}{key}.json"
+
+
+def write_mcp_config(
+    connection_id: str,
+    *,
+    backend_port: int,
+    auth_token: str = "",
+    backend_host: str = "localhost",
+    session_id: str | None = None,
+) -> Path:
+    """Write (or overwrite) the MCP config for a CADE websocket connection."""
     python = _get_python()
     env: dict[str, str] = {
         "CADE_BACKEND_PORT": str(backend_port),
-        "CADE_BACKEND_HOST": "localhost",
+        "CADE_BACKEND_HOST": backend_host,
+        "CADE_CONNECTION_ID": connection_id,
     }
     if auth_token:
         env["CADE_AUTH_TOKEN"] = auth_token
-    if connection_id:
-        env["CADE_CONNECTION_ID"] = connection_id
 
     config = {
         "mcpServers": {
@@ -55,13 +75,63 @@ def create_mcp_config(
         }
     }
 
-    tmp = tempfile.NamedTemporaryFile(
-        mode="w",
-        suffix=".json",
-        prefix="cade-mcp-",
-        delete=False,
-    )
-    json.dump(config, tmp, indent=2)
-    tmp.close()
+    path = mcp_config_path(session_id, connection_id)
+    # The config embeds CADE_AUTH_TOKEN, so keep the dir and file owner-only.
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.parent.chmod(0o700)
+    except OSError:
+        pass
+    path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    logger.info("Wrote CLI MCP config → %s (connection=%s)", path, connection_id)
+    return path
 
-    return Path(tmp.name)
+
+def remove_mcp_config(path: str | Path | None) -> None:
+    """Delete a CLI MCP config file (best effort).
+
+    Called when the owning PTY session is torn down — these live at stable,
+    session-keyed paths and would otherwise accumulate (each one holding the
+    auth token) for the life of ``~/.cade/mcp``.
+    """
+    if not path:
+        return
+    try:
+        Path(path).unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.debug("Could not remove MCP config %s: %s", path, e)
+
+
+def cli_orchestrator_enabled() -> bool:
+    """Return whether CC terminal tabs should get orchestrator MCP wiring."""
+    if os.getenv("CADE_CLI_ORCHESTRATOR", "true").lower() in ("0", "false", "no", "off"):
+        return False
+    from core.backend.providers.config import get_providers_config, resolve_worker_provider
+
+    cfg = get_providers_config()
+    if not cfg.cli_orchestrator:
+        return False
+    return resolve_worker_provider(cfg) is not None
+
+
+def prepare_cli_orchestrator_env(
+    connection_id: str,
+    *,
+    backend_port: int,
+    auth_token: str = "",
+    session_id: str | None = None,
+) -> dict[str, str]:
+    """Build PTY env vars wiring Claude Code to CADE's orchestrator MCP."""
+    path = write_mcp_config(
+        connection_id,
+        backend_port=backend_port,
+        auth_token=auth_token,
+        session_id=session_id,
+    )
+    return {"CADE_CLI_MCP_CONFIG": str(path)}

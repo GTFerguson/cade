@@ -49,6 +49,7 @@ class ConnectionState:
     allow_tools: bool = True
     allow_subagents: bool = True
     auto_approve_reports: bool = False
+    cli_autonomous: bool = False
     approved_paths: set[str] = field(default_factory=_default_approved_paths)
     approved_commands: set[str] = field(default_factory=set)
 
@@ -140,6 +141,12 @@ class PermissionManager:
 
     def get_auto_approve_reports(self, connection_id: str = "") -> bool:
         return self._state(connection_id).auto_approve_reports
+
+    def set_cli_autonomous(self, enabled: bool, connection_id: str = "") -> None:
+        self._state(connection_id).cli_autonomous = enabled
+
+    def get_cli_autonomous(self, connection_id: str = "") -> bool:
+        return self._state(connection_id).cli_autonomous
 
     def set_provider_type(self, provider_type: str, connection_id: str = "") -> None:
         self._state(connection_id).provider_type = provider_type

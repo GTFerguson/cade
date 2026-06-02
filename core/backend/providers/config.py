@@ -62,6 +62,8 @@ class ProvidersConfig:
 
     providers: dict[str, ProviderConfig] = field(default_factory=dict)
     default_provider: str = ""
+    worker_provider: str = ""
+    cli_orchestrator: bool = True
 
 
 # Default warn / danger thresholds for the context-budget indicator,
@@ -84,6 +86,51 @@ def _coerce_int(value, fallback: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return fallback
+
+
+def _coerce_bool(value, fallback: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes", "on")
+    return fallback
+
+
+def _minimax_model_warning(model: str, api_base: str = "") -> str | None:
+    """Return a warning when MiniMax model string and api_base are mismatched.
+
+    LiteLLM has two MiniMax paths:
+    - ``anthropic/minimax-m2.7`` + ``.../anthropic/v1/messages`` (Anthropic wire format)
+    - ``minimax/MiniMax-M2.7`` + ``https://api.minimax.io/v1`` (OpenAI wire format)
+
+    Mixing them (e.g. minimax/MiniMax-M2.7 with the anthropic messages URL) 404s.
+    """
+    if not model:
+        return None
+    lower = model.lower()
+    base = (api_base or "").lower()
+    anthropic_endpoint = "anthropic" in base and "messages" in base
+    openai_endpoint = base.endswith("/v1") or base.endswith("/v1/")
+
+    if anthropic_endpoint and lower.startswith("minimax/"):
+        return (
+            f"model {model!r} with api_base {api_base!r} routes to MiniMax's OpenAI "
+            "adapter but the endpoint is Anthropic-format; use anthropic/minimax-m2.7 "
+            "or change api_base to https://api.minimax.io/v1"
+        )
+    if openai_endpoint and lower.startswith("anthropic/minimax"):
+        return (
+            f"model {model!r} with api_base {api_base!r} routes through LiteLLM's "
+            "anthropic adapter but the endpoint is OpenAI-format; use "
+            "minimax/MiniMax-M2.7 or change api_base to "
+            "https://api.minimax.io/anthropic/v1/messages"
+        )
+    if lower.startswith("minimax/") and "minimax-m" in lower and "MiniMax" not in model:
+        return (
+            f"model {model!r} may not match MiniMax's case-sensitive model ids "
+            "(e.g. minimax/MiniMax-M2.7)"
+        )
+    return None
 
 
 def resolve_context_window(model: str) -> int:
@@ -176,19 +223,47 @@ def load_providers_config(path: Path | None = None) -> ProvidersConfig:
         api_key = resolved.get("api-key", resolved.get("api_key", ""))
         system_prompt = resolved.get("system-prompt", resolved.get("system_prompt", ""))
 
+        model = resolved.get("model", "")
         providers[name] = ProviderConfig(
             name=name,
             type=resolved.get("type", "api"),
-            model=resolved.get("model", ""),
+            model=model,
             region=resolved.get("region", ""),
             api_key=api_key,
             system_prompt=system_prompt,
             extra=extra,
         )
 
+        if providers[name].type == "api":
+            warning = _minimax_model_warning(model, extra.get("api_base", ""))
+            if warning:
+                logger.warning("Provider %s: %s", name, warning)
+
+    worker_provider = data.get("worker_provider", "")
+    if isinstance(worker_provider, str):
+        worker_provider = _resolve_env_vars(worker_provider)
+
+    cli_orchestrator = _coerce_bool(data.get("cli_orchestrator"), True)
+
     return ProvidersConfig(
         providers=providers,
         default_provider=default_provider,
+        worker_provider=worker_provider,
+        cli_orchestrator=cli_orchestrator,
+    )
+
+
+def resolve_worker_provider(cfg: ProvidersConfig) -> ProviderConfig | None:
+    """Return the API provider config used for orchestrator worker agents."""
+    for name in (cfg.worker_provider, cfg.default_provider):
+        if not name:
+            continue
+        provider = cfg.providers.get(name)
+        if provider is not None and provider.type == "api":
+            return provider
+    return next(
+        (p for p in cfg.providers.values() if p.type == "api"),
+        None,
     )
 
 

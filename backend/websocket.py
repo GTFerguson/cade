@@ -149,6 +149,7 @@ class ConnectionHandler:
         self._kiosk_mode: bool = False
         self._current_mode: str = "code"
         self._orchestrator_on: bool = False
+        self._cli_pty_env: dict[str, str] = {}
 
     async def _send_status(self, message: str) -> None:
         """Send a startup status message."""
@@ -221,13 +222,6 @@ class ConnectionHandler:
 
             # Emit memory graph for any graph data that already exists
             asyncio.create_task(self._emit_nkrdn_graph())
-
-            # Register this connection so orchestrator events are scoped to it
-            from backend.orchestrator.manager import get_orchestrator_manager
-            orchestrator = get_orchestrator_manager()
-            orchestrator.register_connection(
-                self._connection_id, self._send, self._working_dir
-            )
 
             # Register permission prompt broadcast
             from backend.permissions.manager import get_permission_manager
@@ -374,6 +368,11 @@ class ConnectionHandler:
         # Load user config first so we can use network_timeout setting
         self._user_config = load_user_config(self._working_dir)
 
+        from backend.orchestrator.manager import get_orchestrator_manager
+        get_orchestrator_manager().register_connection(
+            self._connection_id, self._send, self._working_dir,
+        )
+
         # Initialize provider registry from global config (~/.cade/providers.toml)
         try:
             providers_config = get_providers_config()
@@ -392,9 +391,9 @@ class ConnectionHandler:
         self._launch_yaml: dict = load_launch_preset(self._working_dir)
         self._kiosk_mode: bool = bool(self._launch_yaml.get("kiosk_mode", False))
         self._current_mode: str = "code"
-        self._orchestrator_on: bool = False
         if self._kiosk_mode:
             logger.info("Kiosk mode enabled — PTY, file watcher, and CC features disabled")
+        self._cli_pty_env = self._prepare_cli_orchestrator_env()
         provider_config_dict = extract_provider_config(self._launch_yaml)
         if self._provider_override == "none":
             logger.info(
@@ -455,6 +454,7 @@ class ConnectionHandler:
                 dummy_mode=self._config.dummy_mode,
                 network_timeout=self._user_config.behavior.session.network_timeout,
                 initial_prompt=self._initial_prompt,
+                pty_env=self._cli_pty_env or None,
             )
             self._session.connected_clients.add(self._ws)
             # On resume, restore the session's original working directory if the
@@ -473,6 +473,7 @@ class ConnectionHandler:
                 self._config.shell_command,
                 self._working_dir,
                 TerminalSize(cols=80, rows=24),
+                env=self._cli_pty_env or None,
             )
             self._session = PTYSession(
                 id="",
@@ -556,6 +557,46 @@ class ConnectionHandler:
         )
         self._watcher.on_change(self._dashboard.on_data_source_file_change)
         self._dashboard.start_watching()
+
+    def _prepare_cli_orchestrator_env(self) -> dict[str, str]:
+        """Wire Claude Code CLI to CADE orchestrator MCP + Minimax workers."""
+        if (
+            self._kiosk_mode
+            or not self._config.auto_start_claude
+            or self._config.dummy_mode
+        ):
+            return {}
+
+        from backend.orchestrator.mcp_config import (
+            cli_orchestrator_enabled,
+            prepare_cli_orchestrator_env,
+        )
+
+        if not cli_orchestrator_enabled():
+            return {}
+
+        env = prepare_cli_orchestrator_env(
+            self._connection_id,
+            backend_port=self._config.port,
+            auth_token=self._config.auth_token,
+            session_id=self._session_id,
+        )
+
+        from backend.permissions.manager import get_permission_manager
+
+        pm = get_permission_manager()
+        pm.set_orchestrator(True, connection_id=self._connection_id)
+        pm.set_cli_autonomous(True, connection_id=self._connection_id)
+        pm.set_permission("allowSubagents", True, connection_id=self._connection_id)
+        pm.set_permission("autoApproveReports", True, connection_id=self._connection_id)
+        self._orchestrator_on = True
+        logger.info(
+            "CLI orchestrator enabled (autonomous) for connection %s (session=%s, mcp=%s)",
+            self._connection_id,
+            self._session_id,
+            env.get("CADE_CLI_MCP_CONFIG"),
+        )
+        return env
 
     async def _cleanup(self) -> None:
         """Clean up resources."""
@@ -2176,7 +2217,12 @@ class ConnectionHandler:
 
             from backend.terminal.agent_launch import build_launch_command
 
-            cmd = build_launch_command(self._initial_prompt, self._config.cli_agent)
+            mcp_path = self._cli_pty_env.get("CADE_CLI_MCP_CONFIG")
+            cmd = build_launch_command(
+                self._initial_prompt,
+                self._config.cli_agent,
+                mcp_path,
+            )
             await self._session.pty.write(cmd + "\n")
         except asyncio.CancelledError:
             pass

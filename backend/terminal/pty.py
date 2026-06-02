@@ -35,7 +35,13 @@ class BasePTY(ABC):
     """Abstract base class for PTY implementations."""
 
     @abstractmethod
-    async def spawn(self, command: str, cwd: Path, size: TerminalSize) -> None:
+    async def spawn(
+        self,
+        command: str,
+        cwd: Path,
+        size: TerminalSize,
+        env: dict[str, str] | None = None,
+    ) -> None:
         """Spawn a new PTY process."""
         ...
 
@@ -77,12 +83,20 @@ class UnixPTY(BasePTY):
         self._process: "pexpect.spawn | None" = None  # type: ignore[name-defined]
         self._read_task: asyncio.Task | None = None
 
-    async def spawn(self, command: str, cwd: Path, size: TerminalSize) -> None:
+    async def spawn(
+        self,
+        command: str,
+        cwd: Path,
+        size: TerminalSize,
+        env: dict[str, str] | None = None,
+    ) -> None:
         import pexpect
 
         try:
-            env = os.environ.copy()
-            env.setdefault("TERM", "xterm-256color")
+            spawn_env = os.environ.copy()
+            if env:
+                spawn_env.update(env)
+            spawn_env.setdefault("TERM", "xterm-256color")
 
             self._process = pexpect.spawn(
                 command,
@@ -90,7 +104,7 @@ class UnixPTY(BasePTY):
                 dimensions=(size.rows, size.cols),
                 encoding="utf-8",
                 timeout=None,
-                env=env,
+                env=spawn_env,
             )
         except Exception as e:
             raise PTYError.spawn_failed(command, str(e)) from e
@@ -174,14 +188,39 @@ class WindowsPTY(BasePTY):
 
     def _do_spawn(
         self, pty: "winpty.PTY", exe: str, args: str, cwd: str,  # type: ignore[name-defined]
+        env: dict[str, str] | None = None,
     ) -> None:
-        """Synchronous spawn helper — called in executor for timeout support."""
-        if args:
-            pty.spawn(exe, cwd=cwd, cmdline=args)
-        else:
-            pty.spawn(exe, cwd=cwd)
+        """Synchronous spawn helper — called in executor for timeout support.
 
-    async def spawn(self, command: str, cwd: Path, size: TerminalSize) -> None:
+        pywinpty's ``PTY`` has no env parameter, so the child inherits the
+        process environment at CreateProcess time. Apply any per-session
+        overrides only for the duration of the spawn and restore them after, so
+        one tab's MCP wiring can't leak into the backend or sibling tabs.
+        """
+        saved: dict[str, str | None] = {}
+        try:
+            if env:
+                for key, value in env.items():
+                    saved[key] = os.environ.get(key)
+                    os.environ[key] = value
+            if args:
+                pty.spawn(exe, cwd=cwd, cmdline=args)
+            else:
+                pty.spawn(exe, cwd=cwd)
+        finally:
+            for key, prev in saved.items():
+                if prev is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = prev
+
+    async def spawn(
+        self,
+        command: str,
+        cwd: Path,
+        size: TerminalSize,
+        env: dict[str, str] | None = None,
+    ) -> None:
         from winpty import PTY, Backend, WinptyError
 
         is_wsl = "wsl" in command.lower()
@@ -237,7 +276,7 @@ class WindowsPTY(BasePTY):
                     await asyncio.wait_for(
                         loop.run_in_executor(
                             None, self._do_spawn, pty, attempt_exe,
-                            attempt_args, str(cwd),
+                            attempt_args, str(cwd), env,
                         ),
                         timeout=5.0,
                     )
@@ -265,7 +304,7 @@ class WindowsPTY(BasePTY):
                             await asyncio.wait_for(
                                 loop.run_in_executor(
                                     None, self._do_spawn, pty2, attempt_exe,
-                                    attempt_args, str(cwd),
+                                    attempt_args, str(cwd), env,
                                 ),
                                 timeout=5.0,
                             )
@@ -393,13 +432,14 @@ class PTYManager:
         command: str,
         cwd: Path,
         size: TerminalSize | None = None,
+        env: dict[str, str] | None = None,
     ) -> None:
         """Spawn a new PTY with the given command."""
         if self._pty is not None:
             await self.close()
 
         self._pty = self._create_pty()
-        await self._pty.spawn(command, cwd, size or TerminalSize())
+        await self._pty.spawn(command, cwd, size or TerminalSize(), env=env)
 
     async def read(self) -> AsyncIterator[str]:
         """Read output from PTY as an async iterator."""

@@ -7,7 +7,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from core.backend.providers.api_provider import APIProvider
+import litellm
+
+from core.backend.providers.api_provider import (
+    APIProvider,
+    _is_retryable_acompletion_error,
+)
 from core.backend.providers.config import ProviderConfig
 from core.backend.providers.tool_executor import ToolRegistry
 from core.backend.providers.types import (
@@ -776,3 +781,77 @@ async def test_orchestrator_overlay_can_be_toggled_off():
 
     assert "spawn_agent" not in names
     assert "list_agents" not in names
+
+
+def test_is_retryable_acompletion_error_minimax_1000():
+    err = litellm.InternalServerError(
+        message='AnthropicException - b\'{"type":"error","error":{"type":"api_error",'
+        '"message":"unknown error, 999 (1000)"}}\'',
+        llm_provider="anthropic",
+        model="minimax-m2.7",
+    )
+    assert _is_retryable_acompletion_error(err) is True
+
+
+def test_is_retryable_acompletion_error_non_transient_internal_server():
+    err = litellm.InternalServerError(
+        message="permanent schema validation failure",
+        llm_provider="anthropic",
+        model="minimax-m2.7",
+    )
+    assert _is_retryable_acompletion_error(err) is False
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_retries_minimax_1000(provider: APIProvider):
+    """MiniMax transient api_error 1000 should retry before surfacing ChatError."""
+    minimax_err = litellm.InternalServerError(
+        message='AnthropicException - unknown error, 999 (1000)',
+        llm_provider="anthropic",
+        model="minimax-m2.7",
+    )
+
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm, patch(
+        "core.backend.providers.api_provider.asyncio.sleep", new_callable=AsyncMock
+    ) as mock_sleep:
+        mock_litellm.acompletion = AsyncMock(
+            side_effect=[minimax_err, MockStreamResponse([MockChunk("ok")])]
+        )
+        mock_litellm.InternalServerError = litellm.InternalServerError
+        mock_litellm.APIConnectionError = litellm.APIConnectionError
+        mock_litellm.ServiceUnavailableError = litellm.ServiceUnavailableError
+
+        events = []
+        async for event in provider.stream_chat([ChatMessage(role="user", content="Hi")]):
+            events.append(event)
+
+    assert mock_litellm.acompletion.call_count == 2
+    mock_sleep.assert_awaited_once()
+    assert not any(isinstance(e, ChatError) for e in events)
+    assert any(isinstance(e, ChatDone) for e in events)
+
+
+@pytest.mark.asyncio
+async def test_stream_chat_minimax_1000_exhausts_retries(provider: APIProvider):
+    minimax_err = litellm.InternalServerError(
+        message='AnthropicException - unknown error, 999 (1000)',
+        llm_provider="anthropic",
+        model="minimax-m2.7",
+    )
+
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm, patch(
+        "core.backend.providers.api_provider.asyncio.sleep", new_callable=AsyncMock
+    ):
+        mock_litellm.acompletion = AsyncMock(side_effect=minimax_err)
+        mock_litellm.InternalServerError = litellm.InternalServerError
+        mock_litellm.APIConnectionError = litellm.APIConnectionError
+        mock_litellm.ServiceUnavailableError = litellm.ServiceUnavailableError
+
+        events = []
+        async for event in provider.stream_chat([ChatMessage(role="user", content="Hi")]):
+            events.append(event)
+
+    assert mock_litellm.acompletion.call_count == 4  # initial + 3 retries
+    errors = [e for e in events if isinstance(e, ChatError)]
+    assert len(errors) == 1
+    assert "1000" in errors[0].message

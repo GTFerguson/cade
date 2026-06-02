@@ -769,8 +769,8 @@ def create_app(config: Config | None = None) -> FastAPI:
         manager = get_orchestrator_manager()
         spec = AgentSpec(name=body.name, task=body.task, mode=body.mode)
         record = await manager.spawn_agent(spec, connection_id=connection_id)
-        # allow_subagents=True means autonomous mode — auto-approve without a dialog
-        if get_permission_manager().get_allow_subagents(connection_id):
+        pm = get_permission_manager()
+        if pm.get_cli_autonomous(connection_id) or pm.get_allow_subagents(connection_id):
             await manager.approve_agent(record.agent_id)
         result = await manager.await_completion(record.agent_id, timeout=3600.0)
         return JSONResponse(result)

@@ -78,20 +78,12 @@ def _make_worker_provider(
     """Create a LiteLLM APIProvider for a worker agent."""
     import dataclasses
     from core.backend.providers.api_provider import APIProvider
-    from core.backend.providers.config import get_providers_config
+    from core.backend.providers.config import get_providers_config, resolve_worker_provider
     from backend.providers.registry import _create_tool_registry
     from backend.prompts import compose_prompt
 
     providers_cfg = get_providers_config()
-    base_name = providers_cfg.default_provider
-    base_cfg = providers_cfg.providers.get(base_name)
-
-    # Fall back to first API-type provider if default isn't API
-    if base_cfg is None or base_cfg.type != "api":
-        base_cfg = next(
-            (c for c in providers_cfg.providers.values() if c.type == "api"),
-            None,
-        )
+    base_cfg = resolve_worker_provider(providers_cfg)
 
     if base_cfg is None:
         raise RuntimeError("No API provider configured — cannot spawn LiteLLM worker")
@@ -196,7 +188,7 @@ class OrchestratorManager:
             )
             raise ValueError("Subagent spawning requires orchestrator mode to be enabled")
 
-        if not perms.get_allow_subagents(connection_id):
+        if not perms.get_allow_subagents(connection_id) and not perms.get_cli_autonomous(connection_id):
             logger.warning("spawn_agent blocked: allow_subagents=False (caller=%s)", connection_id)
             raise ValueError("Subagent spawning is disabled")
 
@@ -227,14 +219,15 @@ class OrchestratorManager:
         )
         self._agents[agent_id] = record
 
-        await self._send_to(root_connection_id, {
-            "type": MessageType.CHAT_STREAM,
-            "event": "agent-approval-request",
-            "targetAgentId": agent_id,
-            "name": name,
-            "task": spec.task,
-            "mode": spec.mode,
-        })
+        if not perms.get_cli_autonomous(root_connection_id):
+            await self._send_to(root_connection_id, {
+                "type": MessageType.CHAT_STREAM,
+                "event": "agent-approval-request",
+                "targetAgentId": agent_id,
+                "name": name,
+                "task": spec.task,
+                "mode": spec.mode,
+            })
 
         return record
 
@@ -579,16 +572,21 @@ class OrchestratorManager:
                         # No queued messages — agent is done, go to REVIEW
                         record.state = AgentState.REVIEW
                         await self._set_state(agent_id, AgentState.REVIEW)
-                        await self._send_to_agent(agent_id, {
-                            "type": MessageType.CHAT_STREAM,
-                            "agentId": agent_id,
-                            "event": "report-review-request",
-                            "report": record.report[:500],
-                            "cost": record.cost,
-                        })
-
                         from backend.permissions.manager import get_permission_manager
-                        if get_permission_manager().get_auto_approve_reports(record.owner_connection_id):
+                        pm = get_permission_manager()
+                        if not pm.get_cli_autonomous(record.owner_connection_id):
+                            await self._send_to_agent(agent_id, {
+                                "type": MessageType.CHAT_STREAM,
+                                "agentId": agent_id,
+                                "event": "report-review-request",
+                                "report": record.report[:500],
+                                "cost": record.cost,
+                            })
+
+                        if (
+                            pm.get_auto_approve_reports(record.owner_connection_id)
+                            or pm.get_cli_autonomous(record.owner_connection_id)
+                        ):
                             await self.approve_report(agent_id)
                         return
 

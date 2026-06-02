@@ -32,6 +32,31 @@ logger = logging.getLogger(__name__)
 litellm.suppress_debug_info = True
 
 _DEFAULT_MAX_TOOL_TURNS = 100
+_MAX_ACOMPLETION_RETRIES = 3
+
+# Substrings in InternalServerError messages that indicate a retry is worthwhile.
+# MiniMax surfaces transient outages as api_error "unknown error, 999 (1000)".
+_TRANSIENT_ERROR_SIGNALS = (
+    "name resolution",
+    "cannot connect",
+    "connection",
+    "unknown error",
+    "internal server error",
+    "service unavailable",
+    "temporarily unavailable",
+    "try again later",
+    "(1000)",
+)
+
+
+def _is_retryable_acompletion_error(exc: Exception) -> bool:
+    """Return True when a litellm acompletion failure may succeed on retry."""
+    if isinstance(exc, (litellm.APIConnectionError, litellm.ServiceUnavailableError)):
+        return True
+    if isinstance(exc, litellm.InternalServerError):
+        msg = str(exc).lower()
+        return any(signal in msg for signal in _TRANSIENT_ERROR_SIGNALS)
+    return False
 
 
 def _build_litellm_messages(messages: list[ChatMessage], system_prompt: str | None) -> list[dict]:
@@ -203,42 +228,23 @@ class APIProvider(BaseProvider):
                 len(kwargs["messages"]), len(kwargs.get("tools") or []),
             )
             _retries = 0
-            _max_retries = 3
             while True:
                 try:
                     response = await litellm.acompletion(**kwargs)
                     break
-                except (litellm.APIConnectionError, litellm.ServiceUnavailableError) as e:
-                    if _retries < _max_retries:
-                        _retries += 1
-                        delay = 2 ** (_retries - 1)
-                        logger.warning(
-                            "[%s] transient network error (attempt %d/%d), retrying in %.0fs: %s",
-                            self._config.name, _retries, _max_retries, delay, e,
-                        )
-                        await asyncio.sleep(delay)
-                    else:
-                        logger.exception("[%s] LiteLLM acompletion error: %s", self._config.name, e)
-                        yield ChatError(message=str(e), code=str(getattr(e, "status_code", "unknown")))
-                        return
-                except litellm.InternalServerError as e:
-                    msg = str(e).lower()
-                    if _retries < _max_retries and ("name resolution" in msg or "cannot connect" in msg or "connection" in msg):
-                        _retries += 1
-                        delay = 2 ** (_retries - 1)
-                        logger.warning(
-                            "[%s] transient connection error (attempt %d/%d), retrying in %.0fs: %s",
-                            self._config.name, _retries, _max_retries, delay, e,
-                        )
-                        await asyncio.sleep(delay)
-                    else:
-                        logger.exception("[%s] LiteLLM acompletion error: %s", self._config.name, e)
-                        yield ChatError(message=str(e), code=str(getattr(e, "status_code", "unknown")))
-                        return
                 except Exception as e:
-                    logger.exception("[%s] LiteLLM acompletion error: %s", self._config.name, e)
-                    yield ChatError(message=str(e), code=str(getattr(e, "status_code", "unknown")))
-                    return
+                    if _retries < _MAX_ACOMPLETION_RETRIES and _is_retryable_acompletion_error(e):
+                        _retries += 1
+                        delay = 2 ** (_retries - 1)
+                        logger.warning(
+                            "[%s] transient provider error (attempt %d/%d), retrying in %.0fs: %s",
+                            self._config.name, _retries, _MAX_ACOMPLETION_RETRIES, delay, e,
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        logger.exception("[%s] LiteLLM acompletion error: %s", self._config.name, e)
+                        yield ChatError(message=str(e), code=str(getattr(e, "status_code", "unknown")))
+                        return
             logger.info(
                 "[%s] turn %d: acompletion returned, awaiting first chunk (%.2fs since request, %.2fs since start)",
                 self._config.name, tool_turn_count,
