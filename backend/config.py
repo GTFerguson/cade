@@ -61,6 +61,46 @@ def detect_default_shell() -> str:
 
 
 @dataclass
+class CliAgent:
+    """Describes the CLI coding agent CADE auto-starts in the terminal.
+
+    Two things differ between agents (Claude Code, Kimi Code, …): the command
+    to run, and how it accepts a one-shot starting prompt. Both the auto-start
+    launch and the handoff resume-on-exit are driven off this descriptor, so
+    swapping agents is a config change rather than edits scattered across the
+    launch sites and a shell function.
+    """
+
+    command: str = "claude"
+    # How the agent takes a starting prompt: "positional" -> `claude "<p>"`;
+    # "flag" -> `kimi <seed_flag> "<p>"`.
+    seed_style: str = "positional"
+    seed_flag: str = "-p"
+
+    @classmethod
+    def from_env(cls) -> CliAgent:
+        return cls(
+            command=os.getenv("CADE_CLI_AGENT", "claude"),
+            seed_style=os.getenv("CADE_CLI_AGENT_SEED_STYLE", "positional"),
+            seed_flag=os.getenv("CADE_CLI_AGENT_SEED_FLAG", "-p"),
+        )
+
+    def direct_command(self, prompt: str | None) -> str:
+        """A single shell-safe invocation of the agent, optionally seeded.
+
+        Used as the fallback typed into the PTY when the resume wrapper can't
+        be sourced, so the agent always starts even if resume is unavailable.
+        """
+        import shlex
+
+        if not prompt:
+            return shlex.quote(self.command)
+        if self.seed_style == "flag":
+            return f"{shlex.quote(self.command)} {shlex.quote(self.seed_flag)} {shlex.quote(prompt)}"
+        return f"{shlex.quote(self.command)} {shlex.quote(prompt)}"
+
+
+@dataclass
 class Config:
     """Application configuration loaded from environment variables."""
 
@@ -76,6 +116,7 @@ class Config:
     auth_token: str = ""
     cors_origins: list[str] = field(default_factory=list)
     root_path: str = ""
+    cli_agent: CliAgent = field(default_factory=CliAgent)
 
     @classmethod
     def from_env(cls) -> Config:
@@ -111,6 +152,7 @@ class Config:
             auth_token=os.getenv("CADE_AUTH_TOKEN", ""),
             cors_origins=cors_origins,
             root_path=os.getenv("CADE_ROOT_PATH", ""),
+            cli_agent=CliAgent.from_env(),
         )
 
     def update_from_args(
@@ -142,6 +184,7 @@ class Config:
             auth_token=self.auth_token,
             cors_origins=self.cors_origins,
             root_path=self.root_path,
+            cli_agent=self.cli_agent,
         )
 
     def validate_shell_command(self) -> None:

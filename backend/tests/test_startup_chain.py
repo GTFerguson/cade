@@ -209,7 +209,12 @@ class TestStartupFlow:
         mock_pty.spawn.assert_awaited_once_with(
             "bash", temp_dir, TerminalSize(80, 24)
         )
-        mock_pty.write.assert_awaited_with("claude\n")
+        # Auto-start launches the agent through the handoff resume wrapper,
+        # with a bare `claude` fallback if the wrapper can't be sourced.
+        written = mock_pty.write.await_args.args[0]
+        assert written.endswith("\n")
+        assert "__cade_run" in written
+        assert "else claude; fi" in written
 
     @pytest.mark.asyncio
     async def test_session_with_wsl_flow(self, temp_dir: Path):

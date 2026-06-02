@@ -278,12 +278,14 @@ class SessionRegistry:
             # the command after the connection is established
             if "wsl" not in shell_command.lower():
                 # A Plans-pane "▶ CLI" launch seeds the CLI with an initial
-                # prompt so the agent starts already working on the doc.
-                if initial_prompt:
-                    import shlex
-                    await pty.write(f"claude {shlex.quote(initial_prompt)}\n")
-                else:
-                    await pty.write("claude\n")
+                # prompt so the agent starts already working on the doc. The
+                # command also wires up handoff resume-on-exit (see
+                # agent_launch) and is built from the configured CLI agent.
+                from backend.config import get_config
+                from backend.terminal.agent_launch import build_launch_command
+
+                cmd = build_launch_command(initial_prompt, get_config().cli_agent)
+                await pty.write(cmd + "\n")
 
         return session
 

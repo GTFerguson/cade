@@ -235,6 +235,20 @@ def _auto_setup_hook() -> None:
         logger.debug("Auto hook setup skipped: %s", e)
 
 
+def _install_resume_script(config: Config) -> None:
+    """Write the CLI-agent handoff resume wrapper to ~/.cade/shell/.
+
+    Idempotent; runs every startup so an agent/config change is picked up.
+    """
+    from backend.terminal.agent_launch import install_resume_script
+
+    try:
+        path = install_resume_script(config.cli_agent)
+        logger.info("Resume wrapper installed: %s", path)
+    except Exception as e:
+        logger.debug("Resume wrapper install skipped: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan handler."""
@@ -260,6 +274,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         loop = asyncio.get_running_loop()
         files = await loop.run_in_executor(None, _write_discovery_files, config)
         await loop.run_in_executor(None, _auto_setup_hook)
+        await loop.run_in_executor(None, _install_resume_script, config)
         return files
 
     deferred_setup_task = asyncio.create_task(_deferred_wsl_setup())

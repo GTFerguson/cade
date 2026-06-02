@@ -245,7 +245,9 @@ class TestSessionRegistry:
 
     @pytest.mark.asyncio
     async def test_auto_start_claude(self, temp_dir: Path):
-        """When auto_start_claude=True with non-WSL shell, 'claude\\n' should be written to PTY."""
+        """auto_start_claude=True (non-WSL) launches the agent through the
+        handoff resume wrapper, with a bare `claude` fallback if the wrapper
+        can't be sourced."""
         registry = SessionRegistry()
 
         mock_pty = make_mock_pty()
@@ -257,7 +259,10 @@ class TestSessionRegistry:
                 auto_start_claude=True,
             )
 
-        mock_pty.write.assert_awaited_with("claude\n")
+        written = mock_pty.write.await_args.args[0]
+        assert written.endswith("\n")
+        assert "__cade_run" in written
+        assert "else claude; fi" in written
 
     @pytest.mark.asyncio
     async def test_auto_start_claude_wsl_defers_to_caller(self, temp_dir: Path):

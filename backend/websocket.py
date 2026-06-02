@@ -2174,11 +2174,10 @@ class ConnectionHandler:
             if self._closed or self._session is None:
                 return
 
-            if self._initial_prompt:
-                import shlex
-                await self._session.pty.write(f"claude {shlex.quote(self._initial_prompt)}\n")
-            else:
-                await self._session.pty.write("claude\n")
+            from backend.terminal.agent_launch import build_launch_command
+
+            cmd = build_launch_command(self._initial_prompt, self._config.cli_agent)
+            await self._session.pty.write(cmd + "\n")
         except asyncio.CancelledError:
             pass
         except Exception as e:
