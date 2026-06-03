@@ -93,6 +93,45 @@ __cade_resume_brief() {{
     printf '%s\\n' "$brief"
 }}
 
+# Patch MCP configs written by old packaged binaries: the PyInstaller extraction
+# dir has no .py source files, so the generated script path doesn't exist.
+# Replace with the venv Python + source scripts when available.
+__cade_patch_mcp_config() {{
+    [ -n "${{CADE_CLI_MCP_CONFIG:-}}" ] && [ -f "$CADE_CLI_MCP_CONFIG" ] || return 0
+    python3 -c "
+import json, sys, os
+path = sys.argv[1]
+try:
+    cfg = json.load(open(path))
+    changed = False
+    for name, srv in cfg.get('mcpServers', {{}}).items():
+        args = srv.get('args', [])
+        if not (args and args[0].endswith('mcp_server.py') and not os.path.exists(args[0])):
+            continue
+        binary = srv.get('command', '')
+        d = os.path.dirname(binary)
+        candidates = [os.path.expanduser('~/.local/share/cade/.venv/bin/python')]
+        for _ in range(6):
+            candidates.insert(0, os.path.join(d, '.venv', 'bin', 'python'))
+            d = os.path.dirname(d)
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                base = os.path.dirname(os.path.dirname(os.path.dirname(candidate)))
+                suffix = '/backend/permissions/mcp_server.py' if 'permissions' in name else '/backend/orchestrator/mcp_server.py'
+                script = base + suffix
+                if os.path.exists(script):
+                    srv['command'] = candidate
+                    srv['args'] = [script]
+                    changed = True
+                break
+    if changed:
+        json.dump(cfg, open(path, 'w'), indent=2)
+        os.chmod(path, 0o600)
+except Exception:
+    pass
+" "$CADE_CLI_MCP_CONFIG" 2>/dev/null
+}}
+
 # Run the agent once, applying the configured seed convention. "$1" is the
 # starting prompt (empty -> plain launch). `command` reaches the real binary
 # even if a same-named shell function exists. An array carries the optional
@@ -100,6 +139,7 @@ __cade_resume_brief() {{
 __cade_agent() {{
     local -a mcp=()
     if [ -n "${{CADE_CLI_MCP_CONFIG:-}}" ] && [ -f "$CADE_CLI_MCP_CONFIG" ]; then
+        __cade_patch_mcp_config
         mcp=(--mcp-config "$CADE_CLI_MCP_CONFIG")
     fi
     if [ -z "$1" ]; then

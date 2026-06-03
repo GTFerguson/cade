@@ -1403,6 +1403,19 @@ def parse_args() -> argparse.Namespace:
         help="Show what would be changed without modifying settings",
     )
 
+    # mcp-server command
+    mcp_server_parser = subparsers.add_parser(
+        "mcp-server",
+        help="Run a CADE MCP server over stdio (used by Claude Code)",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    mcp_server_parser.add_argument(
+        "--type",
+        choices=["orchestrator", "permissions"],
+        default="orchestrator",
+        help="Which MCP server to run",
+    )
+
     return parser.parse_args()
 
 
@@ -1577,14 +1590,38 @@ def run_setup_hook(args: argparse.Namespace) -> None:
         print("(Written to WSL home directory from Windows)")
 
 
+def run_mcp_server(args: argparse.Namespace) -> None:
+    """Run a CADE MCP server over stdio."""
+    if args.type == "permissions":
+        from backend.permissions.mcp_server import mcp
+    else:
+        from backend.orchestrator.mcp_server import mcp
+    mcp.run(transport="stdio")
+
+
 def main() -> None:
     """Main entry point."""
+    # Legacy: old packaged configs call `cade-backend /path/to/mcp_server.py`.
+    # The .py file doesn't exist in the PyInstaller extraction dir, but the
+    # path suffix tells us which server to run.
+    import sys as _sys
+    if len(_sys.argv) == 2 and _sys.argv[1].endswith("mcp_server.py"):
+        _script = _sys.argv[1]
+        if "permissions" in _script:
+            from backend.permissions.mcp_server import mcp as _mcp
+        else:
+            from backend.orchestrator.mcp_server import mcp as _mcp
+        _mcp.run(transport="stdio")
+        return
+
     args = parse_args()
 
     if args.command == "view":
         run_view(args)
     elif args.command == "setup-hook":
         run_setup_hook(args)
+    elif args.command == "mcp-server":
+        run_mcp_server(args)
     else:
         # Default to serve (either explicit "serve" or no command)
         run_serve(args)

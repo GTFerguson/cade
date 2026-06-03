@@ -8,9 +8,6 @@ import os
 import sys
 from pathlib import Path
 
-MCP_SERVER_SCRIPT = Path(__file__).parent / "mcp_server.py"
-PERMISSION_SERVER_SCRIPT = Path(__file__).parent.parent / "permissions" / "mcp_server.py"
-
 logger = logging.getLogger(__name__)
 
 # The venv Python has mcp/httpx installed; sys.executable may not if the
@@ -18,11 +15,33 @@ logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _VENV_PYTHON = _PROJECT_ROOT / ".venv" / "bin" / "python"
 
+# Source script paths — only valid in dev (not in a PyInstaller package).
+_MCP_SERVER_SCRIPT = Path(__file__).parent / "mcp_server.py"
+_PERMISSION_SERVER_SCRIPT = Path(__file__).parent.parent / "permissions" / "mcp_server.py"
+
+
+def _is_frozen() -> bool:
+    """True when running inside a PyInstaller-packaged binary."""
+    return getattr(sys, "frozen", False)
+
 
 def _get_python() -> str:
     if _VENV_PYTHON.exists():
         return str(_VENV_PYTHON)
     return sys.executable
+
+
+def _server_command(server_type: str) -> tuple[str, list[str]]:
+    """Return (command, args) to launch the given MCP server.
+
+    In the packaged binary we can't run .py scripts from the extraction dir,
+    so we delegate to the binary's own ``mcp-server`` subcommand instead.
+    """
+    if _is_frozen():
+        return sys.executable, ["mcp-server", "--type", server_type]
+    python = _get_python()
+    script = _MCP_SERVER_SCRIPT if server_type == "orchestrator" else _PERMISSION_SERVER_SCRIPT
+    return python, [str(script)]
 
 
 def mcp_config_dir() -> Path:
@@ -51,7 +70,6 @@ def write_mcp_config(
     session_id: str | None = None,
 ) -> Path:
     """Write (or overwrite) the MCP config for a CADE websocket connection."""
-    python = _get_python()
     env: dict[str, str] = {
         "CADE_BACKEND_PORT": str(backend_port),
         "CADE_BACKEND_HOST": backend_host,
@@ -60,16 +78,19 @@ def write_mcp_config(
     if auth_token:
         env["CADE_AUTH_TOKEN"] = auth_token
 
+    orch_cmd, orch_args = _server_command("orchestrator")
+    perm_cmd, perm_args = _server_command("permissions")
+
     config = {
         "mcpServers": {
             "cade-orchestrator": {
-                "command": python,
-                "args": [str(MCP_SERVER_SCRIPT)],
+                "command": orch_cmd,
+                "args": orch_args,
                 "env": dict(env),
             },
             "cade-permissions": {
-                "command": python,
-                "args": [str(PERMISSION_SERVER_SCRIPT)],
+                "command": perm_cmd,
+                "args": perm_args,
                 "env": dict(env),
             },
         }

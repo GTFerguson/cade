@@ -124,15 +124,34 @@ What this system **doesn't** do:
 - **No aggregated cost.** Cost is the last turn's cost, not a running total.
 - **No agent templates or perf metrics.** Listed as future enhancements; not in scope.
 
+## CLI delegation (Claude Code → API workers)
+
+Claude Code running inside a CADE terminal tab can delegate work to CADE's LiteLLM API workers via the same `spawn_agent` MCP tool. The wiring:
+
+1. On websocket connect, `prepare_cli_orchestrator_env` writes a per-session MCP config to `~/.cade/mcp/session-<id>.json` and injects its path as `CADE_CLI_MCP_CONFIG` into the PTY environment.
+2. `cade-resume.sh` (sourced by the PTY shell) reads `$CADE_CLI_MCP_CONFIG` and launches Claude Code as `claude --mcp-config <path>`, making `mcp__cade-orchestrator__spawn_agent` available in that session.
+3. Claude Code stays on the Max plan for planning and review; worker tasks (implementation, multi-file edits, research) are delegated to the configured LiteLLM provider (typically Minimax).
+
+### MCP config generation
+
+`backend/orchestrator/mcp_config.py` writes the per-session JSON. The command/args depend on context:
+
+- **Dev mode** (`sys.frozen` is False): venv Python + source `mcp_server.py` scripts
+- **Packaged binary** (`sys.frozen` is True): `cade-backend mcp-server --type orchestrator|permissions` subcommand
+
+The `mcp-server` subcommand was added to `main.py` specifically for this. Older packaged binaries that called `cade-backend /path/to/mcp_server.py` are handled by a legacy path in `main.py`'s entry point, and by `__cade_patch_mcp_config` in `cade-resume.sh` which fixes the config in place before Claude Code starts.
+
 ## Key files
 
 | File | Role |
 |------|------|
 | `backend/orchestrator/manager.py` | `OrchestratorManager`, slug/name helpers, worker provider factory |
 | `backend/orchestrator/models.py` | `AgentSpec`, `AgentRecord`, `AgentState` |
-| `backend/orchestrator/mcp_server.py` | stdio MCP server exposing `spawn_agent` / `list_agents` to the orchestrator |
+| `backend/orchestrator/mcp_server.py` | stdio MCP server exposing `spawn_agent` / `list_agents` |
+| `backend/orchestrator/mcp_config.py` | Writes per-session MCP config files for CLI tabs |
+| `backend/terminal/agent_launch.py` | Generates `cade-resume.sh`; includes `__cade_patch_mcp_config` |
 | `core/backend/providers/agent_spawner.py` | `AgentSpawnerTool` — tool definition surfaced inside the LiteLLM tool registry |
-| `backend/main.py` (`/api/orchestrator/*`) | HTTP routes wiring the manager to the frontend and to the MCP server |
+| `backend/main.py` (`/api/orchestrator/*`) | HTTP routes + `mcp-server` subcommand |
 | `backend/prompts/modules/orchestrator.md` | Mode-specific system prompt for orchestrator sessions |
 | `backend/tests/test_orchestrator_manager.py` | Manager + naming + multi-turn coverage |
 | `backend/tests/test_agent_spawner.py` | `AgentSpawnerTool` interface tests |
