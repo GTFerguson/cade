@@ -250,6 +250,18 @@ export interface LaunchPreset {
 /**
  * Connected message (server -> client).
  */
+export interface CliAgentInfo {
+  id: string;
+  displayName: string;
+  capabilities: {
+    mcp: boolean;
+    hooks: boolean;
+    permissions: boolean;
+    sessionResolution: boolean;
+    handoffResume: boolean;
+  };
+}
+
 export interface ConnectedMessage extends BaseMessage {
   type: "connected";
   workingDir: string;
@@ -264,6 +276,7 @@ export interface ConnectedMessage extends BaseMessage {
   launchPreset?: LaunchPreset;
   slashCommands?: Array<{ name: string; description: string }>;
   connectionId?: string;
+  cliAgent?: CliAgentInfo;
   mcpStatus?: Array<{
     name: string;
     authenticated: boolean;

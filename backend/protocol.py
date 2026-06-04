@@ -105,7 +105,7 @@ class MessageType:
 class SessionKey:
     """Session key constants for dual-terminal support."""
 
-    CLAUDE = "claude"  # Primary terminal running Claude Code
+    CLAUDE = "claude"  # Primary terminal running the CLI coding agent
     MANUAL = "manual"  # Secondary terminal for manual shell access
 
 

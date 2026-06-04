@@ -17,6 +17,14 @@ When `mcp__cade-orchestrator__spawn_agent` is available, use it to offload execu
 
 ## How to spawn
 
+The orchestrator tools are **deferred** — their schemas are not loaded by default. Before calling any `mcp__cade-orchestrator__*` tool, load the schemas with ToolSearch:
+
+```text
+ToolSearch(query="select:mcp__cade-orchestrator__list_agents,mcp__cade-orchestrator__spawn_agent,mcp__cade-orchestrator__view_file")
+```
+
+Do this once at the start of any session where you intend to delegate. After that, the tools are callable normally.
+
 Each task must be **self-contained**: goal, files to touch, constraints, acceptance criteria. Workers cannot see your conversation — only the task string.
 
 ```text

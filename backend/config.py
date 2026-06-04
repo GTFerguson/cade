@@ -72,6 +72,7 @@ class CliAgent:
     """
 
     command: str = "claude"
+    adapter_id: str = "claude-code"
     # How the agent takes a starting prompt: "positional" -> `claude "<p>"`;
     # "flag" -> `kimi <seed_flag> "<p>"`.
     seed_style: str = "positional"
@@ -81,21 +82,20 @@ class CliAgent:
     def from_env(cls) -> CliAgent:
         return cls(
             command=os.getenv("CADE_CLI_AGENT", "claude"),
+            adapter_id=os.getenv("CADE_CLI_AGENT_ADAPTER", "claude-code"),
             seed_style=os.getenv("CADE_CLI_AGENT_SEED_STYLE", "positional"),
             seed_flag=os.getenv("CADE_CLI_AGENT_SEED_FLAG", "-p"),
         )
 
-    def direct_command(self, prompt: str | None, mcp_config_path: str | Path | None = None) -> str:
+    def direct_command(self, prompt: str | None) -> str:
         """A single shell-safe invocation of the agent, optionally seeded.
 
-        Used as the fallback typed into the PTY when the resume wrapper can't
-        be sourced, so the agent always starts even if resume is unavailable.
+        Compatibility helper for callers that only need prompt seeding. Adapter
+        classes own vendor-specific integration flags such as MCP config args.
         """
         import shlex
 
         parts = [shlex.quote(self.command)]
-        if mcp_config_path:
-            parts.extend(["--mcp-config", shlex.quote(str(mcp_config_path))])
         if not prompt:
             return " ".join(parts)
         if self.seed_style == "flag":

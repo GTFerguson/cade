@@ -1,8 +1,9 @@
 /**
- * Manages dual terminals (claude and manual) for a project tab.
+ * Manages dual terminals (agent and manual) for a project tab.
  *
- * Provides lazy initialization of the manual terminal and handles
- * switching between terminals with visual status indicators.
+ * The primary terminal runs the configured CLI coding agent (Claude Code,
+ * Codex, Cursor, etc.). Provides lazy initialization of the secondary manual
+ * terminal and handles switching between terminals with visual status indicators.
  */
 
 import { ChatPane, type ChatPaneOptions } from "../chat/chat-pane";
@@ -33,6 +34,7 @@ export class TerminalManager implements Component {
   private agentManager: AgentManager | null = null;
   private agentTabBar: HTMLElement;
   private terminalContent: HTMLElement;
+  private cliAgentLabel = "claude";
   private outputBuffer: Map<AnySessionKey, string[]> = new Map();
   private flushRafId: number | null = null;
   private flushTimeoutId: number | null = null;
@@ -114,6 +116,12 @@ export class TerminalManager implements Component {
   setProjectPath(path: string): void {
     this.projectPath = path;
     this.chatPane?.setProjectPath(path);
+  }
+
+  /** Set the display label for the primary terminal (from the connected payload). */
+  setCliAgentLabel(label: string): void {
+    this.cliAgentLabel = label.toLowerCase();
+    this.updateStatusIndicator();
   }
 
   /**
@@ -449,7 +457,7 @@ export class TerminalManager implements Component {
 
       if (activeAgentId != null) {
         const side = this.agentManager?.getActiveSide() ?? "claude";
-        this.statusIndicator.textContent = side === "claude" ? "[claude]" : "[shell]";
+        this.statusIndicator.textContent = side === "claude" ? `[${this.cliAgentLabel}]` : "[shell]";
         this.statusIndicator.classList.add(side === "claude" ? "claude" : "shell");
       } else {
         // On ORCH tab — show the standard mode label
@@ -470,7 +478,7 @@ export class TerminalManager implements Component {
             this.statusIndicator.classList.add("shell");
           }
         } else if (this.activeTerminal === SessionKey.CLAUDE) {
-          this.statusIndicator.textContent = "[claude]";
+          this.statusIndicator.textContent = `[${this.cliAgentLabel}]`;
           this.statusIndicator.classList.add("claude");
         } else {
           this.statusIndicator.textContent = "[shell]";
@@ -500,7 +508,7 @@ export class TerminalManager implements Component {
           this.statusIndicator.classList.add("shell");
         }
       } else if (this.activeTerminal === SessionKey.CLAUDE) {
-        this.statusIndicator.textContent = "[claude]";
+        this.statusIndicator.textContent = `[${this.cliAgentLabel}]`;
         this.statusIndicator.classList.remove("shell");
         this.statusIndicator.classList.add("claude");
       } else {

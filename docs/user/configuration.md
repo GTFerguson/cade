@@ -156,7 +156,7 @@ close = "x"             # prefix + x - Close current tab
 ```toml
 [misc]
 help = "?"              # prefix + ? - Show help overlay
-toggle-terminal = "s"   # prefix + s - Toggle between Claude and shell terminal
+toggle-terminal = "s"   # prefix + s - Toggle between agent and shell terminal
 ```
 
 ### Navigation
@@ -201,13 +201,57 @@ default-terminal = 0.50     # 50% for terminal
 default-viewer = 0.30       # 30% for viewer
 ```
 
+## CLI Coding Agent
+
+CADE auto-starts a CLI coding agent in the terminal. By default this is **Claude Code**, but you can switch to **Codex** or **Cursor** via environment variables.
+
+### Selecting an Agent
+
+| Agent | Variables |
+|-------|-----------|
+| Claude Code (default) | `CADE_CLI_AGENT=claude` `CADE_CLI_AGENT_ADAPTER=claude-code` |
+| Codex | `CADE_CLI_AGENT=codex` `CADE_CLI_AGENT_ADAPTER=codex` |
+| Cursor | `CADE_CLI_AGENT=cursor-agent` `CADE_CLI_AGENT_ADAPTER=cursor` |
+
+Example — switch to Codex:
+
+```bash
+export CADE_CLI_AGENT=codex
+export CADE_CLI_AGENT_ADAPTER=codex
+```
+
+### MCP Tool Integration
+
+CADE attaches its orchestrator and permissions tools to whichever agent is selected:
+
+- **Claude Code** — passes `--mcp-config <path>` on the command line.
+- **Codex** — merges CADE servers into `~/.codex/config.toml` (removed on session teardown).
+- **Cursor** — merges CADE servers into `.cursor/mcp.json` in the project directory (removed on session teardown).
+
+### Capabilities by Agent
+
+| Capability | Claude Code | Codex | Cursor |
+|------------|:-----------:|:-----:|:------:|
+| Prompt seeding | yes | yes | yes |
+| MCP tools | yes | yes | yes |
+| Hooks (file events) | yes | no | no |
+| Permission delegation | yes | no | no |
+| Session resolution | yes | no | no |
+| Handoff resume | yes | yes | yes |
+
+When a capability is unavailable, CADE degrades gracefully — file watchers replace hooks, and the agent's native permission UI is used.
+
 ## Environment Variables
 
-Some settings can be overridden via environment variables:
+Settings that can be overridden via environment variables:
 
 | Variable | Description |
 |----------|-------------|
-| `CADE_AUTO_START_CLAUDE` | `true` or `false` - Override auto-start setting |
+| `CADE_AUTO_START_CLAUDE` | `true` or `false` — override auto-start setting |
+| `CADE_CLI_AGENT` | Command to run (e.g. `claude`, `codex`, `cursor-agent`) |
+| `CADE_CLI_AGENT_ADAPTER` | Adapter id (e.g. `claude-code`, `codex`, `cursor`) |
+| `CADE_CLI_AGENT_SEED_STYLE` | How the agent takes a prompt: `positional` or `flag` |
+| `CADE_CLI_AGENT_SEED_FLAG` | Flag used when seed_style is `flag` (e.g. `-p`) |
 
 ## Example: Custom Theme
 

@@ -394,8 +394,12 @@ class SessionRegistry:
             await terminal.pty.close()
 
         if session.mcp_config_path:
-            from backend.orchestrator.mcp_config import remove_mcp_config
+            from backend.orchestrator.mcp_config import (
+                remove_adapter_mcp_config,
+                remove_mcp_config,
+            )
             remove_mcp_config(session.mcp_config_path)
+            remove_adapter_mcp_config(session.project_path)
 
     async def _cleanup_loop(self) -> None:
         """Periodically clean up orphaned sessions."""

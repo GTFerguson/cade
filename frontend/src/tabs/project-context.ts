@@ -62,6 +62,9 @@ export class ProjectContextImpl implements IProjectContext {
         this.connectionId = msg.connectionId;
         this.terminalManager?.getChatPane()?.setConnectionId(msg.connectionId);
       }
+      if (msg.cliAgent) {
+        this.terminalManager?.setCliAgentLabel(msg.cliAgent.displayName);
+      }
       if (msg.session != null) {
         this.pendingSession = msg.session;
       }
@@ -69,7 +72,7 @@ export class ProjectContextImpl implements IProjectContext {
         this.splash.setProgress(3, "starting shell");
       }
 
-      // Default landing view is the Claude Code CLI terminal. The API
+      // Default landing view is the CLI coding agent terminal. The API
       // "enhanced chat" is opt-in via the Alt+e enhanced-mode toggle (or the
       // ?enhanced=1 URL param) rather than taking over the view on connect.
       // Seed the chat pane's mode so it renders correctly whenever the user

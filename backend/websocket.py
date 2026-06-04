@@ -559,7 +559,7 @@ class ConnectionHandler:
         self._dashboard.start_watching()
 
     def _prepare_cli_orchestrator_env(self) -> dict[str, str]:
-        """Wire Claude Code CLI to CADE orchestrator MCP + Minimax workers."""
+        """Wire the CLI coding agent to CADE orchestrator MCP."""
         if (
             self._kiosk_mode
             or not self._config.auto_start_claude
@@ -580,6 +580,7 @@ class ConnectionHandler:
             backend_port=self._config.port,
             auth_token=self._config.auth_token,
             session_id=self._session_id,
+            project_dir=self._config.working_dir,
         )
 
         from backend.permissions.manager import get_permission_manager
@@ -724,7 +725,7 @@ class ConnectionHandler:
             # Calculate idle time before updating last_activity
             idle_seconds = int(time.time() - self._session.last_activity)
 
-            # Send scrollback for claude terminal
+            # Send scrollback for the primary (agent) terminal
             scrollback = self._session.get_scrollback(SessionKey.CLAUDE)
             if scrollback:
                 await self._send({
@@ -734,7 +735,7 @@ class ConnectionHandler:
                     "sessionKey": SessionKey.CLAUDE,
                 })
 
-            # Send scrollback for all non-claude terminals (manual + agent terminals)
+            # Send scrollback for all secondary terminals (manual + orchestrator agents)
             for session_key in self._session.terminals:
                 if session_key == SessionKey.CLAUDE:
                     continue
@@ -755,6 +756,10 @@ class ConnectionHandler:
             from backend.wsl.health import check_wsl_health
             wsl_healthy, _ = check_wsl_health(timeout=float(health_check_timeout))
 
+        from backend.terminal.cli_agent_adapters import adapter_from_descriptor
+
+        adapter = adapter_from_descriptor(self._config.cli_agent)
+
         message: dict = {
             "type": MessageType.CONNECTED,
             "workingDir": str(self._working_dir),
@@ -763,6 +768,17 @@ class ConnectionHandler:
             "idleSeconds": idle_seconds,
             "wslHealthy": wsl_healthy,
             "connectionId": self._connection_id,
+            "cliAgent": {
+                "id": adapter.id,
+                "displayName": adapter.display_name,
+                "capabilities": {
+                    "mcp": adapter.capabilities.mcp,
+                    "hooks": adapter.capabilities.hooks,
+                    "permissions": adapter.capabilities.permissions,
+                    "sessionResolution": adapter.capabilities.session_resolution,
+                    "handoffResume": adapter.capabilities.handoff_resume,
+                },
+            },
         }
 
         # Frontend-visible subset of the project-local launch preset.

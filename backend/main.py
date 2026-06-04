@@ -211,7 +211,7 @@ def _read_existing_filter_mode() -> bool:
         return False
 
 
-def _auto_setup_hook() -> None:
+def _auto_setup_hook(config: Config) -> None:
     """Ensure the CADE hook is installed and up to date.
 
     Runs every startup. Idempotent — safe to call repeatedly:
@@ -220,8 +220,17 @@ def _auto_setup_hook() -> None:
     - Adds the hook if missing entirely
     """
     from backend.hooks import CADEHookOptions, setup_cade_hooks
+    from backend.terminal.cli_agent_adapters import adapter_from_descriptor
 
     try:
+        adapter = adapter_from_descriptor(config.cli_agent)
+        if not adapter.capabilities.hooks:
+            logger.info(
+                "Skipping hook setup: %s does not support hooks",
+                adapter.display_name,
+            )
+            return
+
         all_files = _read_existing_filter_mode()
         options = CADEHookOptions(all_files=all_files)
 
@@ -273,7 +282,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         """Write discovery files and install hooks in a background thread."""
         loop = asyncio.get_running_loop()
         files = await loop.run_in_executor(None, _write_discovery_files, config)
-        await loop.run_in_executor(None, _auto_setup_hook)
+        await loop.run_in_executor(None, _auto_setup_hook, config)
         await loop.run_in_executor(None, _install_resume_script, config)
         return files
 

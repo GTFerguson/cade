@@ -147,12 +147,50 @@ def prepare_cli_orchestrator_env(
     backend_port: int,
     auth_token: str = "",
     session_id: str | None = None,
+    project_dir: Path | None = None,
 ) -> dict[str, str]:
-    """Build PTY env vars wiring Claude Code to CADE's orchestrator MCP."""
+    """Build PTY env vars wiring the CLI coding agent to CADE's orchestrator MCP.
+
+    For Claude Code the agent reads the generated JSON via ``--mcp-config``.
+    For Codex/Cursor the adapter merges the server entries into the agent's
+    native config file so auto-discovery picks them up.
+    """
     path = write_mcp_config(
         connection_id,
         backend_port=backend_port,
         auth_token=auth_token,
         session_id=session_id,
     )
+
+    # Let the adapter install the servers into its native config location.
+    from backend.config import get_config
+    from backend.terminal.cli_agent_adapters import adapter_from_descriptor
+
+    adapter = adapter_from_descriptor(get_config().cli_agent)
+    if adapter.capabilities.mcp:
+        servers = json.loads(path.read_text(encoding="utf-8")).get("mcpServers", {})
+        try:
+            adapter.install_mcp_config(servers, project_dir)
+        except Exception as exc:
+            logger.warning(
+                "Failed to install MCP config for %s: %s",
+                adapter.display_name,
+                exc,
+            )
+
     return {"CADE_CLI_MCP_CONFIG": str(path)}
+
+
+def remove_adapter_mcp_config(project_dir: Path | None = None) -> None:
+    """Remove CADE-managed MCP entries from the active adapter's native config.
+
+    Called alongside ``remove_mcp_config`` during session teardown.
+    """
+    from backend.config import get_config
+    from backend.terminal.cli_agent_adapters import adapter_from_descriptor
+
+    try:
+        adapter = adapter_from_descriptor(get_config().cli_agent)
+        adapter.remove_mcp_config(project_dir)
+    except Exception as exc:
+        logger.debug("Adapter MCP cleanup skipped: %s", exc)
