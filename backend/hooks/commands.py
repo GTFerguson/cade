@@ -196,6 +196,31 @@ def matches_filter(file_path, cwd):
     return False
 
 
+def record_handoff_owner(file_path):
+    """Record this tab as the owner of a handoff brief it just wrote.
+
+    CADE's resume-on-exit wrapper reads ~/.cache/cade-resume/owned-<tab> so a
+    tab relaunches into the brief IT wrote, not whichever file in
+    docs/plans/handoff/ is newest. Without this, parallel tabs in one project
+    steal each other's handoffs. Keyed by CADE_SESSION_ID (the tab id CADE
+    injects into the PTY env); a no-op in a plain shell where it is unset.
+    """
+    session_id = os.environ.get("CADE_SESSION_ID", "")
+    if not session_id:
+        return
+    if "docs/plans/handoff/" not in file_path or not file_path.endswith(".md"):
+        return
+    if os.path.basename(file_path).lower() == "readme.md":
+        return
+    try:
+        owned_dir = os.path.join(os.path.expanduser("~"), ".cache", "cade-resume")
+        os.makedirs(owned_dir, exist_ok=True)
+        with open(os.path.join(owned_dir, "owned-" + session_id), "w") as f:
+            f.write(os.path.abspath(file_path))
+    except Exception as e:
+        log("Failed to record handoff owner: %s" % e)
+
+
 def main():
     try:
         data = json.load(sys.stdin)
@@ -213,6 +238,10 @@ def main():
 
     session_id = data.get("session_id", "")
     cwd = data.get("cwd", "")
+
+    # Ownership is tracked independently of the viewer filter so it works even
+    # in projects that exclude plans/ from the viewer.
+    record_handoff_owner(file_path)
 
     if not matches_filter(file_path, cwd):
         return

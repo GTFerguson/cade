@@ -441,3 +441,87 @@ def test_brief_resumed_once_then_marked(tmp_path):
         env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
     )
     assert proc.stdout.strip() == "first=yes second="
+
+
+# --- ownership + ambiguity guard (parallel tabs in one project) -----------
+
+
+def _make_named_brief(project: Path, name: str, age_seconds: int = 0) -> Path:
+    handoff = project / "docs" / "plans" / "handoff"
+    handoff.mkdir(parents=True, exist_ok=True)
+    brief = handoff / name
+    brief.write_text("# handoff\n")
+    if age_seconds:
+        subprocess.run(
+            ["touch", "-d", f"-{age_seconds} seconds", str(brief)], check=True
+        )
+    return brief
+
+
+def _run_resume_brief_env(
+    tmp_path: Path, project: Path, env_extra: dict | None = None
+) -> str:
+    """Like ``_run_resume_brief`` but allows injecting ``CADE_SESSION_ID`` to
+    exercise the ownership path."""
+    script = tmp_path / "cade-resume.sh"
+    script.write_text(render_resume_script(CliAgent(command="true"), window=1800))
+    home = tmp_path / "home"
+    home.mkdir(exist_ok=True)
+    env = {"HOME": str(home), "PATH": "/usr/bin:/bin"}
+    if env_extra:
+        env.update(env_extra)
+    proc = subprocess.run(
+        ["bash", "-c", f'. "{script}"; cd "{project}"; __cade_resume_brief'],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    return proc.stdout.strip()
+
+
+def _own(tmp_path: Path, session_id: str, brief: Path) -> None:
+    owned_dir = tmp_path / "home" / ".cache" / "cade-resume"
+    owned_dir.mkdir(parents=True, exist_ok=True)
+    (owned_dir / f"owned-{session_id}").write_text(str(brief))
+
+
+@bash_required
+def test_owned_brief_beats_newer_sibling(tmp_path):
+    """A tab resumes the brief it wrote, even when a sibling tab's brief in the
+    same project is newer."""
+    project = tmp_path / "proj"
+    mine = _make_named_brief(project, "mine.md", age_seconds=30)
+    _make_named_brief(project, "sibling.md", age_seconds=5)  # newer
+    _own(tmp_path, "TAB1", mine)
+    assert _run_resume_brief_env(tmp_path, project, {"CADE_SESSION_ID": "TAB1"}) == str(
+        mine
+    )
+
+
+@bash_required
+def test_session_tab_never_adopts_foreign_briefs(tmp_path):
+    """With ownership tracked but none owned by this tab, it resumes nothing —
+    a lone unowned brief belongs to another tab, so it is not adopted."""
+    project = tmp_path / "proj"
+    _make_named_brief(project, "foreign.md", age_seconds=10)
+    assert _run_resume_brief_env(tmp_path, project, {"CADE_SESSION_ID": "TAB9"}) == ""
+
+
+@bash_required
+def test_plain_shell_refuses_to_guess_between_briefs(tmp_path):
+    """No session id (plain shell): several fresh briefs -> resume nothing."""
+    project = tmp_path / "proj"
+    _make_named_brief(project, "a.md", age_seconds=10)
+    _make_named_brief(project, "b.md", age_seconds=5)
+    assert _run_resume_brief_env(tmp_path, project, None) == ""
+
+
+@bash_required
+def test_owned_path_outside_project_is_ignored(tmp_path):
+    """A stale ownership record pointing outside the current project's handoff
+    dir is rejected (can't leak a brief in from another repo)."""
+    project = tmp_path / "proj"
+    (project / "docs" / "plans" / "handoff").mkdir(parents=True)
+    other = _make_named_brief(tmp_path / "other", "x.md", age_seconds=10)
+    _own(tmp_path, "TAB1", other)
+    assert _run_resume_brief_env(tmp_path, project, {"CADE_SESSION_ID": "TAB1"}) == ""

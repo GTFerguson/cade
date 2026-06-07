@@ -63,12 +63,19 @@ __CADE_SEED_FLAG="${{CADE_CLI_AGENT_SEED_FLAG:-{shlex.quote(agent.seed_flag)}}}"
 __CADE_AGENT_ADAPTER="{adapter.id}"
 CADE_RESUME_WINDOW="${{CADE_RESUME_WINDOW:-{int(window)}}}"
 
-# Per-project marker recording the last brief we auto-resumed. Keyed by a hash
-# of the project path so it never pollutes the repo.
+# Stable per-tab id CADE injects into the PTY env. Empty in a plain shell, in
+# which case ownership tracking is off and the ambiguity guard below applies.
+__cade_session_id() {{ printf '%s' "${{CADE_SESSION_ID:-}}"; }}
+
+# Single-shot marker recording the last brief we auto-resumed. Keyed by the
+# CADE session id when present so sibling tabs in one project don't share a
+# marker; falls back to a hash of the project path for plain shells.
 __cade_marker() {{
-    local dir="$HOME/.cache/cade-resume"
+    local dir="$HOME/.cache/cade-resume" key
     mkdir -p "$dir" 2>/dev/null
-    printf '%s/%s' "$dir" "$(printf '%s' "$PWD" | cksum | cut -d' ' -f1)"
+    key=$(__cade_session_id)
+    [ -n "$key" ] || key=$(printf '%s' "$PWD" | cksum | cut -d' ' -f1)
+    printf '%s/%s' "$dir" "$key"
 }}
 
 # Newest handoff brief under the current dir (excluding a README index), or "".
@@ -77,16 +84,73 @@ __cade_latest_brief() {{
         -printf '%T@ %p\\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-
 }}
 
-# Echo a brief to auto-resume, or nothing. Applies the freshness + single-shot
-# guards so this is silent in every project that isn't mid-handoff.
+# The brief THIS tab wrote, recorded by CADE's edit hook in
+# ~/.cache/cade-resume/owned-<session>. Echoed only when it still exists and
+# lives under the current project's handoff dir (so a stale record from another
+# project can't leak in). Empty when ownership is unknown.
+__cade_owned_brief() {{
+    local sid owned path
+    sid=$(__cade_session_id)
+    [ -n "$sid" ] || return 0
+    owned="$HOME/.cache/cade-resume/owned-$sid"
+    [ -f "$owned" ] || return 0
+    path=$(cat "$owned" 2>/dev/null)
+    [ -n "$path" ] && [ -f "$path" ] || return 0
+    case "$path" in
+        "$PWD/docs/plans/handoff/"*) printf '%s\\n' "$path" ;;
+    esac
+}}
+
+# Handoff briefs under the current dir whose mtime is within the resume window,
+# newest first, one path per line. Drives the ambiguity guard for plain shells.
+__cade_fresh_briefs() {{
+    local now line ts path
+    now=$(date +%s)
+    find "$PWD/docs/plans/handoff" -maxdepth 1 -type f -name '*.md' ! -iname 'readme.md' \\
+        -printf '%T@ %p\\n' 2>/dev/null | sort -rn | while IFS= read -r line; do
+        ts=${{line%% *}}; ts=${{ts%.*}}
+        path=${{line#* }}
+        [ $((now - ts)) -le "$CADE_RESUME_WINDOW" ] && printf '%s\\n' "$path"
+    done
+}}
+
+# Print a one-time hint listing fresh briefs as `resume <slug>` lines so the
+# user can pick deliberately instead of CADE adopting the wrong tab's handoff.
+__cade_handoff_chooser() {{
+    printf 'CADE: multiple fresh handoffs here — pick one with `resume <slug>`:\\n'
+    local p slug
+    while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        slug=${{p##*/}}; printf '  resume %s\\n' "${{slug%.md}}"
+    done
+}}
+
+# Echo a brief to auto-resume, or nothing. Prefers the brief this tab wrote
+# (ownership). When ownership is tracked (CADE session) a tab NEVER adopts an
+# unowned brief — those belong to other tabs — it just hints. In a plain shell
+# where ownership is impossible, it resumes a lone fresh brief but refuses to
+# guess between several. Applies the freshness + single-shot guards either way.
 __cade_resume_brief() {{
     [ -d docs/plans/handoff ] || return 0
-    local brief
-    brief=$(__cade_latest_brief)
-    [ -n "$brief" ] || return 0
 
-    local now bmt
+    local brief now sid bmt
     now=$(date +%s)
+    sid=$(__cade_session_id)
+    brief=$(__cade_owned_brief)
+
+    if [ -z "$brief" ]; then
+        local fresh
+        fresh=$(__cade_fresh_briefs)
+        [ -n "$fresh" ] || return 0
+        if [ -n "$sid" ] || [ "$(printf '%s\\n' "$fresh" | grep -c .)" -gt 1 ]; then
+            # CADE tab with no brief of its own (the fresh ones are other tabs'),
+            # or a plain shell facing several fresh briefs: don't guess — hint.
+            printf '%s\\n' "$fresh" | __cade_handoff_chooser >&2
+            return 0
+        fi
+        brief=$fresh
+    fi
+
     bmt=$(stat -c %Y "$brief" 2>/dev/null) || return 0
     [ $((now - bmt)) -le "$CADE_RESUME_WINDOW" ] || return 0   # too old -> ignore
 
@@ -175,11 +239,22 @@ __cade_run() {{
     return "$code"
 }}
 
-# Manual trigger: resume the latest handoff on demand (ignores the freshness
-# window) — handy when you quit without a fresh brief and want back in.
+# Manual trigger (ignores the freshness window):
+#   resume          -> this tab's own brief, else the newest in the project
+#   resume <slug>   -> docs/plans/handoff/<slug>.md explicitly
+# Handy when you quit without a fresh brief, or to pick among parallel streams.
 resume() {{
     local brief
-    brief=$(__cade_latest_brief)
+    if [ -n "$1" ]; then
+        brief="$PWD/docs/plans/handoff/${{1%.md}}.md"
+        if [ ! -f "$brief" ]; then
+            echo "No handoff brief: $brief" >&2
+            return 1
+        fi
+    else
+        brief=$(__cade_owned_brief)
+        [ -n "$brief" ] || brief=$(__cade_latest_brief)
+    fi
     if [ -z "$brief" ]; then
         echo "No handoff brief found in docs/plans/handoff/." >&2
         return 1

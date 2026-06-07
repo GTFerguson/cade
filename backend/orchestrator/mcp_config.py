@@ -178,7 +178,13 @@ def prepare_cli_orchestrator_env(
                 exc,
             )
 
-    return {"CADE_CLI_MCP_CONFIG": str(path)}
+    env = {"CADE_CLI_MCP_CONFIG": str(path)}
+    if session_id:
+        # The resume-on-exit wrapper and the edit hook both key handoff-brief
+        # ownership off this, so a tab only auto-resumes the brief it wrote
+        # rather than whichever sibling tab's brief is newest in the project.
+        env["CADE_SESSION_ID"] = session_id
+    return env
 
 
 def remove_adapter_mcp_config(project_dir: Path | None = None) -> None:

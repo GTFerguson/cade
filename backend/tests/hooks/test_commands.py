@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from backend.hooks.commands import (
@@ -154,3 +160,53 @@ class TestHookScriptTemplate:
         rendered = HOOK_SCRIPT_TEMPLATE.replace("{filter_mode}", "plans_only")
         assert "{filter_mode}" not in rendered
         compile(rendered, "view_file.py", "exec")
+
+
+def _run_hook(tmp_path: Path, file_path: str, *, session_id: str | None) -> Path:
+    """Run the generated hook with a Write payload for ``file_path`` and a fake
+    HOME, returning the cade-resume ownership dir for inspection."""
+    script = tmp_path / "view_file.py"
+    script.write_text(generate_hook_script(CADEHookOptions()))
+    home = tmp_path / "home"
+    home.mkdir(exist_ok=True)
+    env = {"HOME": str(home), "PATH": "/usr/bin:/bin"}
+    if session_id is not None:
+        env["CADE_SESSION_ID"] = session_id
+    payload = json.dumps(
+        {"tool_input": {"file_path": file_path}, "cwd": str(tmp_path)}
+    )
+    subprocess.run(
+        [sys.executable, str(script)],
+        input=payload,
+        text=True,
+        capture_output=True,
+        env=env,
+    )
+    return home / ".cache" / "cade-resume"
+
+
+class TestHandoffOwnership:
+    """The hook records which tab wrote a handoff brief so resume-on-exit can
+    relaunch a tab into its own brief, not a sibling tab's newest file."""
+
+    @pytest.mark.skipif(shutil.which("bash") is None, reason="needs a real FS")
+    def test_records_owner_for_handoff_brief(self, tmp_path) -> None:
+        brief = tmp_path / "proj" / "docs" / "plans" / "handoff" / "feature-x.md"
+        brief.parent.mkdir(parents=True)
+        brief.write_text("# brief\n")
+        owned_dir = _run_hook(tmp_path, str(brief), session_id="TAB1")
+        assert (owned_dir / "owned-TAB1").read_text() == str(brief)
+
+    def test_no_session_id_records_nothing(self, tmp_path) -> None:
+        brief = tmp_path / "proj" / "docs" / "plans" / "handoff" / "feature-x.md"
+        brief.parent.mkdir(parents=True)
+        brief.write_text("# brief\n")
+        owned_dir = _run_hook(tmp_path, str(brief), session_id=None)
+        assert not owned_dir.exists()
+
+    def test_non_handoff_file_records_nothing(self, tmp_path) -> None:
+        other = tmp_path / "proj" / "src" / "main.py"
+        other.parent.mkdir(parents=True)
+        other.write_text("x = 1\n")
+        owned_dir = _run_hook(tmp_path, str(other), session_id="TAB1")
+        assert not (owned_dir / "owned-TAB1").exists()
