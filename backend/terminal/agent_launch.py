@@ -152,6 +152,9 @@ __cade_agent() {{
     elif [ "$__CADE_SEED_STYLE" = "flag" ]; then
         command "$__CADE_AGENT_CMD" "${{mcp[@]}}" "$__CADE_SEED_FLAG" "$1"
     else
+        # `--` terminates the variadic --mcp-config so a positional prompt is not
+        # swallowed as a second config path (Claude Code 2.x). Drop it and a
+        # seeded resume dies with "MCP config file not found: <cwd>/<prompt>".
         command "$__CADE_AGENT_CMD" "${{mcp[@]}}" -- "$1"
     fi
 }}
