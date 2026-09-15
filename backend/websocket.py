@@ -393,7 +393,14 @@ class ConnectionHandler:
         self._current_mode: str = "code"
         if self._kiosk_mode:
             logger.info("Kiosk mode enabled — PTY, file watcher, and CC features disabled")
-        self._cli_pty_env = self._prepare_cli_orchestrator_env()
+        from backend.claude_profiles import terminal_env as claude_profile_env
+
+        # The Claude profile applies whether or not the agent auto-starts: a
+        # `claude` typed into the tab later must get the same account.
+        self._cli_pty_env = {
+            **claude_profile_env(self._working_dir),
+            **self._prepare_cli_orchestrator_env(),
+        }
         provider_config_dict = extract_provider_config(self._launch_yaml)
         if self._provider_override == "none":
             logger.info(
@@ -1466,6 +1473,7 @@ class ConnectionHandler:
         import sys
         from backend.wsl.paths import get_wsl_home_as_windows_path
         from backend.cc_session_resolver import resolve_project_to_slug
+        from backend.claude_profiles import claude_dir_for
 
         # On Windows, look in WSL home directory
         if sys.platform == "win32":
@@ -1476,7 +1484,8 @@ class ConnectionHandler:
             else:
                 plans_dir = Path.home() / ".claude" / "plans"
         else:
-            plans_dir = Path.home() / ".claude" / "plans"
+            # A project under a Claude profile writes its plans into that profile
+            plans_dir = claude_dir_for(self._working_dir) / "plans"
 
         if not plans_dir.exists():
             logger.debug("Plans directory does not exist: %s", plans_dir)

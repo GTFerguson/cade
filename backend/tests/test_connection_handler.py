@@ -481,6 +481,71 @@ class TestSetupFlow:
                     await handler._setup()
 
 
+class TestSetupClaudeProfile:
+    """A project under a Claude profile gets CLAUDE_CONFIG_DIR in its terminal.
+
+    CADE starts the agent with `command claude`, which skips shell functions, so
+    the account can only be chosen reliably through the PTY's environment.
+    """
+
+    @pytest.fixture
+    def work_dir(self, temp_dir: Path, monkeypatch) -> Path:
+        work_dir = temp_dir / "claude-work"
+        profiles_file = temp_dir / "claude.toml"
+        profiles_file.write_text(
+            f'[[profile]]\nconfig-dir = "{work_dir}"\npaths = ["{temp_dir / "work"}"]\n'
+        )
+        monkeypatch.setattr(
+            "backend.claude_profiles._profiles_file", lambda: profiles_file
+        )
+        return work_dir
+
+    @staticmethod
+    async def _setup_with_registry(project: Path) -> AsyncMock:
+        handler = ConnectionHandler(make_mock_websocket(), make_mock_config(working_dir=project))
+        handler._session_id = "test-session"
+        mock_session = PTYSession(id="test-session", project_path=project)
+        mock_session.add_terminal(SessionKey.CLAUDE, make_mock_pty())
+        mock_registry = AsyncMock(spec=SessionRegistry)
+        mock_registry.get_or_create.return_value = (mock_session, True)
+
+        with patch("backend.websocket.get_registry", return_value=mock_registry):
+            with patch("backend.websocket.load_user_config") as mock_user_config:
+                mock_user_config.return_value = MagicMock()
+                mock_user_config.return_value.behavior.session.network_timeout = 15.0
+                await handler._setup()
+        return mock_registry
+
+    @pytest.mark.asyncio
+    async def test_session_terminal_gets_profile_dir(self, temp_dir: Path, work_dir: Path):
+        registry = await self._setup_with_registry(temp_dir / "work" / "repo")
+
+        pty_env = registry.get_or_create.call_args.kwargs["pty_env"]
+        assert pty_env["CLAUDE_CONFIG_DIR"] == str(work_dir)
+
+    @pytest.mark.asyncio
+    async def test_session_terminal_outside_profile_is_untouched(
+        self, temp_dir: Path, work_dir: Path
+    ):
+        registry = await self._setup_with_registry(temp_dir / "personal")
+
+        assert registry.get_or_create.call_args.kwargs["pty_env"] is None
+
+    @pytest.mark.asyncio
+    async def test_standalone_terminal_gets_profile_dir(self, temp_dir: Path, work_dir: Path):
+        project = temp_dir / "work"
+        handler = ConnectionHandler(make_mock_websocket(), make_mock_config(working_dir=project))
+        handler._session_id = None
+        mock_pty = make_mock_pty()
+
+        with patch("backend.terminal.pty.PTYManager", return_value=mock_pty):
+            with patch("backend.websocket.load_user_config") as mock_user_config:
+                mock_user_config.return_value = MagicMock()
+                await handler._setup()
+
+        assert mock_pty.spawn.call_args.kwargs["env"]["CLAUDE_CONFIG_DIR"] == str(work_dir)
+
+
 # ---------------------------------------------------------------------------
 # Connected Message Tests
 # ---------------------------------------------------------------------------

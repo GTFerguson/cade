@@ -54,6 +54,7 @@ from backend.protocol import MessageType
 from backend.terminal.sessions import get_registry
 from backend.websocket import websocket_handler
 from backend.cc_session_resolver import resolve_slug_to_project
+from backend.claude_profiles import is_plan_file
 from backend.wsl.health import ensure_wsl_ready
 from backend.wsl.paths import wsl_to_windows_path
 from backend.wsl.session_unifier import unify_sessions
@@ -553,10 +554,9 @@ def create_app(config: Config | None = None) -> FastAPI:
                 "connections": sent_count,
             }
 
-        # Try slug-based routing for plan files (outside project directories)
-        # Normalize path separators to handle Windows UNC paths from WSL
-        normalized_path = str(file_path).replace("\\", "/")
-        if "/.claude/plans/" in normalized_path:
+        # Try slug-based routing for plan files (outside project directories).
+        # Plans can sit in any Claude profile's directory, not just ~/.claude.
+        if is_plan_file(file_path):
             slug = file_path.stem  # e.g., "jazzy-crunching-moonbeam"
             message["isPlan"] = True  # Mark as plan for overlay behavior
 

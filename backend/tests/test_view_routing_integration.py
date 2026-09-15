@@ -177,7 +177,7 @@ class TestWslClaudeDirDetection:
     ) -> None:
         """Verify _get_claude_dir() returns WSL path on Windows."""
         # Mock sys.platform = "win32"
-        monkeypatch.setattr("backend.cc_session_resolver.sys.platform", "win32")
+        monkeypatch.setattr("backend.claude_profiles.sys.platform", "win32")
 
         # Mock get_wsl_home_as_windows_path() to return UNC path
         wsl_home = "\\\\wsl.localhost\\Ubuntu\\home\\testuser"
@@ -202,7 +202,7 @@ class TestWslClaudeDirDetection:
     ) -> None:
         """Falls back to Windows home when WSL is not ready (returns None)."""
         # Mock sys.platform = "win32"
-        monkeypatch.setattr("backend.cc_session_resolver.sys.platform", "win32")
+        monkeypatch.setattr("backend.claude_profiles.sys.platform", "win32")
 
         # Mock get_wsl_home_as_windows_path() to return None (WSL not ready)
         monkeypatch.setattr(
@@ -222,7 +222,7 @@ class TestWslClaudeDirDetection:
     def test_cache_clearing_allows_redetection(self, monkeypatch) -> None:
         """Clearing cache allows WSL to be re-detected after becoming ready."""
         # First call: WSL not ready
-        monkeypatch.setattr("backend.cc_session_resolver.sys.platform", "win32")
+        monkeypatch.setattr("backend.claude_profiles.sys.platform", "win32")
         monkeypatch.setattr(
             "backend.wsl.paths.get_wsl_home_as_windows_path",
             lambda: None,

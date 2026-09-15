@@ -22,6 +22,13 @@ def _isolate_global_state(monkeypatch: pytest.MonkeyPatch) -> Generator[None, No
     """
     monkeypatch.setenv("CADE_CLI_ORCHESTRATOR", "false")
 
+    # A developer running tests from a profiled Claude session, or with a real
+    # ~/.config/cade/claude.toml, must not change which Claude directory tests see.
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    import backend.claude_profiles as profiles_mod
+
+    monkeypatch.setattr(profiles_mod, "_profiles_file", lambda: None)
+
     import backend.orchestrator.manager as orch_mod
     import backend.permissions.manager as perm_mod
     import core.backend.providers.config as providers_mod

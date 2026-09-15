@@ -27,7 +27,7 @@ class TestGetClaudeDir:
 
     def test_linux_uses_home(self, monkeypatch) -> None:
         """On Linux, uses standard home directory."""
-        monkeypatch.setattr("backend.cc_session_resolver.sys.platform", "linux")
+        monkeypatch.setattr("backend.claude_profiles.sys.platform", "linux")
         # Clear the cache to force re-evaluation
         _get_claude_dir.cache_clear()
 
@@ -36,7 +36,7 @@ class TestGetClaudeDir:
 
     def test_windows_uses_wsl_home(self, monkeypatch) -> None:
         """On Windows, uses WSL home directory when available."""
-        monkeypatch.setattr("backend.cc_session_resolver.sys.platform", "win32")
+        monkeypatch.setattr("backend.claude_profiles.sys.platform", "win32")
         monkeypatch.setattr(
             "backend.wsl.paths.get_wsl_home_as_windows_path",
             lambda: "\\\\wsl.localhost\\Ubuntu\\home\\testuser",
@@ -52,7 +52,7 @@ class TestGetClaudeDir:
 
     def test_windows_falls_back_without_wsl(self, monkeypatch) -> None:
         """On Windows without WSL, falls back to Windows home."""
-        monkeypatch.setattr("backend.cc_session_resolver.sys.platform", "win32")
+        monkeypatch.setattr("backend.claude_profiles.sys.platform", "win32")
         monkeypatch.setattr(
             "backend.wsl.paths.get_wsl_home_as_windows_path",
             lambda: None,
@@ -526,3 +526,86 @@ class TestResolveProjectToSlug:
         result = resolve_project_to_slug(project_path)
         # Should return the most recent (sess-2's slug)
         assert result == "new-slug"
+
+
+class TestProfileDirectories:
+    """Sessions started under a Claude profile live in that profile's directory."""
+
+    WORK_ROOT = "/home/user/work"
+
+    @pytest.fixture
+    def dirs(self, temp_dir: Path, monkeypatch) -> dict[str, Path]:
+        default_dir = temp_dir / ".claude"
+        work_dir = temp_dir / ".claude-work"
+        for claude_dir in (default_dir, work_dir):
+            (claude_dir / "projects").mkdir(parents=True)
+
+        profiles_file = temp_dir / "claude.toml"
+        profiles_file.write_text(
+            f'[[profile]]\nname = "work"\nconfig-dir = "{work_dir}"\n'
+            f'paths = ["{self.WORK_ROOT}"]\n'
+        )
+        monkeypatch.setattr(
+            "backend.claude_profiles._profiles_file", lambda: profiles_file
+        )
+        monkeypatch.setattr(
+            "backend.cc_session_resolver._get_claude_dir", lambda: default_dir
+        )
+        return {"default": default_dir, "work": work_dir}
+
+    @staticmethod
+    def _add_session(claude_dir: Path, session_id: str, project: str, slug: str) -> None:
+        with (claude_dir / "history.jsonl").open("a") as f:
+            f.write(json.dumps({"sessionId": session_id, "project": project}) + "\n")
+        subdir = claude_dir / "projects" / encode_project_path(project)
+        subdir.mkdir(parents=True, exist_ok=True)
+        (subdir / f"{session_id}.jsonl").write_text(
+            json.dumps({"type": "user", "slug": slug})
+        )
+
+    def test_resolves_slug_when_only_profile_history_exists(
+        self, dirs: dict[str, Path]
+    ) -> None:
+        self._add_session(dirs["work"], "sess-w", f"{self.WORK_ROOT}/repo", "work-slug")
+        assert not (dirs["default"] / "history.jsonl").exists()
+
+        assert resolve_slug_to_project("work-slug") == Path(f"{self.WORK_ROOT}/repo")
+
+    def test_resolves_slugs_from_both_directories(self, dirs: dict[str, Path]) -> None:
+        self._add_session(dirs["default"], "sess-p", "/home/user/personal", "home-slug")
+        self._add_session(dirs["work"], "sess-w", f"{self.WORK_ROOT}/repo", "work-slug")
+
+        assert resolve_slug_to_project("home-slug") == Path("/home/user/personal")
+        assert resolve_slug_to_project("work-slug") == Path(f"{self.WORK_ROOT}/repo")
+
+    def test_recent_sessions_merge_all_histories(self, dirs: dict[str, Path]) -> None:
+        self._add_session(dirs["default"], "sess-p", "/home/user/personal", "home-slug")
+        self._add_session(dirs["work"], "sess-w", f"{self.WORK_ROOT}/repo", "work-slug")
+
+        assert _get_recent_sessions() == {
+            "sess-p": "/home/user/personal",
+            "sess-w": f"{self.WORK_ROOT}/repo",
+        }
+
+    def test_resolves_project_to_slug_from_profile_directory(
+        self, dirs: dict[str, Path]
+    ) -> None:
+        self._add_session(dirs["work"], "sess-w", f"{self.WORK_ROOT}/repo", "work-slug")
+
+        assert resolve_project_to_slug(f"{self.WORK_ROOT}/repo") == "work-slug"
+
+    def test_prefers_profile_history_over_sessions_from_before_profiling(
+        self, dirs: dict[str, Path]
+    ) -> None:
+        project = f"{self.WORK_ROOT}/repo"
+        self._add_session(dirs["default"], "sess-old", project, "old-personal-slug")
+        self._add_session(dirs["work"], "sess-new", project, "work-slug")
+
+        assert resolve_project_to_slug(project) == "work-slug"
+
+    def test_unprofiled_project_still_resolves_from_default(
+        self, dirs: dict[str, Path]
+    ) -> None:
+        self._add_session(dirs["default"], "sess-p", "/home/user/personal", "home-slug")
+
+        assert resolve_project_to_slug("/home/user/personal") == "home-slug"
