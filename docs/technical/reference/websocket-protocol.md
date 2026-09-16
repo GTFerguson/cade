@@ -1,7 +1,7 @@
 ---
 title: WebSocket Protocol Reference
 created: 2026-02-25
-updated: 2026-02-25
+updated: 2026-09-16
 status: complete
 tags: [reference, protocol, websocket, api]
 ---
@@ -32,11 +32,11 @@ The protocol is defined in `backend/protocol.py` (server) and `frontend/src/plat
 | `get-plans-list` | C->S | `{ root? }` | Request the project's plans/handoffs index |
 | `file-tree` | S->C | `{ data: FileNode[] }` | File tree response |
 | `file-children` | S->C | `{ path, children }` | Directory children response |
-| `file-content` | S->C | `{ path, content, fileType }` | File content |
+| `file-content` | S->C | `{ path, content, fileType, encoding, size, mime? }` | File content. `encoding` is `utf-8` (text), `base64` (binary bytes; `fileType` is `pdf`, `image` or `binary`, `mime` set) or `none` (binary over the 25 MB preview cap; `content` empty, only `size`). |
 | `file-written` | S->C | `{ path }` | Write confirmation |
 | `file-created` | S->C | `{ path }` | Create confirmation |
 | `file-change` | S->C | `{ event, path }` | Filesystem change notification |
-| `view-file` | S->C | `{ path, content, fileType, isPlan? }` | External view request (e.g. plan overlay) |
+| `view-file` | S->C | `{ path, content, fileType, encoding, size, mime?, isPlan? }` | External view request (e.g. plan overlay); same encoding rules as `file-content` |
 | `plans-list` | S->C | `{ root, plans: PlanEntry[], handoffs: PlanEntry[] }` | Plans/handoffs index (see [[frontend-architecture#Plans & Handoffs Pane]]). `PlanEntry = { name, relPath, modified, title, isLatest? }`. Re-emitted after `/compact` writes a handoff. |
 
 ## Session

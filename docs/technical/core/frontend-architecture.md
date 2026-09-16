@@ -1,7 +1,7 @@
 ---
 title: Frontend Architecture
 created: 2026-01-17
-updated: 2026-05-17
+updated: 2026-09-16
 status: active
 tags: [technical, frontend, architecture, wiki-links, tabs, session-persistence, keybindings, state-machine, mobile, dashboard]
 ---
@@ -154,6 +154,8 @@ Wraps xterm.js to provide terminal emulation.
 - Keyboard input forwarded to server via WebSocket
 - Receives output from server PTY
 - Session restoration with scrollback replay
+- Pastes go through xterm's `paste()` so bracketed-paste markers reach the running app (Claude Code relies on them to treat a multiline paste as one block)
+- OSC 52 clipboard writes from the PTY are forwarded to the system clipboard through `@xterm/addon-clipboard` (write-only: answering OSC 52 reads would let a server-side process exfiltrate the clipboard). The backend strips OSC 52 from replayed scrollback so a reconnect cannot overwrite the clipboard with stale content.
 
 **Key Methods:**
 
@@ -164,6 +166,12 @@ Wraps xterm.js to provide terminal emulation.
 | `reset()` | Reset terminal state and clear for session replay |
 | `focus()` | Focus the terminal |
 
+**File drops (`terminal/file-drop.ts`):**
+
+A file dropped on a page with no drop handler makes the webview navigate to the file, replacing CADE with its contents. `installFileDropHandling()` (called once at boot) captures every file drop at the document level and pastes the paths, shell-quoted and space-separated, into a terminal. Each non-read-only `Terminal` registers itself as a drop target on init and unregisters on dispose; the target is the terminal under the pointer, else the one last typed in, and it gets a `file-drop-hover` highlight while a drag hovers. Drags that carry no files (kanban cards) are ignored.
+
+Two sources feed the same routing. In a browser the HTML5 File API exposes only the file *name*, so that is what gets pasted. In the desktop app Tauri's native drag-drop event (enabled by default in `tauri.conf.json`; the window capability grants `core:event:allow-listen`) carries full paths, and the HTML5 drop is suppressed there so nothing pastes twice. Enabling native drag-drop disables HTML5 drag-and-drop on Windows only; the kanban's click-to-move menu still works there.
+
 **ChatPane — `prefillInput(text)`:**
 
 Sets the chat input value and focuses it without submitting. Useful for verb-sheet and command-palette integrations that want to stage a command for the user to review before sending.
@@ -172,6 +180,7 @@ Sets the chat input value and focuses it without submitting. Useful for verb-she
 
 - `@xterm/xterm` - Terminal emulator
 - `@xterm/addon-fit` - Auto-resize support
+- `@xterm/addon-clipboard` - OSC 52 clipboard forwarding
 - `@xterm/addon-web-links` - Clickable URLs
 - `@xterm/addon-webgl` - WebGL renderer (with canvas fallback)
 
@@ -221,6 +230,13 @@ Renders file content with syntax highlighting.
 - Code block highlighting via highlight.js
 - Wiki-link support (`[[path]]` syntax)
 - Auto-refresh when viewed file changes
+- PDF and image preview for binary files (see below)
+
+**Binary files (`markdown/binary-viewers.ts`):**
+
+The backend classifies files before reading them (known binary extensions, else a NUL-byte sniff of the first 8 KB) and sends binaries as base64 with `encoding: "base64"`, a `size` and a `mime`; binaries over 25 MB send `encoding: "none"` and only the size. Text files keep `encoding: "utf-8"`. Before this distinction a PDF was decoded as latin-1 and pushed through the syntax highlighter, which froze the pane.
+
+`renderBinaryContent()` handles every non-text payload: PDFs are rendered page by page through `pdfjs-dist` (worker bundled by Vite, downscaled to the pane width, never upscaled), images are shown inline on a checkerboard, and anything else gets a notice with the size. Both `MarkdownViewer` and the mobile `FileViewer` route through it. Switching files disposes the active viewer, which cancels an in-flight PDF render; the statusline shows the size instead of a line count; and `i` does nothing on a binary since there is no text to edit.
 
 **Supported Markdown:**
 
