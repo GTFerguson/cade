@@ -8,6 +8,11 @@ import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SessionKey, type AnySessionKey } from "@core/platform/protocol";
 import { openExternal } from "@core/platform/tauri-bridge";
+import {
+  noteDropTargetFocus,
+  registerDropTarget,
+  unregisterDropTarget,
+} from "./file-drop";
 import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 import { getSavedThemeId, getThemeById } from "../config/themes";
@@ -171,6 +176,14 @@ export class Terminal implements Component {
     this.terminal.open(this.container);
 
     this.webglRenderer = new WebglRenderer(this.terminal);
+
+    // Dropped files are pasted as paths into whichever terminal is under the
+    // pointer, or failing that the one last typed in. Read-only viewers never
+    // take input, so they stay out of the routing table.
+    if (!this.readOnly) {
+      registerDropTarget(this);
+      this.container.addEventListener("focusin", () => noteDropTargetFocus(this));
+    }
 
     // Allow external key interception (e.g., for prefix key)
     this.terminal.attachCustomKeyEventHandler((e) => {
@@ -404,6 +417,11 @@ export class Terminal implements Component {
     this.ws.sendResize(this.terminal.cols, this.terminal.rows, this.sessionKey);
   }
 
+  /** Root element whose area accepts file drops. */
+  get element(): HTMLElement {
+    return this.container;
+  }
+
   /**
    * Focus the terminal without changing scroll position.
    */
@@ -525,6 +543,7 @@ export class Terminal implements Component {
    * Dispose of terminal resources.
    */
   dispose(): void {
+    unregisterDropTarget(this);
     if (this.resizeDebounceTimer !== null) {
       window.clearTimeout(this.resizeDebounceTimer);
       this.resizeDebounceTimer = null;

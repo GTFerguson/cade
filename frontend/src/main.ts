@@ -7,6 +7,7 @@ import "highlight.js/styles/vs2015.css";
 import "../styles/main.css";
 
 import { loadFonts } from "./terminal/web-fonts";
+import { installFileDropHandling } from "./terminal/file-drop";
 
 // Kick the bundled monospace fetch immediately so the network request is
 // in flight before any UI mounts. The actual await happens inside
@@ -1205,6 +1206,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const authed = await checkAuth();
   if (!authed) return;
+
+  // Installed before any terminal exists so a stray drop during startup can
+  // never navigate the page away.
+  installFileDropHandling();
 
   // Block app init until every registered font face is loaded. Chrome returns
   // FontFace.family with quotes for multi-word families ("JetBrains Mono"),

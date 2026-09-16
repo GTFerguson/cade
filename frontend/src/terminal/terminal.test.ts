@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Terminal } from "./terminal";
+import { resetDropTargets, resolveDropTarget } from "./file-drop";
 import { SessionKey } from "@core/platform/protocol";
 import type { WebSocketClient } from "../platform/websocket";
 
@@ -524,5 +525,54 @@ describe("Terminal paste handling", () => {
         expect(event.defaultPrevented).toBe(true);
       });
     });
+  });
+});
+
+describe("Terminal file-drop registration", () => {
+  let container: HTMLElement;
+  let ws: WebSocketClient;
+
+  beforeEach(async () => {
+    resetDropTargets();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    Object.defineProperty(container, "offsetWidth", { value: 400 });
+    Object.defineProperty(container, "offsetHeight", { value: 300 });
+    ws = createMockWebSocket();
+  });
+
+  it("registers itself so a drop over its container pastes the path", () => {
+    const terminal = new Terminal(container, ws);
+    terminal.initialize();
+    (document as any).elementFromPoint = vi.fn(() => container);
+    const target = resolveDropTarget(5, 5);
+    expect(target).toBe(terminal);
+    const xtermMock = (terminal as any).terminal;
+    target!.pasteText("/tmp/a ");
+    expect(xtermMock.paste).toHaveBeenCalledWith("/tmp/a ");
+  });
+
+  it("does not register a read-only viewer", () => {
+    const terminal = new Terminal(container, ws, { readOnly: true });
+    terminal.initialize();
+    (document as any).elementFromPoint = vi.fn(() => container);
+    expect(resolveDropTarget(5, 5)).toBeNull();
+  });
+
+  it("becomes the fallback target after receiving focus", () => {
+    const terminal = new Terminal(container, ws);
+    terminal.initialize();
+    container.dispatchEvent(new Event("focusin", { bubbles: true }));
+    (document as any).elementFromPoint = vi.fn(() => null);
+    expect(resolveDropTarget(0, 0)).toBe(terminal);
+  });
+
+  it("unregisters on dispose", () => {
+    const terminal = new Terminal(container, ws);
+    terminal.initialize();
+    container.dispatchEvent(new Event("focusin", { bubbles: true }));
+    terminal.dispose();
+    (document as any).elementFromPoint = vi.fn(() => container);
+    expect(resolveDropTarget(5, 5)).toBeNull();
   });
 });

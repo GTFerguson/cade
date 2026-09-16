@@ -7,6 +7,12 @@
   position: relative;
 }
 
+/* Inset so the highlight stays inside the pane; an outline on the canvas
+   edge would be clipped by the pane's overflow rules. */
+.terminal-container.file-drop-hover {
+  box-shadow: inset 0 0 0 2px var(--accent-blue);
+}
+
 /* Terminal status indicator */
 .terminal-status-indicator {
   position: absolute;

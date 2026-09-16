@@ -39,8 +39,7 @@
         "height": 900,
         "resizable": true,
         "fullscreen": false,
-        "decorations": false,
-        "dragDropEnabled": false
+        "decorations": false
       }
     ],
     "security": {
@@ -58,6 +57,8 @@
             "core:window:allow-toggle-maximize",
             "core:window:allow-close",
             "core:window:allow-set-focus",
+            "core:event:allow-listen",
+            "core:event:allow-unlisten",
             "dialog:allow-open",
             "dialog:default"
           ]

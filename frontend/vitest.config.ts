@@ -25,6 +25,10 @@ export default defineConfig({
         __dirname,
         "node_modules/@tauri-apps/api/core.js"
       ),
+      "@tauri-apps/api/webview": resolve(
+        __dirname,
+        "node_modules/@tauri-apps/api/webview.js"
+      ),
     },
   },
   test: {

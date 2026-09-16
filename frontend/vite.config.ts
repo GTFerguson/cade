@@ -36,6 +36,10 @@ export default defineConfig({
         __dirname,
         "node_modules/@tauri-apps/api/core.js"
       ),
+      "@tauri-apps/api/webview": resolve(
+        __dirname,
+        "node_modules/@tauri-apps/api/webview.js"
+      ),
       marked: resolve(__dirname, "node_modules/marked"),
       "highlight.js": resolve(__dirname, "node_modules/highlight.js"),
       "katex/contrib/auto-render": resolve(
