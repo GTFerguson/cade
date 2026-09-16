@@ -49,7 +49,12 @@ TERMINAL_QUERY_PATTERN = re.compile(
     # OSC sequences with queries (e.g., OSC 10 ; ? ST for foreground color)
     r"\x1b\][0-9]+;\?\x07"
     r"|"
-    r"\x1b\][0-9]+;\?\x1b\\\\"
+    r"\x1b\][0-9]+;\?\x1b\\"
+    r"|"
+    # OSC 52 clipboard writes/queries (BEL or ST terminated). The frontend
+    # forwards these to the system clipboard, so replaying them on reconnect
+    # would silently overwrite the user's clipboard with stale content.
+    r"\x1b\]52;[^\x07\x1b]*(?:\x07|\x1b\\)"
     r")"
 )
 

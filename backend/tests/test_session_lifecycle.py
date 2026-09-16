@@ -88,6 +88,34 @@ class TestTerminalState:
         result = ts.get_scrollback()
         assert "\x1bc" not in result
 
+    def test_scrollback_strips_osc52_clipboard_sequences(self):
+        """OSC 52 clipboard writes must not survive into replay — the frontend
+        forwards them to the system clipboard, so replaying stale copies would
+        clobber the user's clipboard on every reconnect."""
+        pty = make_mock_pty()
+        ts = TerminalState(pty=pty)
+        # BEL-terminated and ST-terminated forms, plus a read query
+        ts.capture_output("before\x1b]52;c;aGVsbG8=\x07after")
+        ts.capture_output("mid\x1b]52;c;d29ybGQ=\x1b\\end")
+        ts.capture_output("q\x1b]52;c;?\x07r")
+        result = ts.get_scrollback()
+        assert "\x1b]52" not in result
+        assert "aGVsbG8=" not in result
+        assert "d29ybGQ=" not in result
+        assert "beforeafter" in result
+        assert "midend" in result
+        assert "qr" in result
+
+    def test_scrollback_strips_st_terminated_osc_color_query(self):
+        """OSC color queries terminated with ST (ESC \\) should be stripped,
+        same as the BEL-terminated form."""
+        pty = make_mock_pty()
+        ts = TerminalState(pty=pty)
+        ts.capture_output("a\x1b]10;?\x1b\\b")
+        result = ts.get_scrollback()
+        assert "\x1b]10;?" not in result
+        assert "ab" in result
+
 
 # ---------------------------------------------------------------------------
 # PTYSession tests

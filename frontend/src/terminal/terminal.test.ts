@@ -36,6 +36,7 @@ vi.mock("@xterm/xterm", () => {
     onResize = vi.fn();
     onScroll = vi.fn();
     write = vi.fn();
+    paste = vi.fn();
     clear = vi.fn();
     dispose = vi.fn();
     getSelection = vi.fn(() => "");
@@ -73,6 +74,10 @@ vi.mock("@xterm/addon-fit", () => ({
 
 vi.mock("@xterm/addon-web-links", () => ({
   WebLinksAddon: class {},
+}));
+
+vi.mock("@xterm/addon-clipboard", () => ({
+  ClipboardAddon: class {},
 }));
 
 vi.mock("@xterm/addon-canvas", () => ({
@@ -173,17 +178,20 @@ describe("Terminal paste handling", () => {
   });
 
   describe("Browser paste event", () => {
-    it("handles paste event and sends text via WebSocket", async () => {
+    it("routes paste through xterm so bracketed paste mode is honored", async () => {
       const pasteText = "Hello from clipboard";
       const pasteEvent = createPasteEvent(pasteText);
 
       container.dispatchEvent(pasteEvent);
 
-      // Should prevent default to stop xterm's paste handler
+      // Should prevent default to stop double-handling
       expect(pasteEvent.defaultPrevented).toBe(true);
 
-      // Should send input via WebSocket
-      expect(ws.sendInput).toHaveBeenCalledWith(pasteText, SessionKey.CLAUDE);
+      // Must go through xterm's paste() (applies \x1b[200~ wrapping and
+      // newline normalization), never raw over the WebSocket
+      const xtermMock = (terminal as any).terminal;
+      expect(xtermMock.paste).toHaveBeenCalledWith(pasteText);
+      expect(ws.sendInput).not.toHaveBeenCalled();
     });
 
     it("prevents event propagation to stop xterm handler", () => {
@@ -203,26 +211,31 @@ describe("Terminal paste handling", () => {
       // Should still prevent default
       expect(pasteEvent.defaultPrevented).toBe(true);
 
-      // Should not send empty text
+      // Should not paste empty text
+      const xtermMock = (terminal as any).terminal;
+      expect(xtermMock.paste).not.toHaveBeenCalled();
       expect(ws.sendInput).not.toHaveBeenCalled();
     });
 
-    it("handles paste with multiline text", () => {
+    it("routes multiline paste through xterm unmodified", () => {
       const multilineText = "line 1\nline 2\nline 3";
       const pasteEvent = createPasteEvent(multilineText);
 
       container.dispatchEvent(pasteEvent);
 
-      expect(ws.sendInput).toHaveBeenCalledWith(multilineText, SessionKey.CLAUDE);
+      const xtermMock = (terminal as any).terminal;
+      expect(xtermMock.paste).toHaveBeenCalledWith(multilineText);
+      expect(ws.sendInput).not.toHaveBeenCalled();
     });
 
-    it("handles paste with special characters", () => {
+    it("routes paste with special characters through xterm", () => {
       const specialText = "echo 'Hello $USER'\t\n";
       const pasteEvent = createPasteEvent(specialText);
 
       container.dispatchEvent(pasteEvent);
 
-      expect(ws.sendInput).toHaveBeenCalledWith(specialText, SessionKey.CLAUDE);
+      const xtermMock = (terminal as any).terminal;
+      expect(xtermMock.paste).toHaveBeenCalledWith(specialText);
     });
   });
 
@@ -380,8 +393,8 @@ describe("Terminal paste handling", () => {
       });
     });
 
-    it("pastes clipboard content on right-click when no selection", async () => {
-      const clipboardText = "clipboard content";
+    it("pastes clipboard content through xterm on right-click when no selection", async () => {
+      const clipboardText = "line 1\nline 2";
       clipboard.readText.mockResolvedValue(clipboardText);
 
       const xtermMock = (terminal as any).terminal;
@@ -392,10 +405,12 @@ describe("Terminal paste handling", () => {
 
       expect(contextMenuEvent.defaultPrevented).toBe(true);
 
-      // Wait for async clipboard read
+      // Wait for async clipboard read; must route through xterm's paste()
+      // so bracketed paste and disableStdin are honored
       await vi.waitFor(() => {
-        expect(ws.sendInput).toHaveBeenCalledWith(clipboardText, SessionKey.CLAUDE);
+        expect(xtermMock.paste).toHaveBeenCalledWith(clipboardText);
       });
+      expect(ws.sendInput).not.toHaveBeenCalled();
     });
 
     it("does not paste when clipboard is empty", async () => {
@@ -435,7 +450,7 @@ describe("Terminal paste handling", () => {
   });
 
   describe("Manual terminal session", () => {
-    it("uses MANUAL session key when specified", () => {
+    it("pastes into the terminal instance that owns the container", () => {
       const manualTerminal = new Terminal(container, ws, {
         sessionKey: SessionKey.MANUAL,
       });
@@ -444,7 +459,9 @@ describe("Terminal paste handling", () => {
       const pasteEvent = createPasteEvent("test");
       container.dispatchEvent(pasteEvent);
 
-      expect(ws.sendInput).toHaveBeenCalledWith("test", SessionKey.MANUAL);
+      // Session-key routing happens via each terminal's own onData wiring;
+      // the paste handler must hand the text to its own xterm instance
+      expect((manualTerminal as any).terminal.paste).toHaveBeenCalledWith("test");
     });
   });
 
@@ -458,11 +475,12 @@ describe("Terminal paste handling", () => {
       container.dispatchEvent(event2);
       container.dispatchEvent(event3);
 
-      // Should send each paste exactly once
-      expect(ws.sendInput).toHaveBeenCalledTimes(3);
-      expect(ws.sendInput).toHaveBeenNthCalledWith(1, "paste 1", SessionKey.CLAUDE);
-      expect(ws.sendInput).toHaveBeenNthCalledWith(2, "paste 2", SessionKey.CLAUDE);
-      expect(ws.sendInput).toHaveBeenNthCalledWith(3, "paste 3", SessionKey.CLAUDE);
+      // Should paste each exactly once
+      const xtermMock = (terminal as any).terminal;
+      expect(xtermMock.paste).toHaveBeenCalledTimes(3);
+      expect(xtermMock.paste).toHaveBeenNthCalledWith(1, "paste 1");
+      expect(xtermMock.paste).toHaveBeenNthCalledWith(2, "paste 2");
+      expect(xtermMock.paste).toHaveBeenNthCalledWith(3, "paste 3");
     });
 
     it("prevents xterm from creating duplicate pastes", () => {
@@ -479,9 +497,9 @@ describe("Terminal paste handling", () => {
       const pasteEvent = createPasteEvent("test");
       container.dispatchEvent(pasteEvent);
 
-      // Should only send input once (from paste event handler)
-      expect(ws.sendInput).toHaveBeenCalledTimes(1);
-      expect(ws.sendInput).toHaveBeenCalledWith("test", SessionKey.CLAUDE);
+      // Should only paste once (from paste event handler)
+      expect(xtermMock.paste).toHaveBeenCalledTimes(1);
+      expect(xtermMock.paste).toHaveBeenCalledWith("test");
     });
 
     it("handles Unicode and emoji correctly", () => {
@@ -490,7 +508,8 @@ describe("Terminal paste handling", () => {
 
       container.dispatchEvent(pasteEvent);
 
-      expect(ws.sendInput).toHaveBeenCalledWith(unicodeText, SessionKey.CLAUDE);
+      const xtermMock = (terminal as any).terminal;
+      expect(xtermMock.paste).toHaveBeenCalledWith(unicodeText);
     });
 
     it("prevents default on all paste events to avoid xterm conflicts", () => {

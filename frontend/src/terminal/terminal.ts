@@ -4,6 +4,7 @@
 
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SessionKey, type AnySessionKey } from "@core/platform/protocol";
 import { openExternal } from "@core/platform/tauri-bridge";
@@ -145,6 +146,20 @@ export class Terminal implements Component {
 
     this.fitAddon = new FitAddon();
     this.terminal.loadAddon(this.fitAddon);
+    // Claude Code's TUI does its own mouse-driven selection and copies via
+    // OSC 52; without this addon xterm.js silently drops those sequences and
+    // copied text never reaches the browser clipboard. Write-only provider:
+    // answering OSC 52 reads would let any server-side process exfiltrate the
+    // user's clipboard through the PTY. Skipped for read-only viewers so a
+    // watched session's copies don't clobber the viewer's clipboard.
+    if (!this.readOnly) {
+      this.terminal.loadAddon(
+        new ClipboardAddon(undefined, {
+          readText: () => "",
+          writeText: (_selection, text) => navigator.clipboard.writeText(text),
+        }),
+      );
+    }
     // Route link clicks through openExternal so they reach the OS browser in
     // the desktop build (the default handler's window.open is a no-op there).
     this.terminal.loadAddon(
@@ -253,7 +268,9 @@ export class Terminal implements Component {
     });
     this.resizeObserver.observe(this.container);
 
-    // Prevent default browser paste events (xterm.js has its own paste handler that conflicts)
+    // Catch paste events that xterm's own textarea handler didn't consume
+    // (xterm stops propagation when it handles one, so this only fires for
+    // pastes landing elsewhere in the container).
     this.container.addEventListener('paste', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -261,7 +278,7 @@ export class Terminal implements Component {
       // Get clipboard data from event
       const text = e.clipboardData?.getData('text');
       if (text) {
-        this.ws.sendInput(text, this.sessionKey);
+        this.pasteText(text);
       }
     });
 
@@ -281,7 +298,7 @@ export class Terminal implements Component {
         navigator.clipboard.readText()
           .then(text => {
             if (text) {
-              this.ws.sendInput(text, this.sessionKey);
+              this.pasteText(text);
             }
           })
           .catch(err => {
@@ -458,6 +475,17 @@ export class Terminal implements Component {
    */
   sendInput(data: string): void {
     this.ws.sendInput(data, this.sessionKey);
+  }
+
+  /**
+   * Paste text through xterm rather than sending raw bytes to the PTY.
+   * xterm wraps the text in bracketed-paste markers when the running app
+   * has enabled them (Claude Code relies on this to treat a multiline paste
+   * as one block instead of submitting on each newline), normalizes line
+   * endings, and respects disableStdin on read-only terminals.
+   */
+  pasteText(text: string): void {
+    this.terminal?.paste(text);
   }
 
   /**
