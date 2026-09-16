@@ -37,6 +37,8 @@ import {
 } from "./editor-mode";
 import type { EditorModeState, EditorCallbacks } from "./editor-mode";
 import { viewerRegistry } from "./viewer-registry";
+import { formatBytes, isBinaryPayload, renderBinaryContent } from "./binary-viewers";
+import type { FileContentEncoding } from "../types";
 
 // Make libraries available globally for mertex.md
 declare global {
@@ -63,6 +65,9 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   private currentRoot: string | null = null;
   private currentContent: string = "";
   private currentFileType: string = "plaintext";
+  private currentEncoding: FileContentEncoding = "utf-8";
+  private currentSize = 0;
+  private currentMime: string | undefined = undefined;
   private currentMeta: Record<string, unknown> | undefined = undefined;
   private parsedMode = true;
   private activeParsedComponent: { dispose(): void } | null = null;
@@ -83,9 +88,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   private cfgClickListener: ((e: MouseEvent) => void) | null = null;
   private boundHandlers = {
     fileContent: (message: any) => {
-      this.currentPath = message.path;
-      this.currentContent = message.content;
-      this.currentFileType = message.fileType;
+      this.applyFilePayload(message);
       this.render();
     },
     viewFile: (message: any) => {
@@ -95,9 +98,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
           this.mainView = this.captureCurrentView();
         }
 
-        this.currentPath = message.path;
-        this.currentContent = message.content;
-        this.currentFileType = message.fileType;
+        this.applyFilePayload(message);
         this.isPlanOverlayActive = true;
         this.render();
       } else {
@@ -251,19 +252,41 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     return true;
   }
 
+  private applyFilePayload(message: {
+    path: string | null;
+    content: string;
+    fileType: string;
+    encoding?: FileContentEncoding | undefined;
+    size?: number | undefined;
+    mime?: string | undefined;
+  }): void {
+    this.currentPath = message.path;
+    this.currentContent = message.content;
+    this.currentFileType = message.fileType;
+    // Older servers send text only; treat a missing encoding as text.
+    this.currentEncoding = message.encoding ?? "utf-8";
+    this.currentSize = message.size ?? message.content.length;
+    this.currentMime = message.mime;
+  }
+
+  private isBinary(): boolean {
+    return isBinaryPayload({ encoding: this.currentEncoding });
+  }
+
   private captureCurrentView(): ViewState {
     return {
       path: this.currentPath,
       content: this.currentContent,
       fileType: this.currentFileType,
+      encoding: this.currentEncoding,
+      size: this.currentSize,
+      mime: this.currentMime,
       scrollTop: this.contentContainer?.scrollTop ?? 0,
     };
   }
 
   private restoreView(state: ViewState): void {
-    this.currentPath = state.path;
-    this.currentContent = state.content;
-    this.currentFileType = state.fileType;
+    this.applyFilePayload(state);
     this.render();
 
     if (state.scrollTop > 0) {
@@ -319,6 +342,11 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   }
 
   private async render(): Promise<void> {
+    // Every branch below either recreates this or wants it gone; a PDF
+    // still rendering into a replaced container must be cancelled here.
+    this.activeParsedComponent?.dispose();
+    this.activeParsedComponent = null;
+
     if (this.currentPath === null) {
       this.renderEmpty();
       return;
@@ -372,7 +400,20 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       content.appendChild(divider);
     }
 
-    if (this.currentFileType === "markdown") {
+    if (this.isBinary()) {
+      content.classList.add("binary-viewer");
+      this.activeParsedComponent = renderBinaryContent(
+        content,
+        {
+          fileType: this.currentFileType,
+          content: this.currentContent,
+          encoding: this.currentEncoding,
+          size: this.currentSize,
+          mime: this.currentMime,
+        },
+        displayName,
+      );
+    } else if (this.currentFileType === "markdown") {
       const { frontmatter, content: markdown } = extractFrontmatter(this.currentContent);
 
       if (frontmatter !== null) {
@@ -414,8 +455,6 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
         if (this.parsedMode) {
           this.renderParsedContent(content, viewerFactory);
         } else {
-          this.activeParsedComponent?.dispose();
-          this.activeParsedComponent = null;
           content.classList.add("json-viewer");
           content.appendChild(renderJsonTree(this.currentContent));
         }
@@ -451,7 +490,9 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
       const statusLines = document.createElement("span");
       statusLines.className = "status-lines";
-      statusLines.textContent = `${this.currentContent.split("\n").length} ln`;
+      statusLines.textContent = this.isBinary()
+        ? formatBytes(this.currentSize)
+        : `${this.currentContent.split("\n").length} ln`;
       statusline.appendChild(statusLines);
     }
 
@@ -648,6 +689,8 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
         return true;
       }
       if (e.key === "i" && this.currentPath !== null) {
+        // Bytes have no text form to edit.
+        if (this.isBinary()) return true;
         if (this.currentFileType === "markdown") {
           enterNormalMode(this.editorState, this.editorCallbacks(), this.ws);
           return true;

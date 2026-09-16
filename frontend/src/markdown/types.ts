@@ -1,3 +1,5 @@
+import type { FileContentEncoding } from "../types";
+
 import type { EventHandler } from "../types";
 
 export interface MarkdownEvents {
@@ -9,6 +11,9 @@ export interface ViewState {
   path: string | null;
   content: string;
   fileType: string;
+  encoding: FileContentEncoding;
+  size: number;
+  mime: string | undefined;
   scrollTop: number;
 }
 

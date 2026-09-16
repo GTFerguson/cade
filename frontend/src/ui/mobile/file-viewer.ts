@@ -6,6 +6,12 @@
  */
 
 import hljs from "highlight.js";
+import {
+  formatBytes,
+  isBinaryPayload,
+  renderBinaryContent,
+  type BinaryPayload,
+} from "../../markdown/binary-viewers";
 import type { MobileScreen } from "./screen-manager";
 import { setupSwipeBack } from "./swipe-back";
 
@@ -15,6 +21,7 @@ export interface FileViewerCallbacks {
 
 export class FileViewer implements MobileScreen {
   readonly element: HTMLElement;
+  private binaryViewer: { dispose(): void } | null = null;
   private headerEl: HTMLElement;
   private bodyEl: HTMLElement;
   private statusMode: HTMLElement;
@@ -71,16 +78,33 @@ export class FileViewer implements MobileScreen {
   /**
    * Load and display file content.
    */
-  showFile(path: string, content: string, fileType: string): void {
+  showFile(
+    path: string,
+    content: string,
+    fileType: string,
+    meta: Pick<BinaryPayload, "encoding" | "size" | "mime"> = {},
+  ): void {
     const filename = path.split("/").pop() ?? path;
     this.headerEl.textContent = `[ ${filename} ]`;
     this.statusFile.textContent = filename;
     this.statusLang.textContent = fileType;
 
+    this.binaryViewer?.dispose();
+    this.binaryViewer = null;
+    this.bodyEl.innerHTML = "";
+
+    if (isBinaryPayload(meta)) {
+      this.statusLines.textContent = formatBytes(meta.size ?? 0);
+      this.binaryViewer = renderBinaryContent(
+        this.bodyEl,
+        { fileType, content, ...meta },
+        filename,
+      );
+      return;
+    }
+
     const lineCount = content.split("\n").length;
     this.statusLines.textContent = `${lineCount} ln`;
-
-    this.bodyEl.innerHTML = "";
 
     if (fileType === "markdown") {
       this.renderMarkdown(content);

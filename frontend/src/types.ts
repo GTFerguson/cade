@@ -200,11 +200,17 @@ export interface FileChangeMessage extends BaseMessage {
 /**
  * File content response (server -> client).
  */
+/** How `content` is encoded: text, base64 bytes, or nothing (over the preview cap). */
+export type FileContentEncoding = "utf-8" | "base64" | "none";
+
 export interface FileContentMessage extends BaseMessage {
   type: "file-content";
   path: string;
   content: string;
   fileType: string;
+  encoding?: FileContentEncoding;
+  size?: number;
+  mime?: string;
 }
 
 /**
@@ -216,6 +222,9 @@ export interface ViewFileMessage extends BaseMessage {
   path: string;
   content: string;
   fileType: string;
+  encoding?: FileContentEncoding;
+  size?: number;
+  mime?: string;
   isPlan?: boolean;
 }
 

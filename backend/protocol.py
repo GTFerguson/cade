@@ -34,7 +34,7 @@ class MessageType:
     FILE_TREE = "file-tree"  # File tree response: { type, data: FileNode[] }
     FILE_CHILDREN = "file-children"  # Directory children: { type, path: str, children: FileNode[] }
     FILE_CHANGE = "file-change"  # File changed: { type, event: str, path: str }
-    FILE_CONTENT = "file-content"  # File content: { type, path: str, content: str }
+    FILE_CONTENT = "file-content"  # File content: { type, path, content, fileType, encoding: utf-8|base64|none, size, mime? }
     FILE_WRITTEN = "file-written"  # File written successfully: { type, path: str }
     FILE_CREATED = "file-created"  # File created successfully: { type, path: str }
     VIEW_FILE = "view-file"  # External view request: { type, path: str, content: str }

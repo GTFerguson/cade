@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 from pathlib import Path
 from threading import Lock
@@ -306,25 +307,35 @@ def build_directory_children(
     return nodes
 
 
-def read_file_content(root: Path, relative_path: str) -> str:
-    """Read file content from a relative path.
+# Binary previews travel over the WebSocket as base64 inside a JSON message,
+# so a cap keeps one click on a huge asset from stalling the connection.
+MAX_BINARY_PREVIEW_BYTES = 25 * 1024 * 1024
 
-    Args:
-        root: Root directory
-        relative_path: Path relative to root
+# Extensions the viewer can render (pdf, image) or must never show as text.
+_BINARY_TYPES: dict[str, tuple[str, str]] = {
+    ".pdf": ("pdf", "application/pdf"),
+    ".png": ("image", "image/png"),
+    ".jpg": ("image", "image/jpeg"),
+    ".jpeg": ("image", "image/jpeg"),
+    ".gif": ("image", "image/gif"),
+    ".webp": ("image", "image/webp"),
+    ".bmp": ("image", "image/bmp"),
+    ".ico": ("image", "image/x-icon"),
+    ".avif": ("image", "image/avif"),
+}
+_OPAQUE_BINARY_EXTENSIONS = frozenset({
+    ".7z", ".a", ".bin", ".class", ".db", ".dll", ".dylib", ".exe", ".gz",
+    ".jar", ".mp3", ".mp4", ".o", ".ogg", ".otf", ".pyc", ".so", ".sqlite",
+    ".tar", ".ttf", ".wasm", ".wav", ".woff", ".woff2", ".xz", ".zip", ".zst",
+})
+_SNIFF_BYTES = 8192
 
-    Returns:
-        File content as string
 
-    Raises:
-        FileError: If file not found or cannot be read
-    """
+def _resolve_within_root(root: Path, relative_path: str) -> Path:
+    """Return the file for ``relative_path`` or raise if it escapes ``root``."""
     file_path = root / relative_path
 
-    if not file_path.exists():
-        raise FileError.not_found(relative_path)
-
-    if not file_path.is_file():
+    if not file_path.exists() or not file_path.is_file():
         raise FileError.not_found(relative_path)
 
     try:
@@ -334,15 +345,96 @@ def read_file_content(root: Path, relative_path: str) -> str:
     except Exception:
         raise FileError.not_found(relative_path)
 
+    return file_path
+
+
+def _read_text_lenient(file_path: Path, label: str) -> str:
     try:
         return file_path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         try:
             return file_path.read_text(encoding="latin-1")
         except Exception as e:
-            raise FileError.read_failed(relative_path, str(e)) from e
+            raise FileError.read_failed(label, str(e)) from e
     except Exception as e:
-        raise FileError.read_failed(relative_path, str(e)) from e
+        raise FileError.read_failed(label, str(e)) from e
+
+
+def _binary_kind(file_path: Path) -> tuple[str, str] | None:
+    """Classify a file the viewer must not treat as text, or None for text."""
+    ext = file_path.suffix.lower()
+    if ext in _BINARY_TYPES:
+        return _BINARY_TYPES[ext]
+    if ext in _OPAQUE_BINARY_EXTENSIONS:
+        return ("binary", "application/octet-stream")
+    try:
+        with file_path.open("rb") as fh:
+            sample = fh.read(_SNIFF_BYTES)
+    except OSError:
+        return None
+    # A NUL byte never appears in text encodings the viewer can show.
+    if b"\x00" in sample:
+        return ("binary", "application/octet-stream")
+    return None
+
+
+def build_file_payload(file_path: Path, path_label: str) -> dict:
+    """Build the ``file-content`` message body for an on-disk file.
+
+    Text files carry their decoded content. Binary files carry base64 so the
+    viewer can render PDFs and images itself, or a bare size when the file is
+    over the preview cap. Before this distinction existed a PDF was decoded
+    as latin-1 and pushed through the syntax highlighter, which locked up
+    the viewer.
+    """
+    kind = _binary_kind(file_path)
+    if kind is None:
+        content = _read_text_lenient(file_path, path_label)
+        return {
+            "path": path_label,
+            "content": content,
+            "fileType": get_file_type(path_label),
+            "encoding": "utf-8",
+            "size": file_path.stat().st_size,
+        }
+
+    file_type, mime = kind
+    size = file_path.stat().st_size
+    if size > MAX_BINARY_PREVIEW_BYTES:
+        return {
+            "path": path_label,
+            "content": "",
+            "fileType": file_type,
+            "encoding": "none",
+            "size": size,
+            "mime": mime,
+        }
+    try:
+        raw = file_path.read_bytes()
+    except Exception as e:
+        raise FileError.read_failed(path_label, str(e)) from e
+    return {
+        "path": path_label,
+        "content": base64.b64encode(raw).decode("ascii"),
+        "fileType": file_type,
+        "encoding": "base64",
+        "size": size,
+        "mime": mime,
+    }
+
+
+def read_file_payload(root: Path, relative_path: str) -> dict:
+    """Build a ``file-content`` payload for a path confined to ``root``."""
+    return build_file_payload(_resolve_within_root(root, relative_path), relative_path)
+
+
+def read_file_content(root: Path, relative_path: str) -> str:
+    """Read a text file from a relative path confined to ``root``.
+
+    Raises:
+        FileError: If file not found or cannot be read
+    """
+    return _read_text_lenient(_resolve_within_root(root, relative_path), relative_path)
 
 
 def get_file_type(path: str) -> str:
@@ -380,6 +472,10 @@ def get_file_type(path: str) -> str:
         ".txt": "plaintext",
     }
 
+    if ext in _BINARY_TYPES:
+        return _BINARY_TYPES[ext][0]
+    if ext in _OPAQUE_BINARY_EXTENSIONS:
+        return "binary"
     return type_map.get(ext, "plaintext")
 
 

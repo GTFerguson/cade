@@ -49,7 +49,7 @@ from backend.config import Config, get_config, set_config
 from backend.login_page import get_login_page_html
 from backend.terminal.connections import get_connection_manager
 from backend.connection_registry import get_connection_registry
-from backend.files.tree import get_file_type
+from backend.files.tree import build_file_payload
 from backend.protocol import MessageType
 from backend.terminal.sessions import get_registry
 from backend.websocket import websocket_handler
@@ -523,18 +523,11 @@ def create_app(config: Config | None = None) -> FastAPI:
             return {"error": "Not a file", "path": str(file_path)}
 
         try:
-            content = file_path.read_text(encoding="utf-8")
+            payload = build_file_payload(file_path, str(file_path))
         except Exception as e:
             return {"error": f"Failed to read file: {e}", "path": str(file_path)}
 
-        file_type = get_file_type(str(file_path))
-
-        message = {
-            "type": MessageType.VIEW_FILE,
-            "path": str(file_path),
-            "content": content,
-            "fileType": file_type,
-        }
+        message = {"type": MessageType.VIEW_FILE, **payload}
 
         # Use targeted routing: only send to connections whose project contains this file
         registry = get_connection_registry()

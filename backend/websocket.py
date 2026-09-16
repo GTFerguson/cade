@@ -35,7 +35,7 @@ from backend.files.tree import (
     build_file_tree_cached,
     get_file_tree_cache,
     get_file_type,
-    read_file_content,
+    read_file_payload,
 )
 from core.backend.watcher import FileWatcher
 from backend.neovim.manager import get_neovim_manager
@@ -1335,15 +1335,9 @@ class ConnectionHandler:
             raise ProtocolError.invalid_message("Missing path")
 
         root = self._resolve_root(data.get("root"))
-        content = read_file_content(root, path)
-        file_type = get_file_type(path)
+        payload = read_file_payload(root, path)
 
-        await self._send({
-            "type": MessageType.FILE_CONTENT,
-            "path": path,
-            "content": content,
-            "fileType": file_type,
-        })
+        await self._send({"type": MessageType.FILE_CONTENT, **payload})
 
     async def _handle_write_file(self, data: dict) -> None:
         """Handle file write request."""

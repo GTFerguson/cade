@@ -32,6 +32,7 @@
     "highlight.js": "^11.9.0",
     "marked": "^9.0.0",
     "mertex.md": "file:../mertex.md",
+    "pdfjs-dist": "^6.3.289",
     "prosemirror-state": "^1.4.4",
     "prosemirror-view": "^1.41.3"
   },

@@ -88,7 +88,8 @@ export class MobileUI implements Component {
         this.activeViewer.showFile(
           message.path,
           message.content,
-          message.fileType
+          message.fileType,
+          { encoding: message.encoding, size: message.size, mime: message.mime },
         );
       }
     });
