@@ -17,6 +17,7 @@ import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 import { getSavedThemeId, getThemeById } from "../config/themes";
 import { WebglRenderer } from "./webgl-renderer";
+import { isZoomHotkey } from "./zoom-keys";
 
 /**
  * Build an xterm.js theme from the current CADE theme.
@@ -194,6 +195,8 @@ export class Terminal implements Component {
           return false; // Prevent xterm from handling
         }
       }
+
+      if (isZoomHotkey(e)) return false;
 
       // Now handle terminal-specific shortcuts (only if not intercepted above)
 

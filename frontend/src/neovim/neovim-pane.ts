@@ -9,6 +9,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglRenderer } from "../terminal/webgl-renderer";
 import { WebFontsAddon } from "../terminal/web-fonts";
+import { isZoomHotkey } from "../terminal/zoom-keys";
 import type { PaneKeyHandler } from "../input/keybindings";
 import type { Component, ErrorMessage, NeovimDiffAvailableMessage, NeovimExitedMessage, NeovimOutputMessage, NeovimReadyMessage } from "../types";
 import { ErrorCode } from "@core/platform/protocol";
@@ -137,6 +138,7 @@ export class NeovimPane implements Component, PaneKeyHandler {
     this.fitAddon = new FitAddon();
     this.terminal.loadAddon(this.fitAddon);
     this.terminal.loadAddon(new WebFontsAddon());
+    this.terminal.attachCustomKeyEventHandler((e) => !isZoomHotkey(e));
 
     this.terminal.open(this.terminalContainer);
 
