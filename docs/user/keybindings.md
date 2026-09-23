@@ -1,7 +1,7 @@
 ---
 title: Keyboard Navigation Guide
 created: 2026-01-18
-updated: 2026-01-21
+updated: 2026-09-23
 status: active
 tags: [user, keybindings, navigation, vim, tmux]
 ---
@@ -160,6 +160,22 @@ The terminal uses remapped shortcuts for copy/paste to work in the browser envir
 > [!NOTE]
 > This differs from traditional Unix terminals where `Ctrl+C` sends SIGINT. In CADE, use `Ctrl+X` to interrupt running commands.
 
+## Zoom (Desktop App)
+
+In the desktop app these zoom the whole window, so text in every pane (terminal, file tree, viewer, dashboard) scales together. They work while a terminal has focus.
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+=` / `Ctrl++` | Zoom in |
+| `Ctrl+-` | Zoom out |
+| `Ctrl+0` | Reset to 100% |
+| `Ctrl`+scroll wheel | Zoom in/out |
+
+Each step is 20%. The zoom level resets to 100% when the app restarts. In a browser, the browser's own zoom does the same job.
+
+> [!NOTE]
+> Because CADE takes `Ctrl+-`, the terminal no longer receives it. Shells, nano, and emacs use it as "undo".
+
 ## Workflow Examples
 
 ### Quick file lookup
@@ -229,6 +245,7 @@ prefix = "C-b"
 │  C-x     Send interrupt (SIGINT)                        │
 │  C-v     Paste from clipboard                           │
 │  R-click Copy (with selection) / Paste (without)        │
+│  C-=/C-- Zoom in/out (desktop), C-0 resets              │
 ├─────────────────────────────────────────────────────────┤
 │                    FILE TREE                            │
 ├─────────────────────────────────────────────────────────┤
