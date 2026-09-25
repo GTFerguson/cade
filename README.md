@@ -72,6 +72,7 @@ Hold the prefix key down to chain multiple shortcuts without re-pressing it. Eve
 make setup        # install prerequisites and dependencies
 make dev-desktop  # start in dev mode
 make build-desktop  # build installers
+make install-desktop  # build + install to /usr/bin/cade (Linux; rerun after each update)
 ```
 
 See [SETUP.md](SETUP.md) for detailed instructions or [desktop/QUICKSTART.md](desktop/QUICKSTART.md) for desktop-specific docs.

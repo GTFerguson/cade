@@ -145,6 +145,18 @@ For a full build including Neovim bundling: `scripts/build-desktop.ps1`
 
 Do NOT run PyInstaller with a custom `--distpath` — it bypasses the copy to `resources/` and Tauri will bundle a stale binary. Always use `npm run tauri build` or `scripts/build-desktop.ps1`.
 
+### Updating the installed app (Linux)
+
+The user runs the **installed** app at `/usr/bin/cade` (the `cade-gui` alias), not the build in `target/`. That copy does not update itself, so after pulling or committing changes to `frontend/`, `backend/`, `core/` or `desktop/`, rebuild and reinstall:
+
+```bash
+make install-desktop   # build-desktop, then apt-installs the .deb (needs sudo)
+```
+
+When you finish work that touches those directories, run it, or tell the user it needs running if sudo isn't available. Don't point launchers at `desktop/src-tauri/target/release/cade`: `cargo clean` deletes it.
+
+A `post-merge` hook (`scripts/git-hooks/post-merge`, installed by `make setup`) prints the same reminder after a pull or merge that changes those directories.
+
 ## Git Commits
 
 - **Do NOT include `Co-Authored-By` lines** in commit messages

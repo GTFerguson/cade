@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Reminds you to reinstall the desktop app when a pull or merge changes code
+# that ships in it. The installed /usr/bin/cade is a snapshot, so without this
+# it silently runs old code. Only reminds: a rebuild takes minutes and needs sudo.
+
+changed=$(git diff --name-only ORIG_HEAD HEAD -- frontend/ backend/ core/ desktop/ 2>/dev/null)
+[ -z "$changed" ] && exit 0
+
+count=$(printf '%s\n' "$changed" | wc -l)
+printf '\n\033[33m[cade]\033[0m %s file(s) that ship in the desktop app changed.\n' "$count"
+printf '       Run \033[1mmake install-desktop\033[0m to update /usr/bin/cade.\n\n'

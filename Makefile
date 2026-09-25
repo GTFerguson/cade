@@ -1,7 +1,7 @@
 # CADE Makefile
 # Run stable, dev, or both versions
 
-.PHONY: stable dev dev-dummy both build kill clean help build-desktop dev-desktop setup setup-remote check
+.PHONY: stable dev dev-dummy both build kill clean help build-desktop install-desktop dev-desktop setup setup-remote check
 
 # Default ports
 STABLE_PORT ?= 3000
@@ -54,6 +54,7 @@ help:
 	@echo "  make build        - Build frontend only"
 	@echo "  make kill         - Stop all CADE processes"
 	@echo "  make build-desktop - Build desktop application (full build)"
+	@echo "  make install-desktop - Build desktop app and install the .deb (Linux)"
 	@echo "  make dev-desktop  - Run desktop app in dev mode (Tauri dev)"
 	@echo "  make setup-remote HOST=<ssh-host> - Set up a remote server for CADE"
 	@echo ""
@@ -133,6 +134,7 @@ clean:
 # Check prerequisites for desktop development
 setup:
 	@bash scripts/setup-dev.sh && bash scripts/install-deps.sh
+	@ln -sf ../../scripts/git-hooks/post-merge .git/hooks/post-merge
 
 # Build desktop application (full build with PyInstaller + Tauri)
 build-desktop:
@@ -142,6 +144,17 @@ ifeq ($(OS),Windows_NT)
 else
 	@bash scripts/build-desktop.sh
 endif
+
+# Build and install the desktop app system-wide. The installed copy at
+# /usr/bin/cade survives `cargo clean` wiping target/, which a launcher
+# pointing into target/release/ does not.
+DESKTOP_DEB = desktop/src-tauri/target/release/bundle/deb/CADE_*_amd64.deb
+install-desktop: build-desktop
+ifeq ($(OS),Windows_NT)
+	$(error install-desktop is Linux-only; run the MSI/NSIS installer from desktop/src-tauri/target/release/bundle/)
+endif
+	sudo apt-get install -y --reinstall ./$(firstword $(wildcard $(DESKTOP_DEB)))
+	@echo "Installed: $$(dpkg-query -W -f='$${Package} $${Version}' cade) -> /usr/bin/cade"
 
 # Run desktop application in development mode
 dev-desktop:

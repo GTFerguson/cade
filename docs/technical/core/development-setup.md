@@ -102,6 +102,7 @@ The desktop app uses Tauri (Rust) wrapping the web frontend, with a PyInstaller-
 | `make setup` | Check prerequisites and install all dependencies |
 | `make dev-desktop` | Start desktop in dev mode (Vite hot reload) |
 | `make build-desktop` | Build production desktop app with installers |
+| `make install-desktop` | Build, then install the `.deb` to `/usr/bin/cade` (Linux) |
 
 ### Build Process
 
@@ -112,7 +113,21 @@ The desktop app uses Tauri (Rust) wrapping the web frontend, with a PyInstaller-
 3. **Copy:** Backend binary copied to `desktop/src-tauri/resources/`
 4. **Tauri:** `npm run build` in `desktop/` produces installers
 
-Output: MSI and NSIS installers in `desktop/src-tauri/target/release/bundle/`
+Output: a `.deb` on Linux, MSI and NSIS installers on Windows, in `desktop/src-tauri/target/release/bundle/`
+
+### Keeping the Installed App Current (Linux)
+
+Run the installed app (`/usr/bin/cade`) day to day, not `target/release/cade`. The binary in `target/` disappears on `cargo clean`, and anything pointing at it breaks.
+
+The installed app is a snapshot. It doesn't update when the repo changes, so after each pull or merge that touches `frontend/`, `backend/`, `core/` or `desktop/`, run:
+
+```bash
+make install-desktop
+```
+
+This runs the full `build-desktop` and then `sudo apt-get install --reinstall` on the new `.deb`. `--reinstall` is needed because the package version doesn't change between builds.
+
+`make setup` installs a `post-merge` git hook (`scripts/git-hooks/post-merge`) that prints this reminder whenever a pull or merge changes those directories.
 
 ### Architecture
 
