@@ -130,6 +130,10 @@ def _wrap_with_resource_caps(cmd: list[str]) -> list[str]:
         "--user", "--scope", "--quiet",
         "-p", "MemoryMax=2G",
         "-p", "MemorySwapMax=0",
+        # nkrdn embeds docs in a child process so an OOM there spares the
+        # graph build; systemd's default OOMPolicy=stop would kill the whole
+        # scope on the first OOM kill and defeat that.
+        "-p", "OOMPolicy=continue",
         "-p", "CPUQuota=200%",
         *cmd,
     ]
