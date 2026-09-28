@@ -157,6 +157,8 @@ When you finish work that touches those directories, run it, or tell the user it
 
 A `post-merge` hook (`scripts/git-hooks/post-merge`, installed by `make setup`) prints the same reminder after a pull or merge that changes those directories.
 
+CADE bundles the nkrdn CLI (`/usr/bin/nkrdn` and copies under `/usr/lib/CADE/resources/`), frozen from the sibling `../nkrdn` repo. Keep it in step with nkrdn: after nkrdn changes, run `make install-nkrdn` (rebuilds only that binary, needs sudo). The build uses `../nkrdn/.venv`, or `NKRDN_VENV` if set.
+
 ## Git Commits
 
 - **Do NOT include `Co-Authored-By` lines** in commit messages

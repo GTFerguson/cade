@@ -103,6 +103,7 @@ The desktop app uses Tauri (Rust) wrapping the web frontend, with a PyInstaller-
 | `make dev-desktop` | Start desktop in dev mode (Vite hot reload) |
 | `make build-desktop` | Build production desktop app with installers |
 | `make install-desktop` | Build, then install the `.deb` to `/usr/bin/cade` (Linux) |
+| `make install-nkrdn` | Rebuild only the bundled nkrdn CLI from `../nkrdn` and install it (Linux) |
 
 ### Build Process
 
@@ -128,6 +129,8 @@ make install-desktop
 This runs the full `build-desktop` and then `sudo apt-get install --reinstall` on the new `.deb`. `--reinstall` is needed because the package version doesn't change between builds.
 
 `make setup` installs a `post-merge` git hook (`scripts/git-hooks/post-merge`) that prints this reminder whenever a pull or merge changes those directories.
+
+The bundled nkrdn CLI changes on nkrdn's schedule, not CADE's. After nkrdn changes, `make install-nkrdn` refreshes just that binary: it freezes nkrdn with `scripts/pyinstaller-nkrdn.spec` using `../nkrdn/.venv` (or `NKRDN_VENV`), copies it into `desktop/src-tauri/resources/`, and installs it over `/usr/bin/nkrdn` and the copies under `/usr/lib/CADE/resources/`. The build script looks for nkrdn's Python in that order because `which nkrdn` resolves to the installed frozen binary, which has no interpreter behind it.
 
 ### Architecture
 

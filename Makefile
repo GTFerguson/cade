@@ -1,7 +1,7 @@
 # CADE Makefile
 # Run stable, dev, or both versions
 
-.PHONY: stable dev dev-dummy both build kill clean help build-desktop install-desktop dev-desktop setup setup-remote check
+.PHONY: stable dev dev-dummy both build kill clean help build-desktop install-desktop install-nkrdn dev-desktop setup setup-remote check
 
 # Default ports
 STABLE_PORT ?= 3000
@@ -55,6 +55,7 @@ help:
 	@echo "  make kill         - Stop all CADE processes"
 	@echo "  make build-desktop - Build desktop application (full build)"
 	@echo "  make install-desktop - Build desktop app and install the .deb (Linux)"
+	@echo "  make install-nkrdn - Rebuild only the bundled nkrdn CLI and install it (Linux)"
 	@echo "  make dev-desktop  - Run desktop app in dev mode (Tauri dev)"
 	@echo "  make setup-remote HOST=<ssh-host> - Set up a remote server for CADE"
 	@echo ""
@@ -155,6 +156,19 @@ ifeq ($(OS),Windows_NT)
 endif
 	sudo apt-get install -y --reinstall ./$(firstword $(wildcard $(DESKTOP_DEB)))
 	@echo "Installed: $$(dpkg-query -W -f='$${Package} $${Version}' cade) -> /usr/bin/cade"
+
+# Rebuild only the bundled nkrdn CLI from the sibling nkrdn repo (its .venv,
+# or NKRDN_VENV) and install it over the packaged copies. Agents, CADE's own
+# rebuilds and editor hooks all run the installed binary, so nkrdn fixes do
+# nothing until this runs. The build also lands in resources/, so the next
+# install-desktop bundles the same nkrdn.
+NKRDN_INSTALLED = /usr/bin/nkrdn $(wildcard /usr/lib/CADE/resources/nkrdn /usr/lib/CADE/resources/nkrdn-*-linux-gnu)
+install-nkrdn:
+ifeq ($(OS),Windows_NT)
+	$(error install-nkrdn is Linux-only; run install-desktop's installer instead)
+endif
+	$(PYTHON) scripts/build-backend-sidecar.py --nkrdn-only
+	@for dst in $(NKRDN_INSTALLED); do sudo install -m 755 -o root -g root desktop/src-tauri/resources/nkrdn "$$dst" && echo "Installed nkrdn -> $$dst"; done
 
 # Run desktop application in development mode
 dev-desktop:

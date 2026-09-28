@@ -352,6 +352,29 @@ def _find_venv_python(cli_name: str) -> Path | None:
     return None
 
 
+def _find_nkrdn_python() -> Path | None:
+    """Python for freezing nkrdn: $NKRDN_VENV, the sibling nkrdn repo's .venv, then PATH.
+
+    PATH alone is unreliable: once CADE is installed, ``which nkrdn`` resolves
+    to the frozen /usr/bin/nkrdn, which has no shebang, and the fallback then
+    picks the system python3, which doesn't have nkrdn installed.
+    """
+    rel = Path("Scripts") / "python.exe" if sys.platform == "win32" else Path("bin") / "python"
+    candidates = []
+    if os.environ.get("NKRDN_VENV"):
+        candidates.append(Path(os.environ["NKRDN_VENV"]) / rel)
+    candidates.append(PROJECT_ROOT.parent / "nkrdn" / ".venv" / rel)
+    on_path = _find_venv_python("nkrdn")
+    if on_path:
+        candidates.append(on_path)
+    for python in candidates:
+        if python.exists() and subprocess.run(
+            [str(python), "-c", "import nkrdn"], capture_output=True,
+        ).returncode == 0:
+            return python
+    return None
+
+
 def _build_tool(
     tool_name: str,
     spec_file: Path,
@@ -431,7 +454,7 @@ def _copy_chromium(system: str) -> None:
 
 def _copy_nkrdn_usage_rule() -> None:
     """Copy nkrdn's usage-rule.md to resources so the bundled backend can install it."""
-    venv_python = _find_venv_python("nkrdn")
+    venv_python = _find_nkrdn_python()
     if not venv_python:
         return
     result = subprocess.run(
@@ -450,6 +473,20 @@ def _copy_nkrdn_usage_rule() -> None:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+def _build_nkrdn(system: str, triple: str | None) -> bool:
+    """Freeze nkrdn and copy it into Tauri resources. Returns True on success."""
+    print("\n[build-sidecar] === Building nkrdn ===")
+    nkrdn_python = _find_nkrdn_python()
+    if not nkrdn_python:
+        print("[build-sidecar] nkrdn skipped (no Python with nkrdn installed; set NKRDN_VENV)")
+        return False
+    built_nkrdn = _build_tool("nkrdn", PROJECT_ROOT / "scripts" / "pyinstaller-nkrdn.spec", nkrdn_python, system, triple)
+    if built_nkrdn:
+        _copy_to_resources(built_nkrdn, "nkrdn", system, triple)
+    _copy_nkrdn_usage_rule()
+    return built_nkrdn is not None
+
+
 def main() -> None:
     system = platform.system()
     machine = platform.machine()
@@ -461,6 +498,11 @@ def main() -> None:
 
     RESOURCES_DIR.mkdir(parents=True, exist_ok=True)
     DIST_DIR.mkdir(parents=True, exist_ok=True)
+
+    # nkrdn changes far more often than the rest of the bundle; `make
+    # install-nkrdn` refreshes just it without a full desktop build.
+    if "--nkrdn-only" in sys.argv[1:]:
+        sys.exit(0 if _build_nkrdn(system, triple) else 1)
 
     # ── 0a. Neovim (must be in dist/ before PyInstaller runs) ────────────────
     print("\n[build-sidecar] === Downloading Neovim ===")
@@ -491,15 +533,7 @@ def main() -> None:
     _copy_to_resources(built_backend, "cade-backend", system, triple)
 
     # ── 2. nkrdn ──────────────────────────────────────────────────────────────
-    print("\n[build-sidecar] === Building nkrdn ===")
-    nkrdn_python = _find_venv_python("nkrdn")
-    if nkrdn_python:
-        built_nkrdn = _build_tool("nkrdn", PROJECT_ROOT / "scripts" / "pyinstaller-nkrdn.spec", nkrdn_python, system, triple)
-        if built_nkrdn:
-            _copy_to_resources(built_nkrdn, "nkrdn", system, triple)
-        _copy_nkrdn_usage_rule()
-    else:
-        print("[build-sidecar] nkrdn skipped (not installed)")
+    _build_nkrdn(system, triple)
 
     # ── 3. scout-browse + Chromium ────────────────────────────────────────────
     print("\n[build-sidecar] === Building scout-browse ===")
