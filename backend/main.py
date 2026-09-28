@@ -1072,7 +1072,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def memory_graph(body: MemoryGraphRequest) -> JSONResponse:
         """Build and return the NkrdnGraphMessage for a project.
 
-        Reads .cade/graph.ttl and .cade/knowledge_base.db directly — no CLI
+        Reads .nkrdn/graph.ttl and .nkrdn/knowledge_base.db directly — no CLI
         subprocess needed. Returns an empty-but-valid message if graph data
         doesn't exist yet.
         """

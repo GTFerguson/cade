@@ -107,9 +107,24 @@ def has_code(project_dir: Path) -> bool:
     return False
 
 
-def _graph_path(project_dir: Path) -> Path:
-    """Return the path where the knowledge graph is stored."""
-    return project_dir / ".cade" / "graph.ttl"
+def nkrdn_root(project_dir: Path) -> Path:
+    """The directory nkrdn treats as the project: the enclosing git root.
+
+    Mirrors nkrdn's own resolution, so CADE reads the same .nkrdn/ that a
+    plain `nkrdn rebuild` from anywhere in the repo writes.
+    """
+    for parent in [project_dir, *project_dir.parents]:
+        if (parent / ".git").exists():
+            return parent
+    return project_dir
+
+
+def nkrdn_graph_path(project_dir: Path) -> Path:
+    return nkrdn_root(project_dir) / ".nkrdn" / "graph.ttl"
+
+
+def nkrdn_db_path(project_dir: Path) -> Path:
+    return nkrdn_root(project_dir) / ".nkrdn" / "knowledge_base.db"
 
 
 _SYSTEMD_RUN = shutil.which("systemd-run")
@@ -144,16 +159,11 @@ def _run_nkrdn_rebuild(project_dir: Path) -> subprocess.CompletedProcess:
 
     CPU-bound — call via asyncio.to_thread().
     """
-    graph_file = _graph_path(project_dir)
-    staging_dir = project_dir / ".cade" / "staging"
-
-    cmd = [
-        _NKRDN_BIN,
-        "rebuild",
-        str(project_dir),
-        "--output", str(graph_file),
-        "--staging-dir", str(staging_dir),
-    ]
+    # Exactly what the editor hook and a manual run execute, so all of them
+    # share one .nkrdn/ graph and symbol DB; nkrdn serialises concurrent
+    # rebuilds of a repo. Path overrides would diverge: without them nkrdn
+    # indexes src/ when present, which changes every module name.
+    cmd = [_NKRDN_BIN, "rebuild"]
 
     env = os.environ.copy()
     env["NKRDN_BACKEND"] = "file"  # force rdflib, no Neo4j dependency
@@ -163,7 +173,7 @@ def _run_nkrdn_rebuild(project_dir: Path) -> subprocess.CompletedProcess:
         _wrap_with_resource_caps(cmd),
         capture_output=True,
         text=True,
-        cwd=str(project_dir),
+        cwd=str(nkrdn_root(project_dir)),
         timeout=300,  # 5 minute max for large projects
         env=env,
     )

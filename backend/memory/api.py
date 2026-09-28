@@ -2,7 +2,7 @@
 
 Uses three data sources, all available in the cade backend environment:
   - `nkrdn memory list --json`  (subprocess, same as memory_search)
-  - `.cade/staging/knowledge_base.db` via stdlib sqlite3 (symbol data)
+  - `.nkrdn/knowledge_base.db` via stdlib sqlite3 (symbol data)
   - source markdown YAML frontmatter via PyYAML (date, supersedes)
 """
 
@@ -28,7 +28,8 @@ def build_graph_message(project_dir: Path) -> dict:
     if nkrdn_bin is None:
         return _empty_message()
 
-    graph_file = project_dir / ".cade" / "graph.ttl"
+    from backend.nkrdn_service import nkrdn_db_path, nkrdn_graph_path
+    graph_file = nkrdn_graph_path(project_dir)
     if not graph_file.exists():
         return _empty_message()
 
@@ -49,7 +50,7 @@ def build_graph_message(project_dir: Path) -> dict:
         return _empty_message()
 
     # --- Symbol data via SQLite ---
-    db_path = project_dir / ".cade" / "staging" / "knowledge_base.db"
+    db_path = nkrdn_db_path(project_dir)
     sym_rows = _load_symbols(db_path) if db_path.exists() else {}
 
     # --- Enrich entries with frontmatter fields ---

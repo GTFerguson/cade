@@ -48,17 +48,15 @@ def client(app) -> TestClient:
 
 @pytest.fixture
 def project_with_graph(tmp_path: Path) -> Path:
-    """Create a minimal project with .cade/graph.ttl and knowledge_base.db."""
-    cade_dir = tmp_path / ".cade"
-    cade_dir.mkdir()
-    staging_dir = cade_dir / "staging"
-    staging_dir.mkdir()
+    """Create a minimal project with .nkrdn/graph.ttl and knowledge_base.db."""
+    nkrdn_dir = tmp_path / ".nkrdn"
+    nkrdn_dir.mkdir()
 
     # Minimal graph.ttl (just needs to exist)
-    (cade_dir / "graph.ttl").write_text("# placeholder\n", encoding="utf-8")
+    (nkrdn_dir / "graph.ttl").write_text("# placeholder\n", encoding="utf-8")
 
     # SQLite DB with one symbol
-    db_path = staging_dir / "knowledge_base.db"
+    db_path = nkrdn_dir / "knowledge_base.db"
     conn = sqlite3.connect(str(db_path))
     conn.execute(
         "CREATE TABLE files (id INTEGER PRIMARY KEY, repository_name TEXT, "
@@ -83,8 +81,8 @@ def project_with_graph(tmp_path: Path) -> Path:
     conn.close()
 
     # Memory file
-    memory_dir = cade_dir / "memory"
-    memory_dir.mkdir()
+    memory_dir = tmp_path / ".cade" / "memory"
+    memory_dir.mkdir(parents=True)
     (memory_dir / "2026-05-01-use-jwt.md").write_text(
         textwrap.dedent("""\
             ---
