@@ -168,6 +168,14 @@ ifeq ($(OS),Windows_NT)
 	$(error install-nkrdn is Linux-only; run install-desktop's installer instead)
 endif
 	$(PYTHON) scripts/build-backend-sidecar.py --nkrdn-only
+	@# A one-file PyInstaller binary re-reads its module archive from its own
+	@# path on each lazy import; replacing it under a running rebuild crashes
+	@# that run with a zlib "incorrect header check". Wait for them to finish.
+	@waited=0; while pgrep -x nkrdn >/dev/null; do \
+	    [ $$waited -ge 900 ] && { echo "nkrdn still running after 15 min; not installing"; exit 1; }; \
+	    [ $$waited -eq 0 ] && echo "Waiting for running nkrdn processes to finish..."; \
+	    sleep 5; waited=$$((waited + 5)); \
+	done
 	@for dst in $(NKRDN_INSTALLED); do sudo install -m 755 -o root -g root desktop/src-tauri/resources/nkrdn "$$dst" && echo "Installed nkrdn -> $$dst"; done
 
 # Run desktop application in development mode
