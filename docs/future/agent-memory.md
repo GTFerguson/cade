@@ -42,7 +42,7 @@ nkrdn already provides the machinery agent memory needs:
 | Typed entities + relationships | Class, Function, Module, Package, Namespace + `inheritsFrom`, `dependsOn`, `belongsToModule` |
 | Markdown-with-frontmatter ingest | `src/nkrdn/parsers/docs/` — TF-IDF fusion search |
 | Unified search across kinds | `nkrdn search` over code + docs |
-| Cross-project scope | Workspace graph at `~/.nkrdn/workspace/graph.ttl` with per-repo named graphs |
+| Cross-project scope | Per-repo graphs in each repo's `.nkrdn/`, cross-repo dependency edges in `~/.nkrdn/workspace/deps.ttl`, workspace-wide doc search |
 | Provenance / staleness signals | Delta tracking between rebuilds |
 | Programmable queries | SPARQL, `--json` output |
 
