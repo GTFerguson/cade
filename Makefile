@@ -150,10 +150,23 @@ endif
 # /usr/bin/cade survives `cargo clean` wiping target/, which a launcher
 # pointing into target/release/ does not.
 DESKTOP_DEB = desktop/src-tauri/target/release/bundle/deb/CADE_*_amd64.deb
+# A one-file PyInstaller binary re-reads its module archive from its own path
+# on each lazy import; replacing /usr/bin/nkrdn under a running rebuild crashes
+# that run with a zlib "incorrect header check". Both install targets swap it,
+# so both wait for running nkrdn processes to finish first.
+define wait-for-nkrdn
+@waited=0; while pgrep -x nkrdn >/dev/null; do \
+    [ $$waited -ge 900 ] && { echo "nkrdn still running after 15 min; not installing"; exit 1; }; \
+    [ $$waited -eq 0 ] && echo "Waiting for running nkrdn processes to finish..."; \
+    sleep 5; waited=$$((waited + 5)); \
+done
+endef
+
 install-desktop: build-desktop
 ifeq ($(OS),Windows_NT)
 	$(error install-desktop is Linux-only; run the MSI/NSIS installer from desktop/src-tauri/target/release/bundle/)
 endif
+	$(wait-for-nkrdn)
 	sudo apt-get install -y --reinstall ./$(firstword $(wildcard $(DESKTOP_DEB)))
 	@echo "Installed: $$(dpkg-query -W -f='$${Package} $${Version}' cade) -> /usr/bin/cade"
 
@@ -168,14 +181,7 @@ ifeq ($(OS),Windows_NT)
 	$(error install-nkrdn is Linux-only; run install-desktop's installer instead)
 endif
 	$(PYTHON) scripts/build-backend-sidecar.py --nkrdn-only
-	@# A one-file PyInstaller binary re-reads its module archive from its own
-	@# path on each lazy import; replacing it under a running rebuild crashes
-	@# that run with a zlib "incorrect header check". Wait for them to finish.
-	@waited=0; while pgrep -x nkrdn >/dev/null; do \
-	    [ $$waited -ge 900 ] && { echo "nkrdn still running after 15 min; not installing"; exit 1; }; \
-	    [ $$waited -eq 0 ] && echo "Waiting for running nkrdn processes to finish..."; \
-	    sleep 5; waited=$$((waited + 5)); \
-	done
+	$(wait-for-nkrdn)
 	@for dst in $(NKRDN_INSTALLED); do sudo install -m 755 -o root -g root desktop/src-tauri/resources/nkrdn "$$dst" && echo "Installed nkrdn -> $$dst"; done
 
 # Run desktop application in development mode
