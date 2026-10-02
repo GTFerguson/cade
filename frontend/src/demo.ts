@@ -155,6 +155,37 @@ def solve_mystery():
 
 // ── Callout (admonition) showcase fixture ────────────────────────────
 
+const MERMAID_MD = `# Diagram Showcase
+
+Mermaid blocks in the file viewer. Click a diagram to open the zoomable viewer.
+
+\`\`\`mermaid
+flowchart TB
+  subgraph P[Perception lane]
+    direction LR
+    P1[Reconstruct pitch] --> P2[Validate boundaries]
+    P3[Ball and player evidence] --> P4[Tracking evidence]
+    P1 -. field context .-> P4
+  end
+  subgraph D[Dataset lane]
+    direction LR
+    D1[Define labels] --> D2[Labeling tool] --> D3[Frozen dataset]
+  end
+  D3 -. improved components .-> P4
+  P2 --> V[Assisted study]
+  P4 --> V
+\`\`\`
+
+\`\`\`mermaid
+gitGraph
+  commit
+  branch feature
+  commit
+  checkout main
+  merge feature
+\`\`\`
+`;
+
 const CALLOUTS_MD = `# Callout Showcase
 
 Obsidian-style callouts rendered as ASCII box-drawing panels. A normal
@@ -495,6 +526,11 @@ const SCENARIOS: Record<string, Scenario> = {
       sources: {},
     },
   },
+  "mermaid": {
+    initial: {
+      sources: {},
+    },
+  },
   "plans-pane": {
     initial: {
       sources: {},
@@ -758,6 +794,16 @@ export function activateDemoMode(ws: WebSocketClient): void {
         type: "file-content",
         path: "docs/callout-showcase.md",
         content: CALLOUTS_MD,
+        fileType: "markdown",
+      });
+    }
+
+    if (key === "mermaid") {
+      ws.injectEvent("file-tree", { type: "file-tree", data: [] });
+      ws.injectEvent("file-content", {
+        type: "file-content",
+        path: "docs/diagram-showcase.md",
+        content: MERMAID_MD,
         fileType: "markdown",
       });
     }

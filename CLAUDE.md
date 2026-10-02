@@ -67,7 +67,7 @@ When asked to "show something in demo" or "use demo mode":
 
 **Never start or kill the production backend for demo purposes.** Demo mode is entirely frontend — the dev server connects to nothing, all data is injected client-side. Only works when `import.meta.env.DEV` is true (Vite dev server).
 
-Existing scenarios: `mobile-npc`, `mobile-explore`, `mobile-walk`, `mobile-noexits`, `viewer`. Add new ones as needed. Clean up temporary scenarios after use if they're one-off.
+Existing scenarios: `mobile-npc`, `mobile-explore`, `mobile-walk`, `mobile-noexits`, `viewer`, `mermaid`. Add new ones as needed. Clean up temporary scenarios after use if they're one-off.
 
 ## Development Workflow
 

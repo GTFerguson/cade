@@ -1558,3 +1558,40 @@
   display: block;
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
 }
+
+/* --- Mermaid diagram blocks --- */
+
+.markdown-body .mermaid-container {
+  margin: 12px 0;
+  padding: 16px 12px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  text-align: center;
+  overflow-x: auto;
+  cursor: pointer;
+}
+
+.markdown-body .mermaid-container:hover {
+  border-color: var(--accent-blue);
+}
+
+/* Unlike chat, documents get the diagram's full height: plan flowcharts are
+   often tall and unreadable when squashed. Click opens the zoomable viewer. */
+.markdown-body .mermaid-container svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown-body .mermaid-placeholder {
+  margin: 12px 0;
+  padding: 24px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.markdown-body .mermaid-placeholder::before {
+  content: "rendering diagram\2026";
+}

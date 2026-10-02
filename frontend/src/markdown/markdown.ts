@@ -9,7 +9,6 @@
  * - editor-mode.ts: Milkdown/ProseMirror editor with vim modes
  */
 
-import { MertexMD } from "mertex.md";
 import { marked } from "marked";
 import hljs from "highlight.js";
 import type { PaneKeyHandler } from "../input/keybindings";
@@ -22,6 +21,9 @@ import { renderJsonTree } from "./json-tree";
 import { wikiLinkExtension, attachWikiLinkHandlers, resolveMarkdownLinkHref } from "./wiki-links";
 import { registerCallouts } from "./callouts";
 import { patchLinks } from "@core/chat/linkify";
+import { MarkdownRenderer } from "@core/chat/markdown-renderer";
+import { DiagramViewer } from "@core/chat/diagram-viewer";
+import { CADE_MERMAID_CONFIG } from "./mermaid-theme";
 import { handleViewModeScroll, scrollCodeBlocksHorizontally, createScrollState } from "./scroll";
 import type { ScrollState } from "./scroll";
 import { getUserConfig } from "../config/user-config";
@@ -71,7 +73,8 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   private currentMeta: Record<string, unknown> | undefined = undefined;
   private parsedMode = true;
   private activeParsedComponent: { dispose(): void } | null = null;
-  private mertex: MertexMD;
+  private renderer: MarkdownRenderer;
+  private diagramViewer: DiagramViewer | null = null;
   private handlers: MarkdownEventHandlers = new Map();
   private contentContainer: HTMLElement | null = null;
   private scrollState: ScrollState = createScrollState();
@@ -119,14 +122,17 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     private container: HTMLElement,
     private ws: WebSocketClient
   ) {
-    this.mertex = new MertexMD({
-      breaks: true,
-      gfm: true,
-      headerIds: true,
-      highlight: true,
-      sanitize: true,
-      katex: false,
-      mermaid: false,
+    this.renderer = new MarkdownRenderer({
+      mermaidConfig: CADE_MERMAID_CONFIG,
+      mertexOptions: {
+        breaks: true,
+        gfm: true,
+        headerIds: true,
+        highlight: true,
+        sanitize: true,
+        katex: false,
+        mermaid: true,
+      },
     });
   }
 
@@ -392,6 +398,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
     const content = document.createElement("div");
     content.className = "viewer-content";
+    let pendingDiagramMarkdown: { el: HTMLElement; markdown: string } | null = null;
 
     if (this.previewEl) {
       content.appendChild(this.previewEl);
@@ -422,8 +429,17 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
       const markdownContent = document.createElement("div");
       markdownContent.className = "markdown-body";
-      markdownContent.innerHTML = await this.mertex.render(markdown);
+      // The string-returning render() leaves mermaid blocks as placeholders;
+      // only rendering into an element mounts the diagrams.
+      await this.renderer.render(markdownContent, markdown);
       content.appendChild(markdownContent);
+      markdownContent.addEventListener("click", (e) => {
+        const diagram = (e.target as HTMLElement).closest(".mermaid-container");
+        if (!diagram) return;
+        if (!this.diagramViewer) this.diagramViewer = new DiagramViewer();
+        this.diagramViewer.show(diagram as HTMLElement);
+      });
+      pendingDiagramMarkdown = { el: markdownContent, markdown };
 
       attachWikiLinkHandlers(content, this.currentPath, (targetPath) => {
         this.emit("link-click", targetPath);
@@ -513,6 +529,11 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     this.container.appendChild(content);
     this.container.appendChild(statusline);
     this.contentContainer = content;
+
+    // Some diagram types (gitGraph and others) only mount once attached.
+    if (pendingDiagramMarkdown) {
+      await this.renderer.renderRemainingDiagrams(pendingDiagramMarkdown.el, pendingDiagramMarkdown.markdown);
+    }
 
     // Re-attach flyout if open (innerHTML clear removes it from DOM)
     if (this.filterFlyoutEl) {
@@ -756,6 +777,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     destroyEditor(this.editorState);
 
     this.activeParsedComponent?.dispose();
+    this.diagramViewer?.dispose();
     this.activeParsedComponent = null;
 
     this.closeFilterFlyout();
