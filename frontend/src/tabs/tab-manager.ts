@@ -400,6 +400,24 @@ export class TabManager {
   }
 
   /**
+   * Move a tab to a new position in the bar.
+   */
+  moveTab(id: string, toIndex: number): void {
+    const tabs = this.getTabs();
+    const fromIndex = tabs.findIndex((t) => t.id === id);
+    if (fromIndex === -1) return;
+    const clamped = Math.max(0, Math.min(toIndex, tabs.length - 1));
+    if (clamped === fromIndex) return;
+
+    const [moved] = tabs.splice(fromIndex, 1);
+    tabs.splice(clamped, 0, moved!);
+    // Map iteration order is insertion order, so rebuilding it is the reorder.
+    this.tabs = new Map(tabs.map((t) => [t.id, t]));
+    this.saveState();
+    this.emit("tabs-changed", this.getTabs());
+  }
+
+  /**
    * Update a tab's connection status.
    */
   setConnected(id: string, connected: boolean): void {

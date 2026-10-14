@@ -23,6 +23,7 @@ class MessageType:
     GET_PLANS_LIST = "get-plans-list"  # Request plans/handoffs index: { type, root?: str }
     GET_CHILDREN = "get-children"  # Request directory children: { type, path: str, showIgnored?: bool }
     BROWSE_CHILDREN = "browse-children"  # Browse absolute filesystem path: { type, path: str }
+    CLIENT_DIAGNOSTIC = "client-diagnostic"  # Frontend anomaly for the backend log: { type, kind: str, detail: str }
 
     # Chat - Client -> Server
     CHAT_MESSAGE = "chat-message"  # Send chat message: { type, content: str, providerId?: str }

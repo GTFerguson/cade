@@ -152,3 +152,28 @@
 .tab-add-button:hover {
   color: var(--text-primary);
 }
+
+/* Drag-to-reorder: the dragged tab rides above the siblings sliding under it.
+   The outline is inset: WebKitGTK leaves trails of anything painted outside a
+   transformed element's box, and a layer per tab lets it move them without
+   repainting the strip. */
+.tab.tab-dragging {
+  position: relative;
+  z-index: 1;
+  background: var(--bg-hover);
+  cursor: grabbing;
+  box-shadow: inset 0 0 0 1px var(--border-focus);
+}
+
+.tab-list-dragging .tab {
+  cursor: grabbing;
+  will-change: transform;
+}
+
+.tab-list-dragging .tab:not(.tab-dragging):hover {
+  background: transparent;
+}
+
+.tab-list-dragging .tab.active:not(.tab-dragging):hover {
+  background: var(--bg-primary);
+}

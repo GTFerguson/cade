@@ -5,12 +5,18 @@
 import type { Component, EventHandler } from "../types";
 import type { TabBarEvents, TabState } from "./types";
 import { minimizeWindow, toggleMaximizeWindow, closeWindow } from "@core/platform/tauri-bridge";
+import { TabDragController } from "./tab-drag";
 
 export class TabBar implements Component {
   private handlers: Map<
     keyof TabBarEvents,
     Set<EventHandler<TabBarEvents[keyof TabBarEvents]>>
   > = new Map();
+
+  private drag: TabDragController | null = null;
+  // Tab updates that arrive mid-drag, applied on drop so a re-render can't
+  // pull the tab out from under the pointer.
+  private pendingRender: [TabState[], string | null] | null = null;
 
   constructor(private container: HTMLElement) {}
 
@@ -25,6 +31,11 @@ export class TabBar implements Component {
    * Render the tab bar with the given tabs.
    */
   render(tabs: TabState[], activeTabId: string | null = null): void {
+    if (this.drag?.isDragging()) {
+      this.pendingRender = [tabs, activeTabId];
+      return;
+    }
+    this.pendingRender = null;
     this.container.innerHTML = "";
     this.container.classList.toggle("empty", tabs.length === 0);
 
@@ -50,8 +61,17 @@ export class TabBar implements Component {
     const tabList = document.createElement("div");
     tabList.className = "tab-list";
 
+    this.drag = new TabDragController(
+      tabList,
+      (tabId, toIndex) => this.emit("tab-reorder", { tabId, toIndex }),
+      () => {
+        if (this.pendingRender) this.render(...this.pendingRender);
+      },
+    );
+
     for (const tab of tabs) {
       const tabEl = this.createTabElement(tab, tab.id === activeTabId);
+      this.drag.attach(tabEl);
       tabList.appendChild(tabEl);
     }
 

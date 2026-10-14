@@ -99,6 +99,7 @@ export interface TabManagerEvents {
 export interface TabBarEvents {
   "tab-select": string;
   "tab-close": string;
+  "tab-reorder": { tabId: string; toIndex: number };
   "tab-add": void;
   "tab-add-remote": void;
 }

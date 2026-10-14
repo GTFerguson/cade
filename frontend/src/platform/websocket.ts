@@ -449,7 +449,40 @@ export class WebSocketClient extends BaseWSClient {
     if (root !== undefined) {
       message.root = root;
     }
+    this.noteTreeRequest();
     this.send(message as ClientMessage);
+  }
+
+  // A tab once re-requested its file tree ~800 times a second with no file
+  // changes behind it, and nothing in the frontend showed which caller was
+  // looping. When requests burst past the threshold, ship the call stack to
+  // the backend log so the next occurrence names its trigger.
+  private static readonly TREE_STORM_THRESHOLD = 20;
+  private static readonly TREE_STORM_REPORT_INTERVAL_MS = 10_000;
+  private treeRequestWindowStart = 0;
+  private treeRequestCount = 0;
+  private lastTreeStormReport = -Infinity;
+
+  private noteTreeRequest(): void {
+    const now = performance.now();
+    if (now - this.treeRequestWindowStart > 1000) {
+      this.treeRequestWindowStart = now;
+      this.treeRequestCount = 0;
+    }
+    this.treeRequestCount++;
+    if (
+      this.treeRequestCount > WebSocketClient.TREE_STORM_THRESHOLD &&
+      now - this.lastTreeStormReport > WebSocketClient.TREE_STORM_REPORT_INTERVAL_MS
+    ) {
+      this.lastTreeStormReport = now;
+      const stack = new Error("get-tree storm").stack ?? "(no stack)";
+      console.warn("[file-tree] get-tree storm", stack);
+      this.send({
+        type: MessageType.CLIENT_DIAGNOSTIC,
+        kind: "get-tree-storm",
+        detail: `${this.treeRequestCount} requests in <1s\n${stack}`,
+      } as unknown as ClientMessage);
+    }
   }
 
   requestPlansList(root?: string): void {

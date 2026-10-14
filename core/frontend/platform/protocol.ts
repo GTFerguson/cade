@@ -34,6 +34,7 @@ export const MessageType = {
   GET_PLANS_LIST: "get-plans-list",
   GET_CHILDREN: "get-children",
   BROWSE_CHILDREN: "browse-children",
+  CLIENT_DIAGNOSTIC: "client-diagnostic",
 
   // Server -> Client
   OUTPUT: "output",

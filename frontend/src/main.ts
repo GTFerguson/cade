@@ -290,6 +290,10 @@ class App {
       this.handleTabClose(id);
     });
 
+    this.tabBar.on("tab-reorder", ({ tabId, toIndex }) => {
+      this.tabManager.moveTab(tabId, toIndex);
+    });
+
     this.tabBar.on("tab-add", () => {
       this.handleAddTab();
     });

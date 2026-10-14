@@ -290,16 +290,21 @@ def build_launch_command(
     initial_prompt: str | None,
     agent: "CliAgent",
     mcp_config_path: str | Path | None = None,
+    resume_on_exit: bool = True,
 ) -> str:
-    """The line typed into the PTY to start the agent with resume-on-exit.
+    """The line typed into the PTY to start the agent.
 
-    Sources the resume wrapper and hands off to ``__cade_run``. If sourcing
-    fails (script missing/unreadable), falls back to launching the agent
-    directly so a broken resume install can never leave a blank terminal.
+    With ``resume_on_exit`` it sources the resume wrapper and hands off to
+    ``__cade_run``. If sourcing fails (script missing/unreadable), it falls back
+    to launching the agent directly so a broken resume install can never leave a
+    blank terminal. Without it, the agent is launched directly and exiting it
+    just returns to the shell.
     """
     adapter = adapter_from_descriptor(agent)
     seed = f" {shlex.quote(initial_prompt)}" if initial_prompt else ""
     direct = adapter.direct_command(initial_prompt, mcp_config_path)
+    if not resume_on_exit:
+        return direct
     return (
         f". {SHELL_SCRIPT_PATH} 2>/dev/null; "
         f"if command -v __cade_run >/dev/null 2>&1; then __cade_run{seed}; "

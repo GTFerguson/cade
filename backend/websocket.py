@@ -106,6 +106,8 @@ class ConnectionHandler:
         self._config = config
         self._working_dir: Path = config.working_dir
         self._connection_id: str = uuid.uuid4().hex
+        self._tree_request_window_start = 0.0
+        self._tree_request_count = 0
         self._session: PTYSession | None = None
         self._session_id: str | None = None
         # Optional override for launch.yml's dashboard_file, sent by the
@@ -240,7 +242,7 @@ class ConnectionHandler:
             deferred_task: asyncio.Task | None = None
             if (
                 self._is_new_session
-                and self._config.auto_start_claude
+                and self._auto_start_agent
                 and not self._config.dummy_mode
                 and "wsl" in self._config.shell_command.lower()
             ):
@@ -457,11 +459,12 @@ class ConnectionHandler:
                 self._working_dir,
                 self._config.shell_command,
                 TerminalSize(cols=80, rows=24),
-                auto_start_claude=self._config.auto_start_claude,
+                auto_start_claude=self._auto_start_agent,
                 dummy_mode=self._config.dummy_mode,
                 network_timeout=self._user_config.behavior.session.network_timeout,
                 initial_prompt=self._initial_prompt,
                 pty_env=self._cli_pty_env or None,
+                resume_on_exit=self._auto_resume_handoff,
             )
             self._session.connected_clients.add(self._ws)
             # On resume, restore the session's original working directory if the
@@ -490,7 +493,7 @@ class ConnectionHandler:
             self._is_new_session = True
 
         if self._is_new_session:
-            if self._config.auto_start_claude and not self._config.dummy_mode:
+            if self._auto_start_agent and not self._config.dummy_mode:
                 self._suppress_output = True
                 self._suppress_start_time = time.monotonic()
                 self._suppress_timeout_task = asyncio.create_task(
@@ -565,11 +568,31 @@ class ConnectionHandler:
         self._watcher.on_change(self._dashboard.on_data_source_file_change)
         self._dashboard.start_watching()
 
+    @property
+    def _auto_start_agent(self) -> bool:
+        """Whether to launch the CLI agent in a new terminal.
+
+        Either source can switch it off: the server config (``--no-claude`` /
+        ``CADE_AUTO_START_CLAUDE``) or ``behavior.toml``'s ``auto-start-claude``.
+        """
+        session_behavior = (
+            self._user_config.behavior.session if self._user_config else None
+        )
+        return self._config.auto_start_claude and (
+            session_behavior is None or session_behavior.auto_start_claude
+        )
+
+    @property
+    def _auto_resume_handoff(self) -> bool:
+        if self._user_config is None:
+            return True
+        return self._user_config.behavior.session.auto_resume_handoff
+
     def _prepare_cli_orchestrator_env(self) -> dict[str, str]:
         """Wire the CLI coding agent to CADE orchestrator MCP."""
         if (
             self._kiosk_mode
-            or not self._config.auto_start_claude
+            or not self._auto_start_agent
             or self._config.dummy_mode
         ):
             return {}
@@ -1118,6 +1141,11 @@ class ConnectionHandler:
                 await self._handle_resize(data)
             elif msg_type == MessageType.GET_TREE:
                 await self._handle_get_tree(data)
+            elif msg_type == MessageType.CLIENT_DIAGNOSTIC:
+                logger.warning(
+                    "Client diagnostic [%s] from %s: %s",
+                    data.get("kind"), self._working_dir, data.get("detail"),
+                )
             elif msg_type == MessageType.GET_FILE:
                 await self._handle_get_file(data)
             elif msg_type == MessageType.WRITE_FILE:
@@ -1249,6 +1277,7 @@ class ConnectionHandler:
 
     async def _handle_get_tree(self, data: dict | None = None) -> None:
         """Handle file tree request."""
+        self._note_tree_request(data)
         # Use client override if provided, otherwise use config
         if data and "showIgnored" in data:
             show_ignored = data["showIgnored"]
@@ -1267,6 +1296,25 @@ class ConnectionHandler:
             "type": MessageType.FILE_TREE,
             "data": [node.to_dict() for node in tree],
         })
+
+    # A frontend once re-requested its tree hundreds of times a second while
+    # the backend served every one from cache, so the only symptom was CPU and
+    # log churn. Warn per burst so the connection and root at fault are named.
+    _TREE_STORM_THRESHOLD = 20
+
+    def _note_tree_request(self, data: dict | None) -> None:
+        now = time.monotonic()
+        if now - self._tree_request_window_start > 1.0:
+            if self._tree_request_count > self._TREE_STORM_THRESHOLD:
+                logger.warning(
+                    "get-tree storm: %d requests in 1s from connection %s "
+                    "(working dir %s, request %s)",
+                    self._tree_request_count, self._connection_id,
+                    self._working_dir, data,
+                )
+            self._tree_request_window_start = now
+            self._tree_request_count = 0
+        self._tree_request_count += 1
 
     async def _handle_get_children(self, data: dict) -> None:
         """Handle lazy-load request for directory children."""
@@ -2241,6 +2289,7 @@ class ConnectionHandler:
                 self._initial_prompt,
                 self._config.cli_agent,
                 mcp_path,
+                resume_on_exit=self._auto_resume_handoff,
             )
             await self._session.pty.write(cmd + "\n")
         except asyncio.CancelledError:

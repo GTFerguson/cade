@@ -308,6 +308,13 @@ def test_build_launch_command_sources_wrapper_and_falls_back():
     assert "else claude; fi" in cmd
 
 
+def test_build_launch_command_without_resume_launches_agent_directly():
+    cmd = build_launch_command("go", CLAUDE, "/tmp/mcp.json", resume_on_exit=False)
+    assert cmd == "claude --mcp-config /tmp/mcp.json -- go"
+    assert "__cade_run" not in cmd
+    assert SHELL_SCRIPT_PATH not in cmd
+
+
 def test_build_launch_command_threads_seed_into_both_paths():
     cmd = build_launch_command("read it", CLAUDE)
     assert "__cade_run 'read it'" in cmd

@@ -273,11 +273,13 @@ class TestApplySessionBehaviorConfig:
         """Should apply all session settings."""
         data = {
             "auto-start-claude": False,
+            "auto-resume-handoff": False,
             "auto-save": False,
             "save-interval": 60,
         }
         config = _apply_session_behavior_config(data)
         assert config.auto_start_claude is False
+        assert config.auto_resume_handoff is False
         assert config.auto_save is False
         assert config.save_interval == 60
 

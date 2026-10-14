@@ -192,6 +192,7 @@ class SessionRegistry:
         network_timeout: float = 15.0,
         initial_prompt: str | None = None,
         pty_env: dict[str, str] | None = None,
+        resume_on_exit: bool = True,
     ) -> tuple[PTYSession, bool]:
         """Get an existing session or create a new one.
 
@@ -201,6 +202,7 @@ class SessionRegistry:
             shell_command: Command to spawn in the PTY
             size: Terminal size
             auto_start_claude: Whether to auto-start claude command
+            resume_on_exit: Relaunch the agent into a fresh handoff brief on exit
             dummy_mode: Whether to run in dummy mode
             network_timeout: Max time to wait for network readiness (seconds)
 
@@ -228,6 +230,7 @@ class SessionRegistry:
                 network_timeout,
                 initial_prompt,
                 pty_env,
+                resume_on_exit,
             )
             self._sessions[session_id] = session
             logger.info("Created new session: %s at %s", session_id, project_path)
@@ -244,6 +247,7 @@ class SessionRegistry:
         network_timeout: float,
         initial_prompt: str | None = None,
         pty_env: dict[str, str] | None = None,
+        resume_on_exit: bool = True,
     ) -> PTYSession:
         """Create a new PTY session with the primary (claude) terminal."""
         pty = PTYManager()
@@ -291,7 +295,7 @@ class SessionRegistry:
             if "wsl" not in shell_command.lower():
                 # A Plans-pane "▶ CLI" launch seeds the CLI with an initial
                 # prompt so the agent starts already working on the doc. The
-                # command also wires up handoff resume-on-exit (see
+                # command optionally wires up handoff resume-on-exit (see
                 # agent_launch) and is built from the configured CLI agent.
                 from backend.config import get_config
                 from backend.terminal.agent_launch import build_launch_command
@@ -301,6 +305,7 @@ class SessionRegistry:
                     initial_prompt,
                     get_config().cli_agent,
                     mcp_path,
+                    resume_on_exit=resume_on_exit,
                 )
                 await pty.write(cmd + "\n")
 

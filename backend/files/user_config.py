@@ -130,6 +130,8 @@ class SessionBehaviorConfig:
     """Session behavior settings."""
 
     auto_start_claude: bool = True
+    # Relaunch the agent into a fresh /handoff brief when it exits in the terminal.
+    auto_resume_handoff: bool = True
     auto_save: bool = True
     save_interval: int = 300
     network_timeout: float = 15.0  # Max time to wait for WSL network readiness (seconds)
@@ -255,6 +257,7 @@ class UserConfig:
             "behavior": {
                 "session": {
                     "autoStartClaude": self.behavior.session.auto_start_claude,
+                    "autoResumeHandoff": self.behavior.session.auto_resume_handoff,
                     "autoSave": self.behavior.session.auto_save,
                     "saveInterval": self.behavior.session.save_interval,
                 },

@@ -436,6 +436,8 @@ def _apply_session_behavior_config(data: dict) -> SessionBehaviorConfig:
     config = SessionBehaviorConfig()
     if "auto-start-claude" in data:
         config.auto_start_claude = data["auto-start-claude"]
+    if "auto-resume-handoff" in data:
+        config.auto_resume_handoff = data["auto-resume-handoff"]
     if "auto-save" in data:
         config.auto_save = data["auto-save"]
     if "save-interval" in data:
