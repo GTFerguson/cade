@@ -1,7 +1,7 @@
 ---
 title: Plans
 created: 2026-03-24
-updated: 2026-05-05
+updated: 2026-10-14
 status: active
 tags: [index, plans]
 ---
@@ -21,6 +21,7 @@ Intent before code exists. Plans are ephemeral — once the work ships and desig
 | [[system-prompt/cade-agent-context]] | partially-shipped | Custom component API; 4 open questions |
 | [[dashboard/agent-ui-system]] | partially-shipped | Phases 2–4; missing components |
 | [[permissions/dynamic-permission-management]] | planning | All phases (foundation ready) |
+| [[remote-access-overhaul]] | partially-shipped | Phases 1–4 shipped and graduated; device measurement, chat parity, QR, topology decision |
 
 ## Deferred
 

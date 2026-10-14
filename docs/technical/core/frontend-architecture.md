@@ -1,7 +1,7 @@
 ---
 title: Frontend Architecture
 created: 2026-01-17
-updated: 2026-09-16
+updated: 2026-10-14
 status: active
 tags: [technical, frontend, architecture, wiki-links, tabs, session-persistence, keybindings, state-machine, mobile, dashboard]
 ---
@@ -306,14 +306,22 @@ Mobile navigation is a stack of full-pane screens managed by `ScreenManager` (`u
 
 | Screen | File | Purpose |
 |--------|------|---------|
-| CommandMenu | `ui/mobile/command-menu.ts` | Full-pane menu: files, viewer, dashboard, tab list, reconnect, theme. Vim-style `MenuNav` keys. Replaces the former bottom-sheet overflow menu. |
+| CommandMenu | `ui/mobile/command-menu.ts` | Full-pane menu: search, recent, files, viewer, dashboard, tab list with unread/attention markers, sessions on the server to adopt, reconnect, notify, theme. Vim-style `MenuNav` keys. `refresh()` re-renders in place when a `session-list` reply or push state arrives. |
+| FileSearch | `ui/mobile/file-search.ts` | Fuzzy search over the flat `file-list` (`fuzzy.ts` ranks segment-start and file-name hits); tapping a result pushes a FileViewer |
+| RecentFiles | `ui/mobile/recent-files.ts` | Files changed on disk this session, newest first, from `file-change` events |
 | FileExplorer | `ui/mobile/file-explorer.ts` | Nested file-tree browser; tapping a file pushes a FileViewer |
-| FileViewer | `ui/mobile/file-viewer.ts` | Syntax-highlighted code / rendered markdown |
+| FileViewer | `ui/mobile/file-viewer.ts` | Syntax-highlighted code / rendered markdown, with a `diff` toggle (`d`) that shows the file against HEAD via `get-file-diff` |
 | DashboardScreen | `ui/mobile/dashboard-screen.ts` | Config-driven dashboard (see [Dashboard on Mobile](#dashboard-on-mobile)) |
 
-**Touch Toolbar (`touch-toolbar.ts`):**
+**Input bar (`touch-toolbar.ts`):**
 
-Fixed 6-button bar at the bottom: `esc`, `tab`, `^c`, `^d`, `↑`, `[cmd]`. The first five send the corresponding key to the terminal; `[cmd]` opens the CommandMenu (and toggles it closed if already open). A notification dot on `[cmd]` signals a changed markdown file or a newly arrived dashboard payload; opening the menu clears it. The toolbar repositions above the virtual keyboard via the `visualViewport` API.
+Two rows fixed to the bottom. The composer row is `[cmd]`, a native textarea and `send`: Enter or `send` hands the text to `TerminalManager.sendComposed`, which pastes it through xterm as one bracketed block and then sends Enter, so a multi-line prompt reaches the agent whole; ↑/↓ in an empty composer recall history (`composer-history.ts`). The key strip below scrolls sideways: `esc`, `tab`, `^c`, `^d`, `↑`, `↓`, `⏎`, `y`, `n`, `A-`, `A+`, `⟳` (repaint). Tapping the terminal still focuses xterm for raw keystrokes. The bar publishes its rendered height as `--touch-toolbar-height`, which the terminal pane and every screen use as their bottom inset, and repositions above the virtual keyboard via the `visualViewport` API. When the keyboard opens it tells the terminal manager first, which locks row counts (`Terminal.lockRows`) so the PTY is not resized; see [[remote-sessions#Size: the controller owns it]].
+
+**Session strip (`ui/mobile/session-strip.ts`):**
+
+One line above the terminal: `‹ name · agent ›` with a dot per tab. Arrows and a horizontal swipe switch sessions (`neighbourTab`), tapping the name opens the CommandMenu. Dot colours: green active, blue unread output, pulsing orange when the agent needs input, cyan when a turn finished. `App` tracks unread and attention per tab and calls `MobileUI.refresh()`.
+
+**Font size:** one per-device setting (`terminal/font-size.ts`, localStorage) that every `Terminal` follows; pinch on the tab content (`ui/mobile/pinch-zoom.ts`) or the `A-`/`A+` keys change it, and the viewer reads at the same size through `--mobile-code-font-size`.
 
 **Back navigation:** every screen supports swipe-right-from-edge and the `h` / `Backspace` / `Escape` keys.
 
@@ -488,6 +496,8 @@ Bridged lifecycle events (`connected`, `disconnected`, `auth-failed`, etc.) are 
 - Exponential backoff starting at base delay
 - Maximum attempts before giving up
 - Configuration via `config.ts`
+- `output` and `session-restored` frames carry `seq`; the client tracks the last one per terminal and sends `lastSeq` in `set-project`, so the server replays only what was missed (see [[remote-sessions#Reconnect: delta or cold]])
+- Liveness probe on page foreground and `online`: a `ping` without a `pong` within three seconds, or a pending backoff wait, triggers `reconnectNow()`
 
 ## Session Persistence
 
@@ -497,10 +507,12 @@ PTY sessions persist across browser refreshes and reconnections. When a WebSocke
 
 **How it works:**
 
-1. Each tab has a unique session ID (UUID) stored in localStorage
-2. On reconnect, the frontend sends this ID with `SET_PROJECT`
-3. Backend finds the existing PTY session and sends accumulated scrollback
-4. Frontend receives `session-restored` message and replays scrollback
+1. Each tab has a unique session ID (UUID) stored in localStorage. A tab can also be opened onto a session that already runs on the backend (`TabManager.adoptSession`), in which case the session id is the tab id.
+2. On reconnect, the frontend sends this ID with `SET_PROJECT`, plus `lastSeq` for each terminal it was watching.
+3. If the backend's replay buffer still covers the gap, it replays only the missed chunks as `output`. Otherwise it sends the accumulated scrollback as `session-restored`.
+4. On `session-restored` the frontend resets the terminal and replays the scrollback.
+
+Several clients can be attached to one session at once; output fans out to all of them. See [[remote-sessions]].
 
 **Scrollback Sanitization:**
 
@@ -604,12 +616,7 @@ When crossing the breakpoint:
 
 ### Multi-Device Sessions
 
-Mobile and desktop clients can connect to the same server session simultaneously. The WebSocket protocol enables:
-
-- Shared terminal session (PTY)
-- Synchronized file tree updates
-- Real-time file change notifications across all clients
-- Independent file viewing per client
+Mobile and desktop clients connect to the same server session simultaneously; a phone finds the desktop's sessions through the command menu's "on server" list and adopts one. The substrate (one reader per PTY, sequenced replay, the controller-owns-size policy, attention state, push) is described in [[remote-sessions]]. Each client still keeps its own viewer state.
 
 ### Dashboard on Mobile
 
@@ -648,9 +655,11 @@ frontend/
 │   ├── markdown.ts          # Markdown viewer
 │   ├── ui/
 │   │   ├── mobile.ts        # Mobile UI orchestrator
-│   │   ├── touch-toolbar.ts # Bottom touch button bar
-│   │   ├── overflow-menu.ts # Bottom sheet actions menu
+│   │   ├── touch-toolbar.ts # Composer row + key strip
+│   │   ├── attention-notify.ts # Browser notification when the page is hidden
+│   │   ├── mobile/          # Screens (search, recent, explorer, viewer, menu), session strip, pinch
 │   │   └── splash.ts        # Startup splash screen
+│   ├── push.ts              # Service worker registration, push subscribe/unsubscribe
 │   ├── websocket.ts         # WebSocket client
 │   ├── types.ts             # TypeScript interfaces
 │   ├── protocol.ts          # Message type constants
@@ -663,5 +672,6 @@ frontend/
 
 ## See Also
 
+- [[remote-sessions|Remote Sessions]]
 - [[../README|Technical Documentation Index]]
 - [[../../user/README|User Guide]]

@@ -1,130 +1,96 @@
 ---
 title: Mobile Guide
 created: 2026-02-02
-updated: 2026-02-02
+updated: 2026-10-14
 status: active
 tags: [user, mobile, guide]
 ---
 
 # Mobile Guide
 
-CADE automatically switches to a mobile-optimized interface on devices with a screen width of 768px or less. The mobile interface is designed for a terminal-first experience — full-screen terminal with touch-friendly controls for file browsing and document viewing.
+On a screen 768px wide or narrower CADE switches to a phone layout: the terminal fills the screen, a session strip sits above it and an input bar below. You can drive any session running on the backend, including ones you started on the desktop.
 
 ## Interface Overview
 
-On mobile, the three-pane desktop layout collapses into a full-screen terminal with three supporting elements:
-
 | Element | Position | Purpose |
 |---------|----------|---------|
-| Terminal | Full screen | Your shell or Claude Code session |
-| Touch Toolbar | Bottom edge | Common terminal keys |
-| MD Button | Bottom-right | Open document viewer |
+| Session strip | Top | Current session and agent; ‹ › or swipe to switch; dots show other tabs' state |
+| Terminal | Middle | The agent or shell session |
+| Composer | Above the key strip | Type a prompt, tap **send** |
+| Key strip | Bottom | Keys that are awkward on a phone keyboard |
 
-## Touch Toolbar
+## Attaching to a session
 
-A fixed bar at the bottom of the screen provides buttons for keys that are awkward to type on a mobile keyboard:
+Your tabs live in the browser, but sessions live on the backend. To drive a session started elsewhere:
 
-| Button | Sends | Use For |
-|--------|-------|---------|
-| ↑ | Arrow Up | Scroll through command history |
-| Tab | Tab | Autocomplete commands and paths |
-| Esc | Escape | Cancel operations, exit modes |
-| ^C | Ctrl+C | Interrupt running commands |
-| ^D | Ctrl+D | Send EOF, exit shells |
-| ⋯ | *(opens menu)* | Tab switching, file explorer, actions |
+1. Tap **[cmd]**.
+2. Under **on server**, tap the session. It opens as a new tab attached to the same shell.
 
-> [!TIP]
-> When the virtual keyboard opens, the toolbar automatically repositions above it so all buttons remain accessible.
+Several devices can be attached at once. Everyone sees the same output. The device that last typed owns the terminal's size; the others shrink their text so the whole line fits.
 
-## Overflow Menu
+## Typing
 
-Tap the **⋯** button on the touch toolbar to open the overflow menu — a bottom sheet that slides up.
+**Composer.** Type in the field above the key strip and press Enter or **send**. The text is pasted into the terminal as one block and submitted, so multi-line prompts work. ↑ and ↓ in an empty composer recall earlier prompts.
 
-**Available actions:**
+**Raw keys.** Tap the terminal itself to type straight into it, for vim or a shell.
 
-- **Open tabs** — Switch between your project tabs (active tab is highlighted)
-- **File Explorer** — Browse your project's files and folders
-- **Current File** — View the most recently opened file
-- **Reconnect** — Re-establish the connection if it drops
+**Key strip** (scrolls sideways):
 
-Dismiss the menu by tapping the backdrop area above it.
+| Key | Sends |
+|-----|-------|
+| esc, tab, ^c, ^d | The corresponding key |
+| ↑ ↓ | Arrow keys (menus, history) |
+| ⏎ | Enter |
+| y, n | `y` or `n` followed by Enter, for yes/no prompts |
+| A- A+ | Smaller or larger text |
+| ⟳ | Ask the agent's screen to redraw |
 
-## File Explorer
+Opening the keyboard no longer shrinks the terminal; it scrolls instead, so the prompt line stays in view.
 
-The file explorer opens in a slideout panel from the right side of the screen.
+## Text size
 
-**How to use:**
+Pinch the terminal with two fingers, or use **A-** / **A+**. The size is remembered on this device and applies to every tab and to the file viewer.
 
-1. Open the overflow menu (⋯) and tap **File Explorer**
-2. Browse the folder tree — tap folders to expand them
-3. Use the **back button** (←) in the header to navigate to the parent folder
-4. Tap any file to view it — the panel switches to the document viewer
+## Session strip dots
 
-> [!NOTE]
-> The file tree shows the same project structure as the desktop file tree pane, with real-time updates when files change on disk.
+| Dot | Meaning |
+|-----|---------|
+| Green | The tab you are looking at |
+| Blue | Output arrived in that tab while you were elsewhere |
+| Orange, pulsing | The agent there is waiting for you: a permission prompt or a question |
+| Cyan | The agent there finished its turn |
 
-## Document Viewer
+The same markers appear next to each tab in the **[cmd]** menu.
 
-The slideout viewer panel displays files with syntax highlighting. There are two ways to open it:
+## Files
 
-### Via MD Button
+From **[cmd]**:
 
-The floating **MD** button in the bottom-right corner opens the viewer directly:
+- **[search]** finds a file by typing a few letters of its name.
+- **[recent]** lists files changed on disk this session, newest first.
+- **[files]** browses the tree.
+- **[viewer]** reopens the last file.
 
-| Button Appearance | Meaning |
-|-------------------|---------|
-| Gray outline | No new content |
-| Solid blue with pulse | A file has changed — tap to view it |
+In the viewer, tap **diff** (or press `d`) to see the file's changes against the last commit. New files show as all additions.
 
-When the button is pulsing blue, tapping it loads the changed file automatically.
+## Notifications
 
-### Via File Explorer
+To be told when an agent needs you while CADE is closed:
 
-Tap any file in the file explorer to view it. The panel switches from explorer mode to viewer mode.
+1. Add CADE to your home screen (Share → Add to Home Screen on iOS; Install app on Android).
+2. Open it from the home screen, tap **[cmd]**, then **[notify]**, and allow notifications.
 
-### Closing the Viewer
+While CADE is open in a background tab, the browser shows a notification without any setup.
 
-- Tap the **X** button in the panel header
-- Tap the darkened backdrop behind the panel
+## Staying Connected
 
-The viewer supports:
-
-- Syntax-highlighted markdown with formatting
-- Code files with language-aware highlighting
-- Auto-refresh when the currently viewed file changes on disk
-
-## Multi-Device Sessions
-
-One of CADE's strengths is connecting to the same session from multiple devices. When the backend runs on a remote server:
-
-- **Start work on desktop**, then check progress from your phone
-- **Monitor long-running builds** from a tablet while away from your desk
-- **View generated documentation** on mobile while coding on desktop
-
-All connected clients share the terminal session and file tree state. Each client maintains its own viewer state (which file you're looking at, whether the slideout is open).
-
-## Tips
-
-### Terminal on Mobile
-
-- Use the touch toolbar buttons instead of trying to type modifier keys
-- A Bluetooth keyboard provides a full desktop-like experience
-- Terminal multiplexers (tmux) give additional session resilience
-
-### Staying Connected
-
-- Switching apps briefly preserves the connection
-- If the connection drops, use the **Reconnect** option in the overflow menu
-- Refresh the page as a last resort — your terminal session persists server-side
-
-### Best Experience
-
-- Use landscape orientation for more terminal columns
-- The viewer panel width is capped at 400px for readability
-- Safe area insets are handled automatically on notched devices
+- Switching apps briefly preserves the connection. On return CADE checks the connection and reconnects at once if it dropped, replaying only what you missed.
+- **Reconnect** in the **[cmd]** menu forces a fresh connection.
+- Your terminal session persists on the backend even if the page is closed.
 
 ## See Also
 
 - [[README|User Guide]]
+- [[../technical/core/remote-sessions|Remote Sessions]]
 - [[../technical/core/frontend-architecture#Mobile Support|Mobile Architecture]]
 - [[../future/remote-deployment|Remote Deployment]]

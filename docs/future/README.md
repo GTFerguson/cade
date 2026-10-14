@@ -1,7 +1,7 @@
 ---
 title: Roadmap & Future Plans
 created: 2026-01-16
-updated: 2026-03-24
+updated: 2026-10-14
 status: active
 tags: [index, roadmap, future]
 ---
@@ -46,12 +46,23 @@ See [[remote-deployment]] for full details.
 
 Responsive mobile-optimized interface for phones and tablets. See [[../user/mobile-guide|Mobile Guide]] and [[../technical/core/frontend-architecture#Mobile Support|Frontend Architecture]].
 
-- Full-screen terminal with touch toolbar (arrow, tab, esc, ctrl+c, ctrl+d)
-- Bottom sheet overflow menu for tab switching and actions
-- Slideout file explorer with nested folder navigation
-- Slideout document viewer with auto-refresh
+- Full-screen terminal with a composer bar and key strip
+- Session strip with swipe switching and unread/attention markers
+- Fuzzy file search, recent changes, diff view, file explorer and viewer
+- Pinch and key-driven text size, shared with the viewer
 - Safe area support for notched devices
-- Virtual keyboard awareness (toolbar repositions above keyboard)
+- Virtual keyboard awareness (bar repositions above keyboard, terminal rows stay put)
+
+### Remote Sessions ✓
+
+Any device drives any session on the backend. See [[../technical/core/remote-sessions|Remote Sessions]].
+
+- One output reader per PTY fanning out to every attached client
+- Sequenced reconnects that replay only the missed output
+- Controller-owns-size policy instead of clients fighting over the PTY size
+- Session directory (`GET /api/sessions`) and one-tap adoption from a phone
+- Agent attention hooks (Claude Code, Codex) with browser notifications and Web Push
+- Installable web app (manifest, service worker)
 
 ### Multi-Project Tabs ✓
 
