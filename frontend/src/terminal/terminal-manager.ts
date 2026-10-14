@@ -631,6 +631,37 @@ export class TerminalManager implements Component {
   }
 
   /**
+   * Send a composed prompt: one bracketed paste so the agent treats a
+   * multi-line prompt as a block, then Enter to submit it.
+   */
+  sendComposed(text: string): void {
+    if (this.agentManager?.getActiveAgentId() != null) {
+      this.agentManager.sendInput(text + "\r");
+      return;
+    }
+    const terminal =
+      this.activeTerminal === SessionKey.CLAUDE ? this.claudeTerminal : this.manualTerminal;
+    if (!terminal) return;
+    terminal.pasteText(text);
+    terminal.sendInput("\r");
+  }
+
+  /** Freeze or release row counts while the on-screen keyboard is up. */
+  setKeyboardOpen(open: boolean): void {
+    for (const terminal of [this.claudeTerminal, this.manualTerminal]) {
+      if (!terminal) continue;
+      terminal.lockRows(open ? terminal.rows : null);
+    }
+  }
+
+  /** Ask the active terminal's TUI to redraw itself. */
+  requestRepaint(): void {
+    const terminal =
+      this.activeTerminal === SessionKey.CLAUDE ? this.claudeTerminal : this.manualTerminal;
+    terminal?.requestRepaint();
+  }
+
+  /**
    * Focus the active terminal without changing scroll position.
    */
   focus(): void {

@@ -27,6 +27,7 @@ from core.backend.providers.config import ProviderConfig
 from core.backend.providers.subprocess_provider import SubprocessProvider
 from core.backend.providers.websocket_provider import ProviderAuthError, WebsocketProvider
 from backend.terminal.connections import get_connection_manager
+from backend.terminal.sessions import OutputSubscriber
 from backend.connection_registry import get_connection_registry
 from backend.errors import CADEError, ProtocolError
 from backend.files.operations import create_file, write_file_content
@@ -133,6 +134,12 @@ class ConnectionHandler:
         self._is_new_session = True
         self._output_tasks: dict[str, asyncio.Task] = {}
         self._terminal_sizes: dict[str, TerminalSize] = {}
+        # Last output sequence this client reported seeing per terminal, from
+        # SET_PROJECT. Lets a reconnect replay only the missed chunks.
+        self._client_seqs: dict[str, int] = {}
+        self._subscribers: dict[str, OutputSubscriber] = {}
+        # Display name the tab gave its session, for session listings.
+        self._session_label: str | None = None
         self._user_config = None
         self._doc_index: "DocIndexService | None" = None
         self._nkrdn: "NkrdnService | None" = None
@@ -233,8 +240,6 @@ class ConnectionHandler:
             from backend.memory.tool_executor import register_write_broadcast
             register_write_broadcast(self._connection_id, self._send)
 
-            # Start output loop for claude terminal
-            self._start_output_loop(SessionKey.CLAUDE)
             watch_task = asyncio.create_task(self._watch_loop())
 
             # For WSL sessions, run the network check + Claude start as a
@@ -334,6 +339,16 @@ class ConnectionHandler:
                         self._session_id = data.get("sessionId")
                         if self._session_id:
                             logger.debug("Session ID: %s", self._session_id)
+                        label = data.get("label")
+                        if isinstance(label, str) and label.strip():
+                            self._session_label = label.strip()
+                        last_seq = data.get("lastSeq")
+                        if isinstance(last_seq, dict):
+                            self._client_seqs = {
+                                str(k): int(v)
+                                for k, v in last_seq.items()
+                                if isinstance(v, int) and v >= 0
+                            }
                         dashboard_override = data.get("dashboardFile")
                         if isinstance(dashboard_override, str) and dashboard_override.strip():
                             self._dashboard_file_override = dashboard_override.strip()
@@ -403,6 +418,9 @@ class ConnectionHandler:
             **claude_profile_env(self._working_dir),
             **self._prepare_cli_orchestrator_env(),
         }
+        # The attention hook and the resume wrapper identify this tab by it.
+        if self._session_id:
+            self._cli_pty_env["CADE_SESSION_ID"] = self._session_id
         provider_config_dict = extract_provider_config(self._launch_yaml)
         if self._provider_override == "none":
             logger.info(
@@ -467,6 +485,8 @@ class ConnectionHandler:
                 resume_on_exit=self._auto_resume_handoff,
             )
             self._session.connected_clients.add(self._ws)
+            if self._session_label:
+                self._session.label = self._session_label
             # On resume, restore the session's original working directory if the
             # incoming path differs (e.g. tab localStorage drifted to wrong project).
             if not self._is_new_session and self._session.project_path != self._working_dir:
@@ -489,7 +509,7 @@ class ConnectionHandler:
                 id="",
                 project_path=self._working_dir,
             )
-            self._session.add_terminal(SessionKey.CLAUDE, pty)
+            self._session.add_terminal(SessionKey.CLAUDE, pty).ensure_reader()
             self._is_new_session = True
 
         if self._is_new_session:
@@ -512,10 +532,7 @@ class ConnectionHandler:
                     "\x1b[38;5;245m❯\x1b[0m Dummy mode - no actual Claude running\r\n"
                     "─────────────────────────────────────────────────────────────────\r\n"
                 )
-                await self._send({
-                    "type": MessageType.OUTPUT,
-                    "data": dummy_output,
-                })
+                # Captured only: the attach in _send_connected delivers it.
                 self._session.capture_output(dummy_output)
 
         self._watcher = FileWatcher(
@@ -688,10 +705,20 @@ class ConnectionHandler:
 
         if self._session is not None:
             self._session.connected_clients.discard(self._ws)
+            self._session.release_client(self._connection_id)
+            for session_key, sub in self._subscribers.items():
+                terminal = self._session.get_terminal(session_key)
+                if terminal is not None:
+                    terminal.unsubscribe(sub)
+            self._subscribers.clear()
             if self._session_id:
                 registry = get_registry()
                 await registry.detach(self._session_id, self._ws)
             else:
+                # Unregistered session: nothing else will reap the reader.
+                for terminal in self._session.terminals.values():
+                    if terminal.output_task is not None:
+                        terminal.output_task.cancel()
                 await self._session.pty.close()
             self._session = None
 
@@ -740,10 +767,8 @@ class ConnectionHandler:
             self._session.project_path,
             size,
         )
-        self._session.add_terminal(session_key, pty)
-
-        # Start output loop for the new terminal
-        self._start_output_loop(session_key)
+        self._session.add_terminal(session_key, pty).ensure_reader()
+        await self._attach_terminal(session_key)
         logger.info("Created manual terminal '%s' for session: %s", session_key, self._session_id)
 
     async def _send_connected(self) -> None:
@@ -755,29 +780,9 @@ class ConnectionHandler:
             # Calculate idle time before updating last_activity
             idle_seconds = int(time.time() - self._session.last_activity)
 
-            # Send scrollback for the primary (agent) terminal
-            scrollback = self._session.get_scrollback(SessionKey.CLAUDE)
-            if scrollback:
-                await self._send({
-                    "type": MessageType.SESSION_RESTORED,
-                    "sessionId": self._session_id,
-                    "scrollback": scrollback,
-                    "sessionKey": SessionKey.CLAUDE,
-                })
-
-            # Send scrollback for all secondary terminals (manual + orchestrator agents)
-            for session_key in self._session.terminals:
-                if session_key == SessionKey.CLAUDE:
-                    continue
-                self._start_output_loop(session_key)
-                terminal_scrollback = self._session.get_scrollback(session_key)
-                if terminal_scrollback:
-                    await self._send({
-                        "type": MessageType.SESSION_RESTORED,
-                        "sessionId": self._session_id,
-                        "scrollback": terminal_scrollback,
-                        "sessionKey": session_key,
-                    })
+        if self._session is not None:
+            for session_key in list(self._session.terminals):
+                await self._attach_terminal(session_key)
 
         # Perform WSL health check for restored sessions
         wsl_healthy = True
@@ -1139,6 +1144,16 @@ class ConnectionHandler:
                 await self._handle_input(data)
             elif msg_type == MessageType.RESIZE:
                 await self._handle_resize(data)
+            elif msg_type == MessageType.PING:
+                await self._send({"type": MessageType.PONG, "t": data.get("t")})
+            elif msg_type == MessageType.REPAINT:
+                await self._handle_repaint(data)
+            elif msg_type == MessageType.LIST_SESSIONS:
+                await self._send_session_list()
+            elif msg_type == MessageType.LIST_FILES:
+                await self._handle_list_files(data)
+            elif msg_type == MessageType.GET_FILE_DIFF:
+                await self._handle_get_file_diff(data)
             elif msg_type == MessageType.GET_TREE:
                 await self._handle_get_tree(data)
             elif msg_type == MessageType.CLIENT_DIAGNOSTIC:
@@ -1243,27 +1258,90 @@ class ConnectionHandler:
 
         terminal = self._session.get_terminal(session_key)
         if terminal:
+            # Typing takes control of the terminal; the PTY adopts this
+            # device's size so the TUI repaints for whoever is driving.
+            if await self._session.claim_control(
+                session_key, self._connection_id, self._terminal_sizes.get(session_key)
+            ):
+                await self._broadcast_pty_size(session_key)
             await terminal.pty.write(input_data)
+            # The user is dealing with whatever the agent was waiting on.
+            if self._session.attention is not None:
+                from backend.terminal.attention import apply_attention, broadcast_attention
+
+                if apply_attention(self._session, None, None):
+                    await broadcast_attention(self._session)
 
     async def _handle_resize(self, data: dict) -> None:
-        """Handle terminal resize."""
+        """Handle terminal resize under the one-size policy."""
         if self._kiosk_mode or self._session is None:
             return
 
         session_key = data.get("sessionKey", SessionKey.CLAUDE)
         cols = data.get("cols", 80)
         rows = data.get("rows", 24)
+        size = TerminalSize(cols=cols, rows=rows)
 
         # Store size for lazy terminal creation
-        self._terminal_sizes[session_key] = TerminalSize(cols=cols, rows=rows)
+        self._terminal_sizes[session_key] = size
 
         # Lazily create manual terminals on first resize
         if self._is_manual_session_key(session_key) and not self._session.has_terminal(session_key):
             await self._create_manual_terminal(session_key)
 
+        if not self._session.has_terminal(session_key):
+            return
+        applied = await self._session.request_size(session_key, self._connection_id, size)
+        if applied:
+            await self._broadcast_pty_size(session_key, exclude_self=True)
+        else:
+            await self._send_pty_size(session_key)
+
+    async def _handle_repaint(self, data: dict) -> None:
+        if self._kiosk_mode or self._session is None:
+            return
+        session_key = data.get("sessionKey", SessionKey.CLAUDE)
+        await self._session.nudge_repaint(session_key)
+
+    def _pty_size_message(self, session_key: str) -> dict | None:
+        if self._session is None:
+            return None
         terminal = self._session.get_terminal(session_key)
-        if terminal:
-            await terminal.pty.resize(cols, rows)
+        if terminal is None or terminal.size is None:
+            return None
+        return {
+            "type": MessageType.PTY_SIZE,
+            "sessionKey": session_key,
+            "cols": terminal.size.cols,
+            "rows": terminal.size.rows,
+            "controller": terminal.controller,
+        }
+
+    async def _send_pty_size(self, session_key: str) -> None:
+        message = self._pty_size_message(session_key)
+        if message is not None:
+            await self._send(message)
+
+    async def _broadcast_pty_size(self, session_key: str, exclude_self: bool = False) -> None:
+        """Tell every client attached to this session what size the PTY has."""
+        message = self._pty_size_message(session_key)
+        if message is None or self._session is None:
+            return
+        for ws in list(self._session.connected_clients):
+            if exclude_self and ws is self._ws:
+                continue
+            try:
+                await ws.send_json(message)
+            except Exception:  # noqa: BLE001 — a dying peer is its own handler's problem
+                pass
+
+    async def _send_session_list(self) -> None:
+        from backend.terminal.session_listing import describe_sessions
+
+        await self._send({
+            "type": MessageType.SESSION_LIST,
+            "sessions": describe_sessions(get_registry(), self._config.cli_agent.adapter_id),
+        })
 
     def _resolve_root(self, root_name: str | None) -> Path:
         """Return the root path for a tree/file request.
@@ -1386,6 +1464,32 @@ class ConnectionHandler:
         payload = read_file_payload(root, path)
 
         await self._send({"type": MessageType.FILE_CONTENT, **payload})
+
+    async def _handle_list_files(self, data: dict) -> None:
+        """Flat file list for fuzzy search; walked off the event loop."""
+        from backend.files.listing import list_project_files
+
+        root_name = data.get("root") if data else None
+        root = self._resolve_root(root_name)
+        files, truncated = await asyncio.get_event_loop().run_in_executor(
+            None, list_project_files, root,
+        )
+        await self._send({
+            "type": MessageType.FILE_LIST,
+            "root": root_name,
+            "files": files,
+            "truncated": truncated,
+        })
+
+    async def _handle_get_file_diff(self, data: dict) -> None:
+        from backend.files.diff import file_diff
+
+        path = data.get("path", "")
+        if not path:
+            raise ProtocolError.invalid_message("Missing path")
+        root = self._resolve_root(data.get("root"))
+        result = await file_diff(root, path)
+        await self._send({"type": MessageType.FILE_DIFF, **result})
 
     async def _handle_write_file(self, data: dict) -> None:
         """Handle file write request."""
@@ -2103,7 +2207,7 @@ class ConnectionHandler:
     async def _suppress_timeout(self, timeout: float) -> None:
         """Force-end output suppression after timeout, independent of PTY output.
 
-        Without this, the suppression timeout in _pty_output_loop only triggers
+        Without this, the suppression timeout in _deliver_chunk only triggers
         when new data arrives — if the shell goes quiet after its initial prompt,
         the check never runs and the frontend never receives output.
         """
@@ -2132,102 +2236,115 @@ class ConnectionHandler:
             self._suppress_timeout_task.cancel()
             self._suppress_timeout_task = None
 
-    def _start_output_loop(self, session_key: str) -> None:
-        """Start the output loop for a terminal."""
-        if session_key in self._output_tasks:
-            return
+    async def _attach_terminal(self, session_key: str) -> None:
+        """Subscribe this client to a terminal's output and catch it up.
 
-        task = asyncio.create_task(self._pty_output_loop(session_key))
+        Warm attach (the client told us the last seq it saw and the buffer
+        still holds everything after it): replay just the missed chunks as
+        ordinary output frames. Cold attach: send the whole sanitized
+        scrollback as SESSION_RESTORED so the client resets and redraws. A
+        brand-new session's buffered startup output goes through the normal
+        chunk path instead, so startup suppression still applies to it.
+        """
+        if self._session is None or session_key in self._subscribers:
+            return
+        terminal = self._session.get_terminal(session_key)
+        if terminal is None:
+            return
+        terminal.ensure_reader()
+
+        sub, replay = terminal.subscribe(self._client_seqs.get(session_key))
+        self._subscribers[session_key] = sub
+        delivered_seq = self._client_seqs.get(session_key, 0)
+
+        if replay is None and self._is_new_session:
+            replay = list(terminal.scrollback)
+            delivered_seq = 0
+        if replay is None:
+            scrollback = terminal.get_scrollback()
+            if scrollback:
+                await self._send({
+                    "type": MessageType.SESSION_RESTORED,
+                    "sessionId": self._session_id,
+                    "scrollback": scrollback,
+                    "sessionKey": session_key,
+                    "seq": terminal.last_seq,
+                })
+            delivered_seq = terminal.last_seq
+            # The buffer no longer starts at the beginning, so the replayed
+            # stream may have been drawn for a different screen: ask the
+            # TUI for a clean frame.
+            if terminal.first_seq > 1 and terminal.controller in (None, self._connection_id):
+                await self._session.nudge_repaint(session_key)
+        else:
+            for seq, chunk in replay:
+                await self._deliver_chunk(session_key, seq, chunk)
+                delivered_seq = seq
+
+        await self._send_pty_size(session_key)
+        if self._session.attention is not None:
+            from backend.terminal.attention import attention_message
+
+            await self._send(attention_message(self._session))
+
+        task = asyncio.create_task(self._drain_output(session_key, sub, delivered_seq))
         self._output_tasks[session_key] = task
 
-    async def _pty_output_loop(self, session_key: str) -> None:
-        """Read and send PTY output to client."""
+    async def _drain_output(
+        self, session_key: str, sub: OutputSubscriber, delivered_seq: int
+    ) -> None:
+        """Forward a terminal's live output to this client until it ends."""
         if self._session is None:
             return
-
         terminal = self._session.get_terminal(session_key)
         if terminal is None:
             return
 
-        received_output = False
         try:
-            async for data in terminal.pty.read():
+            async for item in sub:
                 if self._closed:
                     break
-
-                received_output = True
-                self._session.capture_output(data, session_key)
-
-                # Only apply startup suppression to claude terminal
-                if session_key == SessionKey.CLAUDE and self._suppress_output:
-                    # Detect Claude startup via:
-                    # - Alternate screen buffer: \x1b[?1049h or \x1b[?47h
-                    # - Clear screen: \x1b[2J (often with \x1b[H cursor home)
-                    # - Claude logo start (the block characters)
-                    claude_detected = (
-                        "\x1b[?1049h" in data
-                        or "\x1b[?47h" in data
-                        or "\x1b[2J" in data
-                        or "▐▛███▜▌" in data
-                    )
-
-                    # Detect if Claude command failed (not installed)
-                    command_not_found = (
-                        "command not found" in data
-                        or "not found" in data.lower()
-                    )
-
-                    timed_out = (
-                        self._suppress_start_time
-                        and time.monotonic() - self._suppress_start_time > 4.0
-                    )
-
-                    if claude_detected or timed_out or command_not_found:
-                        self._suppress_output = False
-                        self._cancel_suppress_timeout()
-                        # Flush buffered output so error messages are visible
-                        if self._suppress_buffer:
-                            buffered = "".join(self._suppress_buffer)
-                            self._suppress_buffer.clear()
-                            if not claude_detected:
-                                # Send buffered shell output on timeout or error
-                                await self._send({
-                                    "type": MessageType.OUTPUT,
-                                    "data": buffered,
-                                    "sessionKey": session_key,
-                                })
-
-                        # If Claude isn't installed, show helpful message
-                        if command_not_found:
-                            help_message = (
-                                "\r\n\x1b[33m"
-                                "Claude Code is not installed or not in PATH.\r\n"
-                                "To install: npm install -g @anthropics/claude-code\r\n"
-                                "Or disable auto-start: export CADE_AUTO_START_CLAUDE=false\r\n"
-                                "\x1b[0m"
-                            )
-                            await self._send({
-                                "type": MessageType.OUTPUT,
-                                "data": help_message,
-                                "sessionKey": session_key,
-                            })
-
-                        # Fall through to send this chunk
-                    else:
-                        self._suppress_buffer.append(data)
-                        continue  # Keep suppressing
-
-                await self._send({
-                    "type": MessageType.OUTPUT,
-                    "data": data,
-                    "sessionKey": session_key,
-                })
+                if item is None:
+                    break
+                seq, data = item
+                # Chunks published between subscribe() and the end of replay
+                # arrive on the queue as well; skip what was already sent.
+                if seq <= delivered_seq:
+                    continue
+                # A TUI redraw lands as a burst of small PTY reads. Everything
+                # already queued goes out as one frame: fewer JSON messages
+                # and fewer xterm writes for the same bytes.
+                parts = [data]
+                while not sub.queue.empty():
+                    nxt = sub.queue.get_nowait()
+                    if nxt is None:
+                        sub.queue.put_nowait(None)
+                        break
+                    seq, more = nxt
+                    parts.append(more)
+                delivered_seq = seq
+                await self._deliver_chunk(session_key, seq, "".join(parts))
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             if not self._closed:
                 logger.exception("PTY output error for %s: %s", session_key, e)
+            return
 
-        # PTY read loop ended — notify client if process died without producing output
-        if not received_output and not self._closed:
+        if self._closed:
+            return
+        self._subscribers.pop(session_key, None)
+
+        if sub.dropped:
+            # Fell too far behind: resync from the full scrollback.
+            logger.warning("Client lagged on %s; cold reattach", session_key)
+            self._client_seqs.pop(session_key, None)
+            self._output_tasks.pop(session_key, None)
+            await self._attach_terminal(session_key)
+            return
+
+        # PTY reached EOF — notify client if process died without producing output
+        if terminal.last_seq == 0:
             logger.error(
                 "PTY for %s exited without producing any output", session_key,
             )
@@ -2249,6 +2366,73 @@ class ConnectionHandler:
                 "message": error_msg,
                 "sessionKey": session_key,
             })
+
+    async def _deliver_chunk(self, session_key: str, seq: int, data: str) -> None:
+        """Send one output chunk, honouring startup suppression on the agent terminal."""
+        if session_key == SessionKey.CLAUDE and self._suppress_output:
+            # Detect Claude startup via:
+            # - Alternate screen buffer: \x1b[?1049h or \x1b[?47h
+            # - Clear screen: \x1b[2J (often with \x1b[H cursor home)
+            # - Claude logo start (the block characters)
+            claude_detected = (
+                "\x1b[?1049h" in data
+                or "\x1b[?47h" in data
+                or "\x1b[2J" in data
+                or "▐▛███▜▌" in data
+            )
+
+            # Detect if Claude command failed (not installed)
+            command_not_found = (
+                "command not found" in data
+                or "not found" in data.lower()
+            )
+
+            timed_out = (
+                self._suppress_start_time
+                and time.monotonic() - self._suppress_start_time > 4.0
+            )
+
+            if claude_detected or timed_out or command_not_found:
+                self._suppress_output = False
+                self._cancel_suppress_timeout()
+                # Flush buffered output so error messages are visible
+                if self._suppress_buffer:
+                    buffered = "".join(self._suppress_buffer)
+                    self._suppress_buffer.clear()
+                    if not claude_detected:
+                        # Send buffered shell output on timeout or error
+                        await self._send({
+                            "type": MessageType.OUTPUT,
+                            "data": buffered,
+                            "sessionKey": session_key,
+                        })
+
+                # If Claude isn't installed, show helpful message
+                if command_not_found:
+                    help_message = (
+                        "\r\n\x1b[33m"
+                        "Claude Code is not installed or not in PATH.\r\n"
+                        "To install: npm install -g @anthropics/claude-code\r\n"
+                        "Or disable auto-start: export CADE_AUTO_START_CLAUDE=false\r\n"
+                        "\x1b[0m"
+                    )
+                    await self._send({
+                        "type": MessageType.OUTPUT,
+                        "data": help_message,
+                        "sessionKey": session_key,
+                    })
+
+                # Fall through to send this chunk
+            else:
+                self._suppress_buffer.append(data)
+                return  # Keep suppressing
+
+        await self._send({
+            "type": MessageType.OUTPUT,
+            "data": data,
+            "sessionKey": session_key,
+            "seq": seq,
+        })
 
     async def _deferred_claude_start(self) -> None:
         """Run WSL network check in background and start Claude when ready.

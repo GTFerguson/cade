@@ -144,6 +144,13 @@ export interface SetProjectMessage extends BaseMessage {
   type: "set-project";
   path: string;
   sessionId?: string;
+  /** Tab name, shown to other devices listing this backend's sessions. */
+  label?: string;
+  /**
+   * Last output sequence seen per terminal. On reconnect the server replays
+   * only what came after it instead of the whole scrollback.
+   */
+  lastSeq?: Record<string, number>;
   /**
    * Optional override for launch.yml's dashboard_file. Path relative to
    * the project root (or absolute). Driven by the ?dashboard= URL param
@@ -169,6 +176,81 @@ export interface OutputMessage extends BaseMessage {
   type: "output";
   data: string;
   sessionKey?: AnySessionKey;
+  /** Position in the terminal's output stream; absent on synthetic frames. */
+  seq?: number;
+}
+
+/**
+ * The PTY's current size and which connection owns it. Clients that are
+ * not the controller render at this size rather than their own fit.
+ */
+export interface PtySizeMessage extends BaseMessage {
+  type: "pty-size";
+  sessionKey: AnySessionKey;
+  cols: number;
+  rows: number;
+  controller: string | null;
+}
+
+export interface PongMessage extends BaseMessage {
+  type: "pong";
+  t?: number;
+}
+
+export interface LiveTerminalInfo {
+  alive: boolean;
+  exited: boolean;
+  cols: number | null;
+  rows: number | null;
+  lastSeq: number;
+  controller: string | null;
+}
+
+/** One live PTY session on a backend, as listed for adoption by another device. */
+export interface LiveSessionInfo {
+  id: string;
+  label: string | null;
+  projectPath: string;
+  agent: string;
+  createdAt: number;
+  lastActivity: number;
+  alive: boolean;
+  clients: number;
+  attention?: AttentionState;
+  attentionMessage?: string | null;
+  terminals: Record<string, LiveTerminalInfo>;
+}
+
+export interface SessionListMessage extends BaseMessage {
+  type: "session-list";
+  sessions: LiveSessionInfo[];
+}
+
+export type AttentionState = "input" | "idle" | null;
+
+/** The agent in a session is waiting for the user, finished, or working again. */
+export interface SessionAttentionMessage extends BaseMessage {
+  type: "session-attention";
+  sessionId: string;
+  attention: AttentionState;
+  message?: string | null;
+}
+
+/** Flat list of project files for fuzzy search. */
+export interface FileListMessage extends BaseMessage {
+  type: "file-list";
+  root?: string | null;
+  files: string[];
+  truncated: boolean;
+}
+
+/** Git diff of one file against HEAD. */
+export interface FileDiffMessage extends BaseMessage {
+  type: "file-diff";
+  path: string;
+  diff: string;
+  untracked: boolean;
+  error?: string;
 }
 
 /**
@@ -303,6 +385,8 @@ export interface SessionRestoredMessage extends BaseMessage {
   sessionId: string;
   scrollback: string;
   sessionKey?: AnySessionKey;
+  /** Sequence the scrollback runs up to. */
+  seq?: number;
 }
 
 /**

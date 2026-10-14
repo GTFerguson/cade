@@ -228,6 +228,47 @@ def _merge_codex_mcp_servers(config_path: Path, servers: dict) -> None:
     logger.info("Merged CADE MCP servers into %s", config_path)
 
 
+_CADE_NOTIFY_MARKER = "cade-managed notify"
+
+
+def _merge_codex_notify(config_path: Path, command: list[str]) -> None:
+    """Point Codex's ``notify`` at CADE's attention hook.
+
+    ``notify`` is a top-level key, so it must sit above the first table
+    header. A user's own ``notify`` is left alone; only a line CADE wrote
+    (marked) is replaced.
+    """
+    lines = config_path.read_text(encoding="utf-8").splitlines() if config_path.exists() else []
+    kept: list[str] = []
+    for line in lines:
+        if line.strip().startswith("notify") and _CADE_NOTIFY_MARKER in line:
+            continue
+        kept.append(line)
+    if any(l.strip().startswith("notify") for l in kept):
+        return  # the user configured their own notify command
+
+    args = ", ".join(json.dumps(a) for a in command)
+    notify_line = f"notify = [{args}]  # {_CADE_NOTIFY_MARKER}"
+    first_table = next((i for i, l in enumerate(kept) if l.strip().startswith("[")), len(kept))
+    kept.insert(first_table, notify_line)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("\n".join(kept).rstrip("\n") + "\n", encoding="utf-8")
+
+
+def _remove_codex_notify(config_path: Path) -> None:
+    if not config_path.exists():
+        return
+    lines = config_path.read_text(encoding="utf-8").splitlines()
+    kept = [l for l in lines if not (l.strip().startswith("notify") and _CADE_NOTIFY_MARKER in l)]
+    if len(kept) == len(lines):
+        return
+    cleaned = "\n".join(kept).strip()
+    if cleaned:
+        config_path.write_text(cleaned + "\n", encoding="utf-8")
+    else:
+        config_path.unlink(missing_ok=True)
+
+
 def _remove_codex_mcp_servers(config_path: Path, server_names: set[str]) -> None:
     """Strip CADE-managed MCP sections from Codex config."""
     if not config_path.exists():
@@ -298,9 +339,16 @@ class CodexAdapter:
         self, servers: dict, project_dir: Path | None = None
     ) -> None:
         _merge_codex_mcp_servers(_codex_config_path(), servers)
+        # Codex has no hooks, but its notify command fires on turn
+        # completion, which is enough for "done, come back".
+        _merge_codex_notify(
+            _codex_config_path(),
+            ["python3", str(Path.home() / ".cade" / "hooks" / "attention.py")],
+        )
 
     def remove_mcp_config(self, project_dir: Path | None = None) -> None:
         _remove_codex_mcp_servers(_codex_config_path(), CADE_MCP_SERVER_NAMES)
+        _remove_codex_notify(_codex_config_path())
 
 
 # ── Cursor ──────────────────────────────────────────────────────────────────

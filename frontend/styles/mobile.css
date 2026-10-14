@@ -33,8 +33,8 @@
 
   .terminal-pane {
     position: fixed;
-    top: 0;
-    bottom: 48px;
+    top: var(--session-strip-height, 0px);
+    bottom: var(--touch-toolbar-height, 92px);
     left: 0;
     right: 0;
     height: auto;
@@ -91,12 +91,18 @@
 
 .app-container.mobile-layout .terminal-pane {
   position: fixed;
-  top: 0;
-  bottom: 48px;
+  top: var(--session-strip-height, 0px);
+  bottom: var(--touch-toolbar-height, 92px);
   left: 0;
   right: 0;
   height: auto;
   width: auto;
+}
+
+/* Rows are frozen while the keyboard is up: the xterm element is taller
+   than the pane, so the pane scrolls to keep the prompt line in view. */
+.terminal-container.terminal-rows-locked {
+  overflow-y: auto;
 }
 
 /* ==========================================================================
@@ -108,15 +114,93 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: 48px;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: stretch;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
   z-index: 99;
   padding-bottom: env(safe-area-inset-bottom, 0px);
   touch-action: manipulation;
+}
+
+/* Composer row: [cmd] [ prompt ] [send] */
+.touch-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.touch-composer .touch-toolbar-btn.key-cmd {
+  flex: 0 0 auto;
+  padding: 0 10px;
+  height: 36px;
+}
+
+.touch-composer-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  max-height: 120px;
+  padding: 8px 10px;
+  resize: none;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 16px; /* under 16px iOS zooms the page on focus */
+  line-height: 20px;
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.touch-composer-input:focus {
+  border-color: var(--accent-blue);
+}
+
+.touch-composer-send {
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent-green);
+  color: var(--bg-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-composer-send:active {
+  opacity: 0.8;
+}
+
+/* Key strip: fixed-width keys, scrolls sideways on narrow phones */
+.touch-keys {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  height: 44px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.touch-keys::-webkit-scrollbar {
+  display: none;
+}
+
+.touch-keys .touch-toolbar-btn {
+  flex: 0 0 auto;
+  min-width: 44px;
+  padding: 0 10px;
+  border-right: 1px solid var(--border-color);
 }
 
 .touch-toolbar-btn {
@@ -156,16 +240,117 @@
 /* Hide mobile-only elements on desktop */
 @media (min-width: 769px) {
   .touch-toolbar,
+  .session-strip,
   .mobile-screen {
     display: none !important;
   }
+}
+
+/* ==========================================================================
+   Session Strip (Mobile)
+   ========================================================================== */
+
+.session-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  z-index: 98;
+  padding-top: env(safe-area-inset-top, 0px);
+  font-family: var(--font-mono);
+  touch-action: pan-x;
+  user-select: none;
+}
+
+.session-strip button {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-family: inherit;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.session-strip-arrow {
+  flex: 0 0 44px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.session-strip-arrow:disabled {
+  opacity: 0.3;
+}
+
+.session-strip-centre {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.session-strip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.session-strip-agent {
+  color: var(--text-muted);
+}
+
+.session-strip-dots {
+  display: inline-flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.session-strip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.4;
+}
+
+.session-strip-dot.active {
+  background: var(--accent-green);
+  opacity: 1;
+}
+
+.session-strip-dot.unread {
+  background: var(--accent-blue);
+  opacity: 1;
+}
+
+.session-strip-dot.needs-input {
+  background: var(--accent-orange);
+  opacity: 1;
+  animation: session-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.session-strip-dot.idle {
+  background: var(--accent-cyan);
+  opacity: 1;
+}
+
+@keyframes session-dot-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.5); }
 }
 
 /* Touch toolbar key-cmd styling */
 .touch-toolbar-btn.key-cmd {
   color: var(--accent-red);
   font-weight: 600;
-  flex: 1.3;
 }
 
 .touch-toolbar-btn.key-cmd:active {
@@ -182,13 +367,13 @@
    Mobile Full-Pane Screens
    ========================================================================== */
 
-/* Base screen: covers viewport above toolbar, hidden by default */
+/* Base screen: covers viewport between session strip and toolbar, hidden by default */
 .mobile-screen {
   position: fixed;
-  top: 0;
+  top: var(--session-strip-height, 0px);
   left: 0;
   right: 0;
-  bottom: 48px;
+  bottom: var(--touch-toolbar-height, 92px);
   display: none;
   flex-direction: column;
   background: var(--bg-primary);
@@ -507,4 +692,204 @@
     border: none;
     background: transparent;
   }
+}
+
+/* ── File Search ─────────────────────────────────────── */
+
+.mobile-file-search .search-bar {
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.mobile-file-search .search-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 16px; /* under 16px iOS zooms the page on focus */
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.mobile-file-search .search-input:focus {
+  border-color: var(--accent-blue);
+}
+
+.mobile-file-search .search-results {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-file-search .search-result {
+  padding: 12px 16px;
+  min-height: 44px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--bg-tertiary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl; /* keep the file name visible when the path is long */
+  text-align: left;
+}
+
+.mobile-file-search .search-result-path {
+  direction: ltr;
+  unicode-bidi: embed;
+}
+
+.mobile-file-search .search-result:active {
+  background: var(--bg-hover);
+}
+
+.mobile-file-search mark {
+  background: transparent;
+  color: var(--accent-green);
+  font-weight: 600;
+}
+
+/* ── Recent Files ────────────────────────────────────── */
+
+.mobile-recent-files .recent-list {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-recent-files .recent-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "name meta" "dir meta";
+  gap: 2px 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--bg-tertiary);
+  font-family: var(--font-mono);
+}
+
+.mobile-recent-files .recent-row:active {
+  background: var(--bg-hover);
+}
+
+.mobile-recent-files .recent-name {
+  grid-area: name;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.mobile-recent-files .recent-dir {
+  grid-area: dir;
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-recent-files .recent-meta {
+  grid-area: meta;
+  align-self: center;
+  font-size: 11px;
+  color: var(--accent-blue);
+  white-space: nowrap;
+}
+
+.mobile-recent-files .recent-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px;
+}
+
+/* ── Viewer: diff toggle and shared font size ────────── */
+
+.mobile-file-viewer .viewer-header {
+  position: relative;
+  justify-content: center;
+}
+
+.mobile-file-viewer .viewer-diff-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  touch-action: manipulation;
+}
+
+.mobile-file-viewer .viewer-diff-toggle.active {
+  background: var(--accent-blue);
+  color: var(--bg-primary);
+  border-color: var(--accent-blue);
+}
+
+.mobile-file-viewer .viewer-notice {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px 16px;
+}
+
+.mobile-file-viewer .diff-view {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--mobile-code-font-size, 12px);
+  line-height: 1.4;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.mobile-file-viewer .diff-view .hljs-addition {
+  display: inline-block;
+  min-width: 100%;
+  background: rgba(174, 238, 0, 0.12);
+  color: var(--accent-green);
+}
+
+.mobile-file-viewer .diff-view .hljs-deletion {
+  display: inline-block;
+  min-width: 100%;
+  background: rgba(255, 44, 75, 0.12);
+  color: var(--accent-red);
+}
+
+.mobile-file-viewer .diff-view .hljs-meta,
+.mobile-file-viewer .diff-view .hljs-comment {
+  color: var(--accent-blue);
+}
+
+.mobile-file-viewer .code-view-mobile {
+  font-size: var(--mobile-code-font-size, 12px);
+}
+
+.mobile-file-viewer .md-view {
+  font-size: calc(var(--mobile-code-font-size, 12px) + 2px);
+}
+
+/* Tab state markers in the command menu */
+.mobile-command-menu .tab-indicator.unread {
+  background: var(--accent-blue);
+}
+
+.mobile-command-menu .tab-indicator.idle {
+  background: var(--accent-cyan);
+}
+
+.mobile-command-menu .tab-indicator.needs-input {
+  background: var(--accent-orange);
+  animation: session-dot-pulse 1.2s ease-in-out infinite;
 }

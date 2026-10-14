@@ -536,3 +536,9 @@
 .agent-approval-btn.reject:hover {
   background: rgba(255, 44, 75, 0.1);
 }
+
+/* Mirroring another client's PTY size: the terminal is sized to their
+   columns, not ours, so let it overflow and scroll rather than clip. */
+.terminal-container.terminal-fixed-size {
+  overflow: auto;
+}

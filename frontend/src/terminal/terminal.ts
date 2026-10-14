@@ -18,6 +18,11 @@ import type { WebSocketClient } from "../platform/websocket";
 import { getSavedThemeId, getThemeById } from "../config/themes";
 import { WebglRenderer } from "./webgl-renderer";
 import { isZoomHotkey } from "./zoom-keys";
+import {
+  fontSizeForCols,
+  getTerminalFontSize,
+  onTerminalFontSizeChange,
+} from "./font-size";
 
 /**
  * Build an xterm.js theme from the current CADE theme.
@@ -90,6 +95,19 @@ export class Terminal implements Component {
   private scrollbackOverride: number | null;
   private lastSentSize: { cols: number; rows: number } | null = null;
 
+  // One-size policy: the client that last typed owns the PTY size. When
+  // that is someone else, we render at their size instead of fitting the
+  // container, so the TUI isn't drawn for a screen we don't have.
+  private connectionId: string | null = null;
+  private fixedSize: { cols: number; rows: number } | null = null;
+  private applyingPtySize = false;
+  private unsubscribeFontSize: (() => void) | null = null;
+
+  // While the on-screen keyboard is up the pane shrinks; keeping the row
+  // count fixed means the PTY is not resized (and the TUI not repainted)
+  // every time the keyboard toggles. The pane scrolls instead.
+  private rowLock: number | null = null;
+
   // Scroll lock: xterm.js has a bug where alternate buffer transitions
   // clear the internal isUserScrolling flag, causing the viewport to snap
   // to the bottom on the next output write. We track scroll state ourselves
@@ -123,7 +141,7 @@ export class Terminal implements Component {
     this.terminal = new XTerm({
       cursorBlink: !this.hideCursor,
       cursorStyle: "block",
-      fontSize: this.fontSizeOverride ?? 14,
+      fontSize: this.fontSizeOverride ?? getTerminalFontSize(),
       fontFamily: '"JetBrains Mono", "Fira Code", Consolas, monospace',
       fontWeight: "400",
       fontWeightBold: "600",
@@ -177,6 +195,10 @@ export class Terminal implements Component {
     this.terminal.open(this.container);
 
     this.webglRenderer = new WebglRenderer(this.terminal);
+
+    if (this.fontSizeOverride === null) {
+      this.unsubscribeFontSize = onTerminalFontSizeChange(() => this.applyFontSize());
+    }
 
     // Dropped files are pasted as paths into whichever terminal is under the
     // pointer, or failing that the one last typed in. Read-only viewers never
@@ -253,10 +275,18 @@ export class Terminal implements Component {
       });
 
       this.terminal.onResize(({ cols, rows }) => {
+        // A resize we applied to mirror the controller is not a request.
+        if (this.applyingPtySize) return;
         this.lastSentSize = { cols, rows };
         this.ws.sendResize(cols, rows, this.sessionKey);
       });
     }
+
+    this.ws.on("pty-size", (message) => {
+      if (message.sessionKey === this.sessionKey) {
+        this.applyPtySize(message.cols, message.rows, message.controller);
+      }
+    });
 
     if (this.subscribeToOutput) {
       this.ws.on("output", (message) => {
@@ -268,7 +298,8 @@ export class Terminal implements Component {
       });
     }
 
-    this.ws.on("connected", () => {
+    this.ws.on("connected", (message) => {
+      this.connectionId = message.connectionId ?? null;
       this.sendSize();
     });
 
@@ -351,9 +382,24 @@ export class Terminal implements Component {
       return;
     }
 
+    // Another client owns the PTY size; keep mirroring it, but shrink the
+    // glyphs so their columns fit our width.
+    if (this.fixedSize !== null) {
+      this.applyFontSize();
+      return;
+    }
+
     try {
       const dims = this.fitAddon.proposeDimensions();
       if (!dims) {
+        return;
+      }
+
+      if (this.rowLock !== null) {
+        if (dims.cols !== this.terminal.cols || this.rowLock !== this.terminal.rows) {
+          this.terminal.resize(dims.cols, this.rowLock);
+        }
+        this.container.scrollTop = this.container.scrollHeight;
         return;
       }
 
@@ -402,6 +448,91 @@ export class Terminal implements Component {
     } catch {
       this.isFitting = false;
     }
+  }
+
+  /**
+   * Adopt the PTY's size as announced by the server. When we are the
+   * controller (or nobody is) we go back to fitting our own container.
+   */
+  applyPtySize(cols: number, rows: number, controller: string | null): void {
+    if (!this.terminal) return;
+    const weControl = controller === null || controller === this.connectionId;
+
+    if (weControl) {
+      if (this.fixedSize !== null) {
+        this.fixedSize = null;
+        this.container.classList.remove("terminal-fixed-size");
+        this.applyFontSize();
+        // Force a real refit: lastSentSize describes our container, but the
+        // terminal is currently at the previous controller's size.
+        this.lastSentSize = null;
+        this.fit();
+      }
+      return;
+    }
+
+    this.fixedSize = { cols, rows };
+    this.container.classList.add("terminal-fixed-size");
+    this.applyFontSize();
+    if (this.terminal.cols === cols && this.terminal.rows === rows) return;
+    this.applyingPtySize = true;
+    try {
+      this.terminal.resize(cols, rows);
+    } finally {
+      this.applyingPtySize = false;
+    }
+  }
+
+  /** Whether another client currently owns the PTY size. */
+  isMirroring(): boolean {
+    return this.fixedSize !== null;
+  }
+
+  /**
+   * Freeze the row count (keyboard up) or release it (keyboard down).
+   * Releasing refits to the container.
+   */
+  lockRows(rows: number | null): void {
+    if (!this.terminal) return;
+    const next = rows === null ? null : Math.max(1, Math.floor(rows));
+    if (next === this.rowLock) return;
+    this.rowLock = next;
+    this.container.classList.toggle("terminal-rows-locked", next !== null);
+    if (next === null) {
+      this.lastSentSize = null;
+    }
+    this.fit();
+  }
+
+  /** Current row count, for callers that want to lock it. */
+  get rows(): number {
+    return this.terminal?.rows ?? 0;
+  }
+
+  /**
+   * Set xterm's font to the shared setting, or to whatever lets a mirrored
+   * PTY's columns fit this container, then reflow.
+   */
+  private applyFontSize(): void {
+    if (!this.terminal) return;
+    const userSize = this.fontSizeOverride ?? getTerminalFontSize();
+    const target =
+      this.fixedSize !== null
+        ? fontSizeForCols(this.fixedSize.cols, this.container.clientWidth, userSize)
+        : userSize;
+    if (this.terminal.options.fontSize === target) return;
+    this.terminal.options.fontSize = target;
+    // Glyphs are rasterised at the old size in the atlas.
+    this.webglRenderer?.refresh();
+    if (this.fixedSize === null) {
+      this.lastSentSize = null;
+      this.fit();
+    }
+  }
+
+  /** Ask the TUI to redraw itself (server-side SIGWINCH nudge). */
+  requestRepaint(): void {
+    this.ws.sendRepaint(this.sessionKey);
   }
 
   /**
@@ -554,6 +685,9 @@ export class Terminal implements Component {
 
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+
+    this.unsubscribeFontSize?.();
+    this.unsubscribeFontSize = null;
 
     this.webglRenderer?.dispose();
     this.webglRenderer = null;

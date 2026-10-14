@@ -12,6 +12,9 @@
  *   ?demo=mobile-noexits  The Sealed Vault — no exits
  *   ?demo=bible-master    Padarax master bible rendered via entity_detail
  *   ?demo=bible-arc       Northern Goliath Warlord arc bible
+ *   ?demo=mobile-remote   phone attached to a desktop-driven Claude Code session:
+ *                         mirrored PTY size, unread/attention dots, live sessions,
+ *                         recent file changes
  */
 
 import type { WebSocketClient } from "./platform/websocket";
@@ -513,6 +516,9 @@ function injectPhase5MemoryCaptures(ws: WebSocketClient): void {
 }
 
 const SCENARIOS: Record<string, Scenario> = {
+  "mobile-remote": {
+    initial: null,
+  },
   "phase5-memory": {
     initial: PHASE5_GRAPH,
   },
@@ -683,6 +689,115 @@ const SCENARIOS: Record<string, Scenario> = {
 
 // ── Activation ───────────────────────────────────────────────────────
 
+/**
+ * A phone attached to a session the desktop is driving. Exercises every
+ * remote-access surface without a backend: cold-attach scrollback, the
+ * controller's wider PTY size, a live-sessions reply, file changes for the
+ * recent list, and an attention event a few seconds in.
+ */
+function injectMobileRemote(ws: WebSocketClient): void {
+  const esc = "\x1b";
+  const transcript =
+    `${esc}[1;36m✻ Welcome to Claude Code!${esc}[0m\r\n\r\n` +
+    `${esc}[90m  /help for help, /status for your current setup${esc}[0m\r\n\r\n` +
+    `${esc}[90m  cwd: ~/projects/cade${esc}[0m\r\n\r\n` +
+    `${esc}[1m> ${esc}[0mfix the flaky reconnect test\r\n\r\n` +
+    `${esc}[32m●${esc}[0m I'll start by reading the test to see what it waits on.\r\n\r\n` +
+    `${esc}[32m●${esc}[0m ${esc}[1mRead${esc}[0m(backend/tests/test_websocket_integration.py)\r\n` +
+    `  ${esc}[90m⎿  Read 480 lines${esc}[0m\r\n\r\n` +
+    `${esc}[32m●${esc}[0m The test closes the socket and immediately asserts on the\r\n` +
+    `  reconnect count; the close is asynchronous in the browser. I'll\r\n` +
+    `  detach the handlers before closing.\r\n\r\n` +
+    `${esc}[32m●${esc}[0m ${esc}[1mUpdate${esc}[0m(core/frontend/platform/ws-client.ts)\r\n` +
+    `  ${esc}[90m⎿  Updated 1 file (+9 -2)${esc}[0m\r\n\r\n` +
+    `${esc}[33m⚠ Bash command${esc}[0m\r\n` +
+    `  ${esc}[90mnpx vitest run ws-client${esc}[0m\r\n` +
+    `  Do you want to proceed?\r\n` +
+    `  ${esc}[36m❯ 1. Yes${esc}[0m\r\n` +
+    `    2. Yes, and don't ask again for npx commands\r\n` +
+    `    3. No, and tell Claude what to do differently (esc)\r\n`;
+
+  ws.injectEvent("connected", {
+    type: "connected",
+    workingDir: "/demo",
+    sessionRestored: true,
+    connectionId: "phone-demo",
+    cliAgent: { id: "claude-code", displayName: "Claude Code", capabilities: {} },
+  });
+  ws.injectEvent("session-restored", {
+    type: "session-restored",
+    sessionId: "demo",
+    sessionKey: "claude",
+    scrollback: transcript,
+    seq: 42,
+  });
+  // The desktop owns the PTY at 120 columns; the phone mirrors it.
+  ws.injectEvent("pty-size", {
+    type: "pty-size",
+    sessionKey: "claude",
+    cols: 120,
+    rows: 40,
+    controller: "desktop-demo",
+  });
+  ws.injectEvent("file-tree", { type: "file-tree", data: [] });
+  const changes = [
+    ["core/frontend/platform/ws-client.ts", "modified"],
+    ["docs/plans/remote-access-overhaul.md", "modified"],
+    ["frontend/src/platform/websocket.test.ts", "created"],
+  ];
+  changes.forEach(([path, event], i) => {
+    setTimeout(() => ws.injectEvent("file-change", { type: "file-change", path, event }), 200 * (i + 1));
+  });
+  setTimeout(() => {
+    ws.injectEvent("session-attention", {
+      type: "session-attention",
+      sessionId: "demo",
+      attention: "input",
+      message: "Claude needs your permission to use Bash",
+    });
+  }, 3000);
+  // Live sessions on the "server", answered whenever the menu opens.
+  const sessions = () =>
+    ws.injectEvent("session-list", {
+      type: "session-list",
+      sessions: [
+        {
+          id: "codex-demo", label: "padarax", projectPath: "/home/gary/projects/padarax",
+          agent: "codex", createdAt: 0, lastActivity: Date.now() / 1000, alive: true, clients: 1,
+          attention: "idle", terminals: {},
+        },
+        {
+          id: "shell-demo", label: "nkrdn", projectPath: "/home/gary/projects/nkrdn",
+          agent: "claude-code", createdAt: 0, lastActivity: Date.now() / 1000, alive: true, clients: 0,
+          attention: null, terminals: {},
+        },
+      ],
+    });
+  setTimeout(sessions, 600);
+  setInterval(sessions, 4000);
+  // File listing for the search screen, answered the same way.
+  const files = () =>
+    ws.injectEvent("file-list", {
+      type: "file-list",
+      root: null,
+      truncated: false,
+      files: [
+        "backend/terminal/sessions.py",
+        "backend/terminal/attention.py",
+        "backend/websocket.py",
+        "core/frontend/platform/ws-client.ts",
+        "frontend/src/terminal/terminal.ts",
+        "frontend/src/terminal/terminal-manager.ts",
+        "frontend/src/ui/mobile.ts",
+        "frontend/src/ui/mobile/session-strip.ts",
+        "docs/plans/remote-access-overhaul.md",
+        "README.md",
+      ],
+    });
+  setTimeout(files, 800);
+  setInterval(files, 4000);
+}
+
 export function activateDemoMode(ws: WebSocketClient): void {
   const params = new URLSearchParams(window.location.search);
   const key = params.get("demo");
@@ -695,6 +810,11 @@ export function activateDemoMode(ws: WebSocketClient): void {
   }
 
   console.info(`[demo] activating scenario "${key}"`);
+
+  if (key === "mobile-remote") {
+    setTimeout(() => injectMobileRemote(ws), 400);
+    return;
+  }
 
   // Force the Padarax theme regardless of whatever is in localStorage.
   localStorage.setItem("cade-theme", "padarax");

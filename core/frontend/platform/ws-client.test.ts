@@ -84,6 +84,79 @@ afterEach(() => {
 });
 
 describe("BaseWSClient", () => {
+  describe("disconnect", () => {
+    it("does not reconnect when the closed socket reports its close later", () => {
+      const client = newClient();
+      client.connect();
+      const socket = FakeWebSocket.instances[0]!;
+      socket.simulateOpen();
+
+      client.disconnect();
+      socket.simulateClose(1006);
+      vi.advanceTimersByTime(60_000);
+
+      expect(client.getState()).toBe("disconnected");
+      expect(FakeWebSocket.instances).toHaveLength(1);
+    });
+
+    it("keeps a connection opened right after disconnect", () => {
+      const client = newClient();
+      client.connect();
+      const first = FakeWebSocket.instances[0]!;
+      first.simulateOpen();
+
+      client.disconnect();
+      client.connect();
+      first.simulateClose(1006);
+
+      expect(FakeWebSocket.instances).toHaveLength(2);
+      expect(client.getState()).toBe("connecting");
+    });
+  });
+
+  describe("reconnectNow", () => {
+    it("replaces a live socket with a fresh connection immediately", () => {
+      const client = newClient();
+      client.connect();
+      const first = FakeWebSocket.instances[0]!;
+      first.simulateOpen();
+
+      client.reconnectNow();
+
+      expect(first.closed).toBe(true);
+      expect(FakeWebSocket.instances).toHaveLength(2);
+      expect(client.getState()).toBe("connecting");
+    });
+
+    it("does not let the abandoned socket's close schedule a second reconnect", () => {
+      const client = newClient();
+      client.connect();
+      const first = FakeWebSocket.instances[0]!;
+      first.simulateOpen();
+
+      client.reconnectNow();
+      first.simulateClose();
+      vi.advanceTimersByTime(1000);
+
+      expect(FakeWebSocket.instances).toHaveLength(2);
+    });
+
+    it("skips a pending backoff wait", () => {
+      const client = newClient({ reconnectBaseDelay: 10_000 });
+      client.connect();
+      FakeWebSocket.instances[0]!.simulateOpen();
+      FakeWebSocket.instances[0]!.simulateClose();
+      expect(client.getState()).toBe("disconnected");
+      expect(FakeWebSocket.instances).toHaveLength(1);
+
+      client.reconnectNow();
+
+      expect(FakeWebSocket.instances).toHaveLength(2);
+      vi.advanceTimersByTime(20_000);
+      expect(FakeWebSocket.instances).toHaveLength(2);
+    });
+  });
+
   describe("lifecycle", () => {
     it("connects on demand and reports state", () => {
       const client = newClient();

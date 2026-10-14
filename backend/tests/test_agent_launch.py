@@ -532,3 +532,34 @@ def test_owned_path_outside_project_is_ignored(tmp_path):
     other = _make_named_brief(tmp_path / "other", "x.md", age_seconds=10)
     _own(tmp_path, "TAB1", other)
     assert _run_resume_brief_env(tmp_path, project, {"CADE_SESSION_ID": "TAB1"}) == ""
+
+
+class TestCodexNotify:
+    def test_merge_inserts_notify_above_tables_and_removal_restores(self, temp_dir):
+        from backend.terminal.cli_agent_adapters import (
+            _merge_codex_notify,
+            _remove_codex_notify,
+        )
+
+        cfg = temp_dir / "config.toml"
+        cfg.write_text('model = "o3"\n\n[mcp_servers."x"]\ncommand = "x"\n')
+        _merge_codex_notify(cfg, ["python3", "/home/u/.cade/hooks/attention.py"])
+        text = cfg.read_text()
+        assert text.index("notify = [") < text.index("[mcp_servers")
+        assert "cade-managed notify" in text
+
+        # Idempotent.
+        _merge_codex_notify(cfg, ["python3", "/home/u/.cade/hooks/attention.py"])
+        assert cfg.read_text().count("notify = [") == 1
+
+        _remove_codex_notify(cfg)
+        assert "notify" not in cfg.read_text()
+        assert '[mcp_servers."x"]' in cfg.read_text()
+
+    def test_merge_leaves_a_user_notify_alone(self, temp_dir):
+        from backend.terminal.cli_agent_adapters import _merge_codex_notify
+
+        cfg = temp_dir / "config.toml"
+        cfg.write_text('notify = ["my-notifier"]\n')
+        _merge_codex_notify(cfg, ["python3", "x.py"])
+        assert cfg.read_text() == 'notify = ["my-notifier"]\n'

@@ -221,12 +221,54 @@ export class BaseWSClient {
     this.clearReconnectTimer();
 
     if (this.ws !== null) {
-      this.ws.close();
+      const stale = this.ws;
       this.ws = null;
+      // The browser fires onclose asynchronously. Left attached, it would
+      // run the ordinary close path later and schedule a reconnect for a
+      // socket we closed on purpose (and null out a newer socket's handle).
+      stale.onopen = null;
+      stale.onclose = null;
+      stale.onerror = null;
+      stale.onmessage = null;
+      stale.close();
     }
 
     this.setState("disconnected");
     this.reconnectAttempts = 0;
+  }
+
+  /**
+   * Drop the current socket (or a pending backoff wait) and connect again
+   * right away. For when the client has evidence the socket is dead that
+   * the browser has not reported yet: a liveness ping went unanswered, or
+   * the page just came back to the foreground.
+   */
+  reconnectNow(): void {
+    this.clearInitialConnectTimer();
+    this.clearReconnectTimer();
+    this.reconnectAttempts = 0;
+
+    if (this.ws !== null) {
+      const stale = this.ws;
+      this.ws = null;
+      // Detach first so the close of a socket we gave up on doesn't run the
+      // ordinary close path and schedule a second, backed-off reconnect.
+      stale.onopen = null;
+      stale.onclose = null;
+      stale.onerror = null;
+      stale.onmessage = null;
+      try {
+        stale.close();
+      } catch {
+        // Already closed.
+      }
+      this.setState("disconnected");
+      this.emit(CHANNEL_DISCONNECTED, undefined);
+    } else if (this.state !== "disconnected") {
+      this.setState("disconnected");
+    }
+
+    this.connect();
   }
 
   isConnected(): boolean {

@@ -337,3 +337,29 @@ class TestHasCadeHook:
         settings = ClaudeSettings(settings_path)
         settings.load()
         assert not settings.has_cade_hook(HookType.POST_TOOL_USE)
+
+
+class TestAttentionHooks:
+    def test_setup_registers_event_hooks_once(self, temp_dir: Path, monkeypatch) -> None:
+        from backend.hooks import CADEHookOptions, setup_cade_hooks
+        from backend.hooks.config import ATTENTION_HOOK_TYPES
+
+        settings_path = temp_dir / "settings.json"
+        monkeypatch.setattr(
+            "backend.hooks.get_wsl_settings_path", lambda: (settings_path, False)
+        )
+        monkeypatch.setattr(
+            "backend.hooks.installer.get_wsl_cade_dir", lambda: temp_dir / ".cade"
+        )
+
+        setup_cade_hooks(CADEHookOptions())
+        setup_cade_hooks(CADEHookOptions())
+
+        import json
+
+        data = json.loads(settings_path.read_text())
+        for hook_type in ATTENTION_HOOK_TYPES:
+            entries = data["hooks"][hook_type.value]
+            assert len(entries) == 1
+            assert "attention.py" in entries[0]["hooks"][0]["command"]
+        assert (temp_dir / ".cade" / "hooks" / "attention.py").exists()

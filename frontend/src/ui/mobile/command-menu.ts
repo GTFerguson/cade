@@ -10,6 +10,7 @@
  */
 
 import { MenuNav, escapeHtml } from "@core/ui/menu-nav";
+import type { LiveSessionInfo } from "../../types";
 import type { MobileScreen } from "./screen-manager";
 import { setupSwipeBack } from "./swipe-back";
 
@@ -18,17 +19,29 @@ export interface OverflowTab {
   name: string;
   projectPath: string;
   isActive: boolean;
+  /** Output arrived while another tab was active. */
+  unread?: boolean;
+  attention?: "input" | "idle" | null;
 }
 
 export interface CommandMenuCallbacks {
   getTabs: () => OverflowTab[];
   onSwitchTab: (id: string) => void;
+  /** Sessions running on the backend that have no tab here yet. */
+  getLiveSessions: () => LiveSessionInfo[];
+  onAdoptSession: (session: LiveSessionInfo) => void;
   onFiles: () => void;
+  onSearch: () => void;
+  onRecent: () => void;
+  getRecentCount: () => number;
   onViewer: () => void;
   onDashboard: () => void;
   isDashboardAvailable: () => boolean;
   onReconnect: () => void;
   onTheme: () => void;
+  /** Current push-notification state, for the [notify] entry. */
+  getPushState: () => string;
+  onTogglePush: () => void;
   onBack: () => void;
   getCurrentFileName: () => string | null;
   getCurrentThemeName: () => string;
@@ -86,6 +99,15 @@ export class CommandMenu implements MobileScreen {
     this.actions = [];
   }
 
+  /** Re-render in place, keeping the current selection where possible. */
+  refresh(): void {
+    if (!this.boundKeyHandler) return;
+    const selected = this.nav.selectedIndex;
+    this.render();
+    this.nav.selectedIndex = Math.min(selected, Math.max(0, this.optionEls.length - 1));
+    this.nav.renderSelection();
+  }
+
   private render(): void {
     this.element.innerHTML = "";
     this.optionEls = [];
@@ -104,7 +126,17 @@ export class CommandMenu implements MobileScreen {
     const list = document.createElement("div");
     list.className = "options-list";
 
-    // [files]
+    // [search] / [recent] / [files]
+    this.addOption(list, "[search]", "find a file", () =>
+      this.callbacks.onSearch()
+    );
+    const recent = this.callbacks.getRecentCount();
+    this.addOption(
+      list,
+      "[recent]",
+      recent > 0 ? `${recent} changed` : "no changes yet",
+      () => this.callbacks.onRecent()
+    );
     this.addOption(list, "[files]", "browse tree", () =>
       this.callbacks.onFiles()
     );
@@ -137,10 +169,27 @@ export class CommandMenu implements MobileScreen {
       this.addTabOption(list, tab);
     }
 
+    // Sessions already running on this backend (started elsewhere) that
+    // this device can attach to.
+    const live = this.callbacks.getLiveSessions();
+    if (live.length > 0) {
+      list.appendChild(this.createDivider());
+      const liveLabel = document.createElement("div");
+      liveLabel.className = "section-label";
+      liveLabel.textContent = "on server";
+      list.appendChild(liveLabel);
+      for (const session of live) {
+        this.addLiveSessionOption(list, session);
+      }
+    }
+
     // Divider + bottom actions
     list.appendChild(this.createDivider());
     this.addOption(list, "[reconnect]", "", () =>
       this.callbacks.onReconnect()
+    );
+    this.addOption(list, "[notify]", this.callbacks.getPushState(), () =>
+      this.callbacks.onTogglePush()
     );
     this.addOption(
       list,
@@ -185,13 +234,35 @@ export class CommandMenu implements MobileScreen {
   private addTabOption(container: HTMLElement, tab: OverflowTab): void {
     const el = document.createElement("div");
     el.className = "option";
+    const indicator = ["tab-indicator"];
+    if (tab.isActive) indicator.push("active");
+    if (tab.attention === "input") indicator.push("needs-input");
+    else if (tab.attention === "idle") indicator.push("idle");
+    else if (tab.unread) indicator.push("unread");
+    const meta =
+      tab.attention === "input" ? "needs you" :
+      tab.attention === "idle" ? "done" :
+      tab.unread ? "new output" : tab.projectPath;
     el.innerHTML =
-      `<span class="tab-indicator${tab.isActive ? " active" : ""}"></span>` +
+      `<span class="${indicator.join(" ")}"></span>` +
       `<span class="option-label">${escapeHtml(tab.name)}</span>` +
-      `<span class="option-meta">${escapeHtml(tab.projectPath)}</span>`;
+      `<span class="option-meta">${escapeHtml(meta)}</span>`;
     container.appendChild(el);
     this.optionEls.push(el);
     this.actions.push(() => this.callbacks.onSwitchTab(tab.id));
+  }
+
+  private addLiveSessionOption(container: HTMLElement, session: LiveSessionInfo): void {
+    const name = session.label ?? session.projectPath.split("/").pop() ?? session.id;
+    const el = document.createElement("div");
+    el.className = "option";
+    el.innerHTML =
+      `<span class="tab-indicator"></span>` +
+      `<span class="option-label">${escapeHtml(name)}</span>` +
+      `<span class="option-meta">${escapeHtml(`${session.agent} · ${session.clients} online`)}</span>`;
+    container.appendChild(el);
+    this.optionEls.push(el);
+    this.actions.push(() => this.callbacks.onAdoptSession(session));
   }
 
   private createDivider(): HTMLElement {

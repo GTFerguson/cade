@@ -529,7 +529,9 @@ class TestSetupClaudeProfile:
     ):
         registry = await self._setup_with_registry(temp_dir / "personal")
 
-        assert registry.get_or_create.call_args.kwargs["pty_env"] is None
+        # The session id is always injected; only the profile dir must be absent.
+        pty_env = registry.get_or_create.call_args.kwargs["pty_env"] or {}
+        assert "CLAUDE_CONFIG_DIR" not in pty_env
 
     @pytest.mark.asyncio
     async def test_standalone_terminal_gets_profile_dir(self, temp_dir: Path, work_dir: Path):

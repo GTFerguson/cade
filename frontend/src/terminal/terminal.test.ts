@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Terminal } from "./terminal";
 import { resetDropTargets, resolveDropTarget } from "./file-drop";
 import { SessionKey } from "@core/platform/protocol";
+import { resetTerminalFontSizeCache, setTerminalFontSize } from "./font-size";
 import type { WebSocketClient } from "../platform/websocket";
 
 // Mock ResizeObserver (not available in jsdom)
@@ -58,6 +59,11 @@ vi.mock("@xterm/xterm", () => {
 
     cols = 80;
     rows = 24;
+    options: { fontSize: number } = { fontSize: 14 };
+    resize = vi.fn((cols: number, rows: number) => {
+      this.cols = cols;
+      this.rows = rows;
+    });
   }
 
   return {
@@ -574,5 +580,127 @@ describe("Terminal file-drop registration", () => {
     terminal.dispose();
     (document as any).elementFromPoint = vi.fn(() => container);
     expect(resolveDropTarget(5, 5)).toBeNull();
+  });
+});
+
+describe("Terminal PTY size policy", () => {
+  let container: HTMLElement;
+  let ws: WebSocketClient;
+  let terminal: Terminal;
+  let xterm: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    container = document.createElement("div");
+    Object.defineProperty(container, "offsetWidth", { value: 800, configurable: true });
+    Object.defineProperty(container, "offsetHeight", { value: 600, configurable: true });
+    document.body.appendChild(container);
+    ws = createMockWebSocket();
+    terminal = new Terminal(container, ws);
+    terminal.initialize();
+    xterm = (terminal as any).terminal;
+    (terminal as any).connectionId = "me";
+  });
+
+  it("mirrors another controller's size without asking the server for it", () => {
+    terminal.applyPtySize(40, 20, "phone");
+
+    expect(xterm.resize).toHaveBeenCalledWith(40, 20);
+    expect(terminal.isMirroring()).toBe(true);
+    expect(container.classList.contains("terminal-fixed-size")).toBe(true);
+    expect(ws.sendResize).not.toHaveBeenCalled();
+  });
+
+  it("does not refit the container while mirroring", () => {
+    terminal.applyPtySize(40, 20, "phone");
+    (terminal as any).fitAddon.fit.mockClear();
+    terminal.fit();
+    expect((terminal as any).fitAddon.fit).not.toHaveBeenCalled();
+  });
+
+  it("returns to fitting its own container when it becomes the controller", () => {
+    terminal.applyPtySize(40, 20, "phone");
+    terminal.applyPtySize(40, 20, "me");
+
+    expect(terminal.isMirroring()).toBe(false);
+    expect(container.classList.contains("terminal-fixed-size")).toBe(false);
+    expect((terminal as any).fitAddon.fit).toHaveBeenCalled();
+  });
+
+  it("treats an unowned terminal as its own to size", () => {
+    terminal.applyPtySize(40, 20, "phone");
+    terminal.applyPtySize(40, 20, null);
+    expect(terminal.isMirroring()).toBe(false);
+  });
+
+  it("asks for a repaint through its own session key", () => {
+    (ws as any).sendRepaint = vi.fn();
+    terminal.requestRepaint();
+    expect((ws as any).sendRepaint).toHaveBeenCalledWith(SessionKey.CLAUDE);
+  });
+});
+
+describe("Terminal row lock and font size", () => {
+  let container: HTMLElement;
+  let ws: WebSocketClient;
+  let terminal: Terminal;
+  let xterm: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    resetTerminalFontSizeCache();
+    container = document.createElement("div");
+    Object.defineProperty(container, "offsetWidth", { value: 800, configurable: true });
+    Object.defineProperty(container, "offsetHeight", { value: 600, configurable: true });
+    Object.defineProperty(container, "clientWidth", { value: 390, configurable: true });
+    document.body.appendChild(container);
+    ws = createMockWebSocket();
+    terminal = new Terminal(container, ws);
+    terminal.initialize();
+    xterm = (terminal as any).terminal;
+    (terminal as any).connectionId = "me";
+  });
+
+  it("keeps the row count while locked instead of refitting", () => {
+    terminal.lockRows(10);
+    expect(xterm.resize).toHaveBeenCalledWith(80, 10);
+    expect(container.classList.contains("terminal-rows-locked")).toBe(true);
+
+    (terminal as any).fitAddon.fit.mockClear();
+    terminal.fit();
+    expect((terminal as any).fitAddon.fit).not.toHaveBeenCalled();
+    expect(xterm.rows).toBe(10);
+  });
+
+  it("refits when the lock is released", () => {
+    terminal.lockRows(10);
+    (terminal as any).fitAddon.fit.mockClear();
+    terminal.lockRows(null);
+    expect(container.classList.contains("terminal-rows-locked")).toBe(false);
+    expect((terminal as any).fitAddon.fit).toHaveBeenCalled();
+  });
+
+  it("follows the shared font size setting", () => {
+    (terminal as any).fitAddon.fit.mockClear();
+    setTerminalFontSize(18);
+    expect(xterm.options.fontSize).toBe(18);
+    expect((terminal as any).fitAddon.fit).toHaveBeenCalled();
+  });
+
+  it("shrinks the font to fit a wider mirrored PTY, then restores it", () => {
+    setTerminalFontSize(14);
+    terminal.applyPtySize(200, 50, "desktop");
+    // 390px / (200 cols * 0.6) = 3.25 → clamped to the minimum of 7.
+    expect(xterm.options.fontSize).toBe(7);
+
+    terminal.applyPtySize(200, 50, "me");
+    expect(xterm.options.fontSize).toBe(14);
+  });
+
+  it("stops following the setting once disposed", () => {
+    terminal.dispose();
+    setTerminalFontSize(20);
+    expect(xterm.options.fontSize).toBe(14);
   });
 });

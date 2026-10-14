@@ -18,7 +18,12 @@ class MessageType:
     WRITE_FILE = "write-file"  # Write file content: { type, path: str, content: str }
     CREATE_FILE = "create-file"  # Create new file: { type, path: str, content?: str }
     SAVE_SESSION = "save-session"  # Save session state: { type, state: SessionState }
-    SET_PROJECT = "set-project"  # Set project directory: { type, path: str, sessionId?: str }
+    SET_PROJECT = "set-project"  # Set project directory: { type, path: str, sessionId?: str, label?: str, lastSeq?: {sessionKey: int} }
+    PING = "ping"  # Liveness probe: { type, t?: number } — answered with PONG carrying the same t
+    REPAINT = "repaint"  # Ask the TUI in a terminal to redraw itself: { type, sessionKey?: str }
+    LIST_SESSIONS = "list-sessions"  # Request live PTY sessions on this backend: { type }
+    LIST_FILES = "list-files"  # Flat project file list for search: { type, root?: str }
+    GET_FILE_DIFF = "get-file-diff"  # Git diff of one file against HEAD: { type, path: str, root?: str }
     GET_LATEST_PLAN = "get-latest-plan"  # Request most recent plan file: { type }
     GET_PLANS_LIST = "get-plans-list"  # Request plans/handoffs index: { type, root?: str }
     GET_CHILDREN = "get-children"  # Request directory children: { type, path: str, showIgnored?: bool }
@@ -31,7 +36,13 @@ class MessageType:
     PROVIDER_SWITCH = "provider-switch"  # Switch provider: { type, providerId: str }
 
     # Server -> Client
-    OUTPUT = "output"  # Terminal output: { type, data: str, sessionKey?: str }
+    OUTPUT = "output"  # Terminal output: { type, data: str, sessionKey?: str, seq: int }
+    PONG = "pong"  # Liveness reply: { type, t?: number }
+    PTY_SIZE = "pty-size"  # The PTY's current size and owner: { type, sessionKey, cols, rows, controller: str | None }
+    SESSION_LIST = "session-list"  # Live sessions on this backend: { type, sessions: list[dict] }
+    SESSION_ATTENTION = "session-attention"  # Agent needs the user: { type, sessionId, attention: "input"|"idle"|None, message? }
+    FILE_LIST = "file-list"  # Flat file list: { type, root, files: list[str], truncated: bool }
+    FILE_DIFF = "file-diff"  # Diff of one file: { type, path, diff, untracked, error? }
     FILE_TREE = "file-tree"  # File tree response: { type, data: FileNode[] }
     FILE_CHILDREN = "file-children"  # Directory children: { type, path: str, children: FileNode[] }
     FILE_CHANGE = "file-change"  # File changed: { type, event: str, path: str }
@@ -42,7 +53,7 @@ class MessageType:
     PLANS_LIST = "plans-list"  # Plans/handoffs index: { type, root, plans: [...], handoffs: [...] }
     ERROR = "error"  # Error message: { type, code: str, message: str }
     CONNECTED = "connected"  # Connection established: { type, working_dir: str }
-    SESSION_RESTORED = "session-restored"  # Session reattached: { type, sessionId: str, scrollback: str }
+    SESSION_RESTORED = "session-restored"  # Cold attach: { type, sessionId: str, scrollback: str, sessionKey?: str, seq: int }
     STARTUP_STATUS = "startup-status"  # Startup progress: { type, message: str }
     PTY_EXITED = "pty-exited"  # PTY process exited: { type, code: str, message: str, sessionKey?: str }
 

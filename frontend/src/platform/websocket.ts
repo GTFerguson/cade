@@ -25,6 +25,13 @@ import type {
   DashboardDataMessage,
   ErrorMessage,
   EventHandler,
+  FileDiffMessage,
+  FileListMessage,
+  LiveSessionInfo,
+  PongMessage,
+  PtySizeMessage,
+  SessionAttentionMessage,
+  SessionListMessage,
   FileChangeMessage,
   FileChildrenMessage,
   FileContentMessage,
@@ -101,6 +108,12 @@ interface WebSocketEvents {
       reason?: string;
     }>;
   };
+  "pty-size": PtySizeMessage;
+  pong: PongMessage;
+  "session-list": SessionListMessage;
+  "session-attention": SessionAttentionMessage;
+  "file-list": FileListMessage;
+  "file-diff": FileDiffMessage;
   error: ErrorMessage;
   "auth-failed": { code: number };
   "google-auth-required": { client_id: string };
@@ -135,6 +148,24 @@ export class WebSocketClient extends BaseWSClient {
   private pendingProviderOverride: string | null = null;
   private pendingInitialPrompt: string | null = null;
   private pendingChatHandoff: string | null = null;
+  private pendingLabel: string | null = null;
+
+  // Last output sequence seen per terminal, handed back on reconnect so the
+  // server replays only the gap. Cleared when the session id changes.
+  private lastSeq: Record<string, number> = {};
+
+  // Liveness probe: a backgrounded phone's socket can die without the
+  // browser ever firing onclose. On foreground/online we ping, and treat
+  // silence as a dead socket.
+  private static readonly PONG_TIMEOUT_MS = 3000;
+  private pongTimer: number | null = null;
+  private livenessArmed = false;
+  private readonly onVisibilityChange = () => {
+    if (typeof document !== "undefined" && document.visibilityState === "visible") {
+      this.probeLiveness();
+    }
+  };
+  private readonly onOnline = () => this.probeLiveness();
 
   // Bridged subscribers for events that aren't just message-type passthrough.
   private connectedHandlers = new Set<EventHandler<ConnectedMessage>>();
@@ -156,6 +187,11 @@ export class WebSocketClient extends BaseWSClient {
     });
 
     this.remoteAuthToken = authToken ?? null;
+
+    if (typeof document !== "undefined" && typeof window !== "undefined") {
+      document.addEventListener("visibilitychange", this.onVisibilityChange);
+      window.addEventListener("online", this.onOnline);
+    }
 
     // Route connection-level signals from the base primitive into the
     // CADE-style typed event handlers.
@@ -289,6 +325,12 @@ export class WebSocketClient extends BaseWSClient {
       if (this.pendingSessionId !== null) {
         message.sessionId = this.pendingSessionId;
       }
+      if (this.pendingLabel !== null) {
+        message.label = this.pendingLabel;
+      }
+      if (Object.keys(this.lastSeq).length > 0) {
+        message.lastSeq = { ...this.lastSeq };
+      }
       if (this.pendingDashboardFile !== null) {
         message.dashboardFile = this.pendingDashboardFile;
       }
@@ -360,8 +402,22 @@ export class WebSocketClient extends BaseWSClient {
     }
 
     if (typed.type === MessageType.CONNECTED) {
+      this.livenessArmed = true;
       this.fireBridged("connected", message as ConnectedMessage);
       return true;
+    }
+
+    if (typed.type === MessageType.OUTPUT || typed.type === MessageType.SESSION_RESTORED) {
+      const framed = message as { sessionKey?: string; seq?: number };
+      if (typeof framed.seq === "number") {
+        this.lastSeq[framed.sessionKey ?? "claude"] = framed.seq;
+      }
+      return false;
+    }
+
+    if (typed.type === MessageType.PONG) {
+      this.clearPongTimer();
+      return false;
     }
 
     if (typed.type === MessageType.PTY_EXITED) {
@@ -685,9 +741,14 @@ export class WebSocketClient extends BaseWSClient {
     providerOverride?: string,
     initialPrompt?: string,
     chatHandoff?: string,
+    label?: string,
   ): void {
     this.pendingProjectPath = path;
+    if ((sessionId ?? null) !== this.pendingSessionId) {
+      this.lastSeq = {};
+    }
     this.pendingSessionId = sessionId ?? null;
+    this.pendingLabel = label ?? null;
     this.pendingDashboardFile = dashboardFile ?? null;
     this.pendingProviderOverride = providerOverride ?? null;
     this.pendingInitialPrompt = initialPrompt ?? null;
@@ -700,6 +761,9 @@ export class WebSocketClient extends BaseWSClient {
       if (sessionId !== undefined) {
         message.sessionId = sessionId;
       }
+      if (label !== undefined) {
+        message.label = label;
+      }
       if (dashboardFile !== undefined) {
         message.dashboardFile = dashboardFile;
       }
@@ -707,6 +771,84 @@ export class WebSocketClient extends BaseWSClient {
         message.providerOverride = providerOverride;
       }
       this.send(message);
+    }
+  }
+
+  /** Last output sequence seen per terminal (exposed for tests and diagnostics). */
+  getLastSeq(): Readonly<Record<string, number>> {
+    return this.lastSeq;
+  }
+
+  /** Ask the TUI in a terminal to redraw (SIGWINCH nudge on the server). */
+  sendRepaint(sessionKey?: AnySessionKey): void {
+    this.send({
+      type: MessageType.REPAINT,
+      ...(sessionKey !== undefined && { sessionKey }),
+    });
+  }
+
+  /** Flat project file list for search; answered by `file-list`. */
+  requestFileList(root?: string): void {
+    this.send({
+      type: MessageType.LIST_FILES,
+      ...(root !== undefined && { root }),
+    });
+  }
+
+  /** Git diff of one file against HEAD; answered by `file-diff`. */
+  requestFileDiff(path: string, root?: string): void {
+    this.send({
+      type: MessageType.GET_FILE_DIFF,
+      path,
+      ...(root !== undefined && { root }),
+    });
+  }
+
+  /** Request the live sessions on this backend; answered by `session-list`. */
+  requestSessionList(): void {
+    this.send({ type: MessageType.LIST_SESSIONS });
+  }
+
+  /** Fetch the live sessions on this backend over HTTP, for callers without a socket. */
+  static async fetchSessionList(): Promise<LiveSessionInfo[]> {
+    const res = await fetch(`${basePath}/api/sessions`, { credentials: "include" });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { sessions?: LiveSessionInfo[] };
+    return body.sessions ?? [];
+  }
+
+  /**
+   * Check that the socket is really alive. Connected: ping and expect a
+   * pong; silence means the socket is dead, so reconnect. Waiting on a
+   * backoff timer: reconnect right away instead.
+   */
+  probeLiveness(): void {
+    if (!this.livenessArmed) return;
+    const state = this.getState();
+    if (state === "connected") {
+      if (this.pongTimer !== null) return;
+      this.send({ type: MessageType.PING, t: Date.now() });
+      this.pongTimer = window.setTimeout(() => {
+        this.pongTimer = null;
+        console.warn("Liveness ping unanswered; reconnecting");
+        this.reconnectNow();
+      }, WebSocketClient.PONG_TIMEOUT_MS);
+    } else if (state === "disconnected") {
+      this.reconnectNow();
+    }
+  }
+
+  override disconnect(): void {
+    // A tab closing its socket must not be revived by a later probe.
+    this.livenessArmed = false;
+    this.clearPongTimer();
+    super.disconnect();
+  }
+
+  private clearPongTimer(): void {
+    if (this.pongTimer !== null) {
+      window.clearTimeout(this.pongTimer);
+      this.pongTimer = null;
     }
   }
 

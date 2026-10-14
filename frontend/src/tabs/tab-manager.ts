@@ -47,6 +47,19 @@ function getProjectName(path: string): string {
  * connected. Used to suppress redundant auth dialogs when a stale tab
  * fires auth-failed but the user already authenticated on a sibling tab.
  */
+/**
+ * Live sessions on the backend that this browser has no tab for yet: the
+ * ones worth offering for adoption. Dead sessions are left out since
+ * attaching to them would only spawn a replacement PTY.
+ */
+export function sessionsToAdopt<S extends { id: string; alive: boolean }>(
+  sessions: S[],
+  openTabIds: Iterable<string>,
+): S[] {
+  const open = new Set(openTabIds);
+  return sessions.filter((s) => s.alive && !open.has(s.id));
+}
+
 export function hasConnectedProfileTab(
   tabs: { id: string; remoteProfileId?: string; isConnected: boolean }[],
   excludeTabId: string,
@@ -157,6 +170,28 @@ export class TabManager {
     const tabState = this.createTabState(tabInfo);
 
     this.tabs.set(id, tabState);
+    this.saveState();
+
+    this.emit("tab-created", tabState);
+    this.emit("tabs-changed", this.getTabs());
+
+    return tabState;
+  }
+
+  /**
+   * Open a tab onto a session that already runs on the backend (created by
+   * another device, or by this browser before its storage was cleared).
+   * The tab id *is* the session id, so connecting attaches rather than
+   * spawning a new PTY. Returns the existing tab if one is already open.
+   */
+  adoptSession(sessionId: string, projectPath: string, label?: string | null): TabState {
+    const existing = this.tabs.get(sessionId);
+    if (existing) return existing;
+
+    const name = label && label.trim() ? label.trim() : getProjectName(projectPath);
+    const tabState = this.createTabState({ id: sessionId, projectPath, name });
+
+    this.tabs.set(sessionId, tabState);
     this.saveState();
 
     this.emit("tab-created", tabState);

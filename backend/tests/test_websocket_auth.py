@@ -31,7 +31,7 @@ class TestWebSocketAuthentication:
             with patch.object(handler, "_setup", new=AsyncMock()):
                 with patch.object(handler, "_send_connected", new=AsyncMock()):
                     with patch.object(handler, "_receive_loop", new=AsyncMock()):
-                        with patch.object(handler, "_start_output_loop"):
+                        with patch.object(handler, "_attach_terminal"):
                             with patch("backend.websocket.get_connection_manager"):
                                 with patch("backend.websocket.get_connection_registry"):
                                     with patch("asyncio.create_task"):
@@ -92,7 +92,7 @@ class TestWebSocketAuthentication:
             with patch.object(handler, "_setup", new=AsyncMock()):
                 with patch.object(handler, "_send_connected", new=AsyncMock()):
                     with patch.object(handler, "_receive_loop", new=AsyncMock()):
-                        with patch.object(handler, "_start_output_loop"):
+                        with patch.object(handler, "_attach_terminal"):
                             with patch("backend.websocket.get_connection_manager"):
                                 with patch("backend.websocket.get_connection_registry"):
                                     with patch("asyncio.create_task"):
@@ -117,7 +117,7 @@ class TestWebSocketAuthentication:
             with patch.object(handler, "_setup", new=AsyncMock()):
                 with patch.object(handler, "_send_connected", new=AsyncMock()):
                     with patch.object(handler, "_receive_loop", new=AsyncMock()):
-                        with patch.object(handler, "_start_output_loop"):
+                        with patch.object(handler, "_attach_terminal"):
                             with patch("backend.websocket.get_connection_manager"):
                                 with patch("backend.websocket.get_connection_registry"):
                                     with patch("asyncio.create_task"):
@@ -168,7 +168,7 @@ class TestWebSocketAuthIntegration:
             with patch.object(handler_valid, "_setup", new=AsyncMock()):
                 with patch.object(handler_valid, "_send_connected", new=AsyncMock()):
                     with patch.object(handler_valid, "_receive_loop", new=AsyncMock()):
-                        with patch.object(handler_valid, "_start_output_loop"):
+                        with patch.object(handler_valid, "_attach_terminal"):
                             with patch("backend.websocket.get_connection_manager"):
                                 with patch("backend.websocket.get_connection_registry"):
                                     with patch("asyncio.create_task"):
@@ -206,7 +206,7 @@ class TestWebSocketAuthIntegration:
             with patch.object(handler, "_setup", new=AsyncMock()):
                 with patch.object(handler, "_send_connected", new=AsyncMock()):
                     with patch.object(handler, "_receive_loop", new=AsyncMock()):
-                        with patch.object(handler, "_start_output_loop"):
+                        with patch.object(handler, "_attach_terminal"):
                             with patch("backend.websocket.get_connection_manager"):
                                 with patch("backend.websocket.get_connection_registry"):
                                     with patch("asyncio.create_task"):

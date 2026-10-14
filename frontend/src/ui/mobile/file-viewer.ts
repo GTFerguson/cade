@@ -17,6 +17,8 @@ import { setupSwipeBack } from "./swipe-back";
 
 export interface FileViewerCallbacks {
   onBack: () => void;
+  /** Ask for the file's git diff; delivered later via showDiff(). */
+  onRequestDiff?: (path: string) => void;
 }
 
 export class FileViewer implements MobileScreen {
@@ -30,17 +32,36 @@ export class FileViewer implements MobileScreen {
   private statusLines: HTMLElement;
   private boundKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private cleanupSwipe: (() => void) | null = null;
+  private diffToggle: HTMLButtonElement | null = null;
+  private currentPath: string | null = null;
+  private current: { content: string; fileType: string; meta: Pick<BinaryPayload, "encoding" | "size" | "mime"> } | null = null;
+  private showingDiff = false;
 
   constructor(private callbacks: FileViewerCallbacks) {
     this.element = document.createElement("div");
     this.element.className = "mobile-screen mobile-file-viewer";
 
-    // Header
-    this.headerEl = document.createElement("div");
-    this.headerEl.className = "mobile-screen-header";
-    this.headerEl.style.fontSize = "12px";
-    this.headerEl.style.letterSpacing = "1px";
-    this.element.appendChild(this.headerEl);
+    // Header: [ name ] with a diff toggle on the right
+    const headerRow = document.createElement("div");
+    headerRow.className = "mobile-screen-header viewer-header";
+    headerRow.style.fontSize = "12px";
+    headerRow.style.letterSpacing = "1px";
+    this.headerEl = document.createElement("span");
+    this.headerEl.className = "viewer-title";
+    headerRow.appendChild(this.headerEl);
+    if (this.callbacks.onRequestDiff) {
+      this.diffToggle = document.createElement("button");
+      this.diffToggle.className = "viewer-diff-toggle";
+      this.diffToggle.textContent = "diff";
+      this.diffToggle.setAttribute("aria-label", "toggle diff");
+      this.diffToggle.style.display = "none";
+      this.diffToggle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.toggleDiff();
+      });
+      headerRow.appendChild(this.diffToggle);
+    }
+    this.element.appendChild(headerRow);
 
     // Body
     this.bodyEl = document.createElement("div");
@@ -88,6 +109,14 @@ export class FileViewer implements MobileScreen {
     this.headerEl.textContent = `[ ${filename} ]`;
     this.statusFile.textContent = filename;
     this.statusLang.textContent = fileType;
+    this.currentPath = path;
+    this.current = { content, fileType, meta };
+    this.showingDiff = false;
+    this.statusMode.textContent = "VIEW";
+    if (this.diffToggle) {
+      this.diffToggle.style.display = isBinaryPayload(meta) ? "none" : "";
+      this.diffToggle.classList.remove("active");
+    }
 
     this.binaryViewer?.dispose();
     this.binaryViewer = null;
@@ -113,6 +142,56 @@ export class FileViewer implements MobileScreen {
     }
   }
 
+  /** Path of the file on screen, if any. */
+  getPath(): string | null {
+    return this.currentPath;
+  }
+
+  /** Flip between the file's content and its diff against HEAD. */
+  toggleDiff(): void {
+    if (!this.currentPath) return;
+    if (this.showingDiff) {
+      const c = this.current;
+      if (c) this.showFile(this.currentPath, c.content, c.fileType, c.meta);
+      return;
+    }
+    this.showingDiff = true;
+    this.statusMode.textContent = "DIFF";
+    this.diffToggle?.classList.add("active");
+    this.bodyEl.innerHTML =
+      '<div class="viewer-notice">loading diff…</div>';
+    this.callbacks.onRequestDiff?.(this.currentPath);
+  }
+
+  /**
+   * Render a unified diff for the current file. Ignored if the viewer has
+   * moved on to another file or left diff mode in the meantime.
+   */
+  showDiff(path: string, diff: string, untracked: boolean, error?: string): void {
+    if (!this.showingDiff || path !== this.currentPath) return;
+    this.bodyEl.innerHTML = "";
+    if (error) {
+      this.bodyEl.innerHTML = `<div class="viewer-notice">${this.escapeHtml(error)}</div>`;
+      return;
+    }
+    if (diff.trim() === "") {
+      this.bodyEl.innerHTML = '<div class="viewer-notice">no changes against HEAD</div>';
+      return;
+    }
+    this.statusLang.textContent = untracked ? "new file" : "diff";
+    const pre = document.createElement("pre");
+    pre.className = "diff-view";
+    const code = document.createElement("code");
+    code.className = "hljs language-diff";
+    try {
+      code.innerHTML = hljs.highlight(diff, { language: "diff" }).value;
+    } catch {
+      code.textContent = diff;
+    }
+    pre.appendChild(code);
+    this.bodyEl.appendChild(pre);
+  }
+
   /**
    * Show empty state when no file is available.
    */
@@ -121,6 +200,10 @@ export class FileViewer implements MobileScreen {
     this.statusFile.textContent = "";
     this.statusLang.textContent = "";
     this.statusLines.textContent = "";
+    this.currentPath = null;
+    this.current = null;
+    this.showingDiff = false;
+    if (this.diffToggle) this.diffToggle.style.display = "none";
     this.bodyEl.innerHTML =
       '<div style="text-align:center;color:var(--text-muted);padding:40px;">no file selected</div>';
   }
@@ -131,6 +214,9 @@ export class FileViewer implements MobileScreen {
         e.preventDefault();
         e.stopPropagation();
         this.callbacks.onBack();
+      } else if (e.key === "d" && this.callbacks.onRequestDiff) {
+        e.preventDefault();
+        this.toggleDiff();
       }
     };
     document.addEventListener("keydown", this.boundKeyHandler, true);

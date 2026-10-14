@@ -22,7 +22,11 @@ def _is_cade_hook(command: str) -> bool:
     Returns:
         True if the command is a CADE hook.
     """
-    return "api/view" in command or "view_file.py" in command
+    return (
+        "api/view" in command
+        or "view_file.py" in command
+        or "attention.py" in command
+    )
 
 
 class ClaudeSettings:

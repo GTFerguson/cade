@@ -11,6 +11,17 @@ class HookType(Enum):
 
     PRE_TOOL_USE = "PreToolUse"
     POST_TOOL_USE = "PostToolUse"
+    NOTIFICATION = "Notification"
+    STOP = "Stop"
+    USER_PROMPT_SUBMIT = "UserPromptSubmit"
+
+
+# Event-level hooks that feed CADE's attention state (see attention_hook.py).
+ATTENTION_HOOK_TYPES = (
+    HookType.NOTIFICATION,
+    HookType.STOP,
+    HookType.USER_PROMPT_SUBMIT,
+)
 
 
 @dataclass

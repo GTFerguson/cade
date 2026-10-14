@@ -231,7 +231,7 @@ class TestFullOutputChain:
 
     @pytest.mark.asyncio
     async def test_output_loop_counts_messages(self, temp_dir: Path):
-        """Test that _pty_output_loop sends each chunk exactly once."""
+        """PTY bytes reach the client exactly once, in order, with the final seq."""
         config = Config(
             working_dir=temp_dir,
             auto_start_claude=False,
@@ -243,6 +243,7 @@ class TestFullOutputChain:
 
         # Create a session with mock PTY
         mock_pty = AsyncMock()
+        mock_pty.is_alive.return_value = True
 
         # Mock PTY to yield specific outputs then stop
         async def mock_read():
@@ -256,18 +257,19 @@ class TestFullOutputChain:
         session = PTYSession(id="test", project_path=temp_dir)
         session.add_terminal(SessionKey.CLAUDE, mock_pty)
         handler._session = session
+        handler._is_new_session = True
 
-        # Start output loop
-        task = asyncio.create_task(handler._pty_output_loop(SessionKey.CLAUDE))
+        # Attach: starts the session's reader and this client's drain task
+        await handler._attach_terminal(SessionKey.CLAUDE)
 
         # Wait a bit for processing
         await asyncio.sleep(0.5)
-        task.cancel()
-
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        for task in handler._output_tasks.values():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
         # Check how many OUTPUT messages were sent
         output_messages = [
@@ -280,5 +282,10 @@ class TestFullOutputChain:
             data = call[0][0]["data"]
             print(f"  {i+1}: {repr(data)}")
 
-        # Should send exactly 3 messages (one per chunk)
-        assert len(output_messages) == 3, f"Expected 3 messages, got {len(output_messages)}"
+        # Every chunk exactly once and in order. Chunks still queued when
+        # the drain task runs are coalesced into one frame, so the frame
+        # count varies with scheduling but the bytes and final seq do not.
+        joined = "".join(c[0][0]["data"] for c in output_messages)
+        assert joined == "first chunk\nsecond chunk\n(base) gary@host:~/dir$ "
+        assert 1 <= len(output_messages) <= 3
+        assert output_messages[-1][0][0]["seq"] == 3

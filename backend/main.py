@@ -427,6 +427,25 @@ class NotifyRequest(BaseModel):
     style: str = "info"
 
 
+class AttentionRequest(BaseModel):
+    """Posted by the agent hooks (see backend/hooks/attention_hook.py)."""
+
+    session_id: str | None = None
+    cwd: str | None = None
+    event: str
+    notification_type: str | None = None
+    message: str | None = None
+
+
+class PushSubscribeRequest(BaseModel):
+    subscription: dict
+    device: str | None = None
+
+
+class PushUnsubscribeRequest(BaseModel):
+    endpoint: str
+
+
 async def _send_to_connections(connections: list, message: dict) -> int:
     """Send a message to a list of WebSocket connections.
 
@@ -689,6 +708,115 @@ def create_app(config: Config | None = None) -> FastAPI:
             pass
 
         return JSONResponse({"path": str(target), "resolved": str(target), "children": entries})
+
+    @app.post("/api/sessions/attention")
+    async def session_attention(body: AttentionRequest) -> JSONResponse:
+        """Agent hook: the agent is waiting, finished, or working again.
+
+        Local-only like the other hook endpoints. Updates the session,
+        tells its attached clients, and pushes to subscribed phones when
+        the agent needs someone.
+        """
+        from backend.push import get_push_service
+        from backend.terminal.attention import (
+            IDLE,
+            NEEDS_INPUT,
+            AttentionEvent,
+            apply_attention,
+            attention_from_event,
+            broadcast_attention,
+            resolve_session,
+        )
+        from backend.terminal.sessions import get_registry
+
+        event = AttentionEvent(
+            session_id=body.session_id,
+            cwd=body.cwd,
+            event=body.event,
+            notification_type=body.notification_type,
+            message=body.message,
+        )
+        state = attention_from_event(event)
+        if state is False:
+            return JSONResponse({"status": "ignored"})
+        session = resolve_session(get_registry().sessions(), body.session_id, body.cwd)
+        if session is None:
+            return JSONResponse({"status": "no-session"}, status_code=404)
+
+        changed = apply_attention(session, state, body.message)
+        if changed:
+            await broadcast_attention(session)
+            if state in (NEEDS_INPUT, IDLE):
+                label = session.label or session.project_path.name
+                title = f"{label}: needs you" if state == NEEDS_INPUT else f"{label}: done"
+                await get_push_service().send({
+                    "title": title,
+                    "body": (body.message or "")[:200],
+                    "tag": f"cade-{session.id}",
+                    "sessionId": session.id,
+                    "url": f"{get_config().root_path}/",
+                })
+        return JSONResponse({"status": "ok", "attention": session.attention})
+
+    @app.get("/api/push/status")
+    async def push_status(
+        cade_session: str | None = Cookie(default=None),
+    ) -> JSONResponse:
+        from backend.push import get_push_service, push_available
+
+        cfg = get_config()
+        if cfg.auth_enabled and not validate_session_cookie(cade_session or "", cfg):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        svc = get_push_service()
+        return JSONResponse({
+            "available": push_available(),
+            "publicKey": svc.public_key() if push_available() else None,
+            "subscriptions": svc.subscription_count(),
+        })
+
+    @app.post("/api/push/subscribe")
+    async def push_subscribe(
+        body: PushSubscribeRequest,
+        cade_session: str | None = Cookie(default=None),
+    ) -> JSONResponse:
+        from backend.push import get_push_service
+
+        cfg = get_config()
+        if cfg.auth_enabled and not validate_session_cookie(cade_session or "", cfg):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        try:
+            count = get_push_service().subscribe(body.subscription, body.device)
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        return JSONResponse({"status": "ok", "subscriptions": count})
+
+    @app.post("/api/push/unsubscribe")
+    async def push_unsubscribe(
+        body: PushUnsubscribeRequest,
+        cade_session: str | None = Cookie(default=None),
+    ) -> JSONResponse:
+        from backend.push import get_push_service
+
+        cfg = get_config()
+        if cfg.auth_enabled and not validate_session_cookie(cade_session or "", cfg):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        count = get_push_service().unsubscribe(body.endpoint)
+        return JSONResponse({"status": "ok", "subscriptions": count})
+
+    @app.get("/api/sessions")
+    async def list_sessions(
+        cade_session: str | None = Cookie(default=None),
+    ) -> JSONResponse:
+        """Live PTY sessions on this backend, newest activity first."""
+        from backend.terminal.session_listing import describe_sessions
+        from backend.terminal.sessions import get_registry
+
+        cfg = get_config()
+        if cfg.auth_enabled and not validate_session_cookie(cade_session or "", cfg):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        return JSONResponse({
+            "sessions": describe_sessions(get_registry(), cfg.cli_agent.adapter_id),
+        })
 
     # --- Orchestrator API ---
 

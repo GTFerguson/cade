@@ -63,6 +63,9 @@ if frontend_dist.exists():
 datas += collect_data_files('litellm')
 hiddenimports += collect_submodules('litellm')
 
+# Web Push: pywebpush pulls in py_vapid and http_ece at call time.
+hiddenimports += ['pywebpush', 'py_vapid', 'http_ece']
+
 # tiktoken's encodings are loaded via entry points, which PyInstaller doesn't
 # discover automatically. Without these, litellm crashes with "Unknown encoding cl100k_base".
 hiddenimports += collect_submodules('tiktoken_ext')

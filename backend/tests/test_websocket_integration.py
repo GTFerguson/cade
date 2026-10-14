@@ -257,6 +257,59 @@ class TestWebSocketWithPTY:
                 f"Never received echo output. Collected: {output_collected[:300]}"
             )
 
+    def test_two_clients_share_one_shell(
+        self, pty_client: TestClient, temp_dir: Path
+    ):
+        """A second client attaching to the same session id sees the same
+        shell: output fans out to both, and the late joiner catches up from
+        the scrollback instead of spawning its own PTY."""
+        def text_of(msg: dict) -> str:
+            if msg["type"] == MessageType.OUTPUT:
+                return msg.get("data", "")
+            if msg["type"] == MessageType.SESSION_RESTORED:
+                return msg.get("scrollback", "")
+            return ""
+
+        def connect(ws) -> tuple[dict, str]:
+            """Handshake; returns the connected frame and any terminal text
+            delivered before it (a late joiner's catch-up arrives first)."""
+            ws.send_json({
+                "type": MessageType.SET_PROJECT,
+                "path": str(temp_dir),
+                "sessionId": "pty-shared-1",
+            })
+            seen = ""
+            for _ in range(20):
+                msg = ws.receive_json()
+                seen += text_of(msg)
+                if msg["type"] == MessageType.CONNECTED:
+                    return msg, seen
+            raise AssertionError("never connected")
+
+        def read_until(ws, marker: str, seen: str = "", limit: int = 50) -> str:
+            for _ in range(limit):
+                if marker in seen:
+                    return seen
+                seen += text_of(ws.receive_json())
+            raise AssertionError(f"never saw {marker!r}; got {seen[:300]!r}")
+
+        with pty_client.websocket_connect("/ws") as first:
+            first_hello, _ = connect(first)
+            first.send_json({"type": MessageType.INPUT, "data": "echo FIRST_MARKER_ABC\n"})
+            read_until(first, "FIRST_MARKER_ABC")
+
+            with pty_client.websocket_connect("/ws") as second:
+                second_hello, caught_up = connect(second)
+                assert second_hello["sessionRestored"] is True
+                assert second_hello["connectionId"] != first_hello["connectionId"]
+                # Late joiner catches up on what the shell already printed.
+                read_until(second, "FIRST_MARKER_ABC", seen=caught_up)
+
+                # Input from one client is echoed to both.
+                second.send_json({"type": MessageType.INPUT, "data": "echo SECOND_MARKER_XYZ\n"})
+                read_until(second, "SECOND_MARKER_XYZ")
+                read_until(first, "SECOND_MARKER_XYZ")
+
     def test_resize_during_session(
         self, pty_client: TestClient, temp_dir: Path
     ):

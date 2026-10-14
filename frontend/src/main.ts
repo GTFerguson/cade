@@ -23,6 +23,9 @@ import { HelpOverlay } from "./ui/help-overlay";
 import { ThemeSelector } from "./ui/theme-selector";
 import { KeybindingManager } from "./input/keybindings";
 import { MobileUI } from "./ui/mobile";
+import { notifyAttention } from "./ui/attention-notify";
+import { registerServiceWorker } from "./push";
+import type { AttentionState } from "./types";
 import { ProjectContextImpl, TabBar, TabManager } from "./tabs";
 import { hasConnectedProfileTab } from "./tabs/tab-manager";
 import type { TabState } from "./tabs";
@@ -46,6 +49,10 @@ class App {
   private tabManager: TabManager;
   private tabBar: TabBar | null = null;
   private mobileUI: MobileUI | null = null;
+  /** Tabs that produced output while another tab was active. */
+  private unreadTabs = new Set<string>();
+  /** Per-tab agent attention, from the session-attention hook events. */
+  private attentionByTab = new Map<string, AttentionState>();
   private tabContentContainer: HTMLElement | null = null;
   private defaultProjectPath: string;
   private keybindingManager: KeybindingManager;
@@ -309,12 +316,18 @@ class App {
     });
 
     this.tabManager.on("tab-switched", (tab) => {
+      this.unreadTabs.delete(tab.id);
       this.handleTabSwitch(tab);
       this.initMobileUIIfNeeded();
+      this.mobileUI?.refresh();
     });
 
     this.tabManager.on("tabs-changed", (tabs) => {
       this.tabBar?.render(tabs, this.tabManager.getActiveTabId());
+      for (const id of this.unreadTabs) {
+        if (!tabs.some((t) => t.id === id)) this.unreadTabs.delete(id);
+      }
+      this.mobileUI?.refresh();
       if (this.resumeInProgress) return;
       if (tabs.length === 0) {
         this.showStartSplash();
@@ -346,6 +359,7 @@ class App {
     }
 
     this.initMobileUIIfNeeded();
+    registerServiceWorker();
 
     // Set up keybinding callbacks (manager already initialized above)
     this.keybindingManager.setCallbacks({
@@ -759,6 +773,27 @@ class App {
       tab.ws.on("output", onFirstOutput);
     }
 
+    // The socket is attached to exactly this tab's session, so every
+    // attention frame on it is about this tab.
+    tab.ws.on("session-attention", (msg) => {
+      const previous = this.attentionByTab.get(tab.id) ?? null;
+      this.attentionByTab.set(tab.id, msg.attention);
+      this.mobileUI?.refresh();
+      if (msg.attention !== null && msg.attention !== previous) {
+        notifyAttention(tab.name, msg.attention, msg.message ?? null, () => {
+          this.tabManager.switchTab(tab.id);
+        });
+      }
+    });
+
+    // Output in a background tab is worth a dot on the phone's session strip.
+    tab.ws.on("output", () => {
+      if (this.tabManager.getActiveTabId() === tab.id) return;
+      if (this.unreadTabs.has(tab.id)) return;
+      this.unreadTabs.add(tab.id);
+      this.mobileUI?.refresh();
+    });
+
     if (!isDemoTab) {
       const matches = this.overridesMatchTab(tab);
       tab.ws.sendSetProject(
@@ -768,6 +803,7 @@ class App {
         matches ? (this.providerOverride ?? undefined) : undefined,
         tab.initialPrompt,
         tab.chatHandoff,
+        tab.name,
       );
 
       // Auth is project-driven now: connect first; if the project's launch.yml
@@ -1121,6 +1157,18 @@ class App {
         const active = this.tabManager.getActiveTab();
         active?.context?.getTerminalManager()?.sendInput(data);
       },
+      sendComposed: (text) => {
+        const active = this.tabManager.getActiveTab();
+        active?.context?.getTerminalManager()?.sendComposed(text);
+      },
+      setKeyboardOpen: (open) => {
+        const active = this.tabManager.getActiveTab();
+        active?.context?.getTerminalManager()?.setKeyboardOpen(open);
+      },
+      onRepaint: () => {
+        const active = this.tabManager.getActiveTab();
+        active?.context?.getTerminalManager()?.requestRepaint();
+      },
       getTabs: () => {
         const activeId = this.tabManager.getActiveTabId();
         return this.tabManager.getTabs().map((t) => ({
@@ -1128,10 +1176,21 @@ class App {
           name: t.name,
           projectPath: t.projectPath,
           isActive: t.id === activeId,
+          unread: this.unreadTabs.has(t.id),
+          attention: this.attentionByTab.get(t.id) ?? null,
         }));
       },
       onSwitchTab: (id) => {
         this.tabManager.switchTab(id);
+      },
+      getOpenTabIds: () => this.tabManager.getTabs().map((t) => t.id),
+      onAdoptSession: (session) => {
+        const adopted = this.tabManager.adoptSession(
+          session.id,
+          session.projectPath,
+          session.label,
+        );
+        this.tabManager.switchTab(adopted.id);
       },
       getActiveWs: () => {
         return this.tabManager.getActiveTab()?.ws ?? tab.ws;

@@ -11,6 +11,8 @@ import stat
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from backend.hooks.attention_hook import ATTENTION_SCRIPT
+from backend.hooks.attention_hook import SCRIPT_FILENAME as ATTENTION_SCRIPT_FILENAME
 from backend.hooks.commands import generate_hook_script
 from backend.hooks.wsl_path import get_wsl_cade_dir
 
@@ -47,12 +49,19 @@ def install_hook_script(
 
     script_content = generate_hook_script(options)
     script_path.write_text(script_content, encoding="utf-8")
+    _make_executable(script_path)
 
+    attention_path = hooks_dir / ATTENTION_SCRIPT_FILENAME
+    attention_path.write_text(ATTENTION_SCRIPT, encoding="utf-8")
+    _make_executable(attention_path)
+
+    return script_path
+
+
+def _make_executable(path: Path) -> None:
     # Try to make executable — may fail on UNC paths from Windows,
     # which is fine since we invoke with `python3` explicitly
     try:
-        script_path.chmod(script_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
+        path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
     except OSError:
         pass
-
-    return script_path

@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { hasConnectedProfileTab } from "./tab-manager";
+import { hasConnectedProfileTab, sessionsToAdopt } from "./tab-manager";
 
 function tab(id: string, profileId: string | undefined, connected: boolean) {
   const t: { id: string; remoteProfileId?: string; isConnected: boolean } = {
@@ -78,5 +78,23 @@ describe("hasConnectedProfileTab", () => {
       tab("tab-2", "profile-a", false),
     ];
     expect(hasConnectedProfileTab(tabs, "tab-2", "profile-a")).toBe(false);
+  });
+});
+
+describe("sessionsToAdopt", () => {
+  const live = (id: string, alive = true) => ({ id, alive });
+
+  it("offers live sessions this browser has no tab for", () => {
+    const result = sessionsToAdopt([live("a"), live("b")], ["b"]);
+    expect(result.map((s) => s.id)).toEqual(["a"]);
+  });
+
+  it("leaves out dead sessions", () => {
+    const result = sessionsToAdopt([live("a", false), live("b")], []);
+    expect(result.map((s) => s.id)).toEqual(["b"]);
+  });
+
+  it("returns nothing when every session is already open", () => {
+    expect(sessionsToAdopt([live("a")], ["a"])).toEqual([]);
   });
 });

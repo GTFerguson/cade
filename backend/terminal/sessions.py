@@ -59,27 +59,144 @@ TERMINAL_QUERY_PATTERN = re.compile(
 )
 
 
+# Bounded fan-out queue per attached client. A client that cannot drain this
+# many chunks is detached rather than allowed to stall the PTY reader; it
+# resyncs with a cold attach.
+SUBSCRIBER_QUEUE_LIMIT = 4096
+
+# Sentinel placed on a subscriber queue when no more chunks will follow:
+# the PTY reached EOF, or the subscriber overflowed and was detached.
+END_OF_OUTPUT = None
+
+
+class OutputSubscriber:
+    """One attached client's view of a terminal's output stream."""
+
+    def __init__(self) -> None:
+        self.queue: asyncio.Queue[tuple[int, str] | None] = asyncio.Queue(
+            maxsize=SUBSCRIBER_QUEUE_LIMIT
+        )
+        self.dropped = False
+
+    def _end(self) -> None:
+        # Make room for the sentinel so a full queue never swallows it.
+        while self.queue.full():
+            self.queue.get_nowait()
+        self.queue.put_nowait(END_OF_OUTPUT)
+
+    def drain(self) -> list[tuple[int, str] | None]:
+        """Pop everything queued so far (tests and diagnostics)."""
+        items: list[tuple[int, str] | None] = []
+        while not self.queue.empty():
+            items.append(self.queue.get_nowait())
+        return items
+
+    async def __aiter__(self):
+        while True:
+            item = await self.queue.get()
+            yield item
+            if item is END_OF_OUTPUT:
+                return
+
+
 @dataclass
 class TerminalState:
-    """State for a single terminal (claude or manual)."""
+    """State for a single terminal (claude or manual).
+
+    Output flows PTY -> reader task -> ``publish`` -> every subscriber, with
+    each chunk stamped by a sequence number so a reconnecting client can ask
+    for exactly what it missed. The scrollback deque doubles as the replay
+    ring buffer.
+    """
 
     pty: PTYManager
-    scrollback: deque[str] = field(default_factory=deque)
+    scrollback: deque[tuple[int, str]] = field(default_factory=deque)
     scrollback_size: int = 0
     output_task: asyncio.Task | None = field(default=None, repr=False)
+    subscribers: set[OutputSubscriber] = field(default_factory=set, repr=False)
+    last_seq: int = 0
+    exited: bool = False
+    # Current PTY size, None until a client has sized it.
+    size: TerminalSize | None = None
+    # Connection id of the client whose size owns the PTY.
+    controller: str | None = None
+
+    @property
+    def first_seq(self) -> int:
+        """Sequence of the oldest chunk still in the buffer (0 when empty)."""
+        return self.scrollback[0][0] if self.scrollback else 0
 
     def capture_output(self, data: str) -> None:
-        """Add output to scrollback buffer, trimming if necessary."""
-        self.scrollback.append(data)
+        """Alias kept for callers that only record output."""
+        self.publish(data)
+
+    def publish(self, data: str) -> None:
+        """Stamp a chunk, keep it for replay, and fan it out to subscribers."""
+        self.last_seq += 1
+        item = (self.last_seq, data)
+        self.scrollback.append(item)
         self.scrollback_size += len(data)
 
         while self.scrollback_size > MAX_SCROLLBACK_SIZE and len(self.scrollback) > 1:
             removed = self.scrollback.popleft()
-            self.scrollback_size -= len(removed)
+            self.scrollback_size -= len(removed[1])
+
+        for sub in list(self.subscribers):
+            try:
+                sub.queue.put_nowait(item)
+            except asyncio.QueueFull:
+                sub.dropped = True
+                self.subscribers.discard(sub)
+                sub._end()
+
+    def subscribe(
+        self, since_seq: int | None
+    ) -> tuple[OutputSubscriber, list[tuple[int, str]] | None]:
+        """Attach a client and work out what it needs to catch up.
+
+        Returns the subscriber and a replay list of chunks after ``since_seq``.
+        A ``None`` replay means the client's position cannot be served from
+        the buffer and it must cold-attach from the full scrollback.
+        """
+        sub = OutputSubscriber()
+        self.subscribers.add(sub)
+        if self.exited:
+            sub._end()
+
+        if since_seq is None or since_seq > self.last_seq:
+            return sub, None
+        if since_seq == self.last_seq:
+            return sub, []
+        # since_seq < first_seq - 1 means chunks between were trimmed away.
+        if self.scrollback and since_seq < self.first_seq - 1:
+            return sub, None
+        return sub, [item for item in self.scrollback if item[0] > since_seq]
+
+    def unsubscribe(self, sub: OutputSubscriber) -> None:
+        self.subscribers.discard(sub)
+
+    def ensure_reader(self) -> None:
+        """Start the single PTY reader for this terminal if it isn't running."""
+        if self.output_task is not None and not self.output_task.done():
+            return
+        self.output_task = asyncio.create_task(self._read_loop())
+
+    async def _read_loop(self) -> None:
+        try:
+            async for data in self.pty.read():
+                self.publish(data)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.exception("PTY reader stopped: %s", e)
+        finally:
+            self.exited = True
+            for sub in list(self.subscribers):
+                sub._end()
 
     def get_scrollback(self) -> str:
         """Get concatenated scrollback content, sanitized for replay."""
-        raw = "".join(self.scrollback)
+        raw = "".join(chunk for _, chunk in self.scrollback)
         return TERMINAL_QUERY_PATTERN.sub("", raw)
 
     def clear_scrollback(self) -> None:
@@ -100,6 +217,12 @@ class PTYSession:
     created_at: float = field(default_factory=time.time)
     # CLI orchestrator MCP config written for this session, removed on teardown.
     mcp_config_path: str | None = None
+    # Display name the owning tab gave this session, for session listings.
+    label: str | None = None
+    # Whether the agent needs the user: "input", "idle" or None (see attention.py).
+    attention: str | None = None
+    attention_message: str | None = None
+    attention_at: float = 0.0
 
     @property
     def pty(self) -> PTYManager:
@@ -124,7 +247,7 @@ class PTYSession:
         """Add output to the appropriate terminal's scrollback buffer."""
         terminal = self.terminals.get(session_key)
         if terminal:
-            terminal.capture_output(data)
+            terminal.publish(data)
         self.last_activity = time.time()
 
     def get_scrollback(self, session_key: str = SessionKey.CLAUDE) -> str:
@@ -143,6 +266,93 @@ class PTYSession:
     def is_alive(self) -> bool:
         """Check if at least one PTY is alive."""
         return any(t.pty.is_alive() for t in self.terminals.values())
+
+    # -- size policy -------------------------------------------------------
+    #
+    # The PTY has one size. The client that last typed into a terminal owns
+    # it; everyone else renders at that size. Without this, a phone and a
+    # desktop attached to one session resize the PTY against each other and
+    # the TUI repaints on every swap.
+
+    def _controls(self, terminal: TerminalState, connection_id: str) -> bool:
+        return terminal.controller is None or terminal.controller == connection_id
+
+    async def request_size(
+        self, session_key: str, connection_id: str, size: TerminalSize
+    ) -> bool:
+        """Apply ``size`` if ``connection_id`` may own the terminal.
+
+        Returns True when the PTY now has that size, False when another
+        client controls it and the request was ignored.
+        """
+        terminal = self.terminals.get(session_key)
+        if terminal is None:
+            return False
+        self.remember_size(session_key, connection_id, size)
+        if not self._controls(terminal, connection_id):
+            return False
+        await self._apply_size(terminal, size)
+        return True
+
+    async def claim_control(
+        self,
+        session_key: str,
+        connection_id: str,
+        size: TerminalSize | None = None,
+    ) -> bool:
+        """Make ``connection_id`` the controller of a terminal.
+
+        ``size`` is the claimant's desired size, applied on a handover so the
+        TUI repaints for the device now driving it. Returns True when control
+        changed hands.
+        """
+        terminal = self.terminals.get(session_key)
+        if terminal is None or terminal.controller == connection_id:
+            return False
+        terminal.controller = connection_id
+        desired = size or self._desired_sizes.get((session_key, connection_id))
+        if desired is not None:
+            await self._apply_size(terminal, desired)
+        return True
+
+    def remember_size(
+        self, session_key: str, connection_id: str, size: TerminalSize
+    ) -> None:
+        """Record a client's preferred size for use if it later takes control."""
+        self._desired_sizes[(session_key, connection_id)] = size
+
+    def release_client(self, connection_id: str) -> None:
+        """Forget a departing client; terminals it controlled become unowned."""
+        for terminal in self.terminals.values():
+            if terminal.controller == connection_id:
+                terminal.controller = None
+        for key in [k for k in self._desired_sizes if k[1] == connection_id]:
+            del self._desired_sizes[key]
+
+    async def nudge_repaint(self, session_key: str) -> None:
+        """Make a full-screen TUI redraw by changing the PTY height and back.
+
+        Both Claude Code and Codex repaint their whole screen on SIGWINCH,
+        which is cheaper and more faithful than replaying a raw byte stream
+        that was drawn for a different size.
+        """
+        terminal = self.terminals.get(session_key)
+        if terminal is None or terminal.size is None:
+            return
+        size = terminal.size
+        if size.rows < 2:
+            return
+        await terminal.pty.resize(size.cols, size.rows - 1)
+        await terminal.pty.resize(size.cols, size.rows)
+
+    async def _apply_size(self, terminal: TerminalState, size: TerminalSize) -> None:
+        if terminal.size == size:
+            return
+        terminal.size = size
+        await terminal.pty.resize(size.cols, size.rows)
+
+    def __post_init__(self) -> None:
+        self._desired_sizes: dict[tuple[str, str], TerminalSize] = {}
 
 
 class SessionRegistry:
@@ -263,7 +473,7 @@ class SessionRegistry:
             project_path=project_path,
             mcp_config_path=(pty_env or {}).get("CADE_CLI_MCP_CONFIG"),
         )
-        session.add_terminal(SessionKey.CLAUDE, pty)
+        session.add_terminal(SessionKey.CLAUDE, pty).ensure_reader()
 
         if dummy_mode:
             dummy_output = (
@@ -343,6 +553,7 @@ class SessionRegistry:
             )
 
             terminal = session.add_terminal(SessionKey.MANUAL, pty)
+            terminal.ensure_reader()
             logger.info("Created manual terminal for session: %s", session_id)
             return terminal
 
@@ -391,6 +602,10 @@ class SessionRegistry:
     def get(self, session_id: str) -> PTYSession | None:
         """Get a session by ID without modifying it."""
         return self._sessions.get(session_id)
+
+    def sessions(self) -> list[PTYSession]:
+        """Snapshot of every registered session."""
+        return list(self._sessions.values())
 
     async def _close_session(self, session: PTYSession) -> None:
         """Close a session and all its terminals."""

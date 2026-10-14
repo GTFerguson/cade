@@ -14,8 +14,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from backend.hooks.attention_hook import build_attention_hook_config
 from backend.hooks.commands import build_hook_config
-from backend.hooks.config import CADEHookOptions, HookType
+from backend.hooks.config import ATTENTION_HOOK_TYPES, CADEHookOptions, HookType
 from backend.hooks.installer import install_hook_script
 from backend.hooks.settings import ClaudeSettings
 from backend.hooks.wsl_path import get_wsl_settings_path
@@ -98,6 +99,10 @@ def setup_cade_hooks(
 
     hook_config = build_hook_config(options)
     hook_updated = settings.add_hook(HookType.POST_TOOL_USE, hook_config)
+    # Attention hooks: the agent tells CADE when it is waiting or done, so
+    # a phone can be alerted instead of polling the terminal.
+    for hook_type in ATTENTION_HOOK_TYPES:
+        settings.add_hook(hook_type, build_attention_hook_config())
 
     if dry_run:
         action = "update" if hook_updated else "add"
