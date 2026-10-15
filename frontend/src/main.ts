@@ -25,7 +25,10 @@ import { KeybindingManager } from "./input/keybindings";
 import { MobileUI } from "./ui/mobile";
 import { notifyAttention } from "./ui/attention-notify";
 import { registerServiceWorker } from "./push";
-import type { AttentionState } from "./types";
+import type { AttentionState, LiveSessionInfo } from "./types";
+import { WebSocketClient } from "./platform/websocket";
+import { sessionsToAdopt } from "./tabs/tab-manager";
+import { attachOptionLabel } from "./ui/splash-attach";
 import { ProjectContextImpl, TabBar, TabManager } from "./tabs";
 import { hasConnectedProfileTab } from "./tabs/tab-manager";
 import type { TabState } from "./tabs";
@@ -53,6 +56,8 @@ class App {
   private unreadTabs = new Set<string>();
   /** Per-tab agent attention, from the session-attention hook events. */
   private attentionByTab = new Map<string, AttentionState>();
+  /** Polls the backend's live sessions while the start splash is up. */
+  private splashSessionTimer: number | null = null;
   private tabContentContainer: HTMLElement | null = null;
   private defaultProjectPath: string;
   private keybindingManager: KeybindingManager;
@@ -1041,6 +1046,51 @@ class App {
     }
 
     this.startSplash.setOptions(options);
+    this.pollSplashSessions(options);
+  }
+
+  /**
+   * Sessions already running on this backend (started on another device,
+   * or before this browser's storage was cleared) are offered on the splash
+   * as ATTACH entries. A phone with no saved tabs has no other way in.
+   */
+  private pollSplashSessions(baseOptions: { label: string; action: () => void }[]): void {
+    this.stopSplashSessionPoll();
+    let shownIds = "";
+    const tick = async () => {
+      if (!this.startSplash?.isVisible()) {
+        this.stopSplashSessionPoll();
+        return;
+      }
+      const sessions = await WebSocketClient.fetchSessionList();
+      if (!this.startSplash?.isVisible()) return;
+      const live = sessionsToAdopt(sessions, this.tabManager.getTabs().map((t) => t.id));
+      const ids = live.map((s) => s.id).join(",");
+      if (ids === shownIds) return;
+      shownIds = ids;
+      const attach = live.map((session) => ({
+        label: attachOptionLabel(session),
+        action: () => this.attachFromSplash(session),
+      }));
+      this.startSplash?.setOptions([...attach, ...baseOptions]);
+    };
+    void tick();
+    this.splashSessionTimer = window.setInterval(() => void tick(), 4000);
+  }
+
+  private stopSplashSessionPoll(): void {
+    if (this.splashSessionTimer !== null) {
+      window.clearInterval(this.splashSessionTimer);
+      this.splashSessionTimer = null;
+    }
+  }
+
+  private attachFromSplash(session: LiveSessionInfo): void {
+    this.stopSplashSessionPoll();
+    this.startSplash?.setLoading();
+    this.startSplashTimeout();
+    const tab = this.tabManager.adoptSession(session.id, session.projectPath, session.label);
+    this.tabManager.switchTab(tab.id);
   }
 
   /**
@@ -1291,3 +1341,4 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.error("Failed to initialize app:", e);
   });
 });
+

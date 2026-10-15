@@ -145,8 +145,15 @@ export class Splash {
    * Used for the start screen when no tabs are open.
    */
   setOptions(options: SplashOption[]): void {
+    // Re-rendering (e.g. live sessions arriving) replaces the previous list
+    // and keeps the selection where it was.
+    const previous = this.options ? this.nav.selectedIndex : 0;
+    this.element.querySelector(".splash-options")?.remove();
+    this.element.querySelector(".splash-help")?.remove();
+
     this.options = options;
     this.nav.reset();
+    this.nav.selectedIndex = Math.min(previous, Math.max(0, options.length - 1));
     this.ready = true;
 
     this.statusEl.style.display = "none";

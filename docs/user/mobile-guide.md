@@ -21,10 +21,7 @@ On a screen 768px wide or narrower CADE switches to a phone layout: the terminal
 
 ## Attaching to a session
 
-Your tabs live in the browser, but sessions live on the backend. To drive a session started elsewhere:
-
-1. Tap **[cmd]**.
-2. Under **on server**, tap the session. It opens as a new tab attached to the same shell.
+Your tabs live in the browser, but sessions live on the backend. Sessions already running there appear on the start screen as **[ATTACH name · agent]** entries; tap one and you are in that shell. Once you have a tab open, the same list is under **on server** in the **[cmd]** menu.
 
 Several devices can be attached at once. Everyone sees the same output. The device that last typed owns the terminal's size; the others shrink their text so the whole line fits.
 

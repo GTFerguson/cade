@@ -252,7 +252,9 @@
   font-size: 11px;
   line-height: 1.15;
   white-space: pre;
-  font-family: Consolas, 'Courier New', 'Liberation Mono', monospace;
+  /* The bundled mono font has the box-drawing glyphs; a phone's system
+     monospace falls back per glyph and the columns no longer line up. */
+  font-family: var(--font-mono);
   font-variant-ligatures: none;
   letter-spacing: 0;
 }

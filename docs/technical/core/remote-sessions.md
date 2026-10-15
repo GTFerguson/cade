@@ -46,7 +46,7 @@ The phone's on-screen keyboard never resizes the PTY either: the input bar repor
 
 ## Session directory
 
-`GET /api/sessions` and the `list-sessions` message describe every live session (`backend/terminal/session_listing.py`): id, label, project, agent adapter, attached client count, attention, and per-terminal size, controller and last `seq`. Tabs send their name as `label` in `set-project`. `TabManager.adoptSession` opens a tab whose id *is* the session id, so connecting attaches to the existing PTY instead of spawning one. The mobile menu lists adoptable sessions under "on server".
+`GET /api/sessions` and the `list-sessions` message describe every live session (`backend/terminal/session_listing.py`): id, label, project, agent adapter, attached client count, attention, and per-terminal size, controller and last `seq`. Tabs send their name as `label` in `set-project`. `TabManager.adoptSession` opens a tab whose id *is* the session id, so connecting attaches to the existing PTY instead of spawning one. The start splash polls `GET /api/sessions` while it is up and offers each live session as an ATTACH entry (a browser with no saved tabs has no other way in); the mobile menu lists the same sessions under "on server".
 
 The registry is not persisted: PTYs do not survive a backend restart, so a file would only list sessions that no longer exist.
 
