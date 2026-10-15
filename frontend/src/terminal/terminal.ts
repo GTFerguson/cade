@@ -23,6 +23,7 @@ import {
   getTerminalFontSize,
   onTerminalFontSizeChange,
 } from "./font-size";
+import { setupTouchScroll } from "../ui/mobile/touch-scroll";
 
 /**
  * Build an xterm.js theme from the current CADE theme.
@@ -102,6 +103,7 @@ export class Terminal implements Component {
   private fixedSize: { cols: number; rows: number } | null = null;
   private applyingPtySize = false;
   private unsubscribeFontSize: (() => void) | null = null;
+  private cleanupTouchScroll: (() => void) | null = null;
 
   // While the on-screen keyboard is up the pane shrinks; keeping the row
   // count fixed means the PTY is not resized (and the TUI not repainted)
@@ -199,6 +201,16 @@ export class Terminal implements Component {
     if (this.fontSizeOverride === null) {
       this.unsubscribeFontSize = onTerminalFontSizeChange(() => this.applyFontSize());
     }
+
+    // Finger drags scroll the pane first (a mirrored PTY can be taller than
+    // the screen) and then the scrollback; xterm itself only scrolls on wheel.
+    this.cleanupTouchScroll = setupTouchScroll({
+      container: this.container,
+      cellHeight: () => this.cellHeight(),
+      scrollLines: (n) => {
+        this.terminal?.scrollLines(n);
+      },
+    });
 
     // Dropped files are pasted as paths into whichever terminal is under the
     // pointer, or failing that the one last typed in. Read-only viewers never
@@ -483,6 +495,14 @@ export class Terminal implements Component {
     }
   }
 
+  /** Rendered height of one row, for converting finger travel to lines. */
+  private cellHeight(): number {
+    const rows = this.terminal?.rows ?? 0;
+    const screen = this.container.querySelector<HTMLElement>(".xterm-screen");
+    if (rows > 0 && screen && screen.offsetHeight > 0) return screen.offsetHeight / rows;
+    return Math.max(8, (this.terminal?.options.fontSize ?? 14) * 1.2);
+  }
+
   /** Whether another client currently owns the PTY size. */
   isMirroring(): boolean {
     return this.fixedSize !== null;
@@ -522,8 +542,6 @@ export class Terminal implements Component {
         : userSize;
     if (this.terminal.options.fontSize === target) return;
     this.terminal.options.fontSize = target;
-    // Glyphs are rasterised at the old size in the atlas.
-    this.webglRenderer?.refresh();
     if (this.fixedSize === null) {
       this.lastSentSize = null;
       this.fit();
@@ -608,6 +626,15 @@ export class Terminal implements Component {
    */
   write(data: string): void {
     if (!this.terminal) return;
+    // A taller mirrored PTY makes the pane scrollable; keep the prompt line
+    // in view unless the user has deliberately scrolled up.
+    const el = this.container;
+    const paneAtBottom = el.scrollHeight - el.clientHeight - el.scrollTop < 4;
+    if (this.fixedSize !== null && paneAtBottom) {
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+    }
     const restoreTo = this.savedScrollPos;
     if (restoreTo != null) {
       this.terminal.write(data, () => {
@@ -688,6 +715,8 @@ export class Terminal implements Component {
 
     this.unsubscribeFontSize?.();
     this.unsubscribeFontSize = null;
+    this.cleanupTouchScroll?.();
+    this.cleanupTouchScroll = null;
 
     this.webglRenderer?.dispose();
     this.webglRenderer = null;

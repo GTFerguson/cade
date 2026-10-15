@@ -1234,6 +1234,10 @@ class App {
         this.tabManager.switchTab(id);
       },
       getOpenTabIds: () => this.tabManager.getTabs().map((t) => t.id),
+      onCloseActiveTab: () => {
+        const id = this.tabManager.getActiveTabId();
+        if (id) this.handleTabClose(id);
+      },
       onAdoptSession: (session) => {
         const adopted = this.tabManager.adoptSession(
           session.id,

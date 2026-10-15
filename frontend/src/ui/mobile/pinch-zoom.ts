@@ -3,11 +3,16 @@
  *
  * The terminal is a canvas, so the browser's own pinch-zoom would scale
  * pixels rather than reflow columns. We intercept the gesture and turn the
- * finger spread into a font-size request instead.
+ * finger spread into a font-size request. Reflowing xterm is expensive, so
+ * during the gesture only a cheap preview (a CSS scale) is shown and the
+ * font size is applied once when the fingers lift.
  */
 
 export interface PinchZoomOptions {
   getSize: () => number;
+  /** Called while the fingers move, with the scale relative to the start. */
+  onPreview?: (scale: number) => void;
+  /** Called once per gesture with the final size. */
   onSize: (px: number) => void;
 }
 
@@ -28,14 +33,14 @@ export function setupPinchZoom(el: HTMLElement, opts: PinchZoomOptions): () => v
   let startSize = 0;
   let active = false;
   let pending: number | null = null;
-  let lastSize = 0;
+  let lastScale = 1;
 
   const onStart = (e: TouchEvent) => {
     if (e.touches.length !== 2) return;
     const [a, b] = [e.touches[0]!, e.touches[1]!];
     startDistance = distanceBetween(a, b);
     startSize = opts.getSize();
-    lastSize = startSize;
+    lastScale = 1;
     active = true;
     e.preventDefault();
   };
@@ -43,21 +48,25 @@ export function setupPinchZoom(el: HTMLElement, opts: PinchZoomOptions): () => v
   const onMove = (e: TouchEvent) => {
     if (!active || e.touches.length !== 2) return;
     e.preventDefault();
-    const size = pinchedSize(startSize, startDistance, distanceBetween(e.touches[0]!, e.touches[1]!));
-    // One font change per frame: reflowing xterm is expensive.
+    const scale = distanceBetween(e.touches[0]!, e.touches[1]!) / Math.max(1, startDistance);
+    lastScale = scale;
     if (pending !== null) return;
     pending = requestAnimationFrame(() => {
       pending = null;
-      const rounded = Math.round(size);
-      if (rounded !== lastSize) {
-        lastSize = rounded;
-        opts.onSize(rounded);
-      }
+      opts.onPreview?.(lastScale);
     });
   };
 
   const onEnd = (e: TouchEvent) => {
-    if (e.touches.length < 2) active = false;
+    if (!active || e.touches.length >= 2) return;
+    active = false;
+    if (pending !== null) {
+      cancelAnimationFrame(pending);
+      pending = null;
+    }
+    opts.onPreview?.(1);
+    const size = Math.round(pinchedSize(startSize, 1, lastScale));
+    if (size !== startSize) opts.onSize(size);
   };
 
   el.addEventListener("touchstart", onStart, { passive: false });

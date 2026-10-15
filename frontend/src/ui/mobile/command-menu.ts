@@ -39,6 +39,8 @@ export interface CommandMenuCallbacks {
   isDashboardAvailable: () => boolean;
   onReconnect: () => void;
   onTheme: () => void;
+  /** Close this tab; the session keeps running on the backend. */
+  onDetach: () => void;
   /** Current push-notification state, for the [notify] entry. */
   getPushState: () => string;
   onTogglePush: () => void;
@@ -113,104 +115,77 @@ export class CommandMenu implements MobileScreen {
     this.optionEls = [];
     this.actions = [];
 
-    const wrapper = document.createElement("div");
-    wrapper.style.cssText = "width:100%;max-width:320px;";
-
-    // Header
+    // Header names the session this menu belongs to.
     const header = document.createElement("div");
     header.className = "mobile-screen-header";
-    header.style.cssText = "background:transparent;border:none;margin-bottom:24px;";
-    header.textContent = "[ command ]";
-    wrapper.appendChild(header);
+    const active = this.callbacks.getTabs().find((t) => t.isActive);
+    header.textContent = `[ ${active?.name ?? "cade"} ]`;
+    this.element.appendChild(header);
 
+    const body = document.createElement("div");
+    body.className = "mobile-screen-body";
     const list = document.createElement("div");
     list.className = "options-list";
+    body.appendChild(list);
+    this.element.appendChild(body);
 
-    // [search] / [recent] / [files]
-    this.addOption(list, "[search]", "find a file", () =>
-      this.callbacks.onSearch()
-    );
+    this.addSection(list, "files");
+    this.addOption(list, "[search]", "find a file", () => this.callbacks.onSearch());
     const recent = this.callbacks.getRecentCount();
     this.addOption(
       list,
       "[recent]",
       recent > 0 ? `${recent} changed` : "no changes yet",
-      () => this.callbacks.onRecent()
+      () => this.callbacks.onRecent(),
     );
-    this.addOption(list, "[files]", "browse tree", () =>
-      this.callbacks.onFiles()
-    );
-
-    // [viewer]
+    this.addOption(list, "[files]", "browse tree", () => this.callbacks.onFiles());
     const currentFile = this.callbacks.getCurrentFileName();
-    this.addOption(
-      list,
-      "[viewer]",
-      currentFile ?? "no file",
-      () => this.callbacks.onViewer()
-    );
-
-    // [dashboard] — only when the tab has a dashboard config
+    this.addOption(list, "[viewer]", currentFile ?? "no file", () => this.callbacks.onViewer());
     if (this.callbacks.isDashboardAvailable()) {
-      this.addOption(list, "[dashboard]", "", () =>
-        this.callbacks.onDashboard()
-      );
+      this.addOption(list, "[dashboard]", "", () => this.callbacks.onDashboard());
     }
 
-    // Divider + tabs section
-    list.appendChild(this.createDivider());
-    const tabLabel = document.createElement("div");
-    tabLabel.className = "section-label";
-    tabLabel.textContent = "tabs";
-    list.appendChild(tabLabel);
-
-    const tabs = this.callbacks.getTabs();
-    for (const tab of tabs) {
+    this.addSection(list, "sessions");
+    for (const tab of this.callbacks.getTabs()) {
       this.addTabOption(list, tab);
     }
-
     // Sessions already running on this backend (started elsewhere) that
     // this device can attach to.
-    const live = this.callbacks.getLiveSessions();
-    if (live.length > 0) {
-      list.appendChild(this.createDivider());
-      const liveLabel = document.createElement("div");
-      liveLabel.className = "section-label";
-      liveLabel.textContent = "on server";
-      list.appendChild(liveLabel);
-      for (const session of live) {
-        this.addLiveSessionOption(list, session);
-      }
+    for (const session of this.callbacks.getLiveSessions()) {
+      this.addLiveSessionOption(list, session);
     }
-
-    // Divider + bottom actions
-    list.appendChild(this.createDivider());
-    this.addOption(list, "[reconnect]", "", () =>
-      this.callbacks.onReconnect()
+    this.addOption(list, "[detach]", "leave it running, close this tab", () =>
+      this.callbacks.onDetach(),
     );
+
+    this.addSection(list, "app");
     this.addOption(list, "[notify]", this.callbacks.getPushState(), () =>
-      this.callbacks.onTogglePush()
+      this.callbacks.onTogglePush(),
     );
-    this.addOption(
-      list,
-      "[theme]",
-      this.callbacks.getCurrentThemeName(),
-      () => this.callbacks.onTheme()
+    this.addOption(list, "[theme]", this.callbacks.getCurrentThemeName(), () =>
+      this.callbacks.onTheme(),
     );
+    this.addOption(list, "[reconnect]", "", () => this.callbacks.onReconnect());
 
-    wrapper.appendChild(list);
-    this.element.appendChild(wrapper);
-
-    // Help text - mobile-friendly instructions
-    const help = document.createElement("div");
-    help.className = "pane-help mobile-help";
-    help.innerHTML = `<span class="help-hint">tap to select · swipe → back</span>`;
-    this.element.appendChild(help);
+    const statusline = document.createElement("div");
+    statusline.className = "mobile-screen-statusline";
+    statusline.innerHTML =
+      `<span><span class="status-mode">MENU</span></span>` +
+      `<span style="flex:1"></span>` +
+      `<span class="help-hint">tap to select · swipe → back</span>`;
+    this.element.appendChild(statusline);
 
     // Set initial selection and wire clicks
     this.nav.reset();
     this.nav.renderSelection();
     this.nav.wireClickHandlers();
+  }
+
+  private addSection(container: HTMLElement, title: string): void {
+    const label = document.createElement("div");
+    label.className = "section-label";
+    label.textContent = title;
+    container.appendChild(label);
   }
 
   private addOption(
@@ -256,18 +231,20 @@ export class CommandMenu implements MobileScreen {
     const name = session.label ?? session.projectPath.split("/").pop() ?? session.id;
     const el = document.createElement("div");
     el.className = "option";
+    const indicator = ["tab-indicator", "remote"];
+    if (session.attention === "input") indicator.push("needs-input");
+    else if (session.attention === "idle") indicator.push("idle");
+    const meta =
+      session.attention === "input" ? "needs you · attach" :
+      session.attention === "idle" ? "done · attach" :
+      `${session.agent} · attach`;
     el.innerHTML =
-      `<span class="tab-indicator"></span>` +
+      `<span class="${indicator.join(" ")}"></span>` +
       `<span class="option-label">${escapeHtml(name)}</span>` +
-      `<span class="option-meta">${escapeHtml(`${session.agent} · ${session.clients} online`)}</span>`;
+      `<span class="option-meta">${escapeHtml(meta)}</span>`;
     container.appendChild(el);
     this.optionEls.push(el);
     this.actions.push(() => this.callbacks.onAdoptSession(session));
   }
 
-  private createDivider(): HTMLElement {
-    const d = document.createElement("div");
-    d.className = "divider";
-    return d;
-  }
 }

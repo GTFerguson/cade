@@ -42,6 +42,8 @@ export interface MobileUICallbacks {
   getOpenTabIds: () => string[];
   /** Open a tab onto a session that already runs on the backend. */
   onAdoptSession: (session: LiveSessionInfo) => void;
+  /** Close the active tab; its session keeps running on the backend. */
+  onCloseActiveTab: () => void;
   getActiveWs: () => WebSocketClient;
   onTheme: () => void;
   getCurrentThemeName: () => string;
@@ -126,10 +128,20 @@ export class MobileUI implements Component {
     this.refresh();
 
     // Pinch anywhere on the tab content to change the terminal font size.
+    // A CSS scale previews the gesture; the real reflow happens once at the end.
     const pane = document.getElementById("tab-content");
     if (pane && !this.cleanupPinch) {
       this.cleanupPinch = setupPinchZoom(pane, {
         getSize: () => getTerminalFontSize(),
+        onPreview: (scale) => {
+          if (scale === 1) {
+            pane.style.transform = "";
+            pane.style.transformOrigin = "";
+            return;
+          }
+          pane.style.transformOrigin = "0 100%";
+          pane.style.transform = `scale(${scale.toFixed(3)})`;
+        },
         onSize: (px) => setTerminalFontSize(px),
       });
     }
@@ -302,6 +314,12 @@ export class MobileUI implements Component {
       onTheme: () => this.callbacks.onTheme(),
       getPushState: () => this.pushLabel(),
       onTogglePush: () => void this.togglePush(),
+      onDetach: () => {
+        this.screenManager.popToRoot();
+        this.activeViewer = null;
+        this.activeMenu = null;
+        this.callbacks.onCloseActiveTab();
+      },
       onBack: () => {
         this.screenManager.pop();
         this.activeViewer = null;

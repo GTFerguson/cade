@@ -438,30 +438,27 @@
 
 /* ── Command Menu ────────────────────────────────────── */
 
-.mobile-command-menu {
-  align-items: center;
-  justify-content: center;
-  padding: 40px 24px;
-}
-
 .mobile-command-menu .options-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
   width: 100%;
-  max-width: 320px;
+  padding-bottom: 12px;
 }
 
 .mobile-command-menu .option {
-  padding: 14px 16px;
+  padding: 0 16px;
   color: var(--text-secondary);
   cursor: pointer;
+  font-family: var(--font-mono);
   font-size: 14px;
   display: flex;
   align-items: center;
   gap: 12px;
   min-height: 48px;
   box-sizing: border-box;
+  border-bottom: 1px solid var(--bg-tertiary);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .mobile-command-menu .option:active {
@@ -492,39 +489,34 @@
   text-overflow: ellipsis;
 }
 
-.mobile-command-menu .divider {
-  width: 100%;
-  height: 1px;
-  background: var(--border-color);
-  margin: 8px 0;
-}
-
 .mobile-command-menu .section-label {
   font-size: 10px;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 1px;
-  padding: 8px 16px 4px;
+  padding: 16px 16px 6px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .mobile-command-menu .tab-indicator {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   flex-shrink: 0;
+  background: var(--text-muted);
+  opacity: 0.35;
+}
+
+.mobile-command-menu .tab-indicator.remote {
+  background: transparent;
+  border: 1px solid var(--text-muted);
+  opacity: 0.6;
 }
 
 .mobile-command-menu .tab-indicator.active {
   background: var(--accent-green);
-}
-
-.mobile-command-menu .pane-help {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  font-size: 11px;
-  color: var(--text-muted);
-  text-align: right;
-  line-height: 1.6;
+  opacity: 1;
 }
 
 /* Mobile help hints */
@@ -883,13 +875,26 @@
 /* Tab state markers in the command menu */
 .mobile-command-menu .tab-indicator.unread {
   background: var(--accent-blue);
+  opacity: 1;
 }
 
 .mobile-command-menu .tab-indicator.idle {
   background: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+  opacity: 1;
 }
 
 .mobile-command-menu .tab-indicator.needs-input {
   background: var(--accent-orange);
+  border-color: var(--accent-orange);
+  opacity: 1;
   animation: session-dot-pulse 1.2s ease-in-out infinite;
+}
+
+/* The session name in the strip opens the menu; say so. */
+.session-strip-centre::after {
+  content: "\25BE";
+  color: var(--text-muted);
+  font-size: 10px;
+  margin-left: 2px;
 }
