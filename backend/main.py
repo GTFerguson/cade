@@ -1396,6 +1396,28 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     # --- Frontend serving ---
 
+    @app.middleware("http")
+    async def frontend_cache_headers(request: Request, call_next):
+        """Keep the entry points fresh and the hashed assets cacheable.
+
+        Without a Cache-Control header a browser keeps index.html by
+        heuristic (a tenth of its age), so a phone can show a build from
+        weeks ago long after a reinstall. Assets carry a content hash in
+        their name, so those are safe to cache for good.
+        """
+        response = await call_next(request)
+        path = request.url.path
+        if "Cache-Control" in response.headers:
+            return response
+        if "/assets/" in path:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        elif (
+            path.endswith(("/", "/index.html", "/sw.js", "/manifest.webmanifest"))
+            or path.startswith(f"{get_config().root_path}/api/")
+        ):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     if FRONTEND_DIST.exists():
         @app.get("/")
         async def serve_index(

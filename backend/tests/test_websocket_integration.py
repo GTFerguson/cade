@@ -84,6 +84,14 @@ class TestHealthCheck:
         response = client.get("/")
         assert response.status_code == 200
 
+    def test_entry_points_are_not_cached_but_assets_are(self, client: TestClient):
+        """A phone must pick up a reinstalled frontend on reload: the page
+        and service worker revalidate, hashed assets may be kept."""
+        assert client.get("/").headers.get("cache-control") == "no-cache"
+        assert client.get("/sw.js").headers.get("cache-control") == "no-cache"
+        assert client.get("/api/sessions").headers.get("cache-control") == "no-cache"
+        assert "immutable" in client.get("/assets/index-abc.js").headers.get("cache-control", "")
+
     def test_root_returns_content(self, client: TestClient):
         """Root should return either the frontend HTML or a JSON fallback."""
         response = client.get("/")
