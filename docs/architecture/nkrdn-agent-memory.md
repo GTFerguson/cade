@@ -133,9 +133,11 @@ the existing URI.
 filter to include `.md` files under `.cade/memory/`. The existing 10-second
 debounce schedules a single rebuild per burst of writes — the writer
 doesn't need a direct `NkrdnService` handle. After a successful incremental
-rebuild, `NkrdnService` calls its `on_rebuild` callback; the websocket
-handler passes `_emit_nkrdn_graph` so the frontend immediately receives the
-updated graph without waiting for the next session.
+rebuild, `NkrdnService` calls its `on_rebuild` callback. The service is
+owned by the directory's shared `ProjectServices` (see
+[[components#ProjectServices]]), which relays the callback to every
+connection open on that directory; each one emits `nkrdn-graph`, so all tabs
+receive the updated graph without waiting for the next session.
 
 **Live write notification.** `MemoryToolExecutor.execute_async` fires a
 `memory-write` WebSocket event immediately after a successful write (before

@@ -41,7 +41,7 @@ See [[../core/remote-sessions]] for the broadcaster, replay and size policy behi
 | `file-content` | S->C | `{ path, content, fileType, encoding, size, mime? }` | File content. `encoding` is `utf-8` (text), `base64` (binary bytes; `fileType` is `pdf`, `image` or `binary`, `mime` set) or `none` (binary over the 25 MB preview cap; `content` empty, only `size`). |
 | `file-written` | S->C | `{ path }` | Write confirmation |
 | `file-created` | S->C | `{ path }` | Create confirmation |
-| `file-change` | S->C | `{ event, path }` | Filesystem change notification |
+| `file-changes` | S->C | `{ changes: { event, path }[] }` | Filesystem changes, one message per debounced watcher burst. `event` is `created`, `modified` or `deleted`. A burst can hold thousands of paths (a build or test run churning a temp directory), so handlers act once per message. Bursts that queue while a send is in flight are merged into the next message. |
 | `view-file` | S->C | `{ path, content, fileType, encoding, size, mime?, isPlan? }` | External view request (e.g. plan overlay); same encoding rules as `file-content` |
 | `plans-list` | S->C | `{ root, plans: PlanEntry[], handoffs: PlanEntry[] }` | Plans/handoffs index (see [[frontend-architecture#Plans & Handoffs Pane]]). `PlanEntry = { name, relPath, modified, title, isLatest? }`. Re-emitted after `/compact` writes a handoff. |
 | `file-list` | S->C | `{ root, files: string[], truncated }` | Relative POSIX paths, sorted; `truncated` when cut at the server's cap |

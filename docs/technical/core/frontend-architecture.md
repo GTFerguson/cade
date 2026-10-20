@@ -218,7 +218,7 @@ The file tree maintains navigation and search state internally. A pure state mac
 | Event | Action |
 |-------|--------|
 | `file-tree` | Updates tree data and re-renders |
-| `file-change` | Highlights changed file, refreshes tree |
+| `file-changes` | Highlights changed files for 2s; one tree refetch 250ms after the last message, so a stream of changes costs one refetch |
 
 ### MarkdownViewer (`markdown.ts`)
 
@@ -308,7 +308,7 @@ Mobile navigation is a stack of full-pane screens managed by `ScreenManager` (`u
 |--------|------|---------|
 | CommandMenu | `ui/mobile/command-menu.ts` | Full-pane menu: search, recent, files, viewer, dashboard, tab list with unread/attention markers, sessions on the server to adopt, reconnect, notify, theme. Vim-style `MenuNav` keys. `refresh()` re-renders in place when a `session-list` reply or push state arrives. |
 | FileSearch | `ui/mobile/file-search.ts` | Fuzzy search over the flat `file-list` (`fuzzy.ts` ranks segment-start and file-name hits); tapping a result pushes a FileViewer |
-| RecentFiles | `ui/mobile/recent-files.ts` | Files changed on disk this session, newest first, from `file-change` events |
+| RecentFiles | `ui/mobile/recent-files.ts` | Files changed on disk this session, newest first, from `file-changes` events |
 | FileExplorer | `ui/mobile/file-explorer.ts` | Nested file-tree browser; tapping a file pushes a FileViewer |
 | FileViewer | `ui/mobile/file-viewer.ts` | Syntax-highlighted code / rendered markdown, with a `diff` toggle (`d`) that shows the file against HEAD via `get-file-diff` |
 | DashboardScreen | `ui/mobile/dashboard-screen.ts` | Config-driven dashboard (see [Dashboard on Mobile](#dashboard-on-mobile)) |
@@ -488,7 +488,7 @@ Bridged lifecycle events (`connected`, `disconnected`, `auth-failed`, etc.) are 
 | `output` | Terminal output data |
 | `file-tree` | Directory structure |
 | `file-content` | Requested file content |
-| `file-change` | File system change notification |
+| `file-changes` | File system changes, batched per watcher burst |
 | `error` | Error with code and message |
 
 **Reconnection:**

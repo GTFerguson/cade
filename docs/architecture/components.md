@@ -1,7 +1,7 @@
 ---
 title: CADE Component Inventory
 created: 2026-04-24
-updated: 2026-04-24
+updated: 2026-10-20
 status: active
 tags: [architecture, components, inventory]
 ---
@@ -23,7 +23,8 @@ Full inventory of every significant component in CADE, with location, responsibi
 **Key methods:**
 
 - `handle()` — Top-level connection loop; authenticates, calls `_setup()`, then runs receive/PTY output loops concurrently
-- `_setup()` — Spawns PTY, starts file watcher, initialises provider registry and permission manager
+- `_setup()` — Spawns PTY, joins the directory's shared `ProjectServices`, initialises provider registry and permission manager
+- `_forward_file_changes()` — Sends this connection's queued file-change bursts as `file-changes` messages and feeds them to its `DashboardHandler`
 - `_handle_message()` — Routes incoming WebSocket messages to sub-handlers by type
 - `_stream_chat_response()` — Opens a provider stream and forwards `ChatEvent` objects to the client
 - `_pty_output_loop()` — Reads PTY output bytes and sends them as OUTPUT messages
@@ -31,6 +32,31 @@ Full inventory of every significant component in CADE, with location, responsibi
 **Depends on:** `Config`, `ProviderRegistry`, `PermissionManager`, `OrchestratorManager`, `FileToolExecutor`, `NeovimManager`, `DashboardHandler`, `ChatSession`
 
 **Depended on by:** FastAPI route in `main.py`
+
+---
+
+### ProjectServices
+
+| Field | Value |
+|-------|-------|
+| File | `backend/project_services.py` |
+| Entry | `acquire_project(root, listener)` / `release_project(services, listener)` |
+| Responsibility | Owns the `FileWatcher`, `DocIndexService` and `NkrdnService` for one resolved directory, shared by every connection open on it |
+
+Each tab is its own WebSocket connection, and several tabs are often open on one project. When each connection ran its own watcher and index services, a burst of file changes was processed once per tab and every code edit started one nkrdn rebuild per tab. Connections now register a `ProjectListener` with the directory's single `ProjectServices`; the first registration starts the watcher and the last release stops it and cancels pending rebuilds.
+
+**How it works:**
+
+- The watch loop reads `FileWatcher.watch_batches()`, so a debounced burst moves through the system as one list. Each burst goes to the index services per event (they debounce their own rebuilds) and to every listener as a whole.
+- Listener callbacks are synchronous and only enqueue. Each `ConnectionHandler` drains its own queue in `_forward_file_changes()`, so a slow or dead socket delays only its own tab, and a listener that raises is logged without stopping the others.
+- `enable_indexing()` creates the index services and runs their initial builds once, on the first non-kiosk connection. Later tabs reuse the result and receive the current graph on connect. A directory opened only in kiosk mode is watched but not indexed.
+- Watcher failures are retried with exponential backoff (2s, 4s, 8s) by recreating the watcher; after that, watching stays off and tabs stop receiving live updates.
+
+**Boundaries:** `DashboardHandler` stays per connection, because each tab may show a different dashboard file. Opening a second tab no longer re-runs the initial nkrdn build; the directory is already being watched, so the graph is current.
+
+**Depends on:** `FileWatcher`, `DocIndexService`, `NkrdnService`, file-tree cache (invalidated on each raw change)
+
+**Depended on by:** `ConnectionHandler`
 
 ---
 
@@ -363,7 +389,7 @@ Components extend `BaseDashboardComponent` and receive `{ panel, data, allData, 
 | `ProviderConfig` | `core/backend/providers/config.py` | Config loading from TOML with env-var interpolation |
 | `ChatSession` | `core/backend/chat/session.py` | In-memory history registry keyed by session ID |
 | `DashboardConfig` | `core/backend/dashboard/config.py` | YAML schema for dashboard configuration |
-| `FileWatcher` | `core/backend/watcher.py` | Debounced file change notifications via watchfiles |
+| `FileWatcher` | `core/backend/watcher.py` | Debounced file change notifications via watchfiles; `watch_batches()` yields each burst as a list, `watch()` yields single events |
 
 ---
 
