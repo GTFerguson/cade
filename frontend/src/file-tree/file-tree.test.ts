@@ -44,12 +44,17 @@ describe("FileTree file-change handling", () => {
     vi.useRealTimers();
   });
 
-  // A build or eval run churning temp directories delivers thousands of
-  // file-change messages in one burst. Refetching the whole tree for each one
-  // pinned the webview's main thread and froze terminal input.
-  it("coalesces a burst of file changes into a single tree refetch", () => {
+  const change = (...paths: string[]) => ({
+    type: "file-changes",
+    changes: paths.map((path) => ({ event: "created", path })),
+  });
+
+  // A build or eval run churning temp directories sends a stream of change
+  // messages. Refetching the whole tree for each one pinned the webview's
+  // main thread and froze terminal input.
+  it("coalesces a stream of change messages into a single tree refetch", () => {
     for (let i = 0; i < 1000; i++) {
-      emit("file-change", { event: "created", path: `tmp${i}/scores.npz` });
+      emit("file-changes", change(`tmp${i}/scores.npz`));
     }
     expect(ws.requestTree).toHaveBeenCalledTimes(0);
 
@@ -58,9 +63,9 @@ describe("FileTree file-change handling", () => {
   });
 
   it("refetches again for changes arriving after the previous burst settled", () => {
-    emit("file-change", { event: "modified", path: "a.txt" });
+    emit("file-changes", change("a.txt"));
     vi.runOnlyPendingTimers();
-    emit("file-change", { event: "modified", path: "b.txt" });
+    emit("file-changes", change("b.txt"));
     vi.runOnlyPendingTimers();
     expect(ws.requestTree).toHaveBeenCalledTimes(2);
   });
@@ -68,13 +73,20 @@ describe("FileTree file-change handling", () => {
   it("does not rebuild the DOM once per change message", () => {
     const spy = vi.spyOn(container, "innerHTML", "set");
     for (let i = 0; i < 500; i++) {
-      emit("file-change", { event: "created", path: `tmp${i}` });
+      emit("file-changes", change(`tmp${i}`));
     }
     expect(spy.mock.calls.length).toBeLessThanOrEqual(1);
   });
 
+  it("refetches once for a single large batch", () => {
+    const paths = Array.from({ length: 5000 }, (_, i) => `tmp${i}/f.jpg`);
+    emit("file-changes", change(...paths));
+    vi.runOnlyPendingTimers();
+    expect(ws.requestTree).toHaveBeenCalledTimes(1);
+  });
+
   it("does not refetch after dispose", () => {
-    emit("file-change", { event: "modified", path: "a.txt" });
+    emit("file-changes", change("a.txt"));
     tree.dispose();
     vi.runOnlyPendingTimers();
     expect(ws.requestTree).not.toHaveBeenCalled();

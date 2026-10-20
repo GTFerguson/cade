@@ -32,7 +32,7 @@ import type {
   PtySizeMessage,
   SessionAttentionMessage,
   SessionListMessage,
-  FileChangeMessage,
+  FileChangesMessage,
   FileChildrenMessage,
   FileContentMessage,
   FileTreeMessage,
@@ -59,7 +59,7 @@ interface WebSocketEvents {
   "file-tree": FileTreeMessage;
   "file-children": FileChildrenMessage;
   "browse-children": FileChildrenMessage;
-  "file-change": FileChangeMessage;
+  "file-changes": FileChangesMessage;
   "file-content": FileContentMessage;
   "file-written": { path: string };
   "file-created": { path: string };

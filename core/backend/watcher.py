@@ -92,12 +92,19 @@ class FileWatcher:
         self._stop_event.set()
 
     async def watch(self) -> AsyncIterator[FileChangeEvent]:
-        """Watch for file changes and yield events.
+        """Watch for file changes and yield events one at a time."""
+        async for batch in self.watch_batches():
+            for event in batch:
+                yield event
+
+    async def watch_batches(self) -> AsyncIterator[list[FileChangeEvent]]:
+        """Watch for file changes and yield each debounced burst as one list.
+
+        A burst can hold thousands of paths (a build or test run churning a
+        temp directory), so consumers that forward changes elsewhere should
+        handle the list as a unit rather than per event.
 
         Falls back to polling mode if inotify fails (e.g. exhausted watches).
-
-        Yields:
-            FileChangeEvent objects for each detected change
         """
         pending_changes: dict[str, FileChangeEvent] = {}
         debounce_task: asyncio.Task | None = None
@@ -149,8 +156,9 @@ class FileWatcher:
 
                 try:
                     events = await debounce_task
+                    if events:
+                        yield events
                     for event in events:
-                        yield event
                         for callback in self._callbacks:
                             try:
                                 callback(event)
@@ -167,8 +175,8 @@ class FileWatcher:
             )
             self._force_polling = True
             self._stop_event = asyncio.Event()
-            async for event in self.watch():
-                yield event
+            async for batch in self.watch_batches():
+                yield batch
         except asyncio.CancelledError:
             pass
         finally:

@@ -6,7 +6,7 @@
  * MobileScreen pushed onto the ScreenManager.
  */
 
-import type { Component, FileChangeMessage, LiveSessionInfo } from "../types";
+import type { Component, FileChangesMessage, LiveSessionInfo } from "../types";
 import { sessionsToAdopt } from "../tabs/tab-manager";
 import type { WebSocketClient } from "../platform/websocket";
 import { TouchToolbar } from "./touch-toolbar";
@@ -196,14 +196,15 @@ export class MobileUI implements Component {
       this.refresh();
     });
 
-    this.ws.on("file-change", (message: FileChangeMessage) => {
-      this.recentChanges = recordChange(this.recentChanges, {
-        path: message.path,
-        event: message.event,
-        at: Date.now(),
-      });
-      if (message.path.endsWith(".md")) {
-        this.showUpdateIndicator(message.path);
+    this.ws.on("file-changes", (message: FileChangesMessage) => {
+      const at = Date.now();
+      let lastMarkdown: string | null = null;
+      for (const { path, event } of message.changes) {
+        this.recentChanges = recordChange(this.recentChanges, { path, event, at });
+        if (path.endsWith(".md")) lastMarkdown = path;
+      }
+      if (lastMarkdown !== null) {
+        this.showUpdateIndicator(lastMarkdown);
       }
     });
 

@@ -25,19 +25,19 @@ class FakeWatcher:
     def __init__(self, root: Path, on_raw_change=None) -> None:
         self.root = root
         self.stopped = False
-        self._queue: asyncio.Queue[FileChangeEvent | None] = asyncio.Queue()
+        self._queue: asyncio.Queue[list[FileChangeEvent] | None] = asyncio.Queue()
         FakeWatcher.instances.append(self)
 
-    def push(self, path: str) -> None:
-        self._queue.put_nowait(FileChangeEvent(event="modified", path=path))
+    def push(self, *paths: str) -> None:
+        self._queue.put_nowait([FileChangeEvent(event="modified", path=p) for p in paths])
 
     def stop(self) -> None:
         self.stopped = True
         self._queue.put_nowait(None)
 
-    async def watch(self):
-        while (event := await self._queue.get()) is not None:
-            yield event
+    async def watch_batches(self):
+        while (batch := await self._queue.get()) is not None:
+            yield batch
 
 
 class FakeIndexService:
@@ -63,12 +63,16 @@ class FakeIndexService:
 
 class Recorder:
     def __init__(self) -> None:
-        self.paths: list[str] = []
+        self.batches: list[list[str]] = []
         self.graph_rebuilds = 0
         self.listener = ProjectListener(
-            on_file_change=lambda e: self.paths.append(e.path),
+            on_file_changes=lambda batch: self.batches.append([e.path for e in batch]),
             on_graph_rebuilt=self._graph,
         )
+
+    @property
+    def paths(self) -> list[str]:
+        return [p for batch in self.batches for p in batch]
 
     def _graph(self) -> None:
         self.graph_rebuilds += 1
@@ -109,6 +113,16 @@ async def test_connections_on_one_directory_share_one_watcher(tmp_path):
 
     release_project(services_a, a.listener)
     release_project(services_b, b.listener)
+
+
+async def test_a_burst_reaches_each_listener_as_one_batch(tmp_path):
+    a = Recorder()
+    services = acquire_project(tmp_path, a.listener)
+    FakeWatcher.instances[0].push(*[f"tmp{i}/f.npz" for i in range(500)])
+    await settle()
+    assert len(a.batches) == 1
+    assert len(a.batches[0]) == 500
+    release_project(services, a.listener)
 
 
 async def test_paths_resolving_to_one_directory_share(tmp_path):
@@ -221,7 +235,7 @@ async def test_failing_listener_does_not_starve_the_others(tmp_path):
     def boom(_event):
         raise RuntimeError("socket gone")
 
-    bad = ProjectListener(on_file_change=boom, on_graph_rebuilt=lambda: None)
+    bad = ProjectListener(on_file_changes=boom, on_graph_rebuilt=lambda: None)
     good = Recorder()
     services = acquire_project(tmp_path, bad)
     acquire_project(tmp_path, good.listener)

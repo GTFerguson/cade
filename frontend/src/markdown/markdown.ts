@@ -12,7 +12,7 @@
 import { marked } from "marked";
 import hljs from "highlight.js";
 import type { PaneKeyHandler } from "../input/keybindings";
-import type { Component, EventHandler } from "../types";
+import type { Component, EventHandler, FileChangesMessage } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 import type { MarkdownEvents, ViewState, MarkdownEventHandlers } from "./types";
 import { extractFrontmatter, renderFrontmatter } from "./frontmatter";
@@ -110,9 +110,9 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
         this.emit("link-click", message.path);
       }
     },
-    fileChange: (message: any) => {
+    fileChanges: (message: FileChangesMessage) => {
       if (this.locked) return;
-      if (message.path === this.currentPath) {
+      if (message.changes.some((c) => c.path === this.currentPath)) {
         this.refresh();
       }
     },
@@ -139,7 +139,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
   initialize(): void {
     this.ws.on("file-content", this.boundHandlers.fileContent);
     this.ws.on("view-file", this.boundHandlers.viewFile);
-    this.ws.on("file-change", this.boundHandlers.fileChange);
+    this.ws.on("file-changes", this.boundHandlers.fileChanges);
     this.renderEmpty();
   }
 
@@ -784,7 +784,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
     this.ws.off("file-content", this.boundHandlers.fileContent);
     this.ws.off("view-file", this.boundHandlers.viewFile);
-    this.ws.off("file-change", this.boundHandlers.fileChange);
+    this.ws.off("file-changes", this.boundHandlers.fileChanges);
 
     this.container.innerHTML = "";
     this.handlers.clear();

@@ -270,13 +270,18 @@ export interface FileChildrenMessage extends BaseMessage {
   children: FileNode[];
 }
 
-/**
- * File change notification (server -> client).
- */
-export interface FileChangeMessage extends BaseMessage {
-  type: "file-change";
+export interface FileChange {
   event: "created" | "modified" | "deleted";
   path: string;
+}
+
+/**
+ * File changes (server -> client), one message per watcher burst. A burst can
+ * hold thousands of paths, so handlers should act once per message.
+ */
+export interface FileChangesMessage extends BaseMessage {
+  type: "file-changes";
+  changes: FileChange[];
 }
 
 /**
@@ -745,7 +750,7 @@ export type ServerMessage =
   | FileTreeMessage
   | FileChildrenMessage
   | BrowseChildrenResponseMessage
-  | FileChangeMessage
+  | FileChangesMessage
   | FileContentMessage
   | FileWrittenMessage
   | FileCreatedMessage

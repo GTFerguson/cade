@@ -3,7 +3,13 @@
  */
 
 import type { PaneKeyHandler } from "../input/keybindings";
-import type { Component, EventHandler, FileChildrenMessage, FileNode } from "../types";
+import type {
+  Component,
+  EventHandler,
+  FileChangesMessage,
+  FileChildrenMessage,
+  FileNode,
+} from "../types";
 import { getUserConfig, matchesKeybinding } from "../config/user-config";
 import { computeFileCreationBasePath } from "../remote/profile-utils";
 import type { WebSocketClient } from "../platform/websocket";
@@ -51,10 +57,10 @@ export class FileTree implements Component, PaneKeyHandler {
   private rootMenuHoldTimer: number | null = null;
   private static readonly ROOT_MENU_HOLD_MS = 220;
 
-  // The backend sends one file-change message per path, so a build or test
-  // run churning temp files delivers thousands at once. Re-rendering and
-  // refetching the tree per message saturated the webview's main thread, which
-  // also serves terminal input, so both are coalesced per burst.
+  // A build or test run churning temp files sends a stream of file-changes
+  // messages. Re-rendering and refetching the tree for each saturated the
+  // webview's main thread, which also serves terminal input, so both are
+  // coalesced across messages.
   private static readonly TREE_REFRESH_DEBOUNCE_MS = 250;
   private treeRefreshTimer: number | null = null;
   private renderTimer: number | null = null;
@@ -76,23 +82,23 @@ export class FileTree implements Component, PaneKeyHandler {
     fileChildren: (message: FileChildrenMessage) => {
       this.handleChildrenLoaded(message.path, message.children);
     },
-    fileChange: (message: any) => {
-      this.recentlyChanged.add(message.path);
+    fileChanges: (message: FileChangesMessage) => {
+      for (const { path } of message.changes) {
+        this.recentlyChanged.add(path);
 
-      // Clear existing timer for this path if any
-      const existingTimer = this.recentlyChangedTimers.get(message.path);
-      if (existingTimer != null) {
-        window.clearTimeout(existingTimer);
+        const existingTimer = this.recentlyChangedTimers.get(path);
+        if (existingTimer != null) {
+          window.clearTimeout(existingTimer);
+        }
+
+        const timerId = window.setTimeout(() => {
+          this.recentlyChanged.delete(path);
+          this.recentlyChangedTimers.delete(path);
+          this.scheduleRender();
+        }, 2000);
+
+        this.recentlyChangedTimers.set(path, timerId);
       }
-
-      // Track new timer
-      const timerId = window.setTimeout(() => {
-        this.recentlyChanged.delete(message.path);
-        this.recentlyChangedTimers.delete(message.path);
-        this.scheduleRender();
-      }, 2000);
-
-      this.recentlyChangedTimers.set(message.path, timerId);
 
       // The refetched tree renders the highlight, so no render is needed here.
       this.scheduleTreeRefresh();
@@ -130,7 +136,7 @@ export class FileTree implements Component, PaneKeyHandler {
 
     this.ws.on("file-tree", this.boundHandlers.fileTree);
     this.ws.on("file-children", this.boundHandlers.fileChildren);
-    this.ws.on("file-change", this.boundHandlers.fileChange);
+    this.ws.on("file-changes", this.boundHandlers.fileChanges);
     this.ws.on("connected", this.boundHandlers.connected);
     this.ws.on("dashboard-config", this.boundHandlers.dashboardConfig);
 
@@ -1310,7 +1316,7 @@ export class FileTree implements Component, PaneKeyHandler {
     // Unregister WebSocket handlers
     this.ws.off("file-tree", this.boundHandlers.fileTree);
     this.ws.off("file-children", this.boundHandlers.fileChildren);
-    this.ws.off("file-change", this.boundHandlers.fileChange);
+    this.ws.off("file-changes", this.boundHandlers.fileChanges);
     this.ws.off("connected", this.boundHandlers.connected);
     this.ws.off("dashboard-config", this.boundHandlers.dashboardConfig);
 

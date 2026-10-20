@@ -39,7 +39,7 @@ class ProjectListener:
     Connections hand events to their own queue or task instead.
     """
 
-    on_file_change: Callable[[FileChangeEvent], None]
+    on_file_changes: Callable[[list[FileChangeEvent]], None]
     on_graph_rebuilt: Callable[[], None]
 
 
@@ -102,16 +102,18 @@ class ProjectServices:
             except Exception:
                 logger.exception("Graph-rebuilt listener failed for %s", self.root)
 
-    def _dispatch(self, event: FileChangeEvent) -> None:
+    def _dispatch(self, batch: list[FileChangeEvent]) -> None:
         for service in (self._doc_index, self._nkrdn):
-            if service is not None:
+            if service is None:
+                continue
+            for event in batch:
                 try:
                     service.on_file_change(event)
                 except Exception:
                     logger.exception("Index service failed on change to %s", event.path)
         for listener in list(self._listeners):
             try:
-                listener.on_file_change(event)
+                listener.on_file_changes(batch)
             except Exception:
                 logger.exception("File-change listener failed for %s", self.root)
 
@@ -125,8 +127,8 @@ class ProjectServices:
             if self._watcher is None:
                 return
             try:
-                async for event in self._watcher.watch():
-                    self._dispatch(event)
+                async for batch in self._watcher.watch_batches():
+                    self._dispatch(batch)
                 return
             except asyncio.CancelledError:
                 return

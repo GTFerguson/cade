@@ -45,7 +45,7 @@ class MessageType:
     FILE_DIFF = "file-diff"  # Diff of one file: { type, path, diff, untracked, error? }
     FILE_TREE = "file-tree"  # File tree response: { type, data: FileNode[] }
     FILE_CHILDREN = "file-children"  # Directory children: { type, path: str, children: FileNode[] }
-    FILE_CHANGE = "file-change"  # File changed: { type, event: str, path: str }
+    FILE_CHANGES = "file-changes"  # Files changed, one message per watcher burst: { type, changes: [{ event: str, path: str }] }
     FILE_CONTENT = "file-content"  # File content: { type, path, content, fileType, encoding: utf-8|base64|none, size, mime? }
     FILE_WRITTEN = "file-written"  # File written successfully: { type, path: str }
     FILE_CREATED = "file-created"  # File created successfully: { type, path: str }

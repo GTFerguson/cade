@@ -746,7 +746,10 @@ function injectMobileRemote(ws: WebSocketClient): void {
     ["frontend/src/platform/websocket.test.ts", "created"],
   ];
   changes.forEach(([path, event], i) => {
-    setTimeout(() => ws.injectEvent("file-change", { type: "file-change", path, event }), 200 * (i + 1));
+    setTimeout(
+      () => ws.injectEvent("file-changes", { type: "file-changes", changes: [{ path, event }] }),
+      200 * (i + 1),
+    );
   });
   setTimeout(() => {
     ws.injectEvent("session-attention", {

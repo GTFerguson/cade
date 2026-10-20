@@ -692,15 +692,42 @@ class TestSharedProjectServices:
         assert services is not None
         assert second._project is services
 
-        services._dispatch(FileChangeEvent(event="modified", path="a.py"))
-        assert first._file_changes.get_nowait().path == "a.py"
-        assert second._file_changes.get_nowait().path == "a.py"
+        services._dispatch([FileChangeEvent(event="modified", path="a.py")])
+        assert [e.path for e in first._file_changes.get_nowait()] == ["a.py"]
+        assert [e.path for e in second._file_changes.get_nowait()] == ["a.py"]
 
         await first._cleanup()
         assert _projects.get(services.root) is services
-        services._dispatch(FileChangeEvent(event="modified", path="b.py"))
+        services._dispatch([FileChangeEvent(event="modified", path="b.py")])
         assert first._file_changes.empty()
-        assert second._file_changes.get_nowait().path == "b.py"
+        assert [e.path for e in second._file_changes.get_nowait()] == ["b.py"]
 
         await second._cleanup()
         assert services.root not in _projects
+
+    @pytest.mark.asyncio
+    async def test_queued_bursts_go_to_the_client_as_one_message(self, temp_dir: Path):
+        from core.backend.models import FileChangeEvent
+
+        handler = await self._setup_handler(temp_dir, "tab-1")
+        sent: list[dict] = []
+
+        async def capture(message: dict) -> None:
+            sent.append(message)
+
+        handler._send = capture  # type: ignore[method-assign]
+        for i in range(3):
+            handler._queue_file_changes(
+                [FileChangeEvent(event="created", path=f"tmp{i}/{j}") for j in range(100)]
+            )
+        forward = asyncio.create_task(handler._forward_file_changes())
+        for _ in range(5):
+            await asyncio.sleep(0)
+
+        changes = [m for m in sent if m["type"] == MessageType.FILE_CHANGES]
+        assert len(changes) == 1
+        assert len(changes[0]["changes"]) == 300
+        assert changes[0]["changes"][0] == {"event": "created", "path": "tmp0/0"}
+
+        forward.cancel()
+        await handler._cleanup()

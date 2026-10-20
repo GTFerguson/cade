@@ -130,10 +130,10 @@ class ConnectionHandler:
         # directory; this connection only queues what it must forward.
         self._project: ProjectServices | None = None
         self._project_listener = ProjectListener(
-            on_file_change=self._queue_file_change,
+            on_file_changes=self._queue_file_changes,
             on_graph_rebuilt=lambda: asyncio.create_task(self._emit_nkrdn_graph()),
         )
-        self._file_changes: asyncio.Queue[FileChangeEvent] = asyncio.Queue()
+        self._file_changes: asyncio.Queue[list[FileChangeEvent]] = asyncio.Queue()
         self._closed = False
         self._suppress_output = False
         self._suppress_start_time: float | None = None
@@ -2445,9 +2445,9 @@ class ConnectionHandler:
         except Exception as e:
             logger.exception("Deferred Claude start failed: %s", e)
 
-    def _queue_file_change(self, event: FileChangeEvent) -> None:
+    def _queue_file_changes(self, batch: list[FileChangeEvent]) -> None:
         if not self._closed:
-            self._file_changes.put_nowait(event)
+            self._file_changes.put_nowait(batch)
 
     async def _forward_file_changes(self) -> None:
         """Send this connection's share of the project's file changes.
@@ -2457,16 +2457,20 @@ class ConnectionHandler:
         """
         try:
             while not self._closed:
-                event = await self._file_changes.get()
+                # Bursts that queued up while the previous send was in flight
+                # go out together, so a backed-up socket catches up in one frame.
+                events = await self._file_changes.get()
+                while not self._file_changes.empty():
+                    events = events + self._file_changes.get_nowait()
                 if self._dashboard is not None:
-                    try:
-                        self._dashboard.on_data_source_file_change(event)
-                    except Exception:
-                        logger.exception("Dashboard file-change hook failed")
+                    for event in events:
+                        try:
+                            self._dashboard.on_data_source_file_change(event)
+                        except Exception:
+                            logger.exception("Dashboard file-change hook failed")
                 await self._send({
-                    "type": MessageType.FILE_CHANGE,
-                    "event": event.event,
-                    "path": event.path,
+                    "type": MessageType.FILE_CHANGES,
+                    "changes": [event.to_dict() for event in events],
                 })
         except asyncio.CancelledError:
             pass

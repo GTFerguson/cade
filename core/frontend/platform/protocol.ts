@@ -51,7 +51,7 @@ export const MessageType = {
   FILE_DIFF: "file-diff",
   FILE_TREE: "file-tree",
   FILE_CHILDREN: "file-children",
-  FILE_CHANGE: "file-change",
+  FILE_CHANGES: "file-changes",
   FILE_CONTENT: "file-content",
   FILE_WRITTEN: "file-written",
   FILE_CREATED: "file-created",
