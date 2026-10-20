@@ -51,6 +51,14 @@ export class FileTree implements Component, PaneKeyHandler {
   private rootMenuHoldTimer: number | null = null;
   private static readonly ROOT_MENU_HOLD_MS = 220;
 
+  // The backend sends one file-change message per path, so a build or test
+  // run churning temp files delivers thousands at once. Re-rendering and
+  // refetching the tree per message saturated the webview's main thread, which
+  // also serves terminal input, so both are coalesced per burst.
+  private static readonly TREE_REFRESH_DEBOUNCE_MS = 250;
+  private treeRefreshTimer: number | null = null;
+  private renderTimer: number | null = null;
+
   // Lazy loading state
   private pendingLoads: Set<string> = new Set();
   private pendingLoadResolvers: Map<string, () => void> = new Map();
@@ -70,7 +78,6 @@ export class FileTree implements Component, PaneKeyHandler {
     },
     fileChange: (message: any) => {
       this.recentlyChanged.add(message.path);
-      this.render();
 
       // Clear existing timer for this path if any
       const existingTimer = this.recentlyChangedTimers.get(message.path);
@@ -82,12 +89,13 @@ export class FileTree implements Component, PaneKeyHandler {
       const timerId = window.setTimeout(() => {
         this.recentlyChanged.delete(message.path);
         this.recentlyChangedTimers.delete(message.path);
-        this.render();
+        this.scheduleRender();
       }, 2000);
 
       this.recentlyChangedTimers.set(message.path, timerId);
 
-      this.ws.requestTree(this.showIgnored, this._currentRoot ?? undefined);
+      // The refetched tree renders the highlight, so no render is needed here.
+      this.scheduleTreeRefresh();
     },
     connected: () => {
       this.ws.requestTree(this.showIgnored, this._currentRoot ?? undefined);
@@ -190,6 +198,24 @@ export class FileTree implements Component, PaneKeyHandler {
         console.error(`Error in ${event} handler:`, e);
       }
     });
+  }
+
+  private scheduleTreeRefresh(): void {
+    if (this.treeRefreshTimer != null) {
+      window.clearTimeout(this.treeRefreshTimer);
+    }
+    this.treeRefreshTimer = window.setTimeout(() => {
+      this.treeRefreshTimer = null;
+      this.ws.requestTree(this.showIgnored, this._currentRoot ?? undefined);
+    }, FileTree.TREE_REFRESH_DEBOUNCE_MS);
+  }
+
+  private scheduleRender(): void {
+    if (this.renderTimer != null) return;
+    this.renderTimer = window.setTimeout(() => {
+      this.renderTimer = null;
+      this.render();
+    }, 0);
   }
 
   /**
@@ -1265,6 +1291,15 @@ export class FileTree implements Component, PaneKeyHandler {
       window.clearTimeout(timerId);
     }
     this.recentlyChangedTimers.clear();
+
+    if (this.treeRefreshTimer != null) {
+      window.clearTimeout(this.treeRefreshTimer);
+      this.treeRefreshTimer = null;
+    }
+    if (this.renderTimer != null) {
+      window.clearTimeout(this.renderTimer);
+      this.renderTimer = null;
+    }
 
     // Clear search debounce timer
     if (this.searchDebounceTimer != null) {
