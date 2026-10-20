@@ -34,12 +34,16 @@ from backend.files.operations import create_file, write_file_content
 from backend.files.tree import (
     build_directory_children,
     build_file_tree_cached,
-    get_file_tree_cache,
     get_file_type,
     read_file_payload,
 )
-from core.backend.watcher import FileWatcher
 from backend.neovim.manager import get_neovim_manager
+from backend.project_services import (
+    ProjectListener,
+    ProjectServices,
+    acquire_project,
+    release_project,
+)
 from backend.protocol import ErrorCode, MessageType, SessionKey
 from core.backend.providers.config import (
     DEFAULT_CONTEXT_BUDGET_HARD_LIMIT,
@@ -60,8 +64,6 @@ from core.backend.models import FileChangeEvent
 
 if TYPE_CHECKING:
     from backend.config import Config
-    from backend.doc_index import DocIndexService
-    from backend.nkrdn_service import NkrdnService
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +126,14 @@ class ConnectionHandler:
         # in SET_PROJECT when a tab is primed from the Plans/Handoffs pane
         # (resumable handoff launch). None for an ordinary connection.
         self._initial_prompt: str | None = None
-        self._watcher: FileWatcher | None = None
+        # Watching and indexing are shared with other connections on the same
+        # directory; this connection only queues what it must forward.
+        self._project: ProjectServices | None = None
+        self._project_listener = ProjectListener(
+            on_file_change=self._queue_file_change,
+            on_graph_rebuilt=lambda: asyncio.create_task(self._emit_nkrdn_graph()),
+        )
+        self._file_changes: asyncio.Queue[FileChangeEvent] = asyncio.Queue()
         self._closed = False
         self._suppress_output = False
         self._suppress_start_time: float | None = None
@@ -141,8 +150,6 @@ class ConnectionHandler:
         # Display name the tab gave its session, for session listings.
         self._session_label: str | None = None
         self._user_config = None
-        self._doc_index: "DocIndexService | None" = None
-        self._nkrdn: "NkrdnService | None" = None
         self._chat_session: ChatSession | None = None
         self._chat_task: asyncio.Task | None = None
         self._compact_pending = False
@@ -240,7 +247,7 @@ class ConnectionHandler:
             from backend.memory.tool_executor import register_write_broadcast
             register_write_broadcast(self._connection_id, self._send)
 
-            watch_task = asyncio.create_task(self._watch_loop())
+            watch_task = asyncio.create_task(self._forward_file_changes())
 
             # For WSL sessions, run the network check + Claude start as a
             # background task so the WebSocket stays responsive
@@ -252,22 +259,6 @@ class ConnectionHandler:
                 and "wsl" in self._config.shell_command.lower()
             ):
                 deferred_task = asyncio.create_task(self._deferred_claude_start())
-
-            # Build doc-index in background on project open
-            doc_index_task: asyncio.Task | None = None
-            if self._doc_index is not None:
-                doc_index_task = asyncio.create_task(
-                    self._doc_index.initial_build()
-                )
-
-            # Build knowledge graph in background on project open;
-            # re-emit nkrdn-graph after build so the UI gets fresh data
-            nkrdn_task: asyncio.Task | None = None
-            if self._nkrdn is not None:
-                async def _build_then_emit() -> None:
-                    await self._nkrdn.initial_build()  # type: ignore[union-attr]
-                    await self._emit_nkrdn_graph()
-                nkrdn_task = asyncio.create_task(_build_then_emit())
 
             # Receive loop controls connection lifetime
             # PTY output and watch loops run as long-lived background tasks
@@ -281,16 +272,10 @@ class ConnectionHandler:
                 watch_task.cancel()
                 if deferred_task is not None:
                     deferred_task.cancel()
-                if doc_index_task is not None:
-                    doc_index_task.cancel()
-                if nkrdn_task is not None:
-                    nkrdn_task.cancel()
                 await asyncio.gather(
                     *self._output_tasks.values(),
                     watch_task,
                     *([] if deferred_task is None else [deferred_task]),
-                    *([] if doc_index_task is None else [doc_index_task]),
-                    *([] if nkrdn_task is None else [nkrdn_task]),
                     return_exceptions=True,
                 )
 
@@ -535,21 +520,9 @@ class ConnectionHandler:
                 # Captured only: the attach in _send_connected delivers it.
                 self._session.capture_output(dummy_output)
 
-        self._watcher = FileWatcher(
-            self._working_dir,
-            on_raw_change=lambda p: get_file_tree_cache().invalidate(p),
-        )
-
+        self._project = acquire_project(self._working_dir, self._project_listener)
         if not self._kiosk_mode:
-            from backend.doc_index import DOC_INDEX_AVAILABLE, DocIndexService
-            if DOC_INDEX_AVAILABLE:
-                self._doc_index = DocIndexService(self._working_dir)
-                self._watcher.on_change(self._doc_index.on_file_change)
-
-            from backend.nkrdn_service import NKRDN_AVAILABLE, NkrdnService
-            if NKRDN_AVAILABLE:
-                self._nkrdn = NkrdnService(self._working_dir, on_rebuild=self._emit_nkrdn_graph)
-                self._watcher.on_change(self._nkrdn.on_file_change)
+            self._project.enable_indexing()
 
         # Dashboard handler — watches .cade/dashboard.yml separately
         # (main watcher ignores .cade/ directory). If launch.yml specifies
@@ -582,7 +555,6 @@ class ConnectionHandler:
                 else None
             ),
         )
-        self._watcher.on_change(self._dashboard.on_data_source_file_change)
         self._dashboard.start_watching()
 
     @property
@@ -688,20 +660,12 @@ class ConnectionHandler:
             manager = get_neovim_manager()
             await manager.kill(self._session_id)
 
-        if self._doc_index is not None:
-            self._doc_index.cancel()
-            self._doc_index = None
-
-        if self._nkrdn is not None:
-            self._nkrdn.cancel()
-            self._nkrdn = None
-
         from backend.memory.tool_executor import unregister_write_broadcast
         unregister_write_broadcast(self._connection_id)
 
-        if self._watcher is not None:
-            self._watcher.stop()
-            self._watcher = None
+        if self._project is not None:
+            release_project(self._project, self._project_listener)
+            self._project = None
 
         if self._session is not None:
             self._session.connected_clients.discard(self._ws)
@@ -2481,50 +2445,33 @@ class ConnectionHandler:
         except Exception as e:
             logger.exception("Deferred Claude start failed: %s", e)
 
-    async def _watch_loop(self) -> None:
-        """Watch for file changes and notify client.
+    def _queue_file_change(self, event: FileChangeEvent) -> None:
+        if not self._closed:
+            self._file_changes.put_nowait(event)
 
-        Retries up to 3 times with exponential backoff if the watcher fails,
-        recreating it each time. The connection stays alive even if watching
-        is permanently lost.
+    async def _forward_file_changes(self) -> None:
+        """Send this connection's share of the project's file changes.
+
+        Runs per connection, apart from the shared watch loop, so a slow or
+        dead socket holds up only its own tab.
         """
-        max_retries = 3
-        for attempt in range(max_retries + 1):
-            if self._closed or self._watcher is None:
-                return
-
-            try:
-                async for event in self._watcher.watch():
-                    if self._closed:
-                        return
-                    await self._send({
-                        "type": MessageType.FILE_CHANGE,
-                        "event": event.event,
-                        "path": event.path,
-                    })
-                # Normal exit (stop event set) — don't retry
-                return
-            except asyncio.CancelledError:
-                return
-            except Exception as e:
-                if self._closed:
-                    return
-                if attempt < max_retries:
-                    backoff = 2 ** (attempt + 1)
-                    logger.warning(
-                        "Watch error (attempt %d/%d), retrying in %ds: %s",
-                        attempt + 1, max_retries, backoff, e,
-                    )
-                    await asyncio.sleep(backoff)
-                    self._watcher = FileWatcher(
-                        self._working_dir,
-                        on_raw_change=lambda p: get_file_tree_cache().invalidate(p),
-                    )
-                else:
-                    logger.warning(
-                        "File watcher failed after %d retries, disabling: %s",
-                        max_retries, e,
-                    )
+        try:
+            while not self._closed:
+                event = await self._file_changes.get()
+                if self._dashboard is not None:
+                    try:
+                        self._dashboard.on_data_source_file_change(event)
+                    except Exception:
+                        logger.exception("Dashboard file-change hook failed")
+                await self._send({
+                    "type": MessageType.FILE_CHANGE,
+                    "event": event.event,
+                    "path": event.path,
+                })
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.warning("Stopped forwarding file changes: %s", e)
 
 
 async def websocket_handler(websocket: WebSocket, config: "Config") -> None:

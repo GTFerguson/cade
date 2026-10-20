@@ -49,6 +49,15 @@ def _isolate_global_state(monkeypatch: pytest.MonkeyPatch) -> Generator[None, No
         ):
             setattr(mod, attr, None)
 
+        # Tests that drive a connection's ``_setup`` without ``_cleanup`` leave
+        # its directory registered; stop those watchers so they don't fan
+        # events into later tests.
+        import backend.project_services as project_services_mod
+
+        for services in list(project_services_mod._projects.values()):
+            services._stop()
+        project_services_mod._projects.clear()
+
 
 @pytest.fixture
 def temp_dir() -> Generator[Path, None, None]:

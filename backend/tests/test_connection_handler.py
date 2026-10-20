@@ -657,3 +657,50 @@ class TestCleanup:
                 await handler._cleanup()
 
         mock_pty.close.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# Shared project services
+# ---------------------------------------------------------------------------
+
+
+class TestSharedProjectServices:
+    """Tabs on one directory share a watcher and index services."""
+
+    async def _setup_handler(self, temp_dir: Path, session_id: str) -> ConnectionHandler:
+        handler = ConnectionHandler(make_mock_websocket(), make_mock_config(working_dir=temp_dir))
+        handler._session_id = session_id
+        session = PTYSession(id=session_id, project_path=temp_dir)
+        session.add_terminal(SessionKey.CLAUDE, make_mock_pty())
+        registry = AsyncMock(spec=SessionRegistry)
+        registry.get_or_create.return_value = (session, True)
+        with patch("backend.websocket.get_registry", return_value=registry):
+            with patch("backend.websocket.load_user_config") as user_config:
+                user_config.return_value = MagicMock()
+                user_config.return_value.behavior.session.network_timeout = 15.0
+                await handler._setup()
+        return handler
+
+    @pytest.mark.asyncio
+    async def test_two_tabs_share_services_until_both_close(self, temp_dir: Path):
+        from backend.project_services import _projects
+        from core.backend.models import FileChangeEvent
+
+        first = await self._setup_handler(temp_dir, "tab-1")
+        second = await self._setup_handler(temp_dir, "tab-2")
+        services = first._project
+        assert services is not None
+        assert second._project is services
+
+        services._dispatch(FileChangeEvent(event="modified", path="a.py"))
+        assert first._file_changes.get_nowait().path == "a.py"
+        assert second._file_changes.get_nowait().path == "a.py"
+
+        await first._cleanup()
+        assert _projects.get(services.root) is services
+        services._dispatch(FileChangeEvent(event="modified", path="b.py"))
+        assert first._file_changes.empty()
+        assert second._file_changes.get_nowait().path == "b.py"
+
+        await second._cleanup()
+        assert services.root not in _projects
