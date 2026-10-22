@@ -1,7 +1,7 @@
 ---
 title: WebSocket Protocol Reference
 created: 2026-02-25
-updated: 2026-10-14
+updated: 2026-10-22
 status: complete
 tags: [reference, protocol, websocket, api]
 ---
