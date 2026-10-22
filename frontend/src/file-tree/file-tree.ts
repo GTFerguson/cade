@@ -25,6 +25,11 @@ interface FlatNode {
   parentPath: string | null;
 }
 
+function dirnameOf(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash === -1 ? "" : path.slice(0, slash);
+}
+
 export class FileTree implements Component, PaneKeyHandler {
   private tree: FileNode[] = [];
   private expandedPaths: Set<string> = new Set();
@@ -101,7 +106,12 @@ export class FileTree implements Component, PaneKeyHandler {
       }
 
       // The refetched tree renders the highlight, so no render is needed here.
-      this.scheduleTreeRefresh();
+      const touchesTree = message.changes.some(({ path }) =>
+        this.changeTouchesVisibleTree(path)
+      );
+      if (touchesTree || this._currentRoot != null) {
+        this.scheduleTreeRefresh();
+      }
     },
     connected: () => {
       this.ws.requestTree(this.showIgnored, this._currentRoot ?? undefined);
@@ -204,6 +214,22 @@ export class FileTree implements Component, PaneKeyHandler {
         console.error(`Error in ${event} handler:`, e);
       }
     });
+  }
+
+  /**
+   * Whether a change at `path` can alter what the tree currently renders.
+   *
+   * Eval runs in a large project write thousands of files deep under a
+   * collapsed folder; nothing on screen changes, so refetching the tree in
+   * every open tab for each burst was pure cost. A change is visible when
+   * its folder's listing is open, or when its folder's own row is shown
+   * (the row's chevron reflects whether the folder has children).
+   */
+  private changeTouchesVisibleTree(path: string): boolean {
+    const parent = dirnameOf(path);
+    if (parent === "" || this.expandedPaths.has(parent)) return true;
+    const grandparent = dirnameOf(parent);
+    return grandparent === "" || this.expandedPaths.has(grandparent);
   }
 
   private scheduleTreeRefresh(): void {

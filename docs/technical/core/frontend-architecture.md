@@ -218,7 +218,7 @@ The file tree maintains navigation and search state internally. A pure state mac
 | Event | Action |
 |-------|--------|
 | `file-tree` | Updates tree data and re-renders |
-| `file-changes` | Highlights changed files for 2s; one tree refetch 250ms after the last message, so a stream of changes costs one refetch |
+| `file-changes` | Highlights changed files for 2s; one tree refetch 250ms after the last message, so a stream of changes costs one refetch. Bursts whose paths all lie under collapsed folders (where nothing rendered can change, chevrons included) skip the refetch entirely |
 
 ### MarkdownViewer (`markdown.ts`)
 

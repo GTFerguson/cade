@@ -85,6 +85,28 @@ describe("FileTree file-change handling", () => {
     expect(ws.requestTree).toHaveBeenCalledTimes(1);
   });
 
+  // Eval runs in a big project write deep under a collapsed output/ folder.
+  // Nothing the tree renders changes, so every tab refetching is pure cost.
+  it("skips the refetch when no change is under an open folder", () => {
+    emit("file-changes", change("output/run/sub/scores.json"));
+    vi.runOnlyPendingTimers();
+    expect(ws.requestTree).not.toHaveBeenCalled();
+  });
+
+  it("refetches for a change in an open folder", () => {
+    tree.setExpandedPaths(["output"]);
+    emit("file-changes", change("output/new.txt"));
+    vi.runOnlyPendingTimers();
+    expect(ws.requestTree).toHaveBeenCalledTimes(1);
+  });
+
+  it("refetches for a change that can give a shown folder its chevron", () => {
+    tree.setExpandedPaths(["output"]);
+    emit("file-changes", change("output/run/first.txt"));
+    vi.runOnlyPendingTimers();
+    expect(ws.requestTree).toHaveBeenCalledTimes(1);
+  });
+
   it("does not refetch after dispose", () => {
     emit("file-changes", change("a.txt"));
     tree.dispose();

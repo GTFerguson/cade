@@ -479,6 +479,27 @@ def get_file_type(path: str) -> str:
     return type_map.get(ext, "plaintext")
 
 
+def _is_within(path: Path, ancestor: Path) -> bool:
+    try:
+        path.relative_to(ancestor)
+    except ValueError:
+        return False
+    return True
+
+
+def _tree_can_show(root: Path, max_depth: int, changed_path: Path) -> bool:
+    """Whether a tree of `max_depth` under `root` can reflect `changed_path`.
+
+    Entries down to max_depth are listed, and a directory on that level peeks
+    one level further to set its has_more flag.
+    """
+    try:
+        rel = changed_path.relative_to(root)
+    except ValueError:
+        return False
+    return len(rel.parts) - 1 <= max_depth + 1
+
+
 class FileTreeCache:
     """Cache for file tree structures with invalidation support."""
 
@@ -511,56 +532,39 @@ class FileTreeCache:
         return tree
 
     def invalidate(self, changed_path: Path) -> None:
-        """
-        Invalidate cache entries affected by a file system change.
+        """Drop the cached trees a file system change could have altered.
 
-        Strategy:
-        - If change is to a directory, invalidate that directory and all parents
-        - If change is to a file, invalidate parent directory and all its parents
-        - This ensures tree structure stays consistent
+        A change invalidates a tree when it lies within the levels that tree
+        shows, or when the tree is rooted inside the changed directory. A
+        change deeper than a tree shows leaves it alone: eval runs in a large
+        project write thousands of files well below the two levels the file
+        pane fetches, and rebuilding every tab's tree for each was pure cost.
         """
         with self._lock:
-            paths_to_invalidate: set[Path] = set()
+            if not self._cache:
+                return
 
-            # Resolve the changed path
             try:
                 changed_path = changed_path.resolve()
             except (OSError, RuntimeError):
-                # Path may not exist anymore (deleted), invalidate all
                 logger.warning(
                     f"Cannot resolve changed path {changed_path}, clearing entire cache"
                 )
                 self._cache.clear()
                 return
 
-            # Determine invalidation root
             if changed_path.is_dir():
                 invalidation_root = changed_path
             else:
-                # For files, invalidate parent directory
                 invalidation_root = changed_path.parent
 
-            # Find all cached roots that are ancestors of or descendants of the change
             for cache_key in list(self._cache.keys()):
-                cached_root = cache_key[0]
-                try:
-                    # Is cached_root an ancestor of the change?
-                    changed_path.relative_to(cached_root)
-                    paths_to_invalidate.add(cache_key)
-                except ValueError:
-                    pass
-
-                try:
-                    # Is cached_root a descendant of the change?
-                    cached_root.relative_to(invalidation_root)
-                    paths_to_invalidate.add(cache_key)
-                except ValueError:
-                    pass
-
-            # Invalidate collected paths
-            for cache_key in paths_to_invalidate:
-                del self._cache[cache_key]
-                logger.debug(f"Invalidated file tree cache: {cache_key[0]}")
+                cached_root, max_depth, _ = cache_key
+                if _tree_can_show(cached_root, max_depth, changed_path) or _is_within(
+                    cached_root, invalidation_root
+                ):
+                    del self._cache[cache_key]
+                    logger.debug(f"Invalidated file tree cache: {cached_root}")
 
     def clear(self) -> None:
         """Clear entire cache."""
