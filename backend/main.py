@@ -2,6 +2,16 @@
 
 from __future__ import annotations
 
+import sys
+
+# The packaged binary launches one file-watch worker per open project as
+# `cade-backend watch <dir>`. Dispatching before the server imports keeps each
+# worker a few megabytes instead of loading FastAPI and the whole backend.
+if len(sys.argv) > 1 and sys.argv[1] == "watch":
+    from backend.watch_worker import main as _watch_main
+
+    sys.exit(_watch_main(sys.argv[2:]))
+
 import argparse
 import logging
 import os

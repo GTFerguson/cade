@@ -1,7 +1,7 @@
 ---
 title: CADE Component Inventory
 created: 2026-04-24
-updated: 2026-10-20
+updated: 2026-10-22
 status: active
 tags: [architecture, components, inventory]
 ---
@@ -41,20 +41,22 @@ Full inventory of every significant component in CADE, with location, responsibi
 |-------|-------|
 | File | `backend/project_services.py` |
 | Entry | `acquire_project(root, listener)` / `release_project(services, listener)` |
-| Responsibility | Owns the `FileWatcher`, `DocIndexService` and `NkrdnService` for one resolved directory, shared by every connection open on it |
+| Responsibility | Owns the `WatchProcess`, `DocIndexService` and `NkrdnService` for one resolved directory, shared by every connection open on it |
 
 Each tab is its own WebSocket connection, and several tabs are often open on one project. When each connection ran its own watcher and index services, a burst of file changes was processed once per tab and every code edit started one nkrdn rebuild per tab. Connections now register a `ProjectListener` with the directory's single `ProjectServices`; the first registration starts the watcher and the last release stops it and cancels pending rebuilds.
 
 **How it works:**
 
-- The watch loop reads `FileWatcher.watch_batches()`, so a debounced burst moves through the system as one list. Each burst goes to the index services per event (they debounce their own rebuilds) and to every listener as a whole.
+- The watch loop reads `WatchProcess.watch_batches()`, so a debounced burst moves through the system as one list. Each burst goes to the index services per event (they debounce their own rebuilds) and to every listener as a whole.
 - Listener callbacks are synchronous and only enqueue. Each `ConnectionHandler` drains its own queue in `_forward_file_changes()`, so a slow or dead socket delays only its own tab, and a listener that raises is logged without stopping the others.
 - `enable_indexing()` creates the index services and runs their initial builds once, on the first non-kiosk connection. Later tabs reuse the result and receive the current graph on connect. A directory opened only in kiosk mode is watched but not indexed.
-- Watcher failures are retried with exponential backoff (2s, 4s, 8s) by recreating the watcher; after that, watching stays off and tabs stop receiving live updates.
+- Watcher failures (including a worker that exits on its own) are retried with exponential backoff (2s, 4s, 8s) by recreating the watcher; after that, watching stays off and tabs stop receiving live updates.
+
+**Why the watcher is a separate process:** watchfiles registers a recursive inotify watch inside its Rust constructor while holding the GIL, and registration walks every entry under the root. On a project with a few hundred thousand files that is about seven seconds with a warm cache, during which the whole backend was frozen and every tab's terminal stopped; running the constructor on a thread does not help because of the GIL. `WatchProcess` (`backend/watch_process.py`) launches `backend/watch_worker.py` as a child process, one per open project, which runs the in-process `FileWatcher` and streams each burst back as a JSON line on stdout. The child is driven with a plain `Popen` and blocking reads on worker threads rather than asyncio's subprocess transport, because cancelling a task while that transport is still connecting its pipes leaves the event loop unable to close on CPython 3.12. The worker stops when its stdin closes, so a backend that dies takes its workers with it. The packaged binary exposes it as `cade-backend watch <dir>`, dispatched at the top of `backend/main.py` before the server imports so each worker stays small.
 
 **Boundaries:** `DashboardHandler` stays per connection, because each tab may show a different dashboard file. Opening a second tab no longer re-runs the initial nkrdn build; the directory is already being watched, so the graph is current.
 
-**Depends on:** `FileWatcher`, `DocIndexService`, `NkrdnService`, file-tree cache (invalidated on each raw change)
+**Depends on:** `WatchProcess` (wrapping `FileWatcher` in a child process), `DocIndexService`, `NkrdnService`, file-tree cache (invalidated for each changed path that lies within the levels a cached tree shows)
 
 **Depended on by:** `ConnectionHandler`
 
@@ -390,6 +392,7 @@ Components extend `BaseDashboardComponent` and receive `{ panel, data, allData, 
 | `ChatSession` | `core/backend/chat/session.py` | In-memory history registry keyed by session ID |
 | `DashboardConfig` | `core/backend/dashboard/config.py` | YAML schema for dashboard configuration |
 | `FileWatcher` | `core/backend/watcher.py` | Debounced file change notifications via watchfiles; `watch_batches()` yields each burst as a list, `watch()` yields single events |
+| `WatchProcess` | `backend/watch_process.py` | Same surface as `FileWatcher`, but runs it in a `backend/watch_worker.py` child process so registering watches on a huge tree cannot stall the backend |
 
 ---
 

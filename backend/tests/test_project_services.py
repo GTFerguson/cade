@@ -18,7 +18,7 @@ from core.backend.models import FileChangeEvent
 
 
 class FakeWatcher:
-    """Stands in for FileWatcher; events are pushed in by the test."""
+    """Stands in for WatchProcess; events are pushed in by the test."""
 
     instances: list[FakeWatcher] = []
 
@@ -82,7 +82,7 @@ class Recorder:
 def fakes(monkeypatch):
     FakeWatcher.instances.clear()
     FakeIndexService.instances.clear()
-    monkeypatch.setattr(ps, "FileWatcher", FakeWatcher)
+    monkeypatch.setattr(ps, "WatchProcess", FakeWatcher)
     import backend.doc_index as doc_index
     import backend.nkrdn_service as nkrdn_service
     monkeypatch.setattr(doc_index, "DOC_INDEX_AVAILABLE", True)
@@ -250,13 +250,13 @@ async def test_failing_listener_does_not_starve_the_others(tmp_path):
 
 
 async def test_real_watcher_delivers_one_change_to_every_connection(tmp_path, monkeypatch):
-    from core.backend.watcher import FileWatcher as RealWatcher
-    monkeypatch.setattr(ps, "FileWatcher", RealWatcher)
+    from backend.watch_process import WatchProcess as RealWatcher
+    monkeypatch.setattr(ps, "WatchProcess", RealWatcher)
 
     a, b = Recorder(), Recorder()
     services = acquire_project(tmp_path, a.listener)
     acquire_project(tmp_path, b.listener)
-    await asyncio.sleep(0.2)  # let inotify register before writing
+    await asyncio.sleep(1.0)  # let the worker start and inotify register
 
     (tmp_path / "hello.txt").write_text("hi")
     for _ in range(100):

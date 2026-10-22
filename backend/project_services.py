@@ -18,8 +18,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from backend.files.tree import get_file_tree_cache
+from backend.watch_process import WatchProcess
 from core.backend.models import FileChangeEvent
-from core.backend.watcher import FileWatcher
 
 if TYPE_CHECKING:
     from backend.doc_index import DocIndexService
@@ -44,12 +44,16 @@ class ProjectListener:
 
 
 class ProjectServices:
-    """File watching and indexing for one directory, fanned out to listeners."""
+    """File watching and indexing for one directory, fanned out to listeners.
+
+    The watcher runs in a child process (see backend.watch_worker), so
+    opening a very large project costs the backend's event loop nothing.
+    """
 
     def __init__(self, root: Path) -> None:
         self.root = root
         self._listeners: list[ProjectListener] = []
-        self._watcher: FileWatcher | None = None
+        self._watcher: WatchProcess | None = None
         self._watch_task: asyncio.Task | None = None
         self._doc_index: DocIndexService | None = None
         self._nkrdn: NkrdnService | None = None
@@ -60,8 +64,8 @@ class ProjectServices:
         self._watcher = self._new_watcher()
         self._watch_task = asyncio.create_task(self._watch_loop())
 
-    def _new_watcher(self) -> FileWatcher:
-        return FileWatcher(
+    def _new_watcher(self) -> WatchProcess:
+        return WatchProcess(
             self.root,
             on_raw_change=lambda p: get_file_tree_cache().invalidate(p),
         )
