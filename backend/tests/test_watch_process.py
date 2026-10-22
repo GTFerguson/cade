@@ -101,3 +101,18 @@ def test_worker_rejects_a_missing_directory(tmp_path: Path):
         timeout=10,
     )
     assert result.returncode == 2
+
+
+async def test_created_entries_say_whether_they_are_directories(tmp_path: Path):
+    watcher = WatchProcess(tmp_path)
+
+    async def write() -> None:
+        await asyncio.sleep(1.0)
+        (tmp_path / "pkg").mkdir()
+        (tmp_path / "a.txt").write_text("x")
+
+    batch = await _first_batch(watcher, write)
+    watcher.stop()
+
+    kinds = {e.path: e.is_dir for e in batch}
+    assert kinds == {"pkg": True, "a.txt": False}

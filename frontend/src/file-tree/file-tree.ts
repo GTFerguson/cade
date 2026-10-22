@@ -6,6 +6,7 @@ import type { PaneKeyHandler } from "../input/keybindings";
 import type {
   Component,
   EventHandler,
+  FileChange,
   FileChangesMessage,
   FileChildrenMessage,
   FileNode,
@@ -28,6 +29,14 @@ interface FlatNode {
 function dirnameOf(path: string): string {
   const slash = path.lastIndexOf("/");
   return slash === -1 ? "" : path.slice(0, slash);
+}
+
+/** Same order the backend lists entries in: directories first, then by name. */
+function compareNodes(a: FileNode, b: FileNode): number {
+  if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
+  const an = a.name.toLowerCase();
+  const bn = b.name.toLowerCase();
+  return an < bn ? -1 : an > bn ? 1 : 0;
 }
 
 export class FileTree implements Component, PaneKeyHandler {
@@ -105,12 +114,17 @@ export class FileTree implements Component, PaneKeyHandler {
         this.recentlyChangedTimers.set(path, timerId);
       }
 
-      // The refetched tree renders the highlight, so no render is needed here.
+      if (this._currentRoot != null) {
+        // Change paths are relative to the project root, not the extra root
+        // on show, so the tree cannot be patched; refetch it instead.
+        this.scheduleTreeRefresh();
+        return;
+      }
       const touchesTree = message.changes.some(({ path }) =>
         this.changeTouchesVisibleTree(path)
       );
-      if (touchesTree || this._currentRoot != null) {
-        this.scheduleTreeRefresh();
+      if (this.applyFileChanges(message.changes) || touchesTree) {
+        this.scheduleRender();
       }
     },
     connected: () => {
@@ -214,6 +228,92 @@ export class FileTree implements Component, PaneKeyHandler {
         console.error(`Error in ${event} handler:`, e);
       }
     });
+  }
+
+  /**
+   * Patch the in-memory tree from a burst of change events.
+   *
+   * Refetching the tree for every change meant a directory walk on the
+   * backend, a full re-render, and one more fetch per expanded folder below
+   * the preloaded depth, in every tab, for a single saved file. The events
+   * already say what was created or deleted, so the tree is edited in place
+   * and only the cases the events cannot describe fall back to a fetch: a
+   * directory that arrives with contents gets a chevron and loads on expand.
+   *
+   * Returns whether the tree's structure changed.
+   */
+  private applyFileChanges(changes: FileChange[]): boolean {
+    const byDepth = (a: FileChange, b: FileChange) =>
+      a.path.split("/").length - b.path.split("/").length;
+    // A burst is unordered, so parents go in before their children and
+    // children come out before their parents.
+    const created = changes.filter((c) => c.event === "created").sort(byDepth);
+    const deleted = changes.filter((c) => c.event === "deleted").sort(byDepth).reverse();
+
+    let changed = false;
+    for (const change of created) {
+      if (this.insertNode(change)) changed = true;
+    }
+    for (const change of deleted) {
+      if (this.removeNode(change.path)) changed = true;
+    }
+    return changed;
+  }
+
+  private insertNode(change: FileChange): boolean {
+    if (!this.showIgnored && change.ignored) return false;
+    const parentPath = dirnameOf(change.path);
+    const parent = parentPath === "" ? null : this.findNodeByPath(parentPath);
+    if (parentPath !== "" && (parent === null || parent.type !== "directory")) return false;
+
+    let siblings = parent === null ? this.tree : parent.children;
+    if (parent !== null && !siblings) {
+      if (this.expandedPaths.has(parent.path)) {
+        // An open folder with nothing loaded is an empty one; it now has an entry.
+        siblings = parent.children = [];
+      } else {
+        // The folder's contents are not loaded. It now has at least one entry,
+        // which is all its collapsed row shows.
+        if (parent.hasMore) return false;
+        parent.hasMore = true;
+        return true;
+      }
+    }
+    if (siblings!.some((n) => n.path === change.path)) return false;
+
+    const node: FileNode = {
+      name: change.path.slice(parentPath === "" ? 0 : parentPath.length + 1),
+      path: change.path,
+      type: change.isDir ? "directory" : "file",
+    };
+    // A directory can arrive with contents already inside it (a move, a
+    // checkout), which the events do not describe; it loads on expand.
+    if (node.type === "directory") node.hasMore = true;
+
+    const index = siblings!.findIndex((n) => compareNodes(node, n) < 0);
+    siblings!.splice(index === -1 ? siblings!.length : index, 0, node);
+    return true;
+  }
+
+  private removeNode(path: string): boolean {
+    const parentPath = dirnameOf(path);
+    const parent = parentPath === "" ? null : this.findNodeByPath(parentPath);
+    const siblings = parent === null ? this.tree : parent?.children;
+    if (!siblings) return false;
+    const index = siblings.findIndex((n) => n.path === path);
+    if (index === -1) return false;
+    siblings.splice(index, 1);
+    if (parent !== null && siblings.length === 0) {
+      delete parent.children;
+      parent.hasMore = false;
+    }
+    const prefix = path + "/";
+    for (const set of [this.expandedPaths, this.pendingLoads]) {
+      for (const p of Array.from(set)) {
+        if (p === path || p.startsWith(prefix)) set.delete(p);
+      }
+    }
+    return true;
   }
 
   /**

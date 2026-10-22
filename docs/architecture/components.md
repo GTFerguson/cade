@@ -56,6 +56,8 @@ Each tab is its own WebSocket connection, and several tabs are often open on one
 
 **Boundaries:** `DashboardHandler` stays per connection, because each tab may show a different dashboard file. Opening a second tab no longer re-runs the initial nkrdn build; the directory is already being watched, so the graph is current.
 
+- Before fan-out, each event is tagged with whether the root `.gitignore` hides its path (`gitignore_matcher`, one `.gitignore` read per burst), and the worker has already recorded whether a created path is a directory. Tabs patch their file trees from these events instead of refetching them, so the message has to carry what a client cannot find out for itself.
+
 **Depends on:** `WatchProcess` (wrapping `FileWatcher` in a child process), `DocIndexService`, `NkrdnService`, file-tree cache (invalidated for each changed path that lies within the levels a cached tree shows)
 
 **Depended on by:** `ConnectionHandler`

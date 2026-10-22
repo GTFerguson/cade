@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from backend.files.tree import get_file_tree_cache
+from backend.files.tree import get_file_tree_cache, gitignore_matcher
 from backend.watch_process import WatchProcess
 from core.backend.models import FileChangeEvent
 
@@ -107,6 +107,11 @@ class ProjectServices:
                 logger.exception("Graph-rebuilt listener failed for %s", self.root)
 
     def _dispatch(self, batch: list[FileChangeEvent]) -> None:
+        # Tabs patch their trees from these events rather than refetching, and
+        # a tab hiding ignored files needs to know which entries to skip.
+        is_ignored = gitignore_matcher(self.root)
+        for event in batch:
+            event.ignored = is_ignored(event.path)
         for service in (self._doc_index, self._nkrdn):
             if service is None:
                 continue

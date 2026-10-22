@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import base64
+import fnmatch
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from threading import Lock
 
@@ -115,8 +117,32 @@ def _matches_gitignore(path: Path, root: Path, patterns: set[str]) -> bool:
             return True
         if "/" not in pattern and name == pattern:
             return True
+        if "*" in pattern and fnmatch.fnmatch(rel_str if "/" in pattern else name, pattern):
+            return True
 
     return False
+
+
+def gitignore_matcher(root: Path) -> Callable[[str], bool]:
+    """Return a predicate telling whether a root-relative path is gitignored.
+
+    Reads the root .gitignore once, so a burst of change events costs one
+    file read however many paths it holds.
+    """
+    patterns = _load_gitignore(root)
+    if not patterns:
+        return lambda _rel_path: False
+
+    def is_ignored(rel_path: str) -> bool:
+        # An entry inside an ignored directory is ignored too; the tree
+        # builder never descends into one, but an event names the leaf.
+        parts = rel_path.split("/")
+        return any(
+            _matches_gitignore(root / "/".join(parts[: i + 1]), root, patterns)
+            for i in range(len(parts))
+        )
+
+    return is_ignored
 
 
 def build_file_tree(

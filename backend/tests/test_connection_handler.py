@@ -727,7 +727,9 @@ class TestSharedProjectServices:
         changes = [m for m in sent if m["type"] == MessageType.FILE_CHANGES]
         assert len(changes) == 1
         assert len(changes[0]["changes"]) == 300
-        assert changes[0]["changes"][0] == {"event": "created", "path": "tmp0/0"}
+        assert changes[0]["changes"][0] == {
+            "event": "created", "path": "tmp0/0", "isDir": None, "ignored": False,
+        }
 
         forward.cancel()
         await handler._cleanup()

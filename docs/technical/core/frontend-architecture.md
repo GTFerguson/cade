@@ -218,7 +218,7 @@ The file tree maintains navigation and search state internally. A pure state mac
 | Event | Action |
 |-------|--------|
 | `file-tree` | Updates tree data and re-renders |
-| `file-changes` | Highlights changed files for 2s; one tree refetch 250ms after the last message, so a stream of changes costs one refetch. Bursts whose paths all lie under collapsed folders (where nothing rendered can change, chevrons included) skip the refetch entirely |
+| `file-changes` | Highlights changed files for 2s and patches the in-memory tree in place: created entries are inserted in sort order (directories first), deleted ones removed, a folder whose contents are not loaded gains a chevron when something lands in it, and a created directory loads on expand because it may already hold contents the events do not describe. One render per burst, no refetch; the tree is only refetched on connect, on the ignored-files toggle, on a manual refresh, or while an extra root is on show (change paths are relative to the project root). Bursts under collapsed folders cost nothing |
 
 ### MarkdownViewer (`markdown.ts`)
 

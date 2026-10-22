@@ -64,15 +64,20 @@ class FakeIndexService:
 class Recorder:
     def __init__(self) -> None:
         self.batches: list[list[str]] = []
+        self.batches_raw: list[list[FileChangeEvent]] = []
         self.graph_rebuilds = 0
         self.listener = ProjectListener(
-            on_file_changes=lambda batch: self.batches.append([e.path for e in batch]),
+            on_file_changes=self._on_batch,
             on_graph_rebuilt=self._graph,
         )
 
     @property
     def paths(self) -> list[str]:
         return [p for batch in self.batches for p in batch]
+
+    def _on_batch(self, batch: list[FileChangeEvent]) -> None:
+        self.batches.append([e.path for e in batch])
+        self.batches_raw.append(batch)
 
     def _graph(self) -> None:
         self.graph_rebuilds += 1
@@ -268,3 +273,15 @@ async def test_real_watcher_delivers_one_change_to_every_connection(tmp_path, mo
 
     release_project(services, a.listener)
     release_project(services, b.listener)
+
+
+async def test_events_are_tagged_with_gitignore_status_before_fan_out(tmp_path):
+    (tmp_path / ".gitignore").write_text("*.log\nbuild/\n")
+    rec = Recorder()
+    services = acquire_project(tmp_path, rec.listener)
+    FakeWatcher.instances[0].push("app.log", "build/out.o", "src/main.py")
+    await settle()
+    release_project(services, rec.listener)
+
+    ignored = {e.path: e.ignored for b in rec.batches_raw for e in b}
+    assert ignored == {"app.log": True, "build/out.o": True, "src/main.py": False}

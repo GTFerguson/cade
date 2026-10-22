@@ -21,6 +21,7 @@ import sys
 import threading
 from pathlib import Path
 
+from core.backend.models import FileChangeEvent
 from core.backend.watcher import FileWatcher
 
 
@@ -35,12 +36,24 @@ def _stop_when_stdin_closes(loop: asyncio.AbstractEventLoop, watcher: FileWatche
     threading.Thread(target=wait_for_eof, name="stdin-eof", daemon=True).start()
 
 
+def _is_dir(root: Path, event: FileChangeEvent) -> bool | None:
+    """Stat here, in the worker, so the backend never touches the disk per event."""
+    if event.event == "deleted":
+        return None
+    try:
+        return (root / event.path).is_dir()
+    except OSError:
+        return None
+
+
 async def _run(root: Path) -> None:
     watcher = FileWatcher(root)
     _stop_when_stdin_closes(asyncio.get_running_loop(), watcher)
     out = sys.stdout.buffer
     async for batch in watcher.watch_batches():
-        line = json.dumps([{"event": e.event, "path": e.path} for e in batch])
+        line = json.dumps([
+            {"event": e.event, "path": e.path, "is_dir": _is_dir(root, e)} for e in batch
+        ])
         out.write(line.encode("utf-8") + b"\n")
         out.flush()
 

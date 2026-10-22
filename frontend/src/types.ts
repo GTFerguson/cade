@@ -273,6 +273,10 @@ export interface FileChildrenMessage extends BaseMessage {
 export interface FileChange {
   event: "created" | "modified" | "deleted";
   path: string;
+  /** Directory or file; null when the backend could not tell (deleted paths). */
+  isDir?: boolean | null;
+  /** Hidden by the project's .gitignore. */
+  ignored?: boolean;
 }
 
 /**
