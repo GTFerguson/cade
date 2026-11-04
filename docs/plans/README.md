@@ -1,7 +1,7 @@
 ---
 title: Plans
 created: 2026-03-24
-updated: 2026-10-14
+updated: 2026-11-04
 status: active
 tags: [index, plans]
 ---
@@ -22,6 +22,7 @@ Intent before code exists. Plans are ephemeral — once the work ships and desig
 | [[dashboard/agent-ui-system]] | partially-shipped | Phases 2–4; missing components |
 | [[permissions/dynamic-permission-management]] | planning | All phases (foundation ready) |
 | [[remote-access-overhaul]] | partially-shipped | Phases 1–4 shipped and graduated; device measurement, chat parity, QR, topology decision |
+| [[infrastructure/seamless-upgrade]] | planning | All phases: in-place backend exec that keeps PTYs alive across an upgrade |
 
 ## Deferred
 

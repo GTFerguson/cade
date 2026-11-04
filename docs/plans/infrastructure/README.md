@@ -1,7 +1,7 @@
 ---
 title: Infrastructure
 created: 2026-04-23
-updated: 2026-04-24
+updated: 2026-11-04
 status: active
 tags: [index, plans, infrastructure]
 ---
@@ -17,3 +17,4 @@ Provider system, tooling, and platform integration implementation notes. Work in
 | [[tool-support-and-failover]] | APIProvider tool loop, FailoverProvider, MCP adapters, agent spawning |
 | [[neovim-packaging]] | Persistent Neovim instance manager |
 | [[phase3-context-ui]] | Phase 3: context budget UI, permissions, orchestration |
+| [[seamless-upgrade]] | Upgrade the backend without killing sessions: exec in place, PTY and listener fds inherited, state in a handoff manifest |
