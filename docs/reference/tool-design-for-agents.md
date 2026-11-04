@@ -179,6 +179,7 @@ A survey of AI agent protocols identifies MCP as the leading context-oriented pr
 MCP introduces unique security challenges (Hou et al., 2025; SMCP, 2026):
 
 **Threat taxonomy:**
+
 | Category | Threats |
 |----------|--------|
 | Malicious developers | Namespace typosquatting, tool poisoning, rug pulls |
