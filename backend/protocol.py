@@ -53,6 +53,7 @@ class MessageType:
     PLANS_LIST = "plans-list"  # Plans/handoffs index: { type, root, plans: [...], handoffs: [...] }
     ERROR = "error"  # Error message: { type, code: str, message: str }
     CONNECTED = "connected"  # Connection established: { type, working_dir: str }
+    UPGRADING = "upgrading"  # Backend is about to exec a new build; reconnect shortly: { type }
     SESSION_RESTORED = "session-restored"  # Cold attach: { type, sessionId: str, scrollback: str, sessionKey?: str, seq: int }
     STARTUP_STATUS = "startup-status"  # Startup progress: { type, message: str }
     PTY_EXITED = "pty-exited"  # PTY process exited: { type, code: str, message: str, sessionKey?: str }

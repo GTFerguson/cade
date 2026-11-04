@@ -49,7 +49,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import uvicorn
-from fastapi import Cookie, FastAPI, Request, WebSocket
+from fastapi import Cookie, FastAPI, Header, Request, WebSocket
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from pydantic import BaseModel
@@ -62,6 +62,8 @@ from backend.connection_registry import get_connection_registry
 from backend.files.tree import build_file_payload
 from backend.protocol import MessageType
 from backend.terminal.sessions import get_registry
+from backend import upgrade as upgrade_mod
+from core.backend.chat.session import get_chat_registry
 from backend.websocket import websocket_handler
 from backend.cc_session_resolver import resolve_slug_to_project
 from backend.claude_profiles import is_plan_file
@@ -282,6 +284,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     registry = get_registry()
     await registry.start()
+
+    # An in-place upgrade (backend.upgrade) started this image with the
+    # previous one's sessions described in a manifest and their PTYs open
+    # on inherited descriptors. Adopt them before any tab reconnects.
+    handoff = upgrade_mod.take_pending_manifest()
+    if handoff is not None:
+        try:
+            adopted = upgrade_mod.import_sessions(handoff, registry)
+            get_chat_registry().adopt(handoff.chat)
+            logger.info("Resumed %d session(s) from the previous build", adopted)
+        except Exception:
+            logger.exception("Could not adopt sessions from the upgrade handoff")
+        upgrade_mod.remove_old_extraction(handoff)
+        upgrade_mod.discard_manifest_file()
 
     # Run WSL-dependent startup tasks in the background so the HTTP server
     # starts accepting connections immediately. These tasks involve multiple
@@ -827,6 +843,64 @@ def create_app(config: Config | None = None) -> FastAPI:
         return JSONResponse({
             "sessions": describe_sessions(get_registry(), cfg.cli_agent.adapter_id),
         })
+
+    # --- In-place upgrade (backend.upgrade) ---
+
+    def _upgrade_authorised(cade_session: str | None, authorization: str | None) -> bool:
+        cfg = get_config()
+        if not cfg.auth_enabled:
+            return True
+        if validate_session_cookie(cade_session or "", cfg):
+            return True
+        bearer = (authorization or "").removeprefix("Bearer ").strip()
+        return validate_token(bearer, cfg)
+
+    @app.get("/api/upgrade")
+    async def upgrade_status(
+        cade_session: str | None = Cookie(default=None),
+        authorization: str | None = Header(default=None),
+    ) -> JSONResponse:
+        """Whether an upgrade is pending, and the running build's id."""
+        if not _upgrade_authorised(cade_session, authorization):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        return JSONResponse(upgrade_mod.get_coordinator().status.to_dict())
+
+    @app.post("/api/upgrade")
+    async def upgrade_request(
+        request: Request,
+        cade_session: str | None = Cookie(default=None),
+        authorization: str | None = Header(default=None),
+    ) -> JSONResponse:
+        """Queue an in-place upgrade to the installed binary.
+
+        Body (optional JSON): ``executable`` to exec instead of our own
+        path, ``now`` to skip waiting for idle. Sessions survive: the
+        process execs the new build with its PTYs inherited.
+        """
+        if not _upgrade_authorised(cade_session, authorization):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if not isinstance(body, dict):
+            body = {}
+        try:
+            status = await upgrade_mod.get_coordinator().request(
+                body.get("executable"), now=bool(body.get("now", False)),
+            )
+        except upgrade_mod.UpgradeError as e:
+            return JSONResponse({"error": str(e)}, status_code=409)
+        return JSONResponse(status.to_dict())
+
+    @app.delete("/api/upgrade")
+    async def upgrade_cancel(
+        cade_session: str | None = Cookie(default=None),
+        authorization: str | None = Header(default=None),
+    ) -> JSONResponse:
+        if not _upgrade_authorised(cade_session, authorization):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        return JSONResponse(upgrade_mod.get_coordinator().cancel().to_dict())
 
     # --- Orchestrator API ---
 
@@ -1463,6 +1537,12 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
+    parser.add_argument(
+        "--version",
+        action="store_true",
+        help="Print the version and build id, then exit",
+    )
+
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Serve command (default)
@@ -1517,6 +1597,39 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Show fake Claude UI for development",
     )
+    # Set by backend.upgrade when this image replaces the previous one.
+    serve_parser.add_argument(
+        upgrade_mod.RESUME_FLAG,
+        dest="resume_handoff",
+        type=str,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+
+    # Upgrade command: ask the running backend to exec the installed build
+    upgrade_parser = subparsers.add_parser(
+        "upgrade",
+        help="Switch the running backend to the installed build without ending its sessions",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    upgrade_parser.add_argument(
+        "--exe",
+        type=str,
+        default=None,
+        help="Binary to switch to (default: the running backend's own path)",
+    )
+    upgrade_parser.add_argument(
+        "--now",
+        action="store_true",
+        help="Do not wait for chat responses to finish",
+    )
+    upgrade_parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Show the upgrade state and exit",
+    )
+    upgrade_parser.add_argument("--port", type=int, default=None, help="Backend port (default: ~/.cade/port)")
+    upgrade_parser.add_argument("--host", type=str, default=None, help="Backend host (default: ~/.cade/host)")
 
     # View command
     view_parser = subparsers.add_parser(
@@ -1631,20 +1744,97 @@ def run_serve(args: argparse.Namespace) -> None:
 
     setup_logging(config.debug)
 
+    # The listening socket is ours, not uvicorn's, so an in-place upgrade can
+    # hand it to the next image and tabs reconnect to the same port.
+    upgrade_mod.set_serve_argv(sys.argv[1:])
+    listener = None
+    resume_path = getattr(args, "resume_handoff", None)
+    if resume_path:
+        try:
+            manifest = upgrade_mod.read_manifest(Path(resume_path))
+        except upgrade_mod.UpgradeError as e:
+            logger.error("Ignoring upgrade handoff: %s", e)
+        else:
+            upgrade_mod.set_pending_manifest(manifest)
+            listener = upgrade_mod.adopt_listener(manifest)
+    if listener is None:
+        listener = upgrade_mod.bind_listener(config.host, config.port)
+    upgrade_mod.set_listener(listener)
+
     app = create_app(config)
 
+    server = uvicorn.Server(uvicorn.Config(
+        app,
+        host=config.host,
+        port=config.port,
+        log_level="debug" if config.debug else "warning",
+        ws_ping_interval=30,
+        ws_ping_timeout=60,
+    ))
     try:
-        uvicorn.run(
-            app,
-            host=config.host,
-            port=config.port,
-            log_level="debug" if config.debug else "warning",
-            ws_ping_interval=30,
-            ws_ping_timeout=60,
-        )
+        server.run(sockets=[listener])
     except KeyboardInterrupt:
         logger.info("Interrupted by user")
         sys.exit(0)
+
+
+def run_upgrade(args: argparse.Namespace) -> None:
+    """Ask the running backend to upgrade itself in place."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    cade_dir = Path.home() / ".cade"
+
+    def _discovered(name: str, default: str) -> str:
+        try:
+            return (cade_dir / name).read_text(encoding="utf-8").strip() or default
+        except OSError:
+            return default
+
+    host = args.host or _discovered("host", "localhost")
+    port = args.port or int(_discovered("port", str(Config.from_env().port)))
+    url = f"http://{host}:{port}/api/upgrade"
+    headers = {"Content-Type": "application/json"}
+    token = os.environ.get("CADE_AUTH_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    if args.status:
+        req = urllib.request.Request(url, headers=headers, method="GET")
+    else:
+        payload: dict = {"now": bool(args.now)}
+        if args.exe:
+            payload["executable"] = os.path.abspath(args.exe)
+        req = urllib.request.Request(
+            url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST",
+        )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as response:
+            result = json.loads(response.read())
+    except urllib.error.HTTPError as e:
+        try:
+            detail = json.loads(e.read()).get("error", "")
+        except Exception:
+            detail = ""
+        print(f"Upgrade refused ({e.code}): {detail}", file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"No CADE backend at {url}: {e.reason}", file=sys.stderr)
+        sys.exit(1)
+
+    state = result.get("state")
+    if state == "pending":
+        waiting = f" (waiting: {result['busyReason']})" if result.get("busyReason") else ""
+        print(f"Upgrade queued to {result.get('executable')} [{result.get('version')}]{waiting}")
+    elif state == "upgrading":
+        print("Upgrade in progress")
+    elif state == "unsupported":
+        print("In-place upgrade is not supported on this platform", file=sys.stderr)
+        sys.exit(2)
+    else:
+        suffix = f": {result['error']}" if result.get("error") else ""
+        print(f"Backend build {result.get('buildVersion')}, no upgrade pending{suffix}")
 
 
 def run_view(args: argparse.Namespace) -> None:
@@ -1778,8 +1968,15 @@ def main() -> None:
 
     args = parse_args()
 
+    if getattr(args, "version", False):
+        from backend import __version__
+        print(f"cade-backend {__version__} build {upgrade_mod.build_id()}")
+        return
+
     if args.command == "view":
         run_view(args)
+    elif args.command == "upgrade":
+        run_upgrade(args)
     elif args.command == "setup-hook":
         run_setup_hook(args)
     elif args.command == "mcp-server":

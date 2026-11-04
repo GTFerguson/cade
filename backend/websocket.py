@@ -31,6 +31,7 @@ from backend.terminal.sessions import OutputSubscriber
 from backend.connection_registry import get_connection_registry
 from backend.errors import CADEError, ProtocolError
 from backend.files.operations import create_file, write_file_content
+from backend.upgrade import build_id
 from backend.files.tree import (
     build_directory_children,
     build_file_tree_cached,
@@ -767,6 +768,9 @@ class ConnectionHandler:
             "idleSeconds": idle_seconds,
             "wslHealthy": wsl_healthy,
             "connectionId": self._connection_id,
+            # Tabs reload when this changes between connects: the backend
+            # upgraded itself in place and their JS is from the old build.
+            "buildVersion": build_id(),
             "cliAgent": {
                 "id": adapter.id,
                 "displayName": adapter.display_name,

@@ -169,6 +169,9 @@ endif
 	$(wait-for-nkrdn)
 	sudo apt-get install -y --reinstall ./$(firstword $(wildcard $(DESKTOP_DEB)))
 	@echo "Installed: $$(dpkg-query -W -f='$${Package} $${Version}' cade) -> /usr/bin/cade"
+	@# A running backend switches to the new build in place and keeps its
+	@# sessions (backend/upgrade.py). No running backend is not an error.
+	-@/usr/bin/cade-backend upgrade 2>/dev/null || echo "No running backend to upgrade; the next launch uses the new build"
 
 # Rebuild only the bundled nkrdn CLI from the sibling nkrdn repo (its .venv,
 # or NKRDN_VENV) and install it over the packaged copies. Agents, CADE's own
