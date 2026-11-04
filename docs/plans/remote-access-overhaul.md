@@ -14,7 +14,7 @@ Operate every CADE session (Claude Code, Codex, manual shells) from a phone or a
 
 Phases 1 to 4 landed on 14 Oct 2026. Their design and rationale now live in [[../technical/core/remote-sessions]] (substrate: broadcaster, sequenced reconnect, size policy, session directory, liveness, attention, push, files) and [[../technical/core/frontend-architecture#MobileUI (`mobile.ts`)]] (composer, key strip, session strip, font size, screens). User-facing behaviour is in [[../user/mobile-guide]]. The `?demo=mobile-remote` scenario exercises every surface without a backend.
 
-Dropped along the way, with reasons recorded in the architecture doc: persisting the session registry to disk (PTYs do not survive a restart), and tmux's smallest-client size rule (it would shrink the desktop whenever a phone looked in).
+Dropped along the way, with reasons recorded in the architecture doc: persisting the session registry to disk (PTYs do not survive the process ending; an in-place upgrade later made them survive *that* by carrying the registry in a handoff, see [[infrastructure/seamless-upgrade]]), and tmux's smallest-client size rule (it would shrink the desktop whenever a phone looked in).
 
 ## Remaining
 

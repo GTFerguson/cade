@@ -119,13 +119,7 @@ Not carried, by design: orchestrator worker agents (in-process asyncio tasks ove
 
 Phases 1 to 3 landed on 4 Nov 2026 (`backend/upgrade.py`, `InheritedPTY` in `backend/terminal/pty.py`, `POST /api/upgrade`, `cade-backend upgrade`, the `install-desktop` trigger, `buildVersion` on `connected` with a one-shot reload in `frontend/src/platform/websocket.ts`). Verified with a real `execv` in `backend/tests/test_upgrade_handoff.py` and a live run: a dev backend upgraded itself with a shell session open, came back on the same pid in about 1.6s, replayed the pre-upgrade scrollback to the reconnecting tab, and left no manifest or extraction directory behind.
 
-Decisions made while building, for the architecture doc when the plan graduates:
-
-- **The listening socket is bound by the backend, not uvicorn**, and passed via `Server.run(sockets=[...])`, so it is a known descriptor the manifest can name. uvicorn's own `fd` option was avoided because it wraps the fd as `AF_UNIX` regardless of family.
-- **Readers are paused, not cancelled.** `BasePTY.stop_reading()` lets the worker thread finish its current `read` and publish the chunk; cancelling the task would have dropped it. Output the shell writes after the pause waits in the kernel's PTY buffer for the new image.
-- **The old `_MEIPASS` is removed by the new image, not the old one**, and only when it is a sibling of the new image's own extraction directory. Deleting it before `exec` would have left the old process unable to import anything if the `exec` then failed; this way a failed handoff rolls back to a fully working backend.
-- **Not carried:** orchestrator workers, in-flight chat streams (the partial reply is kept as the user saw it), file-tree caches, index builds. The idle gate makes the first two rare.
-- **The UI has no upgrade affordance yet.** Pending state is visible only via `GET /api/upgrade` and the CLI's `--status`; the planned toast with a "now" button is in phase 3b below.
+Design and rationale have graduated to [[../../architecture/components#In-place Upgrade]] and the sequence to [[../../architecture/data-flow#9. In-place Upgrade]]; the install workflow is in [[../../technical/core/development-setup#Keeping the Installed App Current (Linux)]]. The sections below on how it works and the handoff manifest are kept only until the remaining phases ship, then this plan is deleted.
 
 ## Remaining phases
 

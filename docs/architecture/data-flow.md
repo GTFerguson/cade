@@ -1,7 +1,7 @@
 ---
 title: CADE Data Flow
 created: 2026-04-24
-updated: 2026-04-24
+updated: 2026-11-04
 status: active
 tags: [architecture, data-flow, sequences]
 ---
@@ -267,6 +267,34 @@ sequenceDiagram
     WS-->>B: CHAT_HISTORY {messages}
 
     Note over WS,PTY: PTY output loop resumes, Claude Code unaffected
+```
+
+## 9. In-place Upgrade
+
+`make install-desktop` (or `cade-backend upgrade`) asks the running backend to switch to the newly installed build. The process execs the new binary with its PTY descriptors and listening socket inherited, so every shell and CLI agent keeps running; see [[components#In-place Upgrade]] for the design.
+
+```mermaid
+sequenceDiagram
+    participant I as Installer / CLI
+    participant O as Backend (pid N, old image)
+    participant FS as ~/.cade/upgrade/handoff.json
+    participant N as Backend (pid N, new image)
+    participant B as Browser tab
+
+    I->>O: POST /api/upgrade
+    O->>O: verify <new> --version; wait until no chat stream
+    O->>B: UPGRADING
+    O->>O: pause PTY readers; export sessions + chat
+    O->>FS: write manifest (fds, pids, scrollback, seqs)
+    O->>O: set PTY and listener fds inheritable
+    O->>N: execv(new binary, serve ... --resume-handoff)
+    N->>FS: read manifest; adopt listener fd
+    N->>N: lifespan: InheritedPTY per terminal, registry.adopt()
+    N->>N: remove old _MEIPASS; delete manifest
+    B->>N: reconnect (backoff); SET_PROJECT {sessionId, lastSeq}
+    N-->>B: CONNECTED {buildVersion: new}
+    B->>B: build changed → location.reload() once
+    B->>N: SET_PROJECT again → SESSION_RESTORED (delta or cold)
 ```
 
 ## See Also

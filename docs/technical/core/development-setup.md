@@ -1,7 +1,7 @@
 ---
 title: Development Setup
 created: 2026-01-17
-updated: 2026-02-01
+updated: 2026-11-04
 status: active
 tags: [technical, development, setup, makefile]
 ---
@@ -127,6 +127,8 @@ make install-desktop
 ```
 
 This runs the full `build-desktop` and then `sudo apt-get install --reinstall` on the new `.deb`. `--reinstall` is needed because the package version doesn't change between builds.
+
+It finishes with `cade-backend upgrade`: if a backend is running, it switches to the new build in place and every open terminal session, shell or CLI agent, keeps running; the tabs reconnect and reload once. No running backend is not an error. The exec waits for any streaming chat reply to finish (ten minutes at most); `cade-backend upgrade --now` skips the wait and `--status` shows the state. A backend older than this feature has no upgrade endpoint, so the first time you install a build that has it you still restart CADE. Linux only: on Windows the app restarts as before.
 
 `make setup` installs a `post-merge` git hook (`scripts/git-hooks/post-merge`) that prints this reminder whenever a pull or merge changes those directories.
 

@@ -155,6 +155,8 @@ make install-desktop   # build-desktop, then apt-installs the .deb (needs sudo)
 
 When you finish work that touches those directories, run it, or tell the user it needs running if sudo isn't available. Don't point launchers at `desktop/src-tauri/target/release/cade`: `cargo clean` deletes it.
 
+The install ends with `cade-backend upgrade`, which makes a running backend exec the new build in place (`backend/upgrade.py`): shells and CLI agents keep running, tabs reconnect and reload once. So installing does not kill the user's sessions and needs no restart, except onto a backend too old to have the endpoint. Don't swap the binary under a running backend by any other route (a manual `dpkg -i` with no upgrade call): the one-file binary re-reads its own path on lazy imports and the old image will crash later.
+
 A `post-merge` hook (`scripts/git-hooks/post-merge`, installed by `make setup`) prints the same reminder after a pull or merge that changes those directories.
 
 CADE bundles the nkrdn CLI (`/usr/bin/nkrdn` and copies under `/usr/lib/CADE/resources/`), frozen from the sibling `../nkrdn` repo. Keep it in step with nkrdn: after nkrdn changes, run `make install-nkrdn` (rebuilds only that binary, needs sudo). It waits for running nkrdn processes first: replacing the one-file binary under a live rebuild crashes that rebuild. CADE's background rebuilds run plain `nkrdn rebuild` from the repo root and read `.nkrdn/graph.ttl` and `.nkrdn/knowledge_base.db`, the same files manual runs and editor hooks use (`backend/nkrdn_service.py: nkrdn_root`); nkrdn serialises concurrent rebuilds of a repo. `.cade/` keeps only CADE's own state, such as `.cade/memory/`. The build uses `../nkrdn/.venv`, or `NKRDN_VENV` if set.

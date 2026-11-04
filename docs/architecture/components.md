@@ -1,7 +1,7 @@
 ---
 title: CADE Component Inventory
 created: 2026-04-24
-updated: 2026-10-22
+updated: 2026-11-04
 status: active
 tags: [architecture, components, inventory]
 ---
@@ -55,6 +55,8 @@ Each tab is its own WebSocket connection, and several tabs are often open on one
 **Why the watcher is a separate process:** watchfiles registers a recursive inotify watch inside its Rust constructor while holding the GIL, and registration walks every entry under the root. On a project with a few hundred thousand files that is about seven seconds with a warm cache, during which the whole backend was frozen and every tab's terminal stopped; running the constructor on a thread does not help because of the GIL. `WatchProcess` (`backend/watch_process.py`) launches `backend/watch_worker.py` as a child process, one per open project, which runs the in-process `FileWatcher` and streams each burst back as a JSON line on stdout. The child is driven with a plain `Popen` and blocking reads on worker threads rather than asyncio's subprocess transport, because cancelling a task while that transport is still connecting its pipes leaves the event loop unable to close on CPython 3.12. The worker stops when its stdin closes, so a backend that dies takes its workers with it. The packaged binary exposes it as `cade-backend watch <dir>`, dispatched at the top of `backend/main.py` before the server imports so each worker stays small.
 
 **Boundaries:** `DashboardHandler` stays per connection, because each tab may show a different dashboard file. Opening a second tab no longer re-runs the initial nkrdn build; the directory is already being watched, so the graph is current.
+
+**Probes before indexing:** `has_code()` (`nkrdn_service.py`) and `has_docs()` (`doc_index.py`) decide whether a directory is worth indexing. Both use `walk_project()` in `backend/files/listing.py`, which prunes the directories the file tree ignores (name-ignored and root-gitignored) and stops after a bounded number of directories, answering "yes" past the limit so the indexer decides. They run in a thread. An unpruned `rglob` on the event loop took six seconds on a project whose gitignored trees held a million files, with every tab frozen for the duration.
 
 - Before fan-out, each event is tagged with whether the root `.gitignore` hides its path (`gitignore_matcher`, one `.gitignore` read per burst), and the worker has already recorded whether a created path is a directory. Tabs patch their file trees from these events instead of refetching them, so the message has to carry what a client cannot find out for itself.
 
@@ -256,6 +258,8 @@ graph TD
 
 **Data source types:** `directory` (scans markdown frontmatter), `rest` (polls HTTP endpoint), `model_usage` (LiteLLM metrics)
 
+**Config watch:** the handler notices `.cade/dashboard.yml` appearing, changing or vanishing with two *non-recursive* watches, one on the project root (to see `.cade/` itself come or go) and one on `.cade/` when it exists, re-registering when that directory appears or disappears. It used to be one recursive watch over the whole project per connection. watchfiles registers a recursive watch while holding the GIL, so each tab opened on a 188k-directory project froze the backend for 14 to 26 seconds, and the watches it held (one per directory, per tab) exhausted the user's inotify budget, after which nothing on the machine could register a new watch.
+
 **Depended on by:** `ConnectionHandler`
 
 ---
@@ -267,9 +271,45 @@ graph TD
 | File | `backend/terminal/` |
 | Responsibility | Spawns and manages PTY sessions; supports session resumption with scrollback; handles resize |
 
-**Platform support:** pexpect (Unix), pywinpty (Windows)
+**Platform support:** pexpect (Unix), pywinpty (Windows), plus `InheritedPTY` for a master descriptor and child pid taken over from a previous program image (see In-place Upgrade). `BasePTY.stop_reading()` pauses a reader after the chunk in flight instead of cancelling it, so a handoff loses nothing the worker thread had already read.
 
-**Depended on by:** `ConnectionHandler`
+**Depended on by:** `ConnectionHandler`, `backend/upgrade.py`
+
+---
+
+### In-place Upgrade
+
+| Field | Value |
+|-------|-------|
+| File | `backend/upgrade.py` |
+| Entry | `POST /api/upgrade`, `cade-backend upgrade`, `UpgradeCoordinator` |
+| Responsibility | Switch the running backend to a newly installed build without ending any terminal session |
+
+The backend is the parent of every shell and holds every PTY master, so a restart ends every session. An upgrade instead replaces the process's program image with `os.execv`. The pid is unchanged, so the shells stay its children (`waitpid` keeps working, nothing is reparented) and the desktop sidecar's handle on the child stays valid with no Rust changes. The PTY masters and the HTTP listening socket are descriptors and survive the exec once their close-on-exec flag is cleared. Everything else (session ids, labels, working directories, scrollback with sequence numbers, terminal sizes, attention state, enhanced-chat history) travels in a JSON manifest at `~/.cade/upgrade/handoff.json`, which the new image adopts in its lifespan before any tab reconnects.
+
+**How it works:**
+
+1. `request()` verifies the target binary answers `--version` (a one-file PyInstaller build extracts itself first, so this is allowed 30s) and marks the upgrade pending. The default target is the backend's own path, which after a reinstall holds the new build.
+2. The coordinator waits until no chat response is streaming, capped at ten minutes (`DEFAULT_IDLE_CAP_SECONDS`), then proceeds anyway with the partial reply kept. Shells and CLI agents mid-task do not count as busy: their processes are untouched.
+3. `perform_handoff()` broadcasts `upgrading` to every tab, pauses each PTY reader, exports the registry and chat sessions, marks the descriptors inheritable, writes the manifest, flushes the logs and execs `exec_argv()`: the same `serve` arguments this process started with plus `--resume-handoff <manifest>`.
+4. The new image binds nothing: `run_serve` adopts the listener from the manifest and hands it to uvicorn, and `lifespan` rebuilds each session around `PTYManager.adopt(fd, pid)` with its scrollback and `last_seq`, adopts the chat registry, removes the old image's extraction directory and deletes the manifest.
+5. Tabs see their socket drop and reconnect by the ordinary backoff. The `connected` message carries `buildVersion`; a page that sees a different value from the one it first connected with reloads once, then its tabs re-attach to their live sessions as on any reconnect.
+
+Measured on a dev backend: same pid, about 1.6s between the exec and the first reconnect, pre-upgrade scrollback replayed.
+
+**Design decisions:**
+
+- *Exec in place rather than fd passing to a second process.* Passing descriptors over `SCM_RIGHTS` works, but the shells would be reparented to init when the old process exited, `waitpid` would stop working, and the Tauri sidecar handle would point at a dead pid. Keeping the pid removes all three problems and needs no protocol.
+- *The listening socket is bound by the backend, not uvicorn.* `run_serve` binds it (`bind_listener`) and passes it to `uvicorn.Server.run(sockets=[...])`, so it is a known descriptor the manifest can name. uvicorn's own `fd` option was avoided because it wraps the fd as `AF_UNIX` regardless of family.
+- *Readers are paused, not cancelled.* Cancelling the reader task would drop the chunk the worker thread was mid-`read`. `stop_reading()` lets that read finish and publish; output the shell writes afterwards waits in the kernel's PTY buffer for the new image's reader.
+- *The old `_MEIPASS` is removed by the new image.* The PyInstaller bootloader cleans its extraction directory only on a normal exit, which exec is not. Deleting it before the exec would leave the old process unable to import anything if the exec then failed, so the new image deletes it, and only when it is a sibling of its own extraction directory (`remove_old_extraction`). A failed handoff rolls back to a fully working backend: readers restart and descriptors go back to close-on-exec.
+- *A failed `--version` refuses the upgrade* rather than exec'ing into a binary that may not start. Nothing is exported until the target checks out.
+
+**Configuration:** `POST /api/upgrade` with optional `{"executable": path, "now": true}`; `GET` reports state (`idle`, `pending` with `busyReason`, `upgrading`, `unsupported`) and the running `buildVersion`; `DELETE` cancels a pending upgrade. `cade-backend upgrade [--exe PATH] [--now] [--status]` wraps the API using `~/.cade/port` and `~/.cade/host`. `make install-desktop` calls it after dpkg, so the window between "new binary on disk" and "old image still lazily importing from that path" is seconds; a one-file PyInstaller binary opens its own path on each lazy import, and swapping it under a long-running old image crashes that image with a zlib "incorrect header check".
+
+**Boundaries:** not carried: orchestrator worker agents (in-process tasks, re-spawnable from their task string), in-flight chat streams (the partial reply is kept), file-tree caches and index builds (they restart). Windows has no `exec` and ConPTY handles do not travel this way, so `supported()` is false there and an upgrade still means a restart. The Tauri shell itself cannot be upgraded this way. A backend older than this feature has no endpoint, so the first upgrade onto a build that has it is still a restart.
+
+**Depended on by:** `main.py` (routes, `--resume-handoff`, listener), `ConnectionHandler` (`buildVersion`), `Makefile` (`install-desktop`)
 
 ---
 
