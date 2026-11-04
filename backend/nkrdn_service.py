@@ -96,15 +96,21 @@ def ensure_setup() -> None:
     logger.info("Installed nkrdn usage rule to %s", rule_dst)
 
 
+# How many directories the code probe looks at before assuming there is code.
+_HAS_CODE_SCAN_DIRS = 2000
+
+
 def has_code(project_dir: Path) -> bool:
-    """Check if a project has source code worth indexing."""
-    for ext in _CODE_EXTENSIONS:
-        try:
-            next(project_dir.rglob(f"*{ext}"))
-            return True
-        except StopIteration:
-            continue
-    return False
+    """Check if a project has source code worth indexing.
+
+    Skips the directories the file tree skips (ignored and gitignored), and
+    gives up after a bounded number of them. Blocking, so call it off the
+    event loop: an unpruned rglob over a project whose gitignored trees held
+    a million files took six seconds and froze every tab while it ran.
+    """
+    from backend.files.listing import has_file_with_suffix
+
+    return has_file_with_suffix(project_dir, _CODE_EXTENSIONS, max_dirs=_HAS_CODE_SCAN_DIRS)
 
 
 def nkrdn_root(project_dir: Path) -> Path:
@@ -200,7 +206,7 @@ class NkrdnService:
         try:
             await asyncio.to_thread(ensure_setup)
 
-            if not has_code(self._project_dir):
+            if not await asyncio.to_thread(has_code, self._project_dir):
                 logger.debug("No source code to index in %s", self._project_dir)
                 return
 

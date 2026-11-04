@@ -54,21 +54,31 @@ if not DOC_INDEX_AVAILABLE:
     logger.debug("cadence submodule not available — doc-index disabled")
 
 
+# How many directories the docs probe looks at before assuming there are docs.
+_HAS_DOCS_SCAN_DIRS = 2000
+
+
 def has_docs(project_dir: Path) -> bool:
-    """Check if a project has markdown docs worth indexing."""
+    """Check if a project has markdown docs worth indexing.
+
+    Skips ignored and gitignored directories and looks at a bounded number
+    of the rest, so the probe stays cheap on a project with huge vendored
+    or generated trees.
+    """
     if not DOC_INDEX_AVAILABLE:
         return False
+    from backend.files.listing import has_file_with_suffix
+
     config = load_config(project_dir)
     scan_dirs = config.get("scan")
     if scan_dirs:
-        for scan_dir in scan_dirs:
-            doc_root = project_dir / scan_dir
-            if doc_root.exists() and any(doc_root.rglob("*.md")):
-                return True
-        return False
-    else:
-        # No scan dirs configured — whole-project scan
-        return any(project_dir.rglob("*.md"))
+        return any(
+            has_file_with_suffix(project_dir / scan_dir, {".md"}, max_dirs=_HAS_DOCS_SCAN_DIRS)
+            for scan_dir in scan_dirs
+            if (project_dir / scan_dir).is_dir()
+        )
+    # No scan dirs configured: whole-project scan
+    return has_file_with_suffix(project_dir, {".md"}, max_dirs=_HAS_DOCS_SCAN_DIRS)
 
 
 def ensure_setup(project_dir: Path) -> None:
