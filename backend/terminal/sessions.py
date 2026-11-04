@@ -194,6 +194,27 @@ class TerminalState:
             for sub in list(self.subscribers):
                 sub._end()
 
+    async def pause_reader(self) -> None:
+        """Stop the PTY reader without losing the chunk it is reading.
+
+        Used before a handoff: the reader thread finishes its current read,
+        the chunk is published and sequenced like any other, and the task
+        ends. Output the child writes after this stays in the PTY buffer for
+        whoever reads the descriptor next.
+        """
+        task = self.output_task
+        if task is None or task.done():
+            return
+        self.pty.stop_reading()
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            task.cancel()
+        except Exception:  # noqa: BLE001
+            pass
+        # A paused reader is not an exited terminal.
+        self.exited = False
+
     def get_scrollback(self) -> str:
         """Get concatenated scrollback content, sanitized for replay."""
         raw = "".join(chunk for _, chunk in self.scrollback)
@@ -602,6 +623,10 @@ class SessionRegistry:
     def get(self, session_id: str) -> PTYSession | None:
         """Get a session by ID without modifying it."""
         return self._sessions.get(session_id)
+
+    def adopt(self, session: PTYSession) -> None:
+        """Register a session rebuilt from a handoff (see backend.upgrade)."""
+        self._sessions[session.id] = session
 
     def sessions(self) -> list[PTYSession]:
         """Snapshot of every registered session."""

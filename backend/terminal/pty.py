@@ -75,6 +75,20 @@ class BasePTY(ABC):
         """Return the PID of the underlying process, or 0 if unavailable."""
         return 0
 
+    def stop_reading(self) -> None:
+        """Ask ``read()`` to end after the chunk in flight, without closing.
+
+        Cancelling the reader task would drop whatever the worker thread
+        was in the middle of reading. Before a handoff the reader is stopped
+        this way so every chunk already read is published, and whatever is
+        still in the kernel's buffer waits for the next program image.
+        """
+
+    def handoff_descriptor(self) -> tuple[int, int] | None:
+        """``(master_fd, pid)`` for carrying this terminal across an exec, or
+        None where descriptors cannot travel (Windows ConPTY)."""
+        return None
+
 
 class UnixPTY(BasePTY):
     """Unix PTY implementation using pexpect."""
@@ -82,6 +96,7 @@ class UnixPTY(BasePTY):
     def __init__(self) -> None:
         self._process: "pexpect.spawn | None" = None  # type: ignore[name-defined]
         self._read_task: asyncio.Task | None = None
+        self._stopping = False
 
     async def spawn(
         self,
@@ -116,7 +131,8 @@ class UnixPTY(BasePTY):
             return
 
         loop = asyncio.get_event_loop()
-        while self.is_alive():
+        self._stopping = False  # a fresh read() loop starts unstopped
+        while self.is_alive() and not self._stopping:
             try:
                 data = await loop.run_in_executor(None, self._read_chunk)
                 if data:
@@ -127,6 +143,14 @@ class UnixPTY(BasePTY):
                 continue
             except Exception as e:
                 raise PTYError.read_failed(str(e)) from e
+
+    def stop_reading(self) -> None:
+        self._stopping = True
+
+    def handoff_descriptor(self) -> tuple[int, int] | None:
+        if self._process is None:
+            return None
+        return self._process.child_fd, self._process.pid
 
     def _read_chunk(self) -> str:
         """Blocking read, called in executor."""
@@ -177,6 +201,177 @@ class UnixPTY(BasePTY):
         if self._process is not None:
             return self._process.pid
         return 0
+
+
+class InheritedPTY(BasePTY):
+    """A PTY whose master descriptor and child came from the previous program
+    image of this process.
+
+    When the backend upgrades itself it execs the new binary in place (see
+    ``backend.upgrade``). The shells are still children of the same pid and
+    their PTY masters are still open, but the pexpect objects that wrapped
+    them are gone with the old image. This class drives such a descriptor
+    directly: read and write on the fd, ioctl for size, waitpid for
+    liveness. ``spawn`` is not supported; the process already exists.
+    """
+
+    _READ_SIZE = 4096
+    _READ_POLL_SECONDS = 0.1
+
+    def __init__(self, master_fd: int, pid: int) -> None:
+        import codecs
+
+        self._fd: int | None = master_fd
+        self._pid = pid
+        self._exit_status: int | None = None
+        self._stopping = False
+        # Output can split a multi-byte character across two reads.
+        self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+
+    async def spawn(
+        self,
+        command: str,
+        cwd: Path,
+        size: TerminalSize,
+        env: dict[str, str] | None = None,
+    ) -> None:
+        raise PTYError.spawn_failed(command, "an inherited PTY is already running")
+
+    async def read(self) -> AsyncIterator[str]:
+        loop = asyncio.get_event_loop()
+        self._stopping = False  # a fresh read() loop starts unstopped
+        while self._fd is not None and not self._stopping:
+            try:
+                data = await loop.run_in_executor(None, self._read_chunk)
+            except EOFError:
+                break
+            except Exception as e:
+                raise PTYError.read_failed(str(e)) from e
+            if data:
+                yield data
+            elif not self.is_alive():
+                # Drain what the dead child left behind, then stop.
+                tail = self._drain()
+                if tail:
+                    yield tail
+                break
+
+    def _read_chunk(self) -> str:
+        """Blocking read with a short poll, called in executor."""
+        import select
+
+        fd = self._fd
+        if fd is None:
+            raise EOFError
+        try:
+            ready, _, _ = select.select([fd], [], [], self._READ_POLL_SECONDS)
+        except (OSError, ValueError):
+            raise EOFError
+        if not ready:
+            return ""
+        try:
+            raw = os.read(fd, self._READ_SIZE)
+        except OSError:
+            # Linux reports EIO on the master once the slave side is closed.
+            raise EOFError
+        if not raw:
+            raise EOFError
+        return self._decoder.decode(raw)
+
+    def _drain(self) -> str:
+        parts: list[str] = []
+        try:
+            while True:
+                parts.append(self._read_chunk() or "")
+                if not parts[-1]:
+                    break
+        except EOFError:
+            pass
+        return "".join(parts)
+
+    def stop_reading(self) -> None:
+        self._stopping = True
+
+    def handoff_descriptor(self) -> tuple[int, int] | None:
+        if self._fd is None:
+            return None
+        return self._fd, self._pid
+
+    async def write(self, data: str) -> None:
+        if self._fd is None:
+            raise PTYError.write_failed("PTY not initialized")
+        payload = data.encode("utf-8")
+        loop = asyncio.get_event_loop()
+        try:
+            await loop.run_in_executor(None, self._write_all, payload)
+        except Exception as e:
+            raise PTYError.write_failed(str(e)) from e
+
+    def _write_all(self, payload: bytes) -> None:
+        fd = self._fd
+        if fd is None:
+            raise PTYError.write_failed("PTY not initialized")
+        view = memoryview(payload)
+        while view:
+            written = os.write(fd, view)
+            view = view[written:]
+
+    async def resize(self, size: TerminalSize) -> None:
+        if self._fd is None:
+            return
+        import fcntl
+        import struct
+        import termios
+
+        try:
+            packed = struct.pack("HHHH", size.rows, size.cols, 0, 0)
+            fcntl.ioctl(self._fd, termios.TIOCSWINSZ, packed)
+        except OSError:
+            pass
+
+    async def close(self) -> None:
+        import signal
+
+        fd, self._fd = self._fd, None
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        if not self.is_alive():
+            return
+        for sig in (signal.SIGHUP, signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.kill(self._pid, sig)
+            except ProcessLookupError:
+                return
+            for _ in range(20):
+                if not self.is_alive():
+                    return
+                await asyncio.sleep(0.05)
+
+    def is_alive(self) -> bool:
+        if self._exit_status is not None:
+            return False
+        try:
+            pid, status = os.waitpid(self._pid, os.WNOHANG)
+        except ChildProcessError:
+            # Not our child (should not happen after an exec, where the pid
+            # is kept); fall back to a signal-0 probe.
+            try:
+                os.kill(self._pid, 0)
+                return True
+            except ProcessLookupError:
+                self._exit_status = -1
+                return False
+        if pid == 0:
+            return True
+        self._exit_status = status
+        return False
+
+    @property
+    def pid(self) -> int:
+        return self._pid
 
 
 class WindowsPTY(BasePTY):
@@ -475,3 +670,21 @@ class PTYManager:
         if self._pty is not None:
             return self._pty.pid
         return 0
+
+    def stop_reading(self) -> None:
+        """End the read loop after the chunk in flight (see BasePTY.stop_reading)."""
+        if self._pty is not None:
+            self._pty.stop_reading()
+
+    def handoff_descriptor(self) -> tuple[int, int] | None:
+        """``(master_fd, pid)`` to carry across an exec, or None if it cannot travel."""
+        if self._pty is None:
+            return None
+        return self._pty.handoff_descriptor()
+
+    @classmethod
+    def adopt(cls, master_fd: int, pid: int) -> PTYManager:
+        """Wrap a PTY inherited from the previous program image."""
+        manager = cls()
+        manager._pty = InheritedPTY(master_fd, pid)
+        return manager

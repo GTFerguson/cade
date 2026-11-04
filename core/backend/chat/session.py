@@ -88,6 +88,28 @@ class ChatSession:
                 result.append({"role": "assistant", "content": msg.content})
         return result
 
+    def to_handoff(self) -> dict:
+        """Plain data for carrying this session across a backend upgrade.
+
+        A response still streaming is kept as far as it got, as the user
+        saw it; the stream itself does not survive the exec.
+        """
+        messages = [{"role": m.role, "content": m.content} for m in self.get_messages()]
+        partial = "".join(self._current_response)
+        if self._streaming and partial:
+            messages.append({"role": "assistant", "content": partial})
+        return {"provider_name": self._provider_name, "messages": messages}
+
+    @classmethod
+    def from_handoff(cls, data: dict) -> ChatSession:
+        session = cls(provider_name=data.get("provider_name", ""))
+        kinds = {"user": HumanMessage, "assistant": AIMessage, "system": SystemMessage}
+        for item in data.get("messages", []):
+            kind = kinds.get(item.get("role"))
+            if kind is not None:
+                session._messages.append(kind(content=item.get("content", "")))
+        return session
+
 
 class ChatSessionRegistry:
     """Registry for chat sessions, keyed by connection/session ID."""
@@ -108,6 +130,17 @@ class ChatSessionRegistry:
     def remove(self, session_id: str) -> None:
         """Remove a session."""
         self._sessions.pop(session_id, None)
+
+    def any_streaming(self) -> bool:
+        """Whether some session has a response in flight."""
+        return any(s.is_streaming for s in self._sessions.values())
+
+    def to_handoff(self) -> dict[str, dict]:
+        return {sid: s.to_handoff() for sid, s in self._sessions.items() if s.has_messages() or s.is_streaming}
+
+    def adopt(self, data: dict[str, dict]) -> None:
+        for sid, item in data.items():
+            self._sessions[sid] = ChatSession.from_handoff(item)
 
 
 # Singleton
