@@ -196,3 +196,64 @@ describe("FileTree file-change handling", () => {
     // afterEach disposes again; that must be harmless
   });
 });
+
+describe("FileTree session restore", () => {
+  let container: HTMLElement;
+  let tree: FileTree;
+  let ws: ReturnType<typeof makeWs>["ws"];
+  let emit: ReturnType<typeof makeWs>["emit"];
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    ({ ws, emit } = makeWs());
+    tree = new FileTree(container, ws as unknown as WebSocketClient);
+    tree.initialize();
+  });
+
+  afterEach(() => {
+    tree.dispose();
+  });
+
+  const dir = (path: string, extra: Partial<FileNode> = {}): FileNode => ({
+    name: path.split("/").pop()!,
+    path,
+    type: "directory",
+    ...extra,
+  });
+  const loadTree = (data: FileNode[]) => {
+    emit("file-tree", { type: "file-tree", data });
+  };
+
+  it("does not expand folders named by the segments of an absolute path", async () => {
+    loadTree([dir("docs", { children: [{ name: "a.md", path: "docs/a.md", type: "file" }] })]);
+    await tree.revealFile("/home/gary/project/docs/a.md");
+    const expanded = tree.getExpandedPaths();
+    expect(expanded).not.toContain("");
+    expect(expanded).not.toContain("home");
+    expect(expanded.every((p) => !p.startsWith("home"))).toBe(true);
+  });
+
+  it("drops saved expanded paths that are not under a root entry", () => {
+    loadTree([dir("docs", { hasMore: true }), dir("src", { hasMore: true })]);
+    tree.setExpandedPaths(["", "home", "home/gary/project/docs", "docs", "docs/plans", "src"]);
+    expect(tree.getExpandedPaths().sort()).toEqual(["docs", "docs/plans", "src"]);
+  });
+
+  it("requests every loadable folder of a level in one round trip", async () => {
+    loadTree([dir("docs", { hasMore: true }), dir("src", { hasMore: true })]);
+    tree.setExpandedPaths(["docs", "docs/plans", "src"]);
+    const loading = tree.loadExpandedChildren();
+    await Promise.resolve();
+    // Both root folders were asked for before either answered.
+    expect(ws.requestChildren.mock.calls.map((c) => c[0])).toEqual(["docs", "src"]);
+
+    emit("file-children", { type: "file-children", path: "docs", children: [dir("docs/plans", { hasMore: true })] });
+    emit("file-children", { type: "file-children", path: "src", children: [] });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(ws.requestChildren.mock.calls.map((c) => c[0])).toEqual(["docs", "src", "docs/plans"]);
+
+    emit("file-children", { type: "file-children", path: "docs/plans", children: [] });
+    await loading;
+  });
+});

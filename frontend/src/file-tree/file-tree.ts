@@ -638,19 +638,27 @@ export class FileTree implements Component, PaneKeyHandler {
     this.selectedPath = path;
     this.openPath = path;
 
-    // Expand all parent folders, loading children as needed
+    // Expand each parent folder in turn, loading its children when they
+    // are not here yet so the next segment can be found. A segment the tree
+    // does not know ends the walk: an absolute path once expanded "home",
+    // "home/gary", ... and those were saved with the session. Before the
+    // tree has loaded nothing can be checked, so the folders are expanded
+    // on trust and apply when it arrives.
     const parts = path.split("/");
     let currentPath = "";
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
-      if (part !== undefined) {
-        currentPath = currentPath ? `${currentPath}/${part}` : part;
-        this.expandedPaths.add(currentPath);
-
-        const node = this.findNodeByPath(currentPath);
-        if (node && node.hasMore && !node.children) {
-          await this.loadChildren(currentPath);
-        }
+      if (!part) continue;
+      currentPath = currentPath ? `${currentPath}/${part}` : part;
+      const node = this.findNodeByPath(currentPath);
+      if (node == null) {
+        if (this.tree.length > 0) break;
+      } else if (node.type !== "directory") {
+        break;
+      }
+      this.expandedPaths.add(currentPath);
+      if (node?.hasMore && !node.children) {
+        await this.loadChildren(currentPath);
       }
     }
 
@@ -751,7 +759,14 @@ export class FileTree implements Component, PaneKeyHandler {
    * Set the expanded folder paths.
    */
   setExpandedPaths(paths: string[]): void {
-    this.expandedPaths = new Set(paths);
+    // Every folder path starts with a root entry, so once the root listing
+    // is loaded anything else is stale: a saved session may still carry
+    // junk from before absolute paths were kept out of the set.
+    const rootNames = new Set(this.tree.map((n) => n.name));
+    const kept = this.tree.length === 0
+      ? paths
+      : paths.filter((p) => rootNames.has(p.split("/")[0] ?? ""));
+    this.expandedPaths = new Set(kept);
     this.render();
   }
 
@@ -1022,14 +1037,17 @@ export class FileTree implements Component, PaneKeyHandler {
    * Called after tree refresh and session restore.
    */
   async loadExpandedChildren(): Promise<void> {
-    // Sort paths so parents load before children
-    const paths = Array.from(this.expandedPaths).sort();
-
-    for (const path of paths) {
-      const node = this.findNodeByPath(path);
-      if (node && node.hasMore && !node.children) {
-        await this.loadChildren(path);
-      }
+    // A folder's children can only be requested once its own node exists,
+    // so this proceeds a level at a time: every loadable folder in one round
+    // trip, then whatever their arrival made loadable. Restoring a session
+    // with many open folders used to cost one round trip per folder.
+    for (;;) {
+      const loadable = Array.from(this.expandedPaths).filter((path) => {
+        const node = this.findNodeByPath(path);
+        return node != null && node.hasMore === true && !node.children;
+      });
+      if (loadable.length === 0) return;
+      await Promise.all(loadable.map((path) => this.loadChildren(path)));
     }
   }
 

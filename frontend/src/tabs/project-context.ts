@@ -927,8 +927,11 @@ export class ProjectContextImpl implements IProjectContext {
     }
 
     if (session.viewerPath != null && this.rightPane != null) {
-      this.rightPane.getViewer().loadFile(session.viewerPath);
-      this.fileTree?.revealFile(session.viewerPath);
+      // Older sessions saved the viewer path absolute; the tree and the
+      // backend both want it relative to the project.
+      const viewerPath = this.resolveAndFindFile(session.viewerPath);
+      this.rightPane.getViewer().loadFile(viewerPath);
+      this.fileTree?.revealFile(viewerPath);
     }
   }
 
