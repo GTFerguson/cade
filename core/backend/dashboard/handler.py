@@ -32,6 +32,9 @@ logger = logging.getLogger(__name__)
 
 SendFn = Callable[[dict[str, Any]], Awaitable[None]]
 
+# The project-local directory the dashboard config lives in.
+CADE_DIR_NAME = ".cade"
+
 
 class DashboardHandler:
     """Handles dashboard operations for a single WebSocket connection."""
@@ -296,41 +299,66 @@ class DashboardHandler:
     async def _config_watch_loop(self) -> None:
         """Watch for dashboard config file creation, changes, and deletion.
 
-        Watches the project root (not just .cade/) so that creating the file
-        from scratch — including creating the .cade/ directory itself — is
-        detected without needing to reconnect.
+        Two non-recursive watches: the project root, so the creation (or
+        removal) of ``.cade/`` itself is seen, and ``.cade/`` when it exists,
+        for the config file inside it. The loop re-registers when ``.cade/``
+        appears or disappears.
+
+        This used to be one recursive watch over the whole project. A
+        recursive watch registers every directory under the root while
+        holding the GIL, so opening a tab on a project with a few hundred
+        thousand directories froze the whole backend for tens of seconds,
+        once per tab, and the watches it held (one per directory, per tab)
+        exhausted the user's inotify budget: after that no watcher on the
+        machine could register anything new.
         """
-        # Watch the default config filenames AND any filename explicitly
-        # overridden via the launch preset.
         config_names = set(CONFIG_FILENAMES)
         if self._config_filename:
             config_names.add(Path(self._config_filename).name)
+        cade_dir = self._working_dir / CADE_DIR_NAME
 
-        def _is_config(change: Change, path: str) -> bool:
+        def _is_relevant(change: Change, path: str) -> bool:
             p = Path(path)
-            return p.name in config_names and p.parent.name == ".cade"
+            if p.name == CADE_DIR_NAME:
+                return True
+            return p.name in config_names and p.parent.name == CADE_DIR_NAME
 
         try:
-            async for changes in awatch(
-                self._working_dir,
-                stop_event=self._stop_event,
-                ignore_permission_denied=True,
-                watch_filter=_is_config,
-            ):
-                for change_type, path_str in changes:
-                    if change_type == Change.deleted:
-                        logger.info("Dashboard config deleted")
-                        await self.send_cleared()
-                    else:
-                        logger.info("Dashboard config changed, reloading")
-                        # Cancel old poll tasks before loading the new config
-                        # so stale intervals don't linger.
-                        for t in self._poll_tasks:
-                            t.cancel()
-                        self._poll_tasks.clear()
-                        await self.load_and_send_config()
-                        await self.load_and_send_data()
-                        self._start_polling()
+            while not self._stop_event.is_set():
+                paths = [self._working_dir]
+                if cade_dir.is_dir():
+                    paths.append(cade_dir)
+                reregister = False
+                async for changes in awatch(
+                    *paths,
+                    stop_event=self._stop_event,
+                    recursive=False,
+                    ignore_permission_denied=True,
+                    watch_filter=_is_relevant,
+                ):
+                    for change_type, path_str in changes:
+                        p = Path(path_str)
+                        if p.name == CADE_DIR_NAME:
+                            # The directory came or went; the watch set must follow.
+                            reregister = True
+                            continue
+                        if change_type == Change.deleted:
+                            logger.info("Dashboard config deleted")
+                            await self.send_cleared()
+                        else:
+                            logger.info("Dashboard config changed, reloading")
+                            # Cancel old poll tasks before loading the new config
+                            # so stale intervals don't linger.
+                            for t in self._poll_tasks:
+                                t.cancel()
+                            self._poll_tasks.clear()
+                            await self.load_and_send_config()
+                            await self.load_and_send_data()
+                            self._start_polling()
+                    if reregister:
+                        break
+                if not reregister:
+                    return
         except asyncio.CancelledError:
             pass
         except Exception as e:
