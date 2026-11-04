@@ -22,7 +22,7 @@ Intent before code exists. Plans are ephemeral — once the work ships and desig
 | [[dashboard/agent-ui-system]] | partially-shipped | Phases 2–4; missing components |
 | [[permissions/dynamic-permission-management]] | planning | All phases (foundation ready) |
 | [[remote-access-overhaul]] | partially-shipped | Phases 1–4 shipped and graduated; device measurement, chat parity, QR, topology decision |
-| [[infrastructure/seamless-upgrade]] | planning | All phases: in-place backend exec that keeps PTYs alive across an upgrade |
+| [[infrastructure/seamless-upgrade]] | partially-shipped | Phases 1–3 shipped (exec-in-place, API, CLI, build-id reload); UX toasts, versioned install dirs, session host |
 
 ## Deferred
 

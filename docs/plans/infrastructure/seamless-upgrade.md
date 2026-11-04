@@ -2,7 +2,7 @@
 title: Seamless Upgrade
 created: 2026-11-04
 updated: 2026-11-04
-status: planning
+status: partially-shipped
 tags: [plan, infrastructure, sessions, upgrade, pty]
 ---
 
@@ -115,13 +115,23 @@ Not carried, by design: orchestrator worker agents (in-process asyncio tasks ove
 - `scripts/build-desktop.sh`, `Makefile` (`install-desktop` triggers the upgrade; versioned dirs)
 - `desktop/src-tauri/src/python.rs` (no change expected; verify the child handle survives exec)
 
-## Phases
+## Shipped
 
-1. **Handoff substrate.** `InheritedPTY`; registry export/import; manifest; `--resume-handoff`; listener fd inheritance; `POST /api/upgrade` doing the exec, with the `_MEIPASS` cleanup. Test: a session survives `upgrade` with its shell still responsive and scrollback intact.
-2. **Carry the rest.** Chat history, labels, sizes, sequence continuity. Test: a tab reconnects and replays exactly the chunks it missed.
-3. **Trigger and UX.** CLI verb; `install-desktop` calls it; the idle gate and pending state; `buildVersion` and frontend reload; "upgrade pending" and "upgrading" toasts.
-4. **Safe install.** Versioned install directories and the symlink flip.
-5. **Deferred.** Session-host daemon (PTY ownership in a separate long-lived process) for Windows and for upgrading the Tauri shell itself; remote deployment hook.
+Phases 1 to 3 landed on 4 Nov 2026 (`backend/upgrade.py`, `InheritedPTY` in `backend/terminal/pty.py`, `POST /api/upgrade`, `cade-backend upgrade`, the `install-desktop` trigger, `buildVersion` on `connected` with a one-shot reload in `frontend/src/platform/websocket.ts`). Verified with a real `execv` in `backend/tests/test_upgrade_handoff.py` and a live run: a dev backend upgraded itself with a shell session open, came back on the same pid in about 1.6s, replayed the pre-upgrade scrollback to the reconnecting tab, and left no manifest or extraction directory behind.
+
+Decisions made while building, for the architecture doc when the plan graduates:
+
+- **The listening socket is bound by the backend, not uvicorn**, and passed via `Server.run(sockets=[...])`, so it is a known descriptor the manifest can name. uvicorn's own `fd` option was avoided because it wraps the fd as `AF_UNIX` regardless of family.
+- **Readers are paused, not cancelled.** `BasePTY.stop_reading()` lets the worker thread finish its current `read` and publish the chunk; cancelling the task would have dropped it. Output the shell writes after the pause waits in the kernel's PTY buffer for the new image.
+- **The old `_MEIPASS` is removed by the new image, not the old one**, and only when it is a sibling of the new image's own extraction directory. Deleting it before `exec` would have left the old process unable to import anything if the `exec` then failed; this way a failed handoff rolls back to a fully working backend.
+- **Not carried:** orchestrator workers, in-flight chat streams (the partial reply is kept as the user saw it), file-tree caches, index builds. The idle gate makes the first two rare.
+- **The UI has no upgrade affordance yet.** Pending state is visible only via `GET /api/upgrade` and the CLI's `--status`; the planned toast with a "now" button is in phase 3b below.
+
+## Remaining phases
+
+3b. **UX.** "Upgrade pending" and "upgrading" toasts; a "now" button; cancel from the UI. Reconnect after the exec is the ordinary backoff path today (1s, 2s, 4s), which covers the measured 1.6s gap.
+4. **Safe install.** Versioned install directories (`/usr/lib/CADE/versions/<version>/`) and a symlink flip, so a build can sit installed-but-not-activated indefinitely without the one-file lazy-import hazard. Until then `install-desktop` triggers the upgrade immediately after dpkg, which keeps the window to seconds.
+5. **Deferred.** Session-host daemon (PTY ownership in a separate long-lived process) for Windows and for upgrading the Tauri shell itself; remote deployment hook so `deploy.sh` calls the endpoint instead of `systemctl restart`.
 
 ## Open questions
 
