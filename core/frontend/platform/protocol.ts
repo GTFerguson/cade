@@ -59,6 +59,7 @@ export const MessageType = {
   PLANS_LIST: "plans-list",
   ERROR: "error",
   CONNECTED: "connected",
+  UPGRADING: "upgrading",
   SESSION_RESTORED: "session-restored",
   STARTUP_STATUS: "startup-status",
   PTY_EXITED: "pty-exited",

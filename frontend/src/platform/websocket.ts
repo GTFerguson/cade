@@ -403,7 +403,16 @@ export class WebSocketClient extends BaseWSClient {
 
     if (typed.type === MessageType.CONNECTED) {
       this.livenessArmed = true;
+      WebSocketClient.noteBuild((message as ConnectedMessage).buildVersion);
       this.fireBridged("connected", message as ConnectedMessage);
+      return true;
+    }
+
+    if (typed.type === MessageType.UPGRADING) {
+      // The backend is about to exec a new build with our session's PTY
+      // kept open. The socket will drop; the ordinary reconnect brings us
+      // back and the new build id then triggers a reload.
+      console.log("Backend upgrading in place; expecting a reconnect");
       return true;
     }
 
@@ -513,6 +522,32 @@ export class WebSocketClient extends BaseWSClient {
   // changes behind it, and nothing in the frontend showed which caller was
   // looping. When requests burst past the threshold, ship the call stack to
   // the backend log so the next occurrence names its trigger.
+  // The build this page's JS belongs to, learned from the first connected
+  // message of any tab. One page serves every tab, so this is static: when
+  // a later connect (any tab) reports a different build the backend has
+  // upgraded itself in place, and the page reloads once to pick up the new
+  // frontend. Sessions survive the upgrade, so tabs re-attach as usual.
+  private static knownBuild: string | null = null;
+  static onBuildChanged: (from: string, to: string) => void = () => window.location.reload();
+
+  private static noteBuild(build: string | undefined): void {
+    if (!build) return;
+    if (WebSocketClient.knownBuild === null) {
+      WebSocketClient.knownBuild = build;
+      return;
+    }
+    if (build !== WebSocketClient.knownBuild) {
+      const from = WebSocketClient.knownBuild;
+      WebSocketClient.knownBuild = build;
+      WebSocketClient.onBuildChanged(from, build);
+    }
+  }
+
+  /** Test hook: forget the build this page was first connected to. */
+  static resetKnownBuild(): void {
+    WebSocketClient.knownBuild = null;
+  }
+
   private static readonly TREE_STORM_THRESHOLD = 20;
   private static readonly TREE_STORM_REPORT_INTERVAL_MS = 10_000;
   private treeRequestWindowStart = 0;

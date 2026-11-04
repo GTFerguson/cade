@@ -106,6 +106,53 @@ describe("set-project handshake", () => {
   });
 });
 
+describe("build identity", () => {
+  beforeEach(() => {
+    WebSocketClient.resetKnownBuild();
+  });
+
+  it("reloads the page once when a reconnect reports a different backend build", () => {
+    const changes: Array<[string, string]> = [];
+    WebSocketClient.onBuildChanged = (from, to) => changes.push([from, to]);
+
+    const client = new WebSocketClient("ws://test/ws");
+    client.sendSetProject("/proj", "tab-1");
+    client.connect();
+    const first = FakeWebSocket.instances[0]!;
+    first.simulateOpen();
+    first.simulateMessage({ type: MessageType.CONNECTED, workingDir: "/proj", buildVersion: "aaa" });
+    // Another tab on the same page, same build: nothing happens.
+    const other = new WebSocketClient("ws://test/ws");
+    other.sendSetProject("/proj", "tab-2");
+    other.connect();
+    const second = FakeWebSocket.instances[1]!;
+    second.simulateOpen();
+    second.simulateMessage({ type: MessageType.CONNECTED, workingDir: "/proj", buildVersion: "aaa" });
+    expect(changes).toEqual([]);
+
+    first.simulateClose();
+    vi.advanceTimersByTime(5000);
+    const next = FakeWebSocket.instances[2]!;
+    next.simulateOpen();
+    next.simulateMessage({ type: MessageType.CONNECTED, workingDir: "/proj", buildVersion: "bbb" });
+    expect(changes).toEqual([["aaa", "bbb"]]);
+  });
+
+  it("ignores a connected message that carries no build id", () => {
+    const changes: string[] = [];
+    WebSocketClient.onBuildChanged = (_from, to) => changes.push(to);
+    const { socket } = connectedClient();
+    socket.simulateMessage({ type: MessageType.CONNECTED, workingDir: "/proj", buildVersion: "aaa" });
+    socket.simulateMessage({ type: MessageType.CONNECTED, workingDir: "/proj" });
+    expect(changes).toEqual([]);
+  });
+
+  it("treats the upgrading notice as handled", () => {
+    const { socket } = connectedClient();
+    expect(() => socket.simulateMessage({ type: MessageType.UPGRADING })).not.toThrow();
+  });
+});
+
 describe("liveness probe", () => {
   it("pings when connected and is satisfied by a pong", () => {
     const { client, socket } = connectedClient();

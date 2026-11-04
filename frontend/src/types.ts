@@ -376,6 +376,8 @@ export interface ConnectedMessage extends BaseMessage {
   launchPreset?: LaunchPreset;
   slashCommands?: Array<{ name: string; description: string }>;
   connectionId?: string;
+  /** Identity of the backend build; a change between connects means an in-place upgrade. */
+  buildVersion?: string;
   cliAgent?: CliAgentInfo;
   mcpStatus?: Array<{
     name: string;
