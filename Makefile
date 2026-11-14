@@ -1,7 +1,7 @@
 # CADE Makefile
 # Run stable, dev, or both versions
 
-.PHONY: stable dev dev-dummy both build kill clean help build-desktop install-desktop install-nkrdn dev-desktop setup setup-remote check
+.PHONY: stable dev dev-dummy both build kill clean help build-desktop install-desktop install-desktop-built install-nkrdn dev-desktop setup setup-remote check
 
 # Default ports
 STABLE_PORT ?= 3000
@@ -55,6 +55,7 @@ help:
 	@echo "  make kill         - Stop all CADE processes"
 	@echo "  make build-desktop - Build desktop application (full build)"
 	@echo "  make install-desktop - Build desktop app and install the .deb (Linux)"
+	@echo "  make install-desktop-built - Install the already-built .deb while CADE is closed (no in-place upgrade)"
 	@echo "  make install-nkrdn - Rebuild only the bundled nkrdn CLI and install it (Linux)"
 	@echo "  make dev-desktop  - Run desktop app in dev mode (Tauri dev)"
 	@echo "  make setup-remote HOST=<ssh-host> - Set up a remote server for CADE"
@@ -172,6 +173,21 @@ endif
 	@# A running backend switches to the new build in place and keeps its
 	@# sessions (backend/upgrade.py). No running backend is not an error.
 	-@/usr/bin/cade-backend upgrade 2>/dev/null || echo "No running backend to upgrade; the next launch uses the new build"
+
+# Install the package build-desktop already produced, with no in-place
+# upgrade, so the next launch runs it. For a build that should wait for the
+# next restart rather than switch a running app. Refuses while a backend is
+# running: replacing its one-file binary under it crashes it on a later lazy
+# import, so close CADE first.
+install-desktop-built:
+ifeq ($(OS),Windows_NT)
+	$(error install-desktop-built is Linux-only)
+endif
+	@test -n "$(wildcard $(DESKTOP_DEB))" || { echo "No built package; run make build-desktop first"; exit 1; }
+	@if pgrep -x cade-backend >/dev/null; then echo "CADE is running; close it, then run this again"; exit 1; fi
+	$(wait-for-nkrdn)
+	sudo apt-get install -y --reinstall ./$(firstword $(wildcard $(DESKTOP_DEB)))
+	@echo "Installed: $$(dpkg-query -W -f='$${Package} $${Version}' cade) -> /usr/bin/cade; launch CADE to use it"
 
 # Rebuild only the bundled nkrdn CLI from the sibling nkrdn repo (its .venv,
 # or NKRDN_VENV) and install it over the packaged copies. Agents, CADE's own
