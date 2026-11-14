@@ -1,7 +1,7 @@
 ---
 title: Plans
 created: 2026-03-24
-updated: 2026-11-04
+updated: 2026-11-14
 status: active
 tags: [index, plans]
 ---
@@ -23,6 +23,7 @@ Intent before code exists. Plans are ephemeral — once the work ships and desig
 | [[permissions/dynamic-permission-management]] | planning | All phases (foundation ready) |
 | [[remote-access-overhaul]] | partially-shipped | Phases 1–4 shipped and graduated; device measurement, chat parity, QR, topology decision |
 | [[infrastructure/seamless-upgrade]] | partially-shipped | Phases 1–3 shipped (exec-in-place, API, CLI, build-id reload); UX toasts, versioned install dirs, session host |
+| [[right-pane-browser]] | planning | Phase 1 (URL in the pane), phase 2 (streamed scout-browse session) |
 
 ## Deferred
 
