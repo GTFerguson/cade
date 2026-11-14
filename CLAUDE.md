@@ -155,7 +155,7 @@ make install-desktop   # build-desktop, then apt-installs the .deb (needs sudo)
 
 When you finish work that touches those directories, run it, or tell the user it needs running if sudo isn't available. Don't point launchers at `desktop/src-tauri/target/release/cade`: `cargo clean` deletes it.
 
-The install ends with `cade-backend upgrade`, which makes a running backend exec the new build in place (`backend/upgrade.py`): shells and CLI agents keep running, tabs reconnect and reload once. So installing does not kill the user's sessions and needs no restart, except onto a backend too old to have the endpoint. Don't swap the binary under a running backend by any other route (a manual `dpkg -i` with no upgrade call): the one-file binary re-reads its own path on lazy imports and the old image will crash later.
+The install ends with `cade-backend upgrade`, which makes a running backend exec the new build in place (`backend/upgrade.py`): shells and CLI agents keep running and tabs reconnect. Browser tabs then reload once to load the new frontend; the desktop window does not, because its frontend is built into the running `cade` binary and only changes when the app restarts. So installing does not kill the user's sessions and needs no restart, except onto a backend too old to have the endpoint. Don't swap the binary under a running backend by any other route (a manual `dpkg -i` with no upgrade call): the one-file binary re-reads its own path on lazy imports and the old image will crash later.
 
 A `post-merge` hook (`scripts/git-hooks/post-merge`, installed by `make setup`) prints the same reminder after a pull or merge that changes those directories.
 

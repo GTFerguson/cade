@@ -121,9 +121,24 @@ Phases 1 to 3 landed on 4 Nov 2026 (`backend/upgrade.py`, `InheritedPTY` in `bac
 
 Design and rationale have graduated to [[../../architecture/components#In-place Upgrade]] and the sequence to [[../../architecture/data-flow#9. In-place Upgrade]]; the install workflow is in [[../../technical/core/development-setup#Keeping the Installed App Current (Linux)]]. The sections below on how it works and the handoff manifest are kept only until the remaining phases ship, then this plan is deleted.
 
+### Desktop reload stranded every tab (found and fixed 14 Nov 2026)
+
+The first live upgrade of the installed desktop app (not a dev backend) kept the backend half of the promise and broke the frontend half. The backend log shows the exec at 12:59:53, "Resumed 4 session(s)" and all four tabs reconnected by 12:59:55; at 12:59:56 every tab closed its socket to reload on the new build id, and none ever reconnected. The app had to be restarted, which lost the sessions the upgrade had just preserved.
+
+Two faults, both specific to the desktop shell:
+
+- **A reload cannot find the backend.** The shell tells the page its backend address by evaluating a script once at startup (`window.__BACKEND_URL__`, `__TAURI__`, `__HOME_DIR__` in `desktop/src-tauri/src/main.rs`). A reload wipes those globals and nothing sets them again, so the page computes its own origin as the backend. This also broke any manual reload. Fixed in `frontend/src/config/config.ts`: the values are mirrored to sessionStorage and restored when a page loads without them.
+- **The reload was pointless there anyway.** The desktop frontend is built into the running `cade` binary, so reloading returns the same page. The reload is now opt-in: a client sends `reloadOnUpgrade` in `set-project` when the backend serves its page, and the backend puts `buildVersion` on `connected` only for those clients. A desktop window therefore reconnects and carries on with its existing interface until the app next restarts.
+
+The opt-in sits on the backend side deliberately: a desktop frontend from before this fix is still running wherever the app has not been restarted, and it would reload into the dead page on any build id it is shown. Withholding the id from clients that do not ask keeps the next install safe for it too.
+
+The gap this leaves: after an upgrade the desktop runs a new backend under an old interface until restart, and nothing tells the user so. That belongs with the 3b toasts below. Delivering a new desktop frontend without a restart needs the session host in phase 5.
+
+The earlier "live run" verification used a dev backend with a browser tab, which is exactly the case that works. A desktop-shell run should be part of verifying any change to this path.
+
 ## Remaining phases
 
-3b. **UX.** "Upgrade pending" and "upgrading" toasts; a "now" button; cancel from the UI. Reconnect after the exec is the ordinary backoff path today (1s, 2s, 4s), which covers the measured 1.6s gap.
+3b. **UX.** "Upgrade pending" and "upgrading" toasts, and on the desktop a notice that the interface updates at the next restart; a "now" button; cancel from the UI. Reconnect after the exec is the ordinary backoff path today (1s, 2s, 4s), which covers the measured 1.6s gap.
 4. **Safe install.** Versioned install directories (`/usr/lib/CADE/versions/<version>/`) and a symlink flip, so a build can sit installed-but-not-activated indefinitely without the one-file lazy-import hazard. Until then `install-desktop` triggers the upgrade immediately after dpkg, which keeps the window to seconds.
 5. **Deferred.** Session-host daemon (PTY ownership in a separate long-lived process) for Windows and for upgrading the Tauri shell itself; remote deployment hook so `deploy.sh` calls the endpoint instead of `systemctl restart`.
 

@@ -7,7 +7,7 @@
 import { BaseWSClient, type WSAuthFailedEvent } from "@core/platform/ws-client";
 import { appendTokenToUrl } from "../auth/tokenManager";
 import { getStoredIdToken } from "../auth/googleAuth";
-import { basePath, config, isRemoteBrowserAccess } from "../config/config";
+import { basePath, config, isRemoteBrowserAccess, isTauri } from "../config/config";
 import { ErrorCode, MessageType, type AnySessionKey } from "@core/platform/protocol";
 import type {
   AgentKilledMessage,
@@ -322,6 +322,9 @@ export class WebSocketClient extends BaseWSClient {
         type: MessageType.SET_PROJECT,
         path: this.pendingProjectPath,
       };
+      if (WebSocketClient.pageComesFromBackend()) {
+        message.reloadOnUpgrade = true;
+      }
       if (this.pendingSessionId !== null) {
         message.sessionId = this.pendingSessionId;
       }
@@ -361,11 +364,7 @@ export class WebSocketClient extends BaseWSClient {
         return;
       }
 
-      const isTauri =
-        window.location.hostname === "tauri.localhost" ||
-        (window as any).__TAURI__ === true;
-
-      if (isTauri || isRemoteBrowserAccess()) {
+      if (isTauri() || isRemoteBrowserAccess()) {
         console.warn("WebSocket auth rejected (1008), showing auth dialog");
         this.fireBridged("auth-failed", { code: event.code });
       } else {
@@ -522,6 +521,14 @@ export class WebSocketClient extends BaseWSClient {
   // changes behind it, and nothing in the frontend showed which caller was
   // looping. When requests burst past the threshold, ship the call stack to
   // the backend log so the next occurrence names its trigger.
+  /**
+   * The desktop shell carries its own copy of the frontend, so reloading
+   * there returns the same page and only interrupts the session.
+   */
+  private static pageComesFromBackend(): boolean {
+    return !isTauri();
+  }
+
   // The build this page's JS belongs to, learned from the first connected
   // message of any tab. One page serves every tab, so this is static: when
   // a later connect (any tab) reports a different build the backend has
@@ -793,6 +800,9 @@ export class WebSocketClient extends BaseWSClient {
         type: MessageType.SET_PROJECT,
         path,
       };
+      if (WebSocketClient.pageComesFromBackend()) {
+        message.reloadOnUpgrade = true;
+      }
       if (sessionId !== undefined) {
         message.sessionId = sessionId;
       }

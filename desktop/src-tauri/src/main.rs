@@ -107,9 +107,10 @@ fn main() {
                 (backend_url, Some(backend))
             };
 
-            // Inject backend URL into the webview BEFORE starting the backend.
-            // The webview begins loading when the window is created (before setup runs),
-            // so this must happen as early as possible to beat the frontend JS evaluation.
+            // Tell the page where its backend is. This runs once, against
+            // whatever document is loaded now; a later reload of the page does
+            // not get it again, so the frontend keeps its own copy of these
+            // values (syncShellGlobals in frontend/src/config/config.ts).
             let window = app.get_webview_window("main")
                 .ok_or("Failed to get main window")?;
 

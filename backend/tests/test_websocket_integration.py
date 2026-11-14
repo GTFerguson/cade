@@ -145,6 +145,36 @@ class TestWebSocketConnection:
             )
             assert connected["workingDir"] == str(temp_dir)
 
+    @staticmethod
+    def _connected(ws) -> dict:
+        for _ in range(10):
+            msg = ws.receive_json()
+            if msg["type"] == MessageType.CONNECTED:
+                return msg
+        raise AssertionError("no connected message")
+
+    def test_build_id_goes_only_to_clients_that_ask_to_reload(
+        self, client: TestClient, temp_dir: Path
+    ):
+        """A changed build id makes a client reload its page. A client that
+        has not asked for that (the desktop shell, whose page is not served
+        by the backend) must not be given one to react to."""
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": MessageType.SET_PROJECT, "path": str(temp_dir)})
+            assert "buildVersion" not in self._connected(ws)
+
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({
+                "type": MessageType.SET_PROJECT,
+                "path": str(temp_dir),
+                "reloadOnUpgrade": True,
+            })
+            assert self._connected(ws)["buildVersion"]
+
+    def test_build_id_withheld_when_no_handshake_arrives(self, client: TestClient):
+        with client.websocket_connect("/ws") as ws:
+            assert "buildVersion" not in self._connected(ws)
+
     def test_websocket_receives_startup_status(self, client: TestClient):
         """Client should receive startup status messages during connection."""
         with client.websocket_connect("/ws") as ws:

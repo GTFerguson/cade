@@ -106,6 +106,26 @@ describe("set-project handshake", () => {
   });
 });
 
+describe("upgrade reload opt-in", () => {
+  afterEach(() => {
+    delete (window as any).__TAURI__;
+  });
+
+  function handshake(): Record<string, unknown> {
+    const { socket } = connectedClient();
+    return JSON.parse(socket.sent.find((m) => m.includes(MessageType.SET_PROJECT))!);
+  }
+
+  it("asks to be reloaded on upgrade when the backend serves the page", () => {
+    expect(handshake().reloadOnUpgrade).toBe(true);
+  });
+
+  it("does not ask in the desktop shell, whose page a reload cannot update", () => {
+    (window as any).__TAURI__ = true;
+    expect(handshake().reloadOnUpgrade).toBeUndefined();
+  });
+});
+
 describe("build identity", () => {
   beforeEach(() => {
     WebSocketClient.resetKnownBuild();

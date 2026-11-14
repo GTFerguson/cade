@@ -14,6 +14,42 @@ const wsScheme = (): string =>
     ? "wss"
     : "ws";
 
+/**
+ * The desktop shell sets these on `window` once, after its backend is up. A
+ * page reload discards them and the shell does not set them again, which
+ * would leave the page with no backend to connect to. So they are mirrored
+ * into sessionStorage and put back when a page loads without them.
+ */
+const SHELL_GLOBALS = ["__BACKEND_URL__", "__TAURI__", "__HOME_DIR__"] as const;
+const SHELL_GLOBALS_KEY = "cade-shell-globals";
+
+function syncShellGlobals(): void {
+  const w = window as any;
+  try {
+    if (w.__BACKEND_URL__) {
+      // Injection can land at any point after load, so every read re-saves
+      // it; a fresh value from the shell always wins over a remembered one.
+      const current = JSON.stringify(Object.fromEntries(SHELL_GLOBALS.map((k) => [k, w[k]])));
+      if (window.sessionStorage.getItem(SHELL_GLOBALS_KEY) !== current) {
+        window.sessionStorage.setItem(SHELL_GLOBALS_KEY, current);
+      }
+      return;
+    }
+    const saved = window.sessionStorage.getItem(SHELL_GLOBALS_KEY);
+    if (!saved) return;
+    const values = JSON.parse(saved) as Record<string, unknown>;
+    for (const key of SHELL_GLOBALS) {
+      if (values[key] !== undefined && w[key] === undefined) w[key] = values[key];
+    }
+  } catch {
+    // Storage can be unavailable or hold junk; the page then behaves as it
+    // would on a first load and waits for the shell.
+  }
+}
+
+// Restore before any other module looks at the globals.
+if (typeof window !== "undefined") syncShellGlobals();
+
 // Build WebSocket URL based on environment.
 // Re-evaluated on each call so Tauri's async eval() injection is picked up.
 const getWsUrl = (): string => {
@@ -25,6 +61,7 @@ const getWsUrl = (): string => {
   }
 
   // 2. Check for Tauri injection (desktop app, localhost backend)
+  syncShellGlobals();
   const backendUrl = (window as any).__BACKEND_URL__;
   if (backendUrl) {
     return `ws://${backendUrl.replace('http://', '')}/ws`;
@@ -73,6 +110,7 @@ export const config = {
    * When true and no __BACKEND_URL__ is set yet, connection should wait.
    */
   get wsUrlPending(): boolean {
+    syncShellGlobals();
     return needsInjectedUrl() && !(window as any).__BACKEND_URL__;
   },
 

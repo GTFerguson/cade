@@ -144,6 +144,12 @@ export interface SetProjectMessage extends BaseMessage {
   type: "set-project";
   path: string;
   sessionId?: string;
+  /**
+   * Set when reloading this page would fetch a newer frontend, i.e. the
+   * backend serves it. The server then reports its build id, and a change
+   * between connects reloads the page.
+   */
+  reloadOnUpgrade?: boolean;
   /** Tab name, shown to other devices listing this backend's sessions. */
   label?: string;
   /**

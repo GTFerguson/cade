@@ -114,6 +114,8 @@ class ConnectionHandler:
         self._tree_request_count = 0
         self._session: PTYSession | None = None
         self._session_id: str | None = None
+        # Whether the client asked, in SET_PROJECT, to be told the build id.
+        self._reload_on_upgrade = False
         # Optional override for launch.yml's dashboard_file, sent by the
         # client in SET_PROJECT. Set when the user opens cade with a
         # ?dashboard=<path> URL param.
@@ -323,6 +325,7 @@ class ConnectionHandler:
                                     project_path,
                                 )
                         self._session_id = data.get("sessionId")
+                        self._reload_on_upgrade = data.get("reloadOnUpgrade") is True
                         if self._session_id:
                             logger.debug("Session ID: %s", self._session_id)
                         label = data.get("label")
@@ -768,9 +771,6 @@ class ConnectionHandler:
             "idleSeconds": idle_seconds,
             "wslHealthy": wsl_healthy,
             "connectionId": self._connection_id,
-            # Tabs reload when this changes between connects: the backend
-            # upgraded itself in place and their JS is from the old build.
-            "buildVersion": build_id(),
             "cliAgent": {
                 "id": adapter.id,
                 "displayName": adapter.display_name,
@@ -783,6 +783,13 @@ class ConnectionHandler:
                 },
             },
         }
+
+        # A tab reloads its page when this changes between connects, to pick
+        # up the frontend of the build the backend upgraded itself to. Only a
+        # client that asked gets it: one whose page the backend does not
+        # serve would gain nothing from reloading.
+        if self._reload_on_upgrade:
+            message["buildVersion"] = build_id()
 
         # Frontend-visible subset of the project-local launch preset.
         # (The provider block was consumed in _setup and registered on the
