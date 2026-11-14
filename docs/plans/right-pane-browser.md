@@ -32,7 +32,7 @@ So there are two distinct needs, and they are not solved by the same thing:
 
 ## What it adds
 
-Two phases, in order. A third approach was considered and rejected (see below).
+Two phases, in order; phase 2 now has its own plan. A third approach was considered and rejected (see below).
 
 ### Phase 1: open a URL in the pane
 
@@ -50,17 +50,9 @@ Estimated effort: an hour or two. It builds directly on the HTML panel.
 
 ### Phase 2: a shared, streamed scout-browse session
 
-Show the agent's own browser live in the pane, and forward the user's clicks and
-keys back to it. The backend attaches to a running scout-browse browser, streams
-frames to the frontend over the existing websocket, and relays input.
-
-This is the only option where the user and the agent share one page: watch the
-agent browse, take over to log in or clear a CAPTCHA, hand back. It works on
-both the desktop app and a remote deployment, because the browser runs beside
-the backend rather than in the client. It also keeps scout-browse's anti-bot
-profile, so sites that block a plain frame still load.
-
-Estimated effort: one to two weeks.
+Split into its own plan: [[integrated-scout-browser]]. Showing the agent's own
+browser live in the pane, with the user able to take over, has different
+integration points and is one to two weeks of work on its own.
 
 ## Key challenges
 
@@ -75,32 +67,14 @@ Estimated effort: one to two weeks.
   means the viewer's machine, not the server, and an `http:` page inside an
   `https:` CADE is blocked as mixed content. Phase 1 is mostly a desktop and
   local-dev feature.
-- **Session ownership (phase 2).** scout-browse is one browser per working
-  directory, launched and closed by the agent. The pane has to follow a session
-  it does not own: appear when one starts, survive the agent navigating, and
-  clear when it closes.
-- **Input fidelity (phase 2).** Forwarded input must map pane coordinates to
-  page coordinates across resizes, and handle text entry, modifier keys,
-  scrolling and focus. Typing latency will be noticeable on a remote deployment.
-- **Turn-taking (phase 2).** The user and the agent can act on the same page at
-  the same moment. There needs to be a visible notion of who has control.
-- **Stream cost (phase 2).** Frames over the websocket compete with terminal and
-  chat traffic. The stream should stop when the pane is hidden.
 
 ## Integration points
 
-- **Right pane.** `RightPaneManager` switches between modes (viewer, neovim,
-  agents, dashboard, plans). The browser is either a new mode or a further
-  renderer inside the viewer; phase 1 fits the viewer, phase 2 is closer to a
-  mode of its own, like the neovim pane.
+- **Right pane.** Phase 1 is a further renderer inside the viewer, beside the
+  HTML panel, not a new `RightPaneManager` mode.
 - **Agent tools.** `backend/orchestrator/mcp_server.py` holds `view_file` and
   `show_html`. A URL tool belongs beside them and should use the same
   caller-tab routing, so a page opens only in the tab that asked.
-- **scout-browse.** It starts Chrome with a debugging port and records the
-  endpoint and process id in `.scout-browse/state.json` under the working
-  directory, so a running session can be attached to without changing how
-  agents launch it. Chrome's screencast and input-dispatch protocol commands are
-  the expected transport.
 - **Viewer lock.** The existing lock stops hooks changing the viewer. It should
   equally stop an agent navigating the pane away.
 
@@ -127,16 +101,11 @@ complaint and phase 2 is not built.
   and JS) be solved here, by serving project files over HTTP to the frame? It is
   the same gap from the other side, and it raises the question of whether a
   sandboxed frame receives the session cookie on an authenticated deployment.
-- In phase 2, does the pane attach to the agent's session only, or can the user
-  start one themselves and hand it to an agent?
-- What frame rate and image quality are acceptable over a remote link, and is
-  the Chrome screencast adequate or is a different transport needed?
-- How does control pass between user and agent: explicit take-over, or
-  last-input-wins with an indicator?
-- Estimates above are from reading the code and knowledge of Tauri and the
-  Chrome protocol; none of the three approaches has been prototyped.
+- Estimates above are from reading the code and knowledge of Tauri; neither
+  phase 1 nor the rejected approach has been prototyped.
 
 ## See also
 
+- [[integrated-scout-browser]] — phase 2: the agent's scout-browse session in the pane
 - [[remote-access-overhaul]] — constraints on what works in a hosted CADE
 - [[dashboard/agent-ui-system]] — the other route by which agents put UI in the right pane

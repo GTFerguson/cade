@@ -23,7 +23,8 @@ Intent before code exists. Plans are ephemeral — once the work ships and desig
 | [[permissions/dynamic-permission-management]] | planning | All phases (foundation ready) |
 | [[remote-access-overhaul]] | partially-shipped | Phases 1–4 shipped and graduated; device measurement, chat parity, QR, topology decision |
 | [[infrastructure/seamless-upgrade]] | partially-shipped | Phases 1–3 shipped (exec-in-place, API, CLI, build-id reload); UX toasts, versioned install dirs, session host |
-| [[right-pane-browser]] | planning | Phase 1 (URL in the pane), phase 2 (streamed scout-browse session) |
+| [[right-pane-browser]] | planning | Phase 1: URL in the viewer frame |
+| [[integrated-scout-browser]] | planning | Session awareness, live view, take-over, agent tools, remote |
 
 ## Deferred
 
