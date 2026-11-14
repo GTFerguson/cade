@@ -436,6 +436,12 @@ class ProjectFiltersRequest(BaseModel):
     exclude: list[str] = []
 
 
+class ShowHtmlRequest(BaseModel):
+    html: str
+    name: str = "canvas"
+    cwd: str | None = None
+
+
 class PushPanelRequest(BaseModel):
     id: str
     title: str
@@ -470,6 +476,46 @@ class PushSubscribeRequest(BaseModel):
 
 class PushUnsubscribeRequest(BaseModel):
     endpoint: str
+
+
+_NO_TAB_ERROR = "No connected CADE tab matches this session, so there is no viewer to show it in"
+
+
+def _caller_project_root(connection_id: str, cwd: str | None) -> Path | None:
+    """Project root of the tab a UI-tool call came from.
+
+    The connection id is tried first. A CLI agent's MCP server keeps the id it
+    was launched with, which stops matching once its tab reconnects, so the
+    caller's working directory is the fallback: the open project containing it.
+    """
+    from backend.orchestrator.manager import get_orchestrator_manager
+
+    if connection_id:
+        root = get_orchestrator_manager().working_dir_for(connection_id)
+        if root is not None:
+            return root
+    if cwd:
+        registry = get_connection_registry()
+        for ws in registry.get_connections_for_file(cwd):
+            return registry.project_path_of(ws)
+    return None
+
+
+async def _send_to_caller_tabs(connection_id: str, cwd: str | None, message: dict) -> int:
+    """Deliver ``message`` to the tab a UI-tool call came from.
+
+    Resolves the caller the same way as ``_caller_project_root``. Returns the
+    number of tabs reached.
+    """
+    from backend.orchestrator.manager import get_orchestrator_manager
+
+    if connection_id and await get_orchestrator_manager().send_to_owner(connection_id, message):
+        return 1
+    if cwd:
+        return await _send_to_connections(
+            get_connection_registry().get_connections_for_file(cwd), message,
+        )
+    return 0
 
 
 async def _send_to_connections(connections: list, message: dict) -> int:
@@ -1363,20 +1409,36 @@ def create_app(config: Config | None = None) -> FastAPI:
     # --- UI Tools API (called by MCP tools) ---
 
     @app.post("/api/ui/view-file")
-    async def ui_view_file(body: ViewFileRequest) -> JSONResponse:
-        """Open a file in the viewer for all connected clients."""
-        from backend.connection_registry import get_connection_registry
-        registry = get_connection_registry()
-        # Broadcast to all connections (the file path is project-relative)
-        for ws_conn in registry.get_all_connections():
-            try:
-                await ws_conn.send_json({
-                    "type": "view-file",
-                    "path": body.path,
-                })
-            except Exception:
-                pass
+    async def ui_view_file(request: Request, body: ViewFileRequest) -> JSONResponse:
+        """Open a project-relative file in the calling session's viewer."""
+        message = {"type": MessageType.VIEW_FILE, "path": body.path}
+        connection_id = request.headers.get("X-Connection-Id", "")
+        if not connection_id and not body.cwd:
+            # A caller that identifies neither its tab nor its project (a
+            # script hitting the API directly) cannot be routed.
+            await _send_to_connections(get_connection_registry().get_all_connections(), message)
+        elif not await _send_to_caller_tabs(connection_id, body.cwd, message):
+            return JSONResponse({"error": _NO_TAB_ERROR}, status_code=409)
         return JSONResponse({"status": "ok", "path": body.path})
+
+    @app.post("/api/ui/show-html")
+    async def ui_show_html(request: Request, body: ShowHtmlRequest) -> JSONResponse:
+        """Save an agent-drawn page into the project and open it in the viewer."""
+        from backend.ui_canvas import CanvasError, write_canvas
+
+        connection_id = request.headers.get("X-Connection-Id", "")
+        project_root = _caller_project_root(connection_id, body.cwd)
+        if project_root is None:
+            return JSONResponse({"error": _NO_TAB_ERROR}, status_code=409)
+        try:
+            relative_path = write_canvas(project_root, body.name, body.html)
+        except CanvasError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+
+        await _send_to_caller_tabs(
+            connection_id, body.cwd, {"type": MessageType.VIEW_FILE, "path": relative_path},
+        )
+        return JSONResponse({"status": "ok", "path": relative_path})
 
     @app.post("/api/ui/push-panel")
     async def ui_push_panel(body: PushPanelRequest) -> JSONResponse:

@@ -172,6 +172,27 @@ class OrchestratorManager:
 
     # ── Public API ──────────────────────────────────────────────────
 
+    def working_dir_for(self, connection_id: str) -> Path | None:
+        """Project root of the tab that owns ``connection_id``.
+
+        Accepts an agent id as well as a websocket connection id, so a tool
+        called by a subagent resolves to the tab that spawned it.
+        """
+        entry = self._connections.get(self._root_connection_id(connection_id))
+        return entry.working_dir if entry else None
+
+    async def send_to_owner(self, connection_id: str, message: dict) -> bool:
+        """Send ``message`` to the tab that owns ``connection_id``.
+
+        Returns False when no such tab is connected, so callers can report
+        that nothing was shown instead of assuming delivery.
+        """
+        root = self._root_connection_id(connection_id)
+        if root not in self._connections:
+            return False
+        await self._send_to(root, message)
+        return True
+
     async def spawn_agent(
         self, spec: AgentSpec, connection_id: str = ""
     ) -> AgentRecord:

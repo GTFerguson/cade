@@ -85,12 +85,30 @@ async def list_agents() -> str:
 
 # ─── UI Tools ────────────────────────────────────────────────
 
+async def _post_ui(endpoint: str, payload: dict) -> str:
+    """Call a viewer endpoint, returning its error text instead of raising.
+
+    A refusal ("no CADE tab is connected", "html is empty") is something the
+    agent can act on, so it is passed back as the tool result.
+    """
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.post(
+            f"{BASE_URL}/api/ui/{endpoint}",
+            # The working directory lets the backend find the right tab when
+            # the connection id this process was launched with has gone stale.
+            json={**payload, "cwd": os.getcwd()},
+            headers=_get_headers(),
+        )
+        return response.text
+
+
 @mcp.tool()
 async def view_file(path: str) -> str:
     """Open a file in the CADE viewer pane.
 
-    Shows the file in the markdown/code viewer. The user sees it
-    immediately without leaving their current context.
+    The user sees it immediately, beside the terminal, without leaving their
+    current context. Markdown, code, JSON, images and PDFs each get their own
+    rendering, and .html files are shown as live pages.
 
     Args:
         path: File path relative to the project root (e.g. "src/main.ts", "docs/plans/roadmap.md")
@@ -98,14 +116,33 @@ async def view_file(path: str) -> str:
     Returns:
         Confirmation message
     """
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.post(
-            f"{BASE_URL}/api/ui/view-file",
-            json={"path": path},
-            headers=_get_headers(),
-        )
-        response.raise_for_status()
-        return response.text
+    return await _post_ui("view-file", {"path": path})
+
+
+@mcp.tool()
+async def show_html(html: str, name: str = "canvas") -> str:
+    """Draw a page in the CADE viewer pane, beside the terminal.
+
+    Use this to show the user something visual without making them leave CADE:
+    a diagram, chart, UI mockup, comparison table, or interactive explainer.
+    The page is rendered live, scripts included, in an isolated frame.
+
+    Pass a complete, self-contained HTML document. Inline its CSS and
+    JavaScript, or load libraries from a CDN by absolute URL; relative paths
+    to local files do not resolve.
+
+    The page is saved to .cade/canvas/<name>.html in the project. Calling
+    again with the same name replaces it. For a small change, edit that file
+    and call view_file on it. Use different names to keep several pages.
+
+    Args:
+        html: The full HTML document to display
+        name: Short label for the page (e.g. "auth-flow", "latency-chart")
+
+    Returns:
+        The saved file path, or an error message
+    """
+    return await _post_ui("show-html", {"html": html, "name": name})
 
 
 if __name__ == "__main__":

@@ -115,6 +115,11 @@ class ConnectionRegistry:
         # Return only connections with the most specific match
         return [ws for ws, depth in matches.items() if depth == max_depth]
 
+    def project_path_of(self, websocket: "WebSocket") -> Path | None:
+        """Project root a registered connection belongs to."""
+        info = self._connections.get(websocket)
+        return info.project_path if info else None
+
     def get_connections_for_project(self, project_path: str | Path) -> list[WebSocket]:
         """Find all connections for a specific project path.
 

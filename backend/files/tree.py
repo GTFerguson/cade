@@ -475,6 +475,7 @@ def get_file_type(path: str) -> str:
         ".jsx": "jsx",
         ".json": "json",
         ".html": "html",
+        ".htm": "html",
         ".css": "css",
         ".scss": "scss",
         ".md": "markdown",
