@@ -40,6 +40,7 @@ import {
 import type { EditorModeState, EditorCallbacks } from "./editor-mode";
 import { viewerRegistry } from "./viewer-registry";
 import { formatBytes, isBinaryPayload, renderBinaryContent } from "./binary-viewers";
+import { renderHtmlDocument } from "./html-view";
 import type { FileContentEncoding } from "../types";
 
 // Make libraries available globally for mertex.md
@@ -363,7 +364,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     const header = document.createElement("div");
     header.className = "viewer-header";
 
-    // Left section: optional JSON toggle
+    // Left section: optional source/rendered toggle
     const headerLeft = document.createElement("div");
     headerLeft.className = "viewer-header-left";
     header.appendChild(headerLeft);
@@ -447,33 +448,22 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       patchLinks(content, (href) => {
         this.emit("link-click", resolveMarkdownLinkHref(href, this.currentPath));
       });
+    } else if (this.currentFileType === "html") {
+      headerLeft.appendChild(this.buildParsedToggle("[source]", "[page]"));
+      if (this.parsedMode) {
+        content.classList.add("html-viewer");
+        this.activeParsedComponent = renderHtmlDocument(content, this.currentContent, displayName);
+      } else {
+        content.classList.add("code-viewer");
+        content.appendChild(renderCode(this.currentContent, this.currentFileType));
+      }
     } else if (this.currentFileType === "json") {
-      const viewerFactory = this.detectJsonViewerFactory();
+      const viewerFactory = viewerRegistry.detect(this.currentPath);
       if (viewerFactory) {
-        // JSON mode toggle goes in the header's left section
-        const toggleEl = document.createElement("span");
-        toggleEl.className = "viewer-json-toggle";
-
-        const rawBtn = document.createElement("button");
-        rawBtn.className = "viewer-json-btn" + (!this.parsedMode ? " viewer-json-btn--active" : "");
-        rawBtn.textContent = "[raw]";
-        rawBtn.addEventListener("click", () => { this.parsedMode = false; void this.render(); });
-
-        const parsedBtn = document.createElement("button");
-        parsedBtn.className = "viewer-json-btn" + (this.parsedMode ? " viewer-json-btn--active" : "");
-        parsedBtn.textContent = "[parsed]";
-        parsedBtn.addEventListener("click", () => { this.parsedMode = true; void this.render(); });
-
-        toggleEl.appendChild(rawBtn);
-        toggleEl.appendChild(parsedBtn);
-        headerLeft.appendChild(toggleEl);
-
-        if (this.parsedMode) {
-          this.renderParsedContent(content, viewerFactory);
-        } else {
-          content.classList.add("json-viewer");
-          content.appendChild(renderJsonTree(this.currentContent));
-        }
+        headerLeft.appendChild(this.buildParsedToggle("[raw]", "[parsed]"));
+      }
+      if (viewerFactory && this.parsedMode) {
+        this.renderParsedContent(content, viewerFactory);
       } else {
         content.classList.add("json-viewer");
         content.appendChild(renderJsonTree(this.currentContent));
@@ -649,16 +639,27 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     this.filterFlyoutEl = null;
   }
 
-  private detectJsonViewerFactory(): ReturnType<typeof viewerRegistry.detect> {
-    const p = this.currentPath;
-    if (!p) return null;
-    return viewerRegistry.detect(p);
+  /**
+   * Header toggle between a file's text and its rendered form. Both views
+   * share `parsedMode`, which `loadFile` resets to the rendered one.
+   */
+  private buildParsedToggle(rawLabel: string, parsedLabel: string): HTMLElement {
+    const toggle = document.createElement("span");
+    toggle.className = "viewer-mode-toggle";
+    for (const [label, parsed] of [[rawLabel, false], [parsedLabel, true]] as const) {
+      const btn = document.createElement("button");
+      btn.className = "viewer-mode-btn" + (this.parsedMode === parsed ? " viewer-mode-btn--active" : "");
+      btn.textContent = label;
+      btn.addEventListener("click", () => {
+        this.parsedMode = parsed;
+        void this.render();
+      });
+      toggle.appendChild(btn);
+    }
+    return toggle;
   }
 
   private renderParsedContent(container: HTMLElement, factory: NonNullable<ReturnType<typeof viewerRegistry.detect>>): void {
-    this.activeParsedComponent?.dispose();
-    this.activeParsedComponent = null;
-
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(this.currentContent) as Record<string, unknown>;

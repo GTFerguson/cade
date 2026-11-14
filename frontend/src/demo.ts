@@ -515,6 +515,54 @@ function injectPhase5MemoryCaptures(ws: WebSocketClient): void {
   fire(5200, { event: "done" });
 }
 
+/**
+ * A page of the kind an agent draws: self-contained, scripted, and reporting
+ * on its own sandbox so the isolation is visible in the demo.
+ */
+const HTML_PAGE = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Request latency</title>
+<style>
+  body { margin: 0; padding: 24px; background: #0f1419; color: #d7dce2; font: 14px/1.5 ui-monospace, monospace; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  .sub { color: #7d8794; margin-bottom: 20px; }
+  .bar { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+  .bar span:first-child { width: 90px; color: #7d8794; }
+  .bar i { display: block; height: 14px; background: #5fb3a1; width: 0; transition: width .6s ease; }
+  #checks { margin-top: 24px; padding-top: 12px; border-top: 1px solid #2a323c; color: #7d8794; }
+  #checks b { color: #d7dce2; font-weight: normal; }
+</style>
+</head>
+<body>
+<h1>Request latency by endpoint</h1>
+<div class="sub">p95, milliseconds</div>
+<div id="bars"></div>
+<div id="checks"></div>
+<script>
+  const data = [["/api/view", 42], ["/ws", 8], ["/api/chat", 310], ["/api/memory", 127]];
+  const max = Math.max(...data.map((d) => d[1]));
+  const bars = document.getElementById("bars");
+  for (const [name, ms] of data) {
+    const row = document.createElement("div");
+    row.className = "bar";
+    row.innerHTML = "<span>" + name + "</span><i></i><span>" + ms + "</span>";
+    bars.appendChild(row);
+    requestAnimationFrame(() => { row.querySelector("i").style.width = (ms / max) * 260 + "px"; });
+  }
+  let parent = "reachable";
+  try { void window.parent.document.body; } catch { parent = "blocked"; }
+  let storage = "reachable";
+  try { void window.localStorage.length; } catch { storage = "blocked"; }
+  document.getElementById("checks").innerHTML =
+    "scripts: <b id='scripts'>running</b> · parent DOM: <b id='parent'>" + parent +
+    "</b> · storage: <b id='storage'>" + storage + "</b> · origin: <b id='origin'>" + self.origin + "</b>";
+</script>
+</body>
+</html>
+`;
+
 const SCENARIOS: Record<string, Scenario> = {
   "mobile-remote": {
     initial: null,
@@ -533,6 +581,11 @@ const SCENARIOS: Record<string, Scenario> = {
     },
   },
   "mermaid": {
+    initial: {
+      sources: {},
+    },
+  },
+  "html": {
     initial: {
       sources: {},
     },
@@ -928,6 +981,16 @@ export function activateDemoMode(ws: WebSocketClient): void {
         path: "docs/diagram-showcase.md",
         content: MERMAID_MD,
         fileType: "markdown",
+      });
+    }
+
+    if (key === "html") {
+      ws.injectEvent("file-tree", { type: "file-tree", data: [] });
+      ws.injectEvent("file-content", {
+        type: "file-content",
+        path: ".cade/canvas/latency-chart.html",
+        content: HTML_PAGE,
+        fileType: "html",
       });
     }
 

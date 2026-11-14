@@ -78,13 +78,13 @@
   color: var(--accent-red);
 }
 
-.viewer-json-toggle {
+.viewer-mode-toggle {
   display: flex;
   gap: 4px;
   align-items: center;
 }
 
-.viewer-json-btn {
+.viewer-mode-btn {
   background: transparent;
   border: none;
   color: var(--text-muted);
@@ -97,11 +97,11 @@
   letter-spacing: 0;
 }
 
-.viewer-json-btn:hover {
+.viewer-mode-btn:hover {
   color: var(--text-primary);
 }
 
-.viewer-json-btn--active {
+.viewer-mode-btn--active {
   color: var(--accent-green);
 }
 
@@ -1530,6 +1530,22 @@
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 12px;
+}
+
+/* The page supplies its own background and scrolling, so the frame fills the
+   content area edge to edge. */
+.viewer-content.html-viewer {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+}
+
+.viewer-html-frame {
+  flex: 1;
+  width: 100%;
+  border: none;
+  /* Pages without a background of their own expect the browser's white. */
+  background: #fff;
 }
 
 .viewer-image {
