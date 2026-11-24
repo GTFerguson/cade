@@ -132,7 +132,23 @@ Two faults, both specific to the desktop shell:
 
 The opt-in sits on the backend side deliberately: a desktop frontend from before this fix is still running wherever the app has not been restarted, and it would reload into the dead page on any build id it is shown. Withholding the id from clients that do not ask keeps the next install safe for it too.
 
-The gap this leaves: after an upgrade the desktop runs a new backend under an old interface until restart, and nothing tells the user so. That belongs with the 3b toasts below. Delivering a new desktop frontend without a restart needs the session host in phase 5.
+The gap this left: after an upgrade the desktop ran a new backend under an old interface until restart, and nothing told the user so. Closed on 24 Nov 2026 (next section).
+
+### Desktop frontend upgrades live (24 Nov 2026)
+
+The desktop window now opens a loader page (`frontend/shell.html`, `frontend/src/shell/loader.ts`) instead of the interface built into the app. The loader fetches `index.html` from the local backend and writes it into its own document, so the JS and CSS always belong to the backend that is running, and the ordinary reload-on-upgrade path applies to the desktop too.
+
+Decisions:
+
+- **The document stays on the shell's origin; it does not navigate to the backend.** The backend port is random per launch (`desktop/src-tauri/src/port.rs`), so its origin changes every start and localStorage (tabs, theme) would be empty each time. It also keeps the Tauri capability set unchanged: no remote-origin IPC grant is needed.
+- **Asset URLs are made absolute rather than using `<base href>`.** The loader rewrites root-relative `src`/`href` in the fetched page, and `experimental.renderBuiltUrl` in `frontend/vite.config.ts` prefixes runtime-loaded chunks, preloaded CSS and worker URLs with `globalThis.__ASSET_ORIGIN__`, which only the loader sets. A `<base>` element would also redirect fragment links and SVG `url(#id)` references, a known hazard for Mermaid markers.
+- **Local backends only.** The loader takes the interface only from `127.0.0.1`/`localhost`; with a remote backend configured it loads the built-in copy, because a remote page would run with the shell's native commands in reach.
+- **Fallback.** Ten fetch attempts half a second apart cover the exec gap; after that, or if the response is not the app page, the loader replaces itself with the built-in `index.html`. A window on the built-in copy does not ask for `reloadOnUpgrade`, exactly as before.
+- **The shell re-supplies its globals on every load** (`on_page_load` in `desktop/src-tauri/src/main.rs`); the sessionStorage mirror remains as the copy the loader reads first.
+
+What still needs an app restart: the Rust shell and the loader itself, which are compiled into the running binary. A new frontend that calls a Tauri command the running shell lacks will find it missing until then. Upgrading those live is the session host in phase 5.
+
+Verified in a headless browser with two servers standing in for the built-in copy and the backend: with the built-in copy's entry script deleted the app still booted from the backend's files, and with the backend stopped the loader landed on the built-in `index.html`. **Not yet verified in the installed desktop app (WebKitGTK) through a real upgrade**; that needs one restart onto a build containing the loader, then an install on top of it.
 
 The earlier "live run" verification used a dev backend with a browser tab, which is exactly the case that works. A desktop-shell run should be part of verifying any change to this path.
 

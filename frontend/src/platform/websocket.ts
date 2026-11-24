@@ -522,11 +522,14 @@ export class WebSocketClient extends BaseWSClient {
   // looping. When requests burst past the threshold, ship the call stack to
   // the backend log so the next occurrence names its trigger.
   /**
-   * The desktop shell carries its own copy of the frontend, so reloading
-   * there returns the same page and only interrupts the session.
+   * Reloading on an upgrade only helps when the page is served by the
+   * backend: a browser tab, or a desktop window whose shell loader fetched
+   * it from there (it sets __LIVE_FRONTEND__). A desktop window running the
+   * copy built into the app would get the same page back and only interrupt
+   * the session.
    */
   private static pageComesFromBackend(): boolean {
-    return !isTauri();
+    return !isTauri() || (window as any).__LIVE_FRONTEND__ === true;
   }
 
   // The build this page's JS belongs to, learned from the first connected

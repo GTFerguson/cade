@@ -8,14 +8,37 @@ const __dirname = dirname(__filename);
 // Backend port for WebSocket proxy (default: 3001 for dev)
 const backendPort = process.env.BACKEND_PORT || "3001";
 
+const base = process.env.VITE_BASE_PATH || "/";
+
 export default defineConfig({
-  base: process.env.VITE_BASE_PATH || "/",
+  base,
   root: ".",
   publicDir: "public",
   build: {
     outDir: "dist",
     emptyOutDir: true,
     sourcemap: true,
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, "index.html"),
+        // Desktop shell loader page (see src/shell/loader.ts).
+        shell: resolve(__dirname, "shell.html"),
+      },
+    },
+  },
+  experimental: {
+    // Chunks and assets the app loads at runtime (lazy imports, their CSS,
+    // worker scripts) are addressed from the document by default. In the
+    // desktop shell the document is the app's built-in page but the code
+    // comes from the backend, so those lookups must go to the backend too:
+    // the shell loader sets __ASSET_ORIGIN__ and everything else leaves it
+    // unset, which keeps the usual base-relative URL.
+    renderBuiltUrl(filename, { hostType }) {
+      if (hostType !== "js") return undefined;
+      return {
+        runtime: `(globalThis.__ASSET_ORIGIN__||"")+${JSON.stringify(base + filename)}`,
+      };
+    },
   },
   resolve: {
     alias: {

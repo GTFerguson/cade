@@ -109,6 +109,7 @@ describe("set-project handshake", () => {
 describe("upgrade reload opt-in", () => {
   afterEach(() => {
     delete (window as any).__TAURI__;
+    delete (window as any).__LIVE_FRONTEND__;
   });
 
   function handshake(): Record<string, unknown> {
@@ -120,9 +121,15 @@ describe("upgrade reload opt-in", () => {
     expect(handshake().reloadOnUpgrade).toBe(true);
   });
 
-  it("does not ask in the desktop shell, whose page a reload cannot update", () => {
+  it("does not ask in a desktop window running the interface built into the app", () => {
     (window as any).__TAURI__ = true;
     expect(handshake().reloadOnUpgrade).toBeUndefined();
+  });
+
+  it("asks in a desktop window whose shell loader fetched the page from the backend", () => {
+    (window as any).__TAURI__ = true;
+    (window as any).__LIVE_FRONTEND__ = true;
+    expect(handshake().reloadOnUpgrade).toBe(true);
   });
 });
 

@@ -18,6 +18,9 @@ use tauri::Manager;
 struct AppState {
     backend: Mutex<Option<PythonProcess>>,
     tunnels: TunnelRegistry,
+    /// Script that tells a page where its backend is. Kept so it can be
+    /// evaluated again on every page load, not only the first.
+    shell_globals: String,
 }
 
 #[tauri::command]
@@ -107,10 +110,10 @@ fn main() {
                 (backend_url, Some(backend))
             };
 
-            // Tell the page where its backend is. This runs once, against
-            // whatever document is loaded now; a later reload of the page does
-            // not get it again, so the frontend keeps its own copy of these
-            // values (syncShellGlobals in frontend/src/config/config.ts).
+            // Tell the page where its backend is. This covers the document
+            // that is loading now, which could not be told sooner because the
+            // backend was still starting; on_page_load below repeats it for
+            // every later load, such as the reload after a live upgrade.
             let window = app.get_webview_window("main")
                 .ok_or("Failed to get main window")?;
 
@@ -118,19 +121,30 @@ fn main() {
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
 
-            window.eval(&format!(
+            let shell_globals = format!(
                 "window.__BACKEND_URL__ = '{}'; window.__TAURI__ = true; window.__HOME_DIR__ = '{}';",
                 backend_url,
                 home_dir.replace('\\', "\\\\")
-            )).map_err(|e| format!("Failed to inject backend URL: {}", e))?;
+            );
+
+            window.eval(&shell_globals)
+                .map_err(|e| format!("Failed to inject backend URL: {}", e))?;
 
             // Store backend in app state (None if using remote backend)
             app.manage(AppState {
                 backend: Mutex::new(backend_process),
                 tunnels: TunnelRegistry::new(),
+                shell_globals,
             });
 
             Ok(())
+        })
+        .on_page_load(|webview, _payload| {
+            // State is absent until setup finishes; that first load is
+            // handled by the eval in setup once the backend is up.
+            if let Some(state) = webview.try_state::<AppState>() {
+                webview.eval(&state.shell_globals).ok();
+            }
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
