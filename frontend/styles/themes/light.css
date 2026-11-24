@@ -1,0 +1,91 @@
+/**
+ * Light-theme overrides for things CSS variables can't reach.
+ *
+ * highlight.js ships a single dark stylesheet (vs2015), whose pale token
+ * colours vanish on cream. Light themes set data-theme-mode="light" on
+ * <html>; these rules swap in a token palette built from the theme's own
+ * accents so code stays readable and on-palette.
+ */
+
+:root[data-theme-mode="light"] .hljs {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+:root[data-theme-mode="light"] .hljs-keyword,
+:root[data-theme-mode="light"] .hljs-literal,
+:root[data-theme-mode="light"] .hljs-symbol,
+:root[data-theme-mode="light"] .hljs-name,
+:root[data-theme-mode="light"] .hljs-link {
+  color: var(--accent-blue);
+}
+
+:root[data-theme-mode="light"] .hljs-built_in,
+:root[data-theme-mode="light"] .hljs-type {
+  color: var(--accent-cyan);
+}
+
+:root[data-theme-mode="light"] .hljs-number,
+:root[data-theme-mode="light"] .hljs-class,
+:root[data-theme-mode="light"] .hljs-regexp,
+:root[data-theme-mode="light"] .hljs-template-tag {
+  color: var(--accent-orange);
+}
+
+:root[data-theme-mode="light"] .hljs-string,
+:root[data-theme-mode="light"] .hljs-meta .hljs-string {
+  color: var(--accent-red);
+}
+
+:root[data-theme-mode="light"] .hljs-subst,
+:root[data-theme-mode="light"] .hljs-function,
+:root[data-theme-mode="light"] .hljs-title,
+:root[data-theme-mode="light"] .hljs-params,
+:root[data-theme-mode="light"] .hljs-formula {
+  color: var(--text-primary);
+}
+
+:root[data-theme-mode="light"] .hljs-title.function_ {
+  color: var(--accent-purple);
+}
+
+:root[data-theme-mode="light"] .hljs-title.class_ {
+  color: var(--accent-cyan);
+}
+
+:root[data-theme-mode="light"] .hljs-comment,
+:root[data-theme-mode="light"] .hljs-quote,
+:root[data-theme-mode="light"] .hljs-meta,
+:root[data-theme-mode="light"] .hljs-meta .hljs-keyword,
+:root[data-theme-mode="light"] .hljs-tag {
+  color: var(--text-muted);
+}
+
+:root[data-theme-mode="light"] .hljs-doctag,
+:root[data-theme-mode="light"] .hljs-attr,
+:root[data-theme-mode="light"] .hljs-attribute {
+  color: var(--accent-green);
+}
+
+:root[data-theme-mode="light"] .hljs-variable,
+:root[data-theme-mode="light"] .hljs-template-variable {
+  color: var(--accent-purple);
+}
+
+:root[data-theme-mode="light"] .hljs-section,
+:root[data-theme-mode="light"] .hljs-bullet,
+:root[data-theme-mode="light"] .hljs-selector-tag,
+:root[data-theme-mode="light"] .hljs-selector-id,
+:root[data-theme-mode="light"] .hljs-selector-class,
+:root[data-theme-mode="light"] .hljs-selector-attr,
+:root[data-theme-mode="light"] .hljs-selector-pseudo {
+  color: var(--accent-yellow);
+}
+
+:root[data-theme-mode="light"] .hljs-addition {
+  background-color: color-mix(in srgb, var(--accent-green) 14%, transparent);
+}
+
+:root[data-theme-mode="light"] .hljs-deletion {
+  background-color: color-mix(in srgb, var(--accent-red) 14%, transparent);
+}

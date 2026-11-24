@@ -33,3 +33,6 @@
 
 /* Mobile (overrides desktop) */
 @import "./mobile.css";
+
+/* Theme-mode overrides — last so they win over component defaults */
+@import "./themes/light.css";

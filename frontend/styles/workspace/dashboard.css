@@ -281,7 +281,7 @@
 }
 
 .cards-paged-back-to-top:hover .cards-paged-back-to-top-label {
-  color: #c73320;
+  color: var(--accent-red);
 }
 
 /* ═══ Panel layouts ═══ */

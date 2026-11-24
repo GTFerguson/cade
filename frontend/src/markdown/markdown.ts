@@ -23,7 +23,7 @@ import { registerCallouts } from "./callouts";
 import { patchLinks } from "@core/chat/linkify";
 import { MarkdownRenderer } from "@core/chat/markdown-renderer";
 import { DiagramViewer } from "@core/chat/diagram-viewer";
-import { CADE_MERMAID_CONFIG } from "./mermaid-theme";
+import { getMermaidConfig } from "./mermaid-theme";
 import { handleViewModeScroll, scrollCodeBlocksHorizontally, createScrollState } from "./scroll";
 import type { ScrollState } from "./scroll";
 import { getUserConfig } from "../config/user-config";
@@ -124,7 +124,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
     private ws: WebSocketClient
   ) {
     this.renderer = new MarkdownRenderer({
-      mermaidConfig: CADE_MERMAID_CONFIG,
+      mermaidConfig: getMermaidConfig(),
       mertexOptions: {
         breaks: true,
         gfm: true,

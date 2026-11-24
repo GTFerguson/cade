@@ -37,6 +37,8 @@ import { SessionKey } from "@core/platform/protocol";
 import { pickProjectFolder, getUserHomePath } from "@core/platform/tauri-bridge";
 import { setUserConfig } from "./config/user-config";
 import { applySavedTheme, onThemeChange, getSavedThemeId, themes } from "./config/themes";
+import { setMermaidConfig } from "@core/chat/markdown-renderer";
+import { getMermaidConfig } from "./markdown/mermaid-theme";
 import { RemoteProfileManager } from "./remote/profile-manager";
 import { RemoteProjectSelector } from "./remote/RemoteProjectSelector";
 import { LocalProjectSelector } from "./local/LocalProjectSelector";
@@ -525,6 +527,7 @@ class App {
 
     // Update all terminal themes when user switches themes
     onThemeChange(() => {
+      setMermaidConfig(getMermaidConfig());
       for (const tab of this.tabManager.getTabs()) {
         tab.context?.getTerminalManager()?.updateTheme();
       }

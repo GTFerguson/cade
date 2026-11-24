@@ -848,14 +848,14 @@
 .mobile-file-viewer .diff-view .hljs-addition {
   display: inline-block;
   min-width: 100%;
-  background: rgba(174, 238, 0, 0.12);
+  background: color-mix(in srgb, var(--accent-green) 12%, transparent);
   color: var(--accent-green);
 }
 
 .mobile-file-viewer .diff-view .hljs-deletion {
   display: inline-block;
   min-width: 100%;
-  background: rgba(255, 44, 75, 0.12);
+  background: color-mix(in srgb, var(--accent-red) 12%, transparent);
   color: var(--accent-red);
 }
 

@@ -98,7 +98,7 @@
 }
 
 .neovim-diff-btn:hover {
-  background: rgba(255, 167, 36, 0.1);
+  background: color-mix(in srgb, var(--accent-orange) 10%, transparent);
   border-color: var(--accent-orange);
 }
 
@@ -290,37 +290,37 @@
 
 .agent-state-starting {
   color: var(--accent-yellow);
-  background: rgba(250, 222, 62, 0.1);
+  background: color-mix(in srgb, var(--accent-yellow) 10%, transparent);
 }
 
 .agent-state-idle {
   color: var(--accent-green);
-  background: rgba(174, 238, 0, 0.1);
+  background: color-mix(in srgb, var(--accent-green) 10%, transparent);
 }
 
 .agent-state-busy {
   color: var(--accent-blue);
-  background: rgba(10, 157, 255, 0.1);
+  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
 }
 
 .agent-state-done {
   color: var(--text-muted);
-  background: rgba(133, 127, 120, 0.1);
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
 }
 
 .agent-state-review {
   color: var(--accent-orange);
-  background: rgba(255, 167, 36, 0.1);
+  background: color-mix(in srgb, var(--accent-orange) 10%, transparent);
 }
 
 .agent-state-closed {
   color: var(--text-muted);
-  background: rgba(133, 127, 120, 0.1);
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
 }
 
 .agent-state-error {
   color: var(--accent-red);
-  background: rgba(255, 44, 75, 0.1);
+  background: color-mix(in srgb, var(--accent-red) 10%, transparent);
 }
 
 /* Mini-terminal in agent cards */
@@ -525,7 +525,7 @@
 }
 
 .agent-approval-btn.approve:hover {
-  background: rgba(174, 238, 0, 0.1);
+  background: color-mix(in srgb, var(--accent-green) 10%, transparent);
 }
 
 .agent-approval-btn.reject {
@@ -534,7 +534,7 @@
 }
 
 .agent-approval-btn.reject:hover {
-  background: rgba(255, 44, 75, 0.1);
+  background: color-mix(in srgb, var(--accent-red) 10%, transparent);
 }
 
 /* Mirroring another client's PTY size: the terminal is sized to their

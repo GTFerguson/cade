@@ -107,7 +107,7 @@
 
 .milkdown-editor.mode-normal .ProseMirror::selection,
 .milkdown-editor.mode-normal .ProseMirror *::selection {
-  background-color: rgba(255, 167, 36, 0.4);
+  background-color: color-mix(in srgb, var(--accent-orange) 40%, transparent);
 }
 
 /* Edit mode - normal caret */
@@ -117,5 +117,5 @@
 
 .milkdown-editor.mode-edit .ProseMirror::selection,
 .milkdown-editor.mode-edit .ProseMirror *::selection {
-  background-color: rgba(174, 238, 0, 0.3);
+  background-color: color-mix(in srgb, var(--accent-green) 30%, transparent);
 }

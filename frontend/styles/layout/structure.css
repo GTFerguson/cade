@@ -140,7 +140,7 @@
 }
 
 .connection-status.disconnected {
-  color: #f14c4c;
+  color: var(--accent-red);
 }
 
 /* Focus styles */

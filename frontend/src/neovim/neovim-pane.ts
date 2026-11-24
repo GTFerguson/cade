@@ -10,6 +10,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglRenderer } from "../terminal/webgl-renderer";
 import { WebFontsAddon } from "../terminal/web-fonts";
 import { isZoomHotkey } from "../terminal/zoom-keys";
+import { buildXtermTheme, onThemeChange } from "../config/themes";
 import type { PaneKeyHandler } from "../input/keybindings";
 import type { Component, ErrorMessage, NeovimDiffAvailableMessage, NeovimExitedMessage, NeovimOutputMessage, NeovimReadyMessage } from "../types";
 import { ErrorCode } from "@core/platform/protocol";
@@ -32,6 +33,7 @@ export class NeovimPane implements Component, PaneKeyHandler {
   private terminal: XTerm | null = null;
   private fitAddon: FitAddon | null = null;
   private webglRenderer: WebglRenderer | null = null;
+  private unsubscribeTheme: (() => void) | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private resizeDebounceTimer: number | null = null;
   private state: NeovimPaneState = "idle";
@@ -110,29 +112,7 @@ export class NeovimPane implements Component, PaneKeyHandler {
       letterSpacing: 0.5,
       lineHeight: 1.3,
       scrollback: 1000,
-      theme: {
-        background: "#1c1b1a",
-        foreground: "#f8f6f2",
-        cursor: "#aeee00",
-        cursorAccent: "#1c1b1a",
-        selectionBackground: "#45413b",
-        black: "#141413",
-        red: "#ff2c4b",
-        green: "#aeee00",
-        yellow: "#fade3e",
-        blue: "#0a9dff",
-        magenta: "#ff9eb8",
-        cyan: "#8cffba",
-        white: "#f8f6f2",
-        brightBlack: "#857f78",
-        brightRed: "#ff2c4b",
-        brightGreen: "#aeee00",
-        brightYellow: "#ffa724",
-        brightBlue: "#0a9dff",
-        brightMagenta: "#ff9eb8",
-        brightCyan: "#8cffba",
-        brightWhite: "#ffffff",
-      },
+      theme: buildXtermTheme(),
     });
 
     this.fitAddon = new FitAddon();
@@ -143,6 +123,12 @@ export class NeovimPane implements Component, PaneKeyHandler {
     this.terminal.open(this.terminalContainer);
 
     this.webglRenderer = new WebglRenderer(this.terminal);
+
+    this.unsubscribeTheme = onThemeChange(() => {
+      if (!this.terminal) return;
+      this.terminal.options.theme = buildXtermTheme();
+      this.webglRenderer?.refresh();
+    });
 
     // Forward terminal data to backend Neovim process
     this.terminal.onData((data) => {
@@ -496,6 +482,8 @@ export class NeovimPane implements Component, PaneKeyHandler {
       this.kill();
     }
 
+    this.unsubscribeTheme?.();
+    this.unsubscribeTheme = null;
     this.webglRenderer?.dispose();
     this.webglRenderer = null;
 

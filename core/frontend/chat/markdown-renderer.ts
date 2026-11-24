@@ -77,6 +77,15 @@ const DEFAULT_MERTEX_OPTIONS: ConstructorParameters<typeof MertexMD>[0] = {
   sanitize: false,
 };
 
+/**
+ * Re-apply mermaid settings, e.g. after a colour theme change. Mermaid's
+ * config is global, so this affects every renderer; diagrams already on
+ * screen keep their colours until they are rendered again.
+ */
+export function setMermaidConfig(config: MarkdownRendererOptions["mermaidConfig"]): void {
+  mermaid.initialize({ startOnLoad: false, ...config });
+}
+
 export class MarkdownRenderer {
   readonly mertex: MertexMD;
 

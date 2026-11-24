@@ -29,7 +29,7 @@ import { MCPStatusIcon, type MCPEntry } from "./mcp-status-icon";
 import { basePath as chatBasePath } from "../config/config";
 import { linkifyElement, patchLinks } from "@core/chat/linkify";
 import { registerCallouts } from "../markdown/callouts";
-import { CADE_MERMAID_CONFIG } from "../markdown/mermaid-theme";
+import { getMermaidConfig } from "../markdown/mermaid-theme";
 import type { FileMemoryCounts } from "../memory/presence-index";
 
 export interface ChatPaneOptions {
@@ -140,7 +140,7 @@ export class ChatPane implements Component, PaneKeyHandler {
     // blocks here too — idempotent, shares the marked singleton.
     registerCallouts();
     this.renderer = new MarkdownRenderer({
-      mermaidConfig: CADE_MERMAID_CONFIG,
+      mermaidConfig: getMermaidConfig(),
       selfCorrect: {
         fix: async (code: string, format: string, error: string): Promise<string> => {
           const res = await fetch("/api/fix-diagram", {

@@ -11,7 +11,7 @@
 
 /* File tree keyboard selection - only visible when pane is focused */
 .pane.pane-focused .file-tree-row.keyboard-selected {
-  background: rgba(255, 44, 75, 0.15);
+  background: color-mix(in srgb, var(--accent-red) 15%, transparent);
 }
 
 /* ==========================================================================

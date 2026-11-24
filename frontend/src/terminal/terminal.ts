@@ -15,7 +15,7 @@ import {
 } from "./file-drop";
 import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
-import { getSavedThemeId, getThemeById } from "../config/themes";
+import { buildXtermTheme } from "../config/themes";
 import { WebglRenderer } from "./webgl-renderer";
 import { isZoomHotkey } from "./zoom-keys";
 import {
@@ -24,49 +24,6 @@ import {
   onTerminalFontSizeChange,
 } from "./font-size";
 import { setupTouchScroll } from "../ui/mobile/touch-scroll";
-
-/**
- * Build an xterm.js theme from the current CADE theme.
- * Reads the active theme's neutral colors and maps them to xterm properties.
- * ANSI accent colors are shared across all themes.
- */
-function buildXtermTheme(): Record<string, string> {
-  const theme = getThemeById(getSavedThemeId());
-  const c = theme?.colors;
-
-  const bg = c?.bgPrimary ?? "#0a0a09";
-  const fg = c?.textPrimary ?? "#f8f6f2";
-  const muted = c?.textMuted ?? "#5e5955";
-  const selection = c?.bgHover ?? "#222120";
-
-  return {
-    background: bg,
-    foreground: fg,
-    cursor: "#aeee00",
-    cursorAccent: bg,
-    selectionBackground: selection,
-
-    // ANSI colors (shared across all themes)
-    black: bg,
-    red: "#ff2c4b",
-    green: "#aeee00",
-    yellow: "#fade3e",
-    blue: "#0a9dff",
-    magenta: "#ff9eb8",
-    cyan: "#8cffba",
-    white: fg,
-
-    // Bright variants
-    brightBlack: muted,
-    brightRed: "#ff2c4b",
-    brightGreen: "#aeee00",
-    brightYellow: "#ffa724",
-    brightBlue: "#0a9dff",
-    brightMagenta: "#ff9eb8",
-    brightCyan: "#8cffba",
-    brightWhite: "#ffffff",
-  };
-}
 
 export type CustomKeyHandler = (e: KeyboardEvent) => boolean;
 
