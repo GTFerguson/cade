@@ -18,6 +18,14 @@ export interface TabInfo {
   id: string;
   projectPath: string;
   name: string;
+  /** The user renamed the tab; the name no longer follows the project path. */
+  customName?: boolean;
+  /**
+   * Session name the agent set as its terminal title. Shown while the user
+   * has not named the tab. Runtime only: the terminal reports it again when
+   * a session is re-attached, so it is not saved.
+   */
+  agentTitle?: string;
   isRemote?: boolean;
   remoteProfileId?: string;
   remoteUrl?: string;
@@ -68,6 +76,7 @@ export interface ProjectContext {
   getTerminalManager(): TerminalManager | null;
   getRightPane(): RightPaneManager | null;
   setOnLaunchPlan(cb: (relPath: string, kind: "cli" | "chat") => void): void;
+  setOnAgentTitle(cb: (title: string) => void): void;
   setTerminalKeyHandler(handler: CustomKeyHandler | null): void;
   toggleTerminal(): void;
 
@@ -100,6 +109,7 @@ export interface TabBarEvents {
   "tab-select": string;
   "tab-close": string;
   "tab-reorder": { tabId: string; toIndex: number };
+  "tab-rename": { tabId: string; name: string };
   "tab-add": void;
   "tab-add-remote": void;
 }

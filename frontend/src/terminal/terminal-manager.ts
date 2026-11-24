@@ -84,6 +84,13 @@ export class TerminalManager implements Component {
     this.container.appendChild(this.terminalContent);
   }
 
+  private onAgentTitle: ((title: string) => void) | null = null;
+
+  /** Hear about the window title the agent's terminal sets. */
+  setOnAgentTitle(cb: (title: string) => void): void {
+    this.onAgentTitle = cb;
+  }
+
   /**
    * Initialize the terminal manager.
    */
@@ -93,6 +100,7 @@ export class TerminalManager implements Component {
       sessionKey: SessionKey.CLAUDE,
       subscribeToOutput: false, // We handle output routing
       hideCursor: true, // Claude Code renders its own cursor
+      onTitleChange: (title) => this.onAgentTitle?.(title),
     });
     this.claudeTerminal.initialize();
 

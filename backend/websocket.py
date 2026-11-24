@@ -1119,6 +1119,8 @@ class ConnectionHandler:
                 await self._handle_input(data)
             elif msg_type == MessageType.RESIZE:
                 await self._handle_resize(data)
+            elif msg_type == MessageType.SET_LABEL:
+                self._handle_set_label(data)
             elif msg_type == MessageType.PING:
                 await self._send({"type": MessageType.PONG, "t": data.get("t")})
             elif msg_type == MessageType.REPAINT:
@@ -1242,10 +1244,23 @@ class ConnectionHandler:
             await terminal.pty.write(input_data)
             # The user is dealing with whatever the agent was waiting on.
             if self._session.attention is not None:
-                from backend.terminal.attention import apply_attention, broadcast_attention
+                from backend.terminal.attention import (
+                    apply_attention,
+                    attention_after_keystroke,
+                    broadcast_attention,
+                )
 
-                if apply_attention(self._session, None, None):
+                after = attention_after_keystroke(self._session.attention)
+                if apply_attention(self._session, after, self._session.attention_message if after else None):
                     await broadcast_attention(self._session)
+
+    def _handle_set_label(self, data: dict) -> None:
+        """The tab was renamed; listings and push notifications use the label."""
+        label = data.get("label")
+        cleaned = label.strip() if isinstance(label, str) else ""
+        self._session_label = cleaned or None
+        if self._session is not None:
+            self._session.label = self._session_label
 
     async def _handle_resize(self, data: dict) -> None:
         """Handle terminal resize under the one-size policy."""
@@ -2258,9 +2273,10 @@ class ConnectionHandler:
 
         await self._send_pty_size(session_key)
         if self._session.attention is not None:
-            from backend.terminal.attention import attention_message
+            from backend.terminal.attention import attention_message, ensure_working_watch
 
             await self._send(attention_message(self._session))
+            ensure_working_watch(self._session)
 
         task = asyncio.create_task(self._drain_output(session_key, sub, delivered_seq))
         self._output_tasks[session_key] = task

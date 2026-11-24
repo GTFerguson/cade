@@ -48,6 +48,7 @@ export class ProjectContextImpl implements IProjectContext {
   private dashboardFullContainer: HTMLElement | null = null;
   private dashboardFullPane: import("../dashboard").DashboardPane | null = null;
   // Set by main.ts so the Plans pane can spawn a primed tab (CLI or chat).
+  private onAgentTitleCb: ((title: string) => void) | null = null;
   private onLaunchPlanCb: ((relPath: string, kind: "cli" | "chat") => void) | null = null;
   private boundHandlers = {
     startupStatus: (_msg: any) => {
@@ -189,6 +190,7 @@ export class ProjectContextImpl implements IProjectContext {
     ) as HTMLElement;
 
     this.terminalManager = new TerminalManager(terminalEl, this.ws);
+    this.terminalManager.setOnAgentTitle((title) => this.onAgentTitleCb?.(title));
     this.terminalManager.initialize();
 
     // Create agent manager for worker agent terminals
@@ -674,6 +676,10 @@ export class ProjectContextImpl implements IProjectContext {
   /**
    * Register the handler that spawns a new tab primed on a plan/handoff.
    */
+  setOnAgentTitle(cb: (title: string) => void): void {
+    this.onAgentTitleCb = cb;
+  }
+
   setOnLaunchPlan(cb: (relPath: string, kind: "cli" | "chat") => void): void {
     this.onLaunchPlanCb = cb;
   }

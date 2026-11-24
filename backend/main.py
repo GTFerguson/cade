@@ -797,6 +797,8 @@ def create_app(config: Config | None = None) -> FastAPI:
             apply_attention,
             attention_from_event,
             broadcast_attention,
+            ensure_working_watch,
+            next_attention,
             resolve_session,
         )
         from backend.terminal.sessions import get_registry
@@ -808,16 +810,19 @@ def create_app(config: Config | None = None) -> FastAPI:
             notification_type=body.notification_type,
             message=body.message,
         )
-        state = attention_from_event(event)
-        if state is False:
+        if attention_from_event(event) is False:
             return JSONResponse({"status": "ignored"})
         session = resolve_session(get_registry().sessions(), body.session_id, body.cwd)
         if session is None:
             return JSONResponse({"status": "no-session"}, status_code=404)
+        state = next_attention(session.attention, event)
+        if state is False:
+            return JSONResponse({"status": "ignored"})
 
         changed = apply_attention(session, state, body.message)
         if changed:
             await broadcast_attention(session)
+            ensure_working_watch(session)
             if state in (NEEDS_INPUT, IDLE):
                 label = session.label or session.project_path.name
                 title = f"{label}: needs you" if state == NEEDS_INPUT else f"{label}: done"

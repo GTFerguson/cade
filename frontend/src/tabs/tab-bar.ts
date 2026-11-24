@@ -2,10 +2,30 @@
  * Tab bar UI component.
  */
 
-import type { Component, EventHandler } from "../types";
+import type { AttentionState, Component, EventHandler } from "../types";
 import type { TabBarEvents, TabState } from "./types";
 import { minimizeWindow, toggleMaximizeWindow, closeWindow } from "@core/platform/tauri-bridge";
 import { TabDragController } from "./tab-drag";
+import { tabDisplayName } from "./session-title";
+
+/** Two clicks on a tab's name within this window start a rename. */
+const RENAME_DOUBLE_CLICK_MS = 400;
+
+interface TabStatus {
+  state: AttentionState;
+  message: string | null;
+}
+
+/**
+ * How each agent state reads on a tab. The glyph differs per state so the
+ * meaning does not rest on colour alone.
+ */
+export const STATUS_DISPLAY: Record<"input" | "idle" | "working" | "none", { glyph: string; title: string }> = {
+  input: { glyph: "!", title: "Needs you" },
+  working: { glyph: "\u25cf", title: "Working" },
+  idle: { glyph: "\u2713", title: "Finished, ready for the next prompt" },
+  none: { glyph: "\u00b7", title: "No agent activity reported" },
+};
 
 export class TabBar implements Component {
   private handlers: Map<
@@ -17,6 +37,12 @@ export class TabBar implements Component {
   // Tab updates that arrive mid-drag, applied on drop so a re-render can't
   // pull the tab out from under the pointer.
   private pendingRender: [TabState[], string | null] | null = null;
+
+  private status = new Map<string, TabStatus>();
+  private renamingTabId: string | null = null;
+  // The first click of a double-click selects the tab, which re-renders the
+  // bar and replaces the element, so the browser's own dblclick never fires.
+  private lastNameClick: { tabId: string; at: number } | null = null;
 
   constructor(private container: HTMLElement) {}
 
@@ -31,11 +57,16 @@ export class TabBar implements Component {
    * Render the tab bar with the given tabs.
    */
   render(tabs: TabState[], activeTabId: string | null = null): void {
-    if (this.drag?.isDragging()) {
+    // A re-render replaces every tab element, which would drop a tab being
+    // dragged or throw away a name being typed.
+    if (this.drag?.isDragging() || this.renamingTabId !== null) {
       this.pendingRender = [tabs, activeTabId];
       return;
     }
     this.pendingRender = null;
+    for (const id of this.status.keys()) {
+      if (!tabs.some((t) => t.id === id)) this.status.delete(id);
+    }
     this.container.innerHTML = "";
     this.container.classList.toggle("empty", tabs.length === 0);
 
@@ -138,10 +169,26 @@ export class TabBar implements Component {
       tabEl.appendChild(icon);
     }
 
+    const statusEl = document.createElement("span");
+    statusEl.className = "tab-status";
+    this.paintStatus(tabEl, statusEl, this.status.get(tab.id) ?? null);
+    tabEl.appendChild(statusEl);
+
     const nameEl = document.createElement("span");
     nameEl.className = "tab-name";
-    nameEl.textContent = tab.name;
-    nameEl.title = tab.projectPath;
+    nameEl.textContent = tabDisplayName(tab);
+    nameEl.title = `${tab.projectPath}\nDouble-click to rename`;
+    nameEl.addEventListener("click", () => {
+      const now = Date.now();
+      const last = this.lastNameClick;
+      if (last && last.tabId === tab.id && now - last.at <= RENAME_DOUBLE_CLICK_MS) {
+        this.lastNameClick = null;
+        // Let this click's own tab-select render finish first.
+        queueMicrotask(() => this.startRename(tab.id));
+      } else {
+        this.lastNameClick = { tabId: tab.id, at: now };
+      }
+    });
 
     const closeBtn = document.createElement("button");
     closeBtn.className = "tab-close";
@@ -160,6 +207,79 @@ export class TabBar implements Component {
     });
 
     return tabEl;
+  }
+
+  /**
+   * Show what a tab's agent is doing. Updates the tab in place so a status
+   * change never interrupts a drag or a rename.
+   */
+  setAttention(tabId: string, state: AttentionState, message: string | null = null): void {
+    this.status.set(tabId, { state, message });
+    const tabEl = this.findTab(tabId);
+    const statusEl = tabEl?.querySelector<HTMLElement>(".tab-status");
+    if (tabEl && statusEl) this.paintStatus(tabEl, statusEl, { state, message });
+  }
+
+  private findTab(tabId: string): HTMLElement | null {
+    for (const el of this.container.querySelectorAll<HTMLElement>(".tab")) {
+      if (el.dataset["tabId"] === tabId) return el;
+    }
+    return null;
+  }
+
+  private paintStatus(tabEl: HTMLElement, statusEl: HTMLElement, status: TabStatus | null): void {
+    const key = status?.state ?? "none";
+    const display = STATUS_DISPLAY[key];
+    tabEl.dataset["status"] = key;
+    statusEl.textContent = display.glyph;
+    statusEl.title = status?.message ? `${display.title}: ${status.message}` : display.title;
+    statusEl.setAttribute("aria-label", display.title);
+  }
+
+  /**
+   * Swap a tab's name for a text field. Enter or clicking away keeps the new
+   * name, Escape keeps the old one.
+   */
+  startRename(tabId: string): void {
+    if (this.renamingTabId !== null || this.drag?.isDragging()) return;
+    const tabEl = this.findTab(tabId);
+    const nameEl = tabEl?.querySelector<HTMLElement>(".tab-name");
+    if (!tabEl || !nameEl) return;
+
+    const input = document.createElement("input");
+    input.className = "tab-name-input";
+    input.type = "text";
+    input.value = nameEl.textContent ?? "";
+    input.spellcheck = false;
+    input.setAttribute("aria-label", "Tab name");
+
+    let finished = false;
+    const finish = (commit: boolean) => {
+      if (finished) return;
+      finished = true;
+      const name = input.value;
+      this.renamingTabId = null;
+      input.replaceWith(nameEl);
+      if (commit) this.emit("tab-rename", { tabId, name });
+      if (this.pendingRender) this.render(...this.pendingRender);
+    };
+
+    input.addEventListener("keydown", (e) => {
+      // Keep app-level shortcuts and the terminal from seeing the typing.
+      e.stopPropagation();
+      if (e.key === "Enter") finish(true);
+      else if (e.key === "Escape") finish(false);
+    });
+    input.addEventListener("blur", () => finish(true));
+    // Pressing inside the field must not start a tab drag or switch tabs.
+    for (const type of ["pointerdown", "mousedown", "click"] as const) {
+      input.addEventListener(type, (e) => e.stopPropagation());
+    }
+
+    this.renamingTabId = tabId;
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
   }
 
   /**

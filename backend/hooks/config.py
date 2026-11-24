@@ -21,6 +21,9 @@ ATTENTION_HOOK_TYPES = (
     HookType.NOTIFICATION,
     HookType.STOP,
     HookType.USER_PROMPT_SUBMIT,
+    # A finished tool call shows the turn is still running, which is the
+    # only signal that work resumed after a permission prompt was answered.
+    HookType.POST_TOOL_USE,
 )
 
 

@@ -106,6 +106,17 @@ describe("set-project handshake", () => {
   });
 });
 
+describe("renaming a session", () => {
+  it("sends the new label to the backend", () => {
+    const { client, socket } = connectedClient();
+    client.sendSetLabel("api server");
+    expect(socket.sent.map((m) => JSON.parse(m))).toContainEqual({
+      type: MessageType.SET_LABEL,
+      label: "api server",
+    });
+  });
+});
+
 describe("upgrade reload opt-in", () => {
   afterEach(() => {
     delete (window as any).__TAURI__;

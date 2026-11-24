@@ -232,7 +232,7 @@ export interface SessionListMessage extends BaseMessage {
   sessions: LiveSessionInfo[];
 }
 
-export type AttentionState = "input" | "idle" | null;
+export type AttentionState = "input" | "idle" | "working" | null;
 
 /** The agent in a session is waiting for the user, finished, or working again. */
 export interface SessionAttentionMessage extends BaseMessage {

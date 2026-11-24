@@ -21,7 +21,7 @@ export interface OverflowTab {
   isActive: boolean;
   /** Output arrived while another tab was active. */
   unread?: boolean;
-  attention?: "input" | "idle" | null;
+  attention?: "input" | "idle" | "working" | null;
 }
 
 export interface CommandMenuCallbacks {
@@ -217,6 +217,7 @@ export class CommandMenu implements MobileScreen {
     const meta =
       tab.attention === "input" ? "needs you" :
       tab.attention === "idle" ? "done" :
+      tab.attention === "working" ? "working" :
       tab.unread ? "new output" : tab.projectPath;
     el.innerHTML =
       `<span class="${indicator.join(" ")}"></span>` +
@@ -237,6 +238,7 @@ export class CommandMenu implements MobileScreen {
     const meta =
       session.attention === "input" ? "needs you · attach" :
       session.attention === "idle" ? "done · attach" :
+      session.attention === "working" ? "working · attach" :
       `${session.agent} · attach`;
     el.innerHTML =
       `<span class="${indicator.join(" ")}"></span>` +

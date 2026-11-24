@@ -13,7 +13,7 @@ export interface StripTab {
   isActive: boolean;
   unread: boolean;
   /** Set by attention hooks: the agent is waiting for input, or finished a turn. */
-  attention?: "input" | "idle" | null;
+  attention?: "input" | "idle" | "working" | null;
 }
 
 export interface SessionStripCallbacks {

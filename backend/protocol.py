@@ -19,6 +19,7 @@ class MessageType:
     CREATE_FILE = "create-file"  # Create new file: { type, path: str, content?: str }
     SAVE_SESSION = "save-session"  # Save session state: { type, state: SessionState }
     SET_PROJECT = "set-project"  # Set project directory: { type, path: str, sessionId?: str, label?: str, lastSeq?: {sessionKey: int} }
+    SET_LABEL = "set-label"  # Rename the session: { type, label: str } (empty clears it)
     PING = "ping"  # Liveness probe: { type, t?: number } — answered with PONG carrying the same t
     REPAINT = "repaint"  # Ask the TUI in a terminal to redraw itself: { type, sessionKey?: str }
     LIST_SESSIONS = "list-sessions"  # Request live PTY sessions on this backend: { type }

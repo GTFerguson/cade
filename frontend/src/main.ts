@@ -24,6 +24,7 @@ import { ThemeSelector } from "./ui/theme-selector";
 import { KeybindingManager } from "./input/keybindings";
 import { MobileUI } from "./ui/mobile";
 import { notifyAttention } from "./ui/attention-notify";
+import { sessionTitleFromTerminal, tabDisplayName } from "./tabs/session-title";
 import { registerServiceWorker } from "./push";
 import type { AttentionState, LiveSessionInfo } from "./types";
 import { WebSocketClient } from "./platform/websocket";
@@ -304,6 +305,12 @@ class App {
       this.handleTabClose(id);
     });
 
+    this.tabBar.on("tab-rename", ({ tabId, name }) => {
+      const tab = this.tabManager.renameTab(tabId, name);
+      tab?.ws.sendSetLabel(tabDisplayName(tab));
+      this.mobileUI?.refresh();
+    });
+
     this.tabBar.on("tab-reorder", ({ tabId, toIndex }) => {
       this.tabManager.moveTab(tabId, toIndex);
     });
@@ -580,6 +587,16 @@ class App {
 
     tab.context = context;
 
+    // An unnamed tab follows the session title the agent sets on its
+    // terminal; the backend label follows too, for listings and push.
+    context.setOnAgentTitle((raw) => {
+      const changed = this.tabManager.setAgentTitle(tab.id, sessionTitleFromTerminal(raw));
+      if (changed) {
+        changed.ws.sendSetLabel(tabDisplayName(changed));
+        this.mobileUI?.refresh();
+      }
+    });
+
     // Plans pane → spawn a primed tab (CLI or enhanced chat).
     context.setOnLaunchPlan((relPath, kind) =>
       this.launchPlanInTab(tab.projectPath, relPath, kind),
@@ -786,9 +803,11 @@ class App {
     tab.ws.on("session-attention", (msg) => {
       const previous = this.attentionByTab.get(tab.id) ?? null;
       this.attentionByTab.set(tab.id, msg.attention);
+      this.tabBar?.setAttention(tab.id, msg.attention, msg.message ?? null);
       this.mobileUI?.refresh();
-      if (msg.attention !== null && msg.attention !== previous) {
-        notifyAttention(tab.name, msg.attention, msg.message ?? null, () => {
+      // Starting work is not worth interrupting anyone for.
+      if ((msg.attention === "input" || msg.attention === "idle") && msg.attention !== previous) {
+        notifyAttention(tabDisplayName(tab), msg.attention, msg.message ?? null, () => {
           this.tabManager.switchTab(tab.id);
         });
       }
@@ -811,7 +830,7 @@ class App {
         matches ? (this.providerOverride ?? undefined) : undefined,
         tab.initialPrompt,
         tab.chatHandoff,
-        tab.name,
+        tabDisplayName(tab),
       );
 
       // Auth is project-driven now: connect first; if the project's launch.yml
@@ -1226,7 +1245,7 @@ class App {
         const activeId = this.tabManager.getActiveTabId();
         return this.tabManager.getTabs().map((t) => ({
           id: t.id,
-          name: t.name,
+          name: tabDisplayName(t),
           projectPath: t.projectPath,
           isActive: t.id === activeId,
           unread: this.unreadTabs.has(t.id),

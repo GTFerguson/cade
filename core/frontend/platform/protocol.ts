@@ -35,6 +35,7 @@ export const MessageType = {
   GET_CHILDREN: "get-children",
   BROWSE_CHILDREN: "browse-children",
   CLIENT_DIAGNOSTIC: "client-diagnostic",
+  SET_LABEL: "set-label",
   PING: "ping",
   REPAINT: "repaint",
   LIST_SESSIONS: "list-sessions",

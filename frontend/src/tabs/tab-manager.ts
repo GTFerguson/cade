@@ -2,6 +2,7 @@
  * Tab state management with localStorage persistence.
  */
 
+import { tabDisplayName } from "./session-title";
 import { wrapIndex } from "@core/nav";
 import { toWebSocketUrl } from "@core/platform/url-utils";
 import { WebSocketClient } from "../platform/websocket";
@@ -189,7 +190,13 @@ export class TabManager {
     if (existing) return existing;
 
     const name = label && label.trim() ? label.trim() : getProjectName(projectPath);
-    const tabState = this.createTabState({ id: sessionId, projectPath, name });
+    const tabState = this.createTabState({
+      id: sessionId,
+      projectPath,
+      name,
+      // A label that differs from the folder name was chosen by someone.
+      ...(name !== getProjectName(projectPath) && { customName: true }),
+    });
 
     this.tabs.set(sessionId, tabState);
     this.saveState();
@@ -453,6 +460,36 @@ export class TabManager {
   }
 
   /**
+   * Give a tab a name of the user's choosing. Returns the tab when the name
+   * changed; a blank or unchanged name is ignored.
+   */
+  renameTab(id: string, name: string): TabState | null {
+    const tab = this.tabs.get(id);
+    const trimmed = name.trim();
+    if (!tab || !trimmed || trimmed === tabDisplayName(tab)) return null;
+    tab.name = trimmed;
+    tab.customName = true;
+    this.saveState();
+    this.emit("tabs-changed", this.getTabs());
+    return tab;
+  }
+
+  /**
+   * Record the session name the agent's terminal reports (null when it
+   * reports none). Returns the tab when what it is called on screen changed.
+   */
+  setAgentTitle(id: string, title: string | null): TabState | null {
+    const tab = this.tabs.get(id);
+    if (!tab || (tab.agentTitle ?? null) === title) return null;
+    const before = tabDisplayName(tab);
+    if (title === null) delete tab.agentTitle;
+    else tab.agentTitle = title;
+    if (tabDisplayName(tab) === before) return null;
+    this.emit("tabs-changed", this.getTabs());
+    return tab;
+  }
+
+  /**
    * Update a tab's connection status.
    */
   setConnected(id: string, connected: boolean): void {
@@ -469,7 +506,7 @@ export class TabManager {
     const tab = this.tabs.get(id);
     if (tab) {
       tab.projectPath = projectPath;
-      tab.name = getProjectName(projectPath);
+      if (!tab.customName) tab.name = getProjectName(projectPath);
       this.saveState();
       this.emit("tabs-changed", this.getTabs());
     }
@@ -578,6 +615,7 @@ export class TabManager {
         projectPath: tab.projectPath,
         name: tab.name,
       };
+      if (tab.customName) info.customName = true;
       if (tab.isRemote !== undefined) info.isRemote = tab.isRemote;
       if (tab.remoteProfileId !== undefined) info.remoteProfileId = tab.remoteProfileId;
       if (tab.remoteUrl !== undefined) info.remoteUrl = tab.remoteUrl;

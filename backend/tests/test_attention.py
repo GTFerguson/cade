@@ -3,6 +3,7 @@ clearing on input, and the HTTP route that hooks post to."""
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -16,9 +17,13 @@ from backend.push import PushService, set_push_service
 from backend.terminal.attention import (
     IDLE,
     NEEDS_INPUT,
+    WORKING,
     AttentionEvent,
     apply_attention,
+    attention_after_keystroke,
     attention_from_event,
+    ensure_working_watch,
+    next_attention,
     resolve_session,
 )
 from backend.terminal.sessions import PTYSession, SessionRegistry, set_registry
@@ -33,7 +38,8 @@ class TestMapping:
             ("Notification", "idle_prompt", NEEDS_INPUT),
             ("Notification", "auth_success", False),
             ("Stop", None, IDLE),
-            ("UserPromptSubmit", None, None),
+            ("UserPromptSubmit", None, WORKING),
+            ("PostToolUse", None, WORKING),
             ("agent-turn-complete", None, IDLE),
             ("SomethingElse", None, False),
         ],
@@ -41,6 +47,60 @@ class TestMapping:
     def test_hook_events_map_to_states(self, event, kind, expected):
         e = AttentionEvent(session_id="s", cwd=None, event=event, notification_type=kind)
         assert attention_from_event(e) == expected
+
+
+class TestTransitions:
+    def _event(self, name: str) -> AttentionEvent:
+        return AttentionEvent(session_id="s", cwd=None, event=name)
+
+    def test_finished_tool_call_resumes_working(self):
+        assert next_attention(None, self._event("PostToolUse")) == WORKING
+
+    def test_finished_tool_call_does_not_hide_a_pending_prompt(self):
+        assert next_attention(NEEDS_INPUT, self._event("PostToolUse")) is False
+
+    def test_stop_ends_a_working_turn(self):
+        assert next_attention(WORKING, self._event("Stop")) == IDLE
+
+    @pytest.mark.parametrize(
+        "current,expected",
+        [(NEEDS_INPUT, None), (IDLE, None), (None, None), (WORKING, WORKING)],
+    )
+    def test_keystroke_clears_waiting_states_but_not_a_running_turn(self, current, expected):
+        assert attention_after_keystroke(current) == expected
+
+
+class TestWorkingWatch:
+    @pytest.mark.asyncio
+    async def test_working_is_dropped_once_the_terminal_goes_quiet(self, temp_dir: Path):
+        session = PTYSession(id="quiet", project_path=temp_dir)
+        session.add_terminal(SessionKey.CLAUDE, make_pty())
+        apply_attention(session, WORKING, None)
+        with (
+            patch("backend.terminal.attention.WORKING_POLL_SECONDS", 0.01),
+            patch("backend.terminal.attention.WORKING_SILENCE_SECONDS", 0.03),
+        ):
+            ensure_working_watch(session)
+            await asyncio.sleep(0.2)
+        assert session.attention is None
+
+    @pytest.mark.asyncio
+    async def test_working_survives_while_output_keeps_coming(self, temp_dir: Path):
+        session = PTYSession(id="busy", project_path=temp_dir)
+        terminal = session.add_terminal(SessionKey.CLAUDE, make_pty())
+        apply_attention(session, WORKING, None)
+        with (
+            patch("backend.terminal.attention.WORKING_POLL_SECONDS", 0.01),
+            patch("backend.terminal.attention.WORKING_SILENCE_SECONDS", 0.05),
+        ):
+            ensure_working_watch(session)
+            for _ in range(15):
+                terminal.publish("spinner frame")
+                await asyncio.sleep(0.01)
+            assert session.attention == WORKING
+            # Let the watcher finish so it does not outlive the test.
+            await asyncio.sleep(0.2)
+        assert session.attention is None
 
 
 class TestResolve:
@@ -71,6 +131,22 @@ class TestApply:
         assert s.attention_message is None
 
 
+class TestRename:
+    def test_set_label_renames_the_session(self, temp_dir: Path):
+        session = PTYSession(id="s", project_path=temp_dir)
+        session.add_terminal(SessionKey.CLAUDE, make_pty())
+        handler = attach_handler(session, temp_dir)
+        handler._handle_set_label({"label": "  api server  "})
+        assert session.label == "api server"
+
+    def test_blank_label_clears_it(self, temp_dir: Path):
+        session = PTYSession(id="s", project_path=temp_dir, label="old")
+        session.add_terminal(SessionKey.CLAUDE, make_pty())
+        handler = attach_handler(session, temp_dir)
+        handler._handle_set_label({"label": "   "})
+        assert session.label is None
+
+
 class TestHandler:
     @pytest.mark.asyncio
     async def test_input_clears_attention_and_tells_everyone(self, temp_dir: Path):
@@ -86,6 +162,17 @@ class TestHandler:
         for h in (desktop, phone):
             frames = sent(h._ws, MessageType.SESSION_ATTENTION)
             assert frames[-1]["attention"] is None
+
+    @pytest.mark.asyncio
+    async def test_input_does_not_end_a_running_turn(self, temp_dir: Path):
+        session = PTYSession(id="s", project_path=temp_dir)
+        session.add_terminal(SessionKey.CLAUDE, make_pty())
+        apply_attention(session, WORKING, None)
+        h = attach_handler(session, temp_dir)
+
+        await h._handle_input({"type": MessageType.INPUT, "data": "queued follow-up"})
+
+        assert session.attention == WORKING
 
     @pytest.mark.asyncio
     async def test_joining_client_learns_current_attention(self, temp_dir: Path):

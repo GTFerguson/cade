@@ -35,10 +35,13 @@ export interface TerminalOptions {
   fontSize?: number;
   rows?: number;
   scrollback?: number;
+  /** Called when the program in the terminal sets its window title. */
+  onTitleChange?: (title: string) => void;
 }
 
 export class Terminal implements Component {
   private terminal: XTerm | null = null;
+  private onTitleChange: ((title: string) => void) | null = null;
   private fitAddon: FitAddon | null = null;
   private webglRenderer: WebglRenderer | null = null;
   private resizeObserver: ResizeObserver | null = null;
@@ -83,6 +86,7 @@ export class Terminal implements Component {
     this.subscribeToOutput = options.subscribeToOutput ?? true;
     this.hideCursor = options.hideCursor ?? false;
     this.readOnly = options.readOnly ?? false;
+    this.onTitleChange = options.onTitleChange ?? null;
     this.fontSizeOverride = options.fontSize ?? null;
     this.rowsOverride = options.rows ?? null;
     this.scrollbackOverride = options.scrollback ?? null;
@@ -226,6 +230,10 @@ export class Terminal implements Component {
     // Suppress during fit() reflows (transient positions) and when
     // container is hidden (viewport freezes while baseY keeps growing,
     // producing stale positions that lock the terminal away from bottom).
+    if (this.onTitleChange) {
+      this.terminal.onTitleChange(this.onTitleChange);
+    }
+
     this.terminal.onScroll(() => {
       if (this.isFitting) return;
       if (this.container.offsetWidth === 0 || this.container.offsetHeight === 0) return;

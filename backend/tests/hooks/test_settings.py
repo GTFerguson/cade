@@ -359,7 +359,13 @@ class TestAttentionHooks:
 
         data = json.loads(settings_path.read_text())
         for hook_type in ATTENTION_HOOK_TYPES:
-            entries = data["hooks"][hook_type.value]
+            # PostToolUse also carries the file-view hook, so count only
+            # the attention entries.
+            entries = [
+                e
+                for e in data["hooks"][hook_type.value]
+                if any("attention.py" in h.get("command", "") for h in e.get("hooks", []))
+            ]
             assert len(entries) == 1
             assert "attention.py" in entries[0]["hooks"][0]["command"]
         assert (temp_dir / ".cade" / "hooks" / "attention.py").exists()

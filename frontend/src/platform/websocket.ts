@@ -828,6 +828,15 @@ export class WebSocketClient extends BaseWSClient {
   }
 
   /** Ask the TUI in a terminal to redraw (SIGWINCH nudge on the server). */
+  /**
+   * Tell the backend the tab's new name, used in session listings and push
+   * notifications. Remembered so a reconnect re-sends it with set-project.
+   */
+  sendSetLabel(label: string): void {
+    this.pendingLabel = label;
+    this.send({ type: MessageType.SET_LABEL, label } as unknown as ClientMessage);
+  }
+
   sendRepaint(sessionKey?: AnySessionKey): void {
     this.send({
       type: MessageType.REPAINT,
