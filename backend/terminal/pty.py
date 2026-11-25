@@ -10,7 +10,7 @@ import subprocess
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, AsyncIterator
+from typing import TYPE_CHECKING, AsyncIterator, Mapping
 
 from backend.errors import PTYError
 from backend.models import TerminalSize
@@ -31,6 +31,59 @@ if sys.platform == "win32" and getattr(sys, "frozen", False):
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+# Variables the packaged backend's own bootloader sets for itself. They name
+# the folder this build was unpacked into, which is gone after an upgrade.
+_BOOTLOADER_PREFIXES = ("_PYI_", "_MEIPASS")
+_LIBRARY_PATH_VARS = ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH", "LIBPATH")
+
+
+def _without_unpack_dirs(path_list: str) -> str:
+    """A search path with every bootloader unpack folder taken out.
+
+    Each in-place upgrade starts the next build with the previous one's
+    library path, so folders of builds long gone pile up in it.
+    """
+    return os.pathsep.join(
+        entry
+        for entry in path_list.split(os.pathsep)
+        if entry and not Path(entry).name.startswith("_MEI")
+    )
+
+
+def shell_environment(base: Mapping[str, str]) -> dict[str, str]:
+    """The environment a user's shell should start with.
+
+    The packaged backend runs with its bootloader's variables set and its
+    unpack folder at the front of the library path. A shell that inherits
+    them hands them to everything run in it: programs load the backend's
+    bundled libraries in place of the system's, and `cade-backend` itself
+    fails to start once an upgrade has removed the folder they point to.
+    The bootloader keeps the library path it found in ``<NAME>_ORIG``, so
+    the original is put back.
+    """
+    env = {
+        key: value
+        for key, value in base.items()
+        if not key.startswith(_BOOTLOADER_PREFIXES)
+    }
+    unpack_dir = base.get("_PYI_APPLICATION_HOME_DIR") or base.get("_MEIPASS2")
+    for name in _LIBRARY_PATH_VARS:
+        original = env.pop(f"{name}_ORIG", None)
+        if original is not None:
+            env[name] = original
+        if name in env:
+            cleaned = _without_unpack_dirs(env[name])
+            if cleaned:
+                env[name] = cleaned
+            else:
+                del env[name]
+    if unpack_dir:
+        # Anything else pointing into the unpack folder dies with it.
+        for key in [k for k, v in env.items() if v.startswith(unpack_dir)]:
+            del env[key]
+    return env
 
 
 class BasePTY(ABC):
@@ -163,7 +216,7 @@ class UnixPTY(BasePTY):
         import pexpect
 
         try:
-            spawn_env = os.environ.copy()
+            spawn_env = shell_environment(os.environ)
             if env:
                 spawn_env.update(env)
             spawn_env.setdefault("TERM", "xterm-256color")

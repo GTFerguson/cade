@@ -355,3 +355,58 @@ class TestPTYManagerIntegration:
             # The important thing is we get a clear state
         except PTYError:
             pass  # Expected on systems without wsl
+
+
+class TestShellEnvironment:
+    """A user's shell must not inherit the packaged backend's own setup."""
+
+    PACKAGED = {
+        "PATH": "/usr/bin",
+        "HOME": "/home/someone",
+        "_PYI_ARCHIVE_FILE": "/usr/bin/cade-backend",
+        "_PYI_APPLICATION_HOME_DIR": "/tmp/_MEIabc123",
+        "_PYI_PARENT_PROCESS_LEVEL": "1",
+        "LD_LIBRARY_PATH": "/tmp/_MEIabc123:/tmp/_MEIold999:/opt/lib",
+        "LD_LIBRARY_PATH_ORIG": "/tmp/_MEIold999:/opt/lib",
+        "TIKTOKEN_CACHE_DIR": "/tmp/_MEIabc123/litellm/tokenizers",
+    }
+
+    def test_bootloader_variables_are_dropped(self):
+        from backend.terminal.pty import shell_environment
+
+        env = shell_environment(self.PACKAGED)
+        assert not [k for k in env if k.startswith("_PYI_")]
+
+    def test_library_path_goes_back_to_the_users_own(self):
+        from backend.terminal.pty import shell_environment
+
+        env = shell_environment(self.PACKAGED)
+        assert env["LD_LIBRARY_PATH"] == "/opt/lib"
+        assert "LD_LIBRARY_PATH_ORIG" not in env
+
+    def test_library_path_is_unset_when_only_unpack_folders_were_in_it(self):
+        from backend.terminal.pty import shell_environment
+
+        env = shell_environment({
+            "_PYI_APPLICATION_HOME_DIR": "/tmp/_MEIabc123",
+            "LD_LIBRARY_PATH": "/tmp/_MEIabc123",
+        })
+        assert "LD_LIBRARY_PATH" not in env
+
+    def test_paths_into_the_unpack_folder_are_dropped(self):
+        from backend.terminal.pty import shell_environment
+
+        assert "TIKTOKEN_CACHE_DIR" not in shell_environment(self.PACKAGED)
+
+    def test_everything_else_is_kept(self):
+        from backend.terminal.pty import shell_environment
+
+        env = shell_environment(self.PACKAGED)
+        assert env["PATH"] == "/usr/bin"
+        assert env["HOME"] == "/home/someone"
+
+    def test_an_unpackaged_backend_passes_its_environment_through(self):
+        from backend.terminal.pty import shell_environment
+
+        plain = {"PATH": "/usr/bin", "LD_LIBRARY_PATH": "/opt/lib", "EDITOR": "nvim"}
+        assert shell_environment(plain) == plain

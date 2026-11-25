@@ -172,7 +172,13 @@ endif
 	@echo "Installed: $$(dpkg-query -W -f='$${Package} $${Version}' cade) -> /usr/bin/cade"
 	@# A running backend switches to the new build in place and keeps its
 	@# sessions (backend/upgrade.py). No running backend is not an error.
-	-@/usr/bin/cade-backend upgrade 2>/dev/null || echo "No running backend to upgrade; the next launch uses the new build"
+	@# Run with the packaged backend's own variables cleared: a terminal
+	@# opened inside CADE before it stopped passing them on still has them,
+	@# pointing at an unpack folder that no longer exists, and the command
+	@# then fails to start at all.
+	-@env -u _PYI_APPLICATION_HOME_DIR -u _PYI_ARCHIVE_FILE -u _PYI_PARENT_PROCESS_LEVEL \
+		-u _PYI_LINUX_PROCESS_NAME -u _MEIPASS2 -u LD_LIBRARY_PATH \
+		/usr/bin/cade-backend upgrade || echo "Backend not upgraded in place (none running, or the command failed: see above); the next launch uses the new build"
 
 # Install the package build-desktop already produced, with no in-place
 # upgrade, so the next launch runs it. For a build that should wait for the
