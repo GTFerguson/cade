@@ -41,8 +41,8 @@
 }
 
 /* What the new tab is opened with: one segmented toggle per choice, in a
-   strip across the top with the toggles in its right corner, each captioned
-   with its name and key. The strip keeps its height when empty so the header
+   strip across the top with the toggles in its right corner; the key help
+   names them. The strip keeps its height when empty so the header
    does not jump once the choices load. */
 .picker-settings {
   align-self: stretch;
@@ -50,7 +50,7 @@
   justify-content: flex-end;
   align-items: flex-start;
   gap: 20px;
-  min-height: 52px;
+  min-height: 30px;
   padding: 16px 20px 0;
   box-sizing: content-box;
   flex-shrink: 0;
@@ -84,12 +84,6 @@
 
 .picker-toggle .big-toggle-half:not(.active):hover {
   background: var(--bg-hover);
-}
-
-.picker-setting-caption {
-  font-size: 11px;
-  letter-spacing: 1px;
-  color: var(--text-muted);
 }
 
 .picker-filter {

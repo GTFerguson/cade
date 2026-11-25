@@ -422,7 +422,6 @@ export class ProjectPicker {
       rows.push(
         this.settingRow(
           "agent",
-          "a",
           usable.map((a) => ({
             // Lowercase like every other option; a tab group keeps the name it was given.
             label: a.name.toLowerCase(),
@@ -437,7 +436,6 @@ export class ProjectPicker {
       rows.push(
         this.settingRow(
           "group",
-          "g",
           choices.map((g) => ({
             label: g ?? "by folder",
             selected: g === this.group,
@@ -459,7 +457,6 @@ export class ProjectPicker {
    */
   private settingRow(
     name: string,
-    key: string,
     choices: { label: string; selected: boolean; pick: () => void }[],
   ): HTMLElement {
     const row = el("div", "picker-setting");
@@ -473,13 +470,10 @@ export class ProjectPicker {
       half.addEventListener("click", choice.pick);
       toggle.appendChild(half);
     });
+    // No caption: the key help already names each toggle and its key.
+    toggle.setAttribute("role", "group");
+    toggle.setAttribute("aria-label", name === "group" ? "tab group" : name);
     row.appendChild(toggle);
-    const caption = el("div", "picker-setting-caption", name === "group" ? "tab group" : name);
-    if (choices.length > 1) {
-      caption.append(" ");
-      caption.appendChild(el("span", "picker-help-key", key));
-    }
-    row.appendChild(caption);
     return row;
   }
 
