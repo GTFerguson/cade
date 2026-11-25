@@ -145,6 +145,15 @@ class TestProjects:
         touch(temp_dir / "committed" / ".git" / "index", 5000)
         assert [p["name"] for p in list_projects(temp_dir)] == ["committed", "quiet"]
 
+    def test_tool_state_in_hidden_folders_is_not_work(self, temp_dir: Path):
+        touch(temp_dir / "worked" / "a.txt", 2000)
+        os.utime(temp_dir / "worked", (2000, 2000))
+        touch(temp_dir / "indexed" / "a.txt", 1000)
+        touch(temp_dir / "indexed" / ".cache" / "index.db", 9000)
+        os.utime(temp_dir / "indexed" / ".cache", (9000, 9000))
+        os.utime(temp_dir / "indexed", (1000, 1000))
+        assert [p["name"] for p in list_projects(temp_dir)] == ["worked", "indexed"]
+
     def test_hidden_folders_and_files_are_not_projects(self, temp_dir: Path):
         (temp_dir / ".cache").mkdir()
         (temp_dir / "notes.txt").write_text("x")

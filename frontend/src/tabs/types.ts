@@ -32,6 +32,12 @@ export interface TabInfo {
    * restarts and has forgotten them.
    */
   group?: string;
+  /**
+   * Adapter id of the CLI agent the tab was opened with ("claude-code",
+   * "codex"). Absent for the backend's default. Saved so a session recreated
+   * after a backend restart starts the same agent.
+   */
+  agent?: string;
   isRemote?: boolean;
   remoteProfileId?: string;
   remoteUrl?: string;

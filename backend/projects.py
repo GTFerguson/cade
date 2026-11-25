@@ -86,7 +86,9 @@ def project_activity(project: Path) -> float:
     try:
         with os.scandir(project) as entries:
             for entry in entries:
-                if entry.name == ".git":
+                # Hidden entries are tool state (indexes, caches) that changes
+                # without anyone working on the project; git is read above.
+                if entry.name.startswith("."):
                     continue
                 try:
                     times.append(entry.stat(follow_symlinks=False).st_mtime)

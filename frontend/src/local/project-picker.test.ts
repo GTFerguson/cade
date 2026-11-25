@@ -1,22 +1,53 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { LiveSessionInfo } from "../types";
-import { ProjectPicker, type PickerResult, type ProjectPickerOptions } from "./project-picker";
+import {
+  ProjectPicker,
+  type PickerApi,
+  type PickerResult,
+  type ProjectPickerOptions,
+} from "./project-picker";
+
+const ROOT = "/home/me/projects";
+const NOW = 1_000_000;
 
 const TREE: Record<string, string[]> = {
-  "~/projects": ["cade", "nkrdn", "padarax"],
-  "/home/me/projects": ["cade", "nkrdn", "padarax"],
-  "/home/me/projects/cade": ["backend", "frontend"],
+  [ROOT]: ["cade", "nkrdn", "padarax"],
+  [`${ROOT}/cade`]: ["backend", "frontend"],
   "/home/me": ["projects", "notes"],
+  "/srv": ["site"],
 };
 
-function mockBrowse(path: string) {
-  const resolved = path === "~/projects" ? "/home/me/projects" : path;
-  const names = TREE[path] ?? [];
-  return Promise.resolve({
-    path: resolved,
-    children: names.map((name) => ({ name, path: `${resolved}/${name}`, type: "directory" })),
-  });
+const HANDOFFS: Record<string, { name: string; relPath: string; title: string; modified: number }[]> = {
+  [`${ROOT}/cade`]: [
+    { name: "roadmap.md", relPath: "docs/plans/handoff/roadmap.md", title: "Organisation roadmap", modified: NOW - 3600 },
+    { name: "remote.md", relPath: "docs/plans/handoff/remote.md", title: "Remote access", modified: NOW - 86400 },
+  ],
+};
+
+function makeApi(over: Partial<PickerApi> = {}): PickerApi {
+  return {
+    projects: vi.fn(async () => ({
+      root: ROOT,
+      projects: [
+        { name: "cade", path: `${ROOT}/cade`, modified: NOW - 7200, handoffs: 2 },
+        { name: "padarax", path: `${ROOT}/padarax`, modified: NOW - 86400 * 3, handoffs: 0 },
+      ],
+      agents: [
+        { id: "claude-code", name: "Claude Code", available: true, default: true },
+        { id: "codex", name: "Codex", available: true, default: false },
+      ],
+    })),
+    handoffs: vi.fn(async (path: string) => HANDOFFS[path] ?? []),
+    browse: vi.fn(async (path: string) => {
+      const resolved = path === "~/projects" ? ROOT : path;
+      return {
+        path: resolved,
+        dirs: (TREE[resolved] ?? []).map((name) => ({ name, path: `${resolved}/${name}` })),
+      };
+    }),
+    ...over,
+  };
 }
 
 const session = { id: "s1", projectPath: "/p/api", label: "release prep", agent: "claude", alive: true } as LiveSessionInfo;
@@ -25,7 +56,7 @@ let host: HTMLElement;
 let result: Promise<PickerResult | null>;
 
 const settle = async () => {
-  for (let i = 0; i < 5; i++) await Promise.resolve();
+  for (let i = 0; i < 8; i++) await Promise.resolve();
 };
 const key = (k: string, init: KeyboardEventInit = {}) => {
   const e = new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...init });
@@ -33,7 +64,10 @@ const key = (k: string, init: KeyboardEventInit = {}) => {
   return e;
 };
 const labels = () => [...host.querySelectorAll(".picker-option-label")].map((n) => n.textContent);
+const metas = () => [...host.querySelectorAll(".picker-option")].map((n) => n.querySelector(".picker-option-meta")?.textContent ?? "");
 const selected = () => host.querySelector(".picker-option.selected .picker-option-label")?.textContent;
+const setting = (name: string) =>
+  host.querySelector(`.picker-setting[data-setting="${name}"] .picker-setting-value`)?.textContent ?? null;
 const type = async (text: string) => {
   const input = host.querySelector<HTMLInputElement>(".picker-filter-input")!;
   input.value = text;
@@ -43,10 +77,11 @@ const type = async (text: string) => {
 
 async function open(options: Partial<ProjectPickerOptions> = {}): Promise<void> {
   const picker = new ProjectPicker(host, {
-    openTabs: [],
-    recents: [],
+    openPaths: [],
     groups: [],
     native: false,
+    api: makeApi(),
+    now: () => NOW,
     ...options,
   });
   result = picker.show();
@@ -55,44 +90,36 @@ async function open(options: Partial<ProjectPickerOptions> = {}): Promise<void> 
 
 beforeEach(() => {
   document.body.innerHTML = "";
+  localStorage.clear();
   host = document.createElement("div");
   document.body.appendChild(host);
-  (window as any).__MOCK_BROWSE__ = vi.fn(mockBrowse);
 });
 
-afterEach(() => {
-  delete (window as any).__MOCK_BROWSE__;
-});
-
-describe("what it lists", () => {
-  it("starts on the active tab's project, so Enter opens a second tab on it", async () => {
-    await open({
-      openTabs: [
-        { path: "/p/a", name: "a", isActive: false },
-        { path: "/p/b", name: "b", isActive: true },
-      ],
-    });
-    expect(selected()).toBe("[b]");
-    key("Enter");
-    expect(await result).toEqual({ kind: "project", path: "/p/b", group: null });
+describe("the projects list", () => {
+  it("shows projects in the backend's order with when each was last worked on", async () => {
+    await open({ openPaths: [`${ROOT}/padarax`] });
+    expect(labels()).toEqual(["[cade]", "[padarax]"]);
+    expect(metas()).toEqual(["2h ago · 2 handoffs", "3d ago · open"]);
   });
 
-  it("lists open projects, sessions without a tab, recents, then folders", async () => {
-    await open({
-      openTabs: [{ path: "/p/b", name: "b", isActive: true }],
-      recents: ["/p/old"],
-      loadSessions: async () => [session],
-      native: true,
-    });
-    expect(labels()).toEqual([
-      "[b]", "[release prep]", "[old]", "[cade/]", "[nkrdn/]", "[padarax/]",
-      "[use this folder]", "[system folder dialog…]",
-    ]);
+  it("puts sessions to attach to first and the system dialog last", async () => {
+    await open({ loadSessions: async () => [session], native: true });
+    expect(labels()).toEqual(["[release prep]", "[cade]", "[padarax]", "[system folder dialog…]"]);
   });
 
-  it("offers no system dialog outside the desktop app", async () => {
+  it("opens a project without handoffs straight away", async () => {
     await open();
-    expect(labels()).not.toContain("[system folder dialog…]");
+    key("j");
+    key("Enter");
+    expect(await result).toEqual({
+      kind: "project", path: `${ROOT}/padarax`, group: null, agent: "claude-code", handoff: null,
+    });
+  });
+
+  it("attaches to a running session", async () => {
+    await open({ loadSessions: async () => [session] });
+    key("Enter");
+    expect(await result).toEqual({ kind: "attach", session });
   });
 
   it("removes itself and resolves to nothing on Escape", async () => {
@@ -101,53 +128,158 @@ describe("what it lists", () => {
     expect(await result).toBeNull();
     expect(host.querySelector(".project-picker")).toBeNull();
   });
+
+  it("falls back to a plain folder listing when the backend has no projects listing", async () => {
+    await open({ api: makeApi({ projects: async () => null }) });
+    expect(labels()).toEqual(["[cade/]", "[nkrdn/]", "[padarax/]", "[use this folder]"]);
+    expect(setting("agent")).toBeNull();
+  });
 });
 
-describe("choosing", () => {
-  it("attaches to a running session", async () => {
-    await open({ loadSessions: async () => [session] });
-    key("Enter");
-    expect(await result).toEqual({ kind: "attach", session });
-  });
-
-  it("hands over to the system dialog", async () => {
-    await open({ native: true });
-    key("k");
-    expect(selected()).toBe("[system folder dialog…]");
-    key("Enter");
-    expect(await result).toEqual({ kind: "system", group: null });
-  });
-
-  it("opens a folder as the project on Enter and goes into it on l", async () => {
+describe("inside a project", () => {
+  it("offers a new session first, then the handoffs with their age", async () => {
     await open();
+    key("Enter");
+    await settle();
+    expect(labels()).toEqual(["[new session]", "[Organisation roadmap]", "[Remote access]", "[browse folders/]"]);
+    expect(metas()).toEqual(["", "roadmap · 1h ago", "remote · 1d ago", ""]);
+    expect(selected()).toBe("[new session]");
+  });
+
+  it("opens a new session", async () => {
+    await open();
+    key("Enter");
+    await settle();
+    key("Enter");
+    expect(await result).toMatchObject({ path: `${ROOT}/cade`, handoff: null });
+  });
+
+  it("opens on the chosen handoff", async () => {
+    await open();
+    key("Enter");
+    await settle();
+    key("j");
+    key("Enter");
+    expect(await result).toEqual({
+      kind: "project", path: `${ROOT}/cade`, group: null, agent: "claude-code",
+      handoff: "docs/plans/handoff/roadmap.md",
+    });
+  });
+
+  it("shows a project that has no handoffs when gone into with l", async () => {
+    await open();
+    key("j");
     key("l");
     await settle();
-    expect(labels()).toEqual(["[backend/]", "[frontend/]", "[use this folder]"]);
-    key("j");
-    key("j");
-    key("Enter");
-    expect(await result).toEqual({ kind: "project", path: "/home/me/projects/cade", group: null });
+    expect(labels()).toEqual(["[new session]", "[browse folders/]"]);
   });
 
-  it("goes up a folder on h", async () => {
+  it("goes back to the projects list on h", async () => {
+    await open();
+    key("Enter");
+    await settle();
+    key("h");
+    await settle();
+    expect(labels()).toEqual(["[cade]", "[padarax]"]);
+  });
+
+  it("reaches the project's own subfolders", async () => {
+    await open();
+    key("Enter");
+    await settle();
+    key("k");
+    key("Enter");
+    await settle();
+    expect(labels()).toEqual(["[backend/]", "[frontend/]", "[use this folder]"]);
+  });
+
+  it("filters the handoffs", async () => {
+    await open();
+    key("Enter");
+    await settle();
+    key("/");
+    await type("remote");
+    expect(labels()).toEqual(["[Remote access]"]);
+  });
+});
+
+describe("agent and tab group", () => {
+  it("starts on the backend's default agent and switches with a", async () => {
+    await open();
+    expect(setting("agent")).toBe("Claude Code");
+    key("a");
+    expect(setting("agent")).toBe("Codex");
+    key("j");
+    key("Enter");
+    expect(await result).toMatchObject({ agent: "codex" });
+  });
+
+  it("remembers the agent for the next time the picker opens", async () => {
+    await open();
+    key("a");
+    key("Escape");
+    await result;
+    await open();
+    expect(setting("agent")).toBe("Codex");
+  });
+
+  it("switches agent inside a project too, and carries it with a handoff", async () => {
+    await open();
+    key("Enter");
+    await settle();
+    key("a");
+    key("j");
+    key("Enter");
+    expect(await result).toMatchObject({ agent: "codex", handoff: "docs/plans/handoff/roadmap.md" });
+  });
+
+  it("cycles the tab group the new tab goes in", async () => {
+    await open({ groups: ["Work", "Home"] });
+    expect(setting("group")).toBe("by folder");
+    key("g");
+    expect(setting("group")).toBe("Work");
+    key("j");
+    key("Enter");
+    expect(await result).toMatchObject({ group: "Work" });
+  });
+
+  it("shows no tab group when there are no groups", async () => {
+    await open();
+    expect(setting("group")).toBeNull();
+  });
+});
+
+describe("outside the projects folder", () => {
+  it("goes up with h and lists plain folders", async () => {
     await open();
     key("h");
     await settle();
     expect(labels()).toEqual(["[projects/]", "[notes/]", "[use this folder]"]);
   });
 
-  it("cycles the tab group the new tab goes in", async () => {
-    await open({ groups: ["Work", "Home"] });
-    expect(host.querySelector(".picker-group-value")!.textContent).toBe("by folder");
-    key("g");
-    expect(host.querySelector(".picker-group-value")!.textContent).toBe("Work");
-    key("Enter");
-    expect(await result).toMatchObject({ group: "Work" });
+  it("comes back to the ordered projects list when the projects folder is entered", async () => {
+    await open();
+    key("h");
+    await settle();
+    key("l");
+    await settle();
+    expect(labels()).toEqual(["[cade]", "[padarax]"]);
   });
 
-  it("hides the tab group line when there are no groups", async () => {
+  it("opens any folder as a project", async () => {
     await open();
-    expect(host.querySelector<HTMLElement>(".picker-group")!.hidden).toBe(true);
+    key("/");
+    await type("/srv/");
+    key("Enter");
+    expect(await result).toMatchObject({ kind: "project", path: "/srv/site", handoff: null });
+  });
+
+  it("hands over to the system dialog with the chosen agent", async () => {
+    await open({ native: true });
+    key("k");
+    expect(selected()).toBe("[system folder dialog…]");
+    key("Enter");
+    expect(await result).toEqual({ kind: "system", group: null, agent: "claude-code" });
   });
 });
 
@@ -164,13 +296,13 @@ describe("keys", () => {
 });
 
 describe("filtering", () => {
-  it("narrows every section by what is typed and opens the match", async () => {
-    await open({ openTabs: [{ path: "/p/b", name: "b", isActive: true }], recents: ["/p/old"] });
+  it("narrows the projects by what is typed and opens the match", async () => {
+    await open();
     key("/");
     await type("pada");
-    expect(labels()).toEqual(["[padarax/]"]);
+    expect(labels()).toEqual(["[padarax]"]);
     key("Enter");
-    expect(await result).toEqual({ kind: "project", path: "/home/me/projects/padarax", group: null });
+    expect(await result).toMatchObject({ path: `${ROOT}/padarax` });
   });
 
   it("says so when nothing matches", async () => {
@@ -195,7 +327,7 @@ describe("filtering", () => {
     await type("pada");
     key("Escape");
     expect(host.querySelector(".project-picker")).not.toBeNull();
-    expect(labels()).toContain("[cade/]");
+    expect(labels()).toEqual(["[cade]", "[padarax]"]);
     expect(host.querySelector<HTMLElement>(".picker-filter")!.hidden).toBe(true);
   });
 
@@ -211,10 +343,9 @@ describe("filtering", () => {
   it("follows Tab into a folder so the path can go on being typed", async () => {
     await open();
     key("/");
-    await type("/home/me/pro");
+    await type("/srv/si");
     key("Tab");
     await settle();
-    expect(host.querySelector<HTMLInputElement>(".picker-filter-input")!.value).toBe("/home/me/projects/");
-    expect(labels()).toEqual(["[cade/]", "[nkrdn/]", "[padarax/]", "[use this folder]"]);
+    expect(host.querySelector<HTMLInputElement>(".picker-filter-input")!.value).toBe("/srv/site/");
   });
 });

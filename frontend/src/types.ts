@@ -154,6 +154,8 @@ export interface SetProjectMessage extends BaseMessage {
   label?: string;
   /** Tab group the tab was last in. Only a session being created takes it. */
   group?: string;
+  /** Adapter id of the agent the tab runs. Only a session being created takes it. */
+  agent?: string;
   /**
    * Last output sequence seen per terminal. On reconnect the server replays
    * only what came after it instead of the whole scrollback.

@@ -183,7 +183,7 @@ export class TabManager {
    */
   createTab(
     projectPath: string,
-    opts?: { initialPrompt?: string; chatHandoff?: string; group?: string },
+    opts?: { initialPrompt?: string; chatHandoff?: string; group?: string; agent?: string },
   ): TabState {
     const id = generateId();
     const name = getProjectName(projectPath);
@@ -192,6 +192,7 @@ export class TabManager {
     if (opts?.initialPrompt) tabInfo.initialPrompt = opts.initialPrompt;
     if (opts?.chatHandoff) tabInfo.chatHandoff = opts.chatHandoff;
     if (opts?.group) tabInfo.group = opts.group;
+    if (opts?.agent) tabInfo.agent = opts.agent;
     const tabState = this.createTabState(tabInfo);
 
     this.tabs.set(id, tabState);
@@ -766,6 +767,7 @@ export class TabManager {
       };
       if (tab.customName) info.customName = true;
       if (tab.group) info.group = tab.group;
+      if (tab.agent) info.agent = tab.agent;
       if (tab.isRemote !== undefined) info.isRemote = tab.isRemote;
       if (tab.remoteProfileId !== undefined) info.remoteProfileId = tab.remoteProfileId;
       if (tab.remoteUrl !== undefined) info.remoteUrl = tab.remoteUrl;

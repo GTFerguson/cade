@@ -153,6 +153,7 @@ export class WebSocketClient extends BaseWSClient {
   private pendingChatHandoff: string | null = null;
   private pendingLabel: string | null = null;
   private pendingGroup: string | null = null;
+  private pendingAgent: string | null = null;
 
   // Last output sequence seen per terminal, handed back on reconnect so the
   // server replays only the gap. Cleared when the session id changes.
@@ -337,6 +338,9 @@ export class WebSocketClient extends BaseWSClient {
       }
       if (this.pendingGroup !== null) {
         message.group = this.pendingGroup;
+      }
+      if (this.pendingAgent !== null) {
+        message.agent = this.pendingAgent;
       }
       if (Object.keys(this.lastSeq).length > 0) {
         message.lastSeq = { ...this.lastSeq };
@@ -824,6 +828,7 @@ export class WebSocketClient extends BaseWSClient {
     chatHandoff?: string,
     label?: string,
     group?: string,
+    agent?: string,
   ): void {
     this.pendingProjectPath = path;
     if ((sessionId ?? null) !== this.pendingSessionId) {
@@ -832,6 +837,7 @@ export class WebSocketClient extends BaseWSClient {
     this.pendingSessionId = sessionId ?? null;
     this.pendingLabel = label ?? null;
     this.pendingGroup = group ?? null;
+    this.pendingAgent = agent ?? null;
     this.pendingDashboardFile = dashboardFile ?? null;
     this.pendingProviderOverride = providerOverride ?? null;
     this.pendingInitialPrompt = initialPrompt ?? null;
@@ -852,6 +858,9 @@ export class WebSocketClient extends BaseWSClient {
       }
       if (group !== undefined) {
         message.group = group;
+      }
+      if (agent !== undefined) {
+        message.agent = agent;
       }
       if (dashboardFile !== undefined) {
         message.dashboardFile = dashboardFile;

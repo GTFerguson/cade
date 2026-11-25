@@ -53,7 +53,7 @@ import { getMermaidConfig } from "./markdown/mermaid-theme";
 import { RemoteProfileManager } from "./remote/profile-manager";
 import { RemoteProjectSelector } from "./remote/RemoteProjectSelector";
 import { ProjectPicker } from "./local/project-picker";
-import { loadRecentProjects, rememberRecentProject } from "./local/recent-projects";
+import { handoffPrompt } from "./local/picker-model";
 import { Splash } from "./ui/splash";
 import type { RemoteProfile } from "./remote/types";
 import { getAuthToken, setAuthToken } from "./auth/tokenManager";
@@ -864,6 +864,7 @@ class App {
         tab.chatHandoff,
         tabDisplayName(tab),
         tab.group,
+        tab.agent,
       );
 
       // Auth is project-driven now: connect first; if the project's launch.yml
@@ -917,14 +918,10 @@ class App {
     // The key that opens the picker must not stack a second one on top.
     if (!this.tabContentContainer || this.projectPickerOpen) return;
     this.projectPickerOpen = true;
-    const activeTabId = this.tabManager.getActiveTabId();
     const tabs = this.tabManager.getTabs();
     const picker = new ProjectPicker(this.tabContentContainer, {
-      // A remote tab's path is on another machine; it is not a project to open here.
-      openTabs: tabs
-        .filter((t) => !t.isRemote)
-        .map((t) => ({ path: t.projectPath, name: t.name, isActive: t.id === activeTabId })),
-      recents: loadRecentProjects(),
+      // A remote tab's path is on another machine, so it marks nothing here.
+      openPaths: tabs.filter((t) => !t.isRemote).map((t) => t.projectPath),
       groups: [...new Set([...this.tabManager.getGroupNames(), ...this.groupDefs.map((d) => d.name)])],
       native: isTauri(),
       loadSessions: async () =>
@@ -944,10 +941,15 @@ class App {
       choice.kind === "system" ? await pickProjectFolder(this.defaultProjectPath) : choice.path;
     if (!path) return;
 
-    rememberRecentProject(path);
     this.startSplash?.setLoading();
     this.startSplashTimeout();
-    const tab = this.tabManager.createTab(path, choice.group ? { group: choice.group } : undefined);
+    const tab = this.tabManager.createTab(path, {
+      ...(choice.group && { group: choice.group }),
+      ...(choice.agent && { agent: choice.agent }),
+      // The agent starts by reading the handoff, so the tab opens already at work.
+      ...(choice.kind === "project" &&
+        choice.handoff && { initialPrompt: handoffPrompt(choice.handoff) }),
+    });
     this.tabManager.switchTab(tab.id);
   }
 

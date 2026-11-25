@@ -43,23 +43,27 @@ onto a chip to change its group.
 
 ## 2. One project picker
 
-Built 25 Nov 2026, not yet installed: `frontend/src/local/project-picker.ts`
-(view), `picker-model.ts` (what is listed and how it is filtered),
-`recent-projects.ts`. One keyboard-driven picker on desktop, browser and phone
-in place of the native folder dialog. It lists the projects already open (the
-active tab's first, so a second tab on it is one key press), sessions running
-with no tab on this device, recent projects, then a folder listing. `/` filters
-all of them by typing, and text that starts like a path browses there. `g`
-chooses the tab group the new tab goes in. The system folder dialog stays
-reachable on desktop as the last entry.
+Built 25 Nov 2026: `frontend/src/local/project-picker.ts` (view),
+`picker-model.ts` (what is listed and how it is filtered), `backend/projects.py`
+(projects and handoffs), `backend/terminal/session_agents.py` (per-tab agent).
+
+One keyboard-driven picker on desktop, browser and phone in place of the native
+folder dialog. It opens on the folders under the main working folder
+(`CADE_PROJECTS_ROOT`, default `~/projects`), most recently worked on first.
+Going into a project offers a new session, then its handoffs newest first;
+choosing a handoff opens a tab whose agent starts by reading it. `a` switches
+the tab's agent between Claude Code and Codex, `g` its tab group, `/` filters or
+takes a typed path. Folders outside the projects folder are reached by going up
+or typing a path, and the system folder dialog is the last entry.
 
 **Left.**
 
-- Choosing the agent (Claude Code, Codex) at the point of opening. The agent is
-  a setting of the whole backend today (`Config.cli_agent`), so this needs the
-  session to carry its own agent first.
-- Recent projects are kept per browser. A phone does not see what the desktop
-  opened.
+- The projects folder is set by an environment variable only; there is no
+  setting for it in the interface or the user config file.
+- "Last worked on" is read from the project folder, its visible top-level
+  entries, git's index and reflog, and its handoffs. An edit deep in the tree
+  that is never staged does not count.
+- The design is not yet written into `docs/technical/` (needs approval).
 
 ## 3. Pull request monitoring
 
