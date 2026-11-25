@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from backend.protocol import SessionKey
+from backend.terminal.attention import AgentTitleWatch
 from backend.terminal.pty import PTYManager
 from backend.models import TerminalSize
 
@@ -120,6 +121,8 @@ class TerminalState:
     size: TerminalSize | None = None
     # Connection id of the client whose size owns the PTY.
     controller: str | None = None
+    # Follows the agent's terminal title; unset on a plain shell terminal.
+    title_watch: AgentTitleWatch | None = field(default=None, repr=False)
 
     @property
     def first_seq(self) -> int:
@@ -185,6 +188,8 @@ class TerminalState:
         try:
             async for data in self.pty.read():
                 self.publish(data)
+                if self.title_watch is not None:
+                    self.title_watch.feed(data)
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001
@@ -261,6 +266,8 @@ class PTYSession:
     def add_terminal(self, session_key: str, pty: PTYManager) -> TerminalState:
         """Add a new terminal with the given session key."""
         terminal = TerminalState(pty=pty)
+        if session_key == SessionKey.CLAUDE:
+            terminal.title_watch = AgentTitleWatch(self)
         self.terminals[session_key] = terminal
         return terminal
 

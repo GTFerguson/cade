@@ -1,7 +1,9 @@
 """Per-session attention state: what is the agent doing, and does it need the user?
 
 Fed by agent hooks (Claude Code's Notification/Stop/UserPromptSubmit/
-PostToolUse, Codex's notify) that POST to the backend. The state is what the
+PostToolUse, Codex's notify) that POST to the backend, and by the title the
+agent sets on its terminal, which is the only place Codex reports that it is
+waiting on an approval. The state is what the
 desktop tabs and the phone's session strip show and what a push notification
 is sent for. A keystroke into the session clears a waiting or finished state:
 the user is evidently dealing with it.
@@ -10,6 +12,7 @@ the user is evidently dealing with it.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +28,53 @@ CLEAR = None            # nothing to report
 # after this long without terminal output a "working" state is dropped.
 WORKING_SILENCE_SECONDS = 10.0
 WORKING_POLL_SECONDS = 2.0
+
+# Codex's notify command fires only when a turn completes. While it waits on
+# an approval it retitles the terminal instead, blinking a glyph in front of
+# this text.
+CODEX_PROMPT_TITLE = "action required"
+
+# OSC 0 (icon + title) and OSC 2 (title), ended by BEL or ST.
+_TITLE_SEQUENCE = re.compile(r"\x1b\][02];([^\x07\x1b]*)(?:\x07|\x1b\\)")
+# A title sequence cut off by the end of a chunk, down to a lone ESC.
+_PARTIAL_TITLE = re.compile(r"\x1b(?:\](?:[02](?:;[^\x07\x1b]*\x1b?)?)?)?\Z")
+# Longer than any real title; an unterminated sequence past this is dropped
+# so a stream that never closes one cannot grow the carry buffer.
+MAX_PARTIAL_TITLE = 512
+
+
+class TitleScanner:
+    """Pulls terminal titles out of PTY output, across chunk boundaries."""
+
+    def __init__(self) -> None:
+        self._carry = ""
+
+    def feed(self, data: str) -> list[str]:
+        text = self._carry + data
+        titles = [m.group(1) for m in _TITLE_SEQUENCE.finditer(text)]
+        partial = _PARTIAL_TITLE.search(text)
+        tail = partial.group(0) if partial else ""
+        self._carry = tail if len(tail) <= MAX_PARTIAL_TITLE else ""
+        return titles
+
+
+def title_transition(
+    was_prompting: bool, title: str, current: str | None
+) -> tuple[bool, str | None | bool]:
+    """What a new terminal title means for a session's attention.
+
+    Returns whether the title is an approval prompt, and the state to move
+    to (False to leave it alone). Only a title that is a prompt, or the first
+    title after one, says anything: every other title is a session name.
+    """
+    prompting = re.sub(r"^[\W_]+", "", title.strip()).lower() == CODEX_PROMPT_TITLE
+    if prompting:
+        return True, NEEDS_INPUT
+    # The prompt was answered and the turn carries on. A turn that ended
+    # instead has already reported itself finished; leave that standing.
+    if was_prompting and current in (NEEDS_INPUT, CLEAR):
+        return False, WORKING
+    return False, False
 
 
 @dataclass(frozen=True)
@@ -126,6 +176,67 @@ def apply_attention(session, state: str | None, message: str | None) -> bool:
     session.attention_message = message if state is not None else None
     session.attention_at = time.time()
     return True
+
+
+async def announce_attention(
+    session, state: str | None, message: str | None, *, push: bool = True
+) -> bool:
+    """Move a session to a state and tell everyone who should hear of it.
+
+    Attached clients get the new state; subscribed phones get a notification
+    when the agent is waiting or finished. Returns True when the state changed.
+    """
+    if not apply_attention(session, state, message):
+        return False
+    await broadcast_attention(session)
+    ensure_working_watch(session)
+    if push and state in (NEEDS_INPUT, IDLE):
+        from backend.config import get_config
+        from backend.push import get_push_service
+
+        label = session.label or session.project_path.name
+        await get_push_service().send({
+            "title": f"{label}: needs you" if state == NEEDS_INPUT else f"{label}: done",
+            "body": (message or "")[:200],
+            "tag": f"cade-{session.id}",
+            "sessionId": session.id,
+            "url": f"{get_config().root_path}/",
+        })
+    return True
+
+
+# Announcements started from the PTY reader, held so they are not collected
+# before they finish.
+_title_announcements: set[asyncio.Task] = set()
+
+
+class AgentTitleWatch:
+    """Follows the agent terminal's title for prompts no hook reports."""
+
+    def __init__(self, session) -> None:
+        self._session = session
+        self._scanner = TitleScanner()
+        self._prompting = False
+
+    def feed(self, data: str) -> None:
+        for title in self._scanner.feed(data):
+            was_prompting = self._prompting
+            self._prompting, state = title_transition(was_prompting, title, self._session.attention)
+            if state is False:
+                continue
+            # The prompt title blinks, and a keystroke inside the prompt
+            # clears the state until the next blink restores it. Only the
+            # prompt first appearing is worth a notification.
+            task = asyncio.create_task(
+                announce_attention(
+                    self._session,
+                    state,
+                    "Waiting for approval" if state == NEEDS_INPUT else None,
+                    push=not was_prompting,
+                )
+            )
+            _title_announcements.add(task)
+            task.add_done_callback(_title_announcements.discard)
 
 
 _working_watchers: dict[str, asyncio.Task] = {}

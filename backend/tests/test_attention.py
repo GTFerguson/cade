@@ -19,12 +19,14 @@ from backend.terminal.attention import (
     NEEDS_INPUT,
     WORKING,
     AttentionEvent,
+    TitleScanner,
     apply_attention,
     attention_after_keystroke,
     attention_from_event,
     ensure_working_watch,
     next_attention,
     resolve_session,
+    title_transition,
 )
 from backend.terminal.sessions import PTYSession, SessionRegistry, set_registry
 from backend.tests.test_multi_client_attach import attach_handler, make_pty, sent
@@ -100,6 +102,112 @@ class TestWorkingWatch:
             assert session.attention == WORKING
             # Let the watcher finish so it does not outlive the test.
             await asyncio.sleep(0.2)
+        assert session.attention is None
+
+
+class TestTitleScanner:
+    def test_reads_bel_and_st_terminated_titles(self):
+        scanner = TitleScanner()
+        assert scanner.feed("a\x1b]0;first\x07b\x1b]2;second\x1b\\c") == ["first", "second"]
+
+    def test_title_split_across_chunks_is_reassembled(self):
+        scanner = TitleScanner()
+        assert scanner.feed("output\x1b]0;[ ! ] Action") == []
+        assert scanner.feed(" Required\x07more") == ["[ ! ] Action Required"]
+
+    def test_escape_split_from_its_introducer(self):
+        scanner = TitleScanner()
+        assert scanner.feed("output\x1b") == []
+        assert scanner.feed("]0;late\x07") == ["late"]
+
+    def test_other_osc_sequences_are_not_titles(self):
+        scanner = TitleScanner()
+        assert scanner.feed("\x1b]8;;http://x\x07link\x1b]8;;\x07") == []
+
+    def test_an_unterminated_sequence_does_not_grow_without_bound(self):
+        scanner = TitleScanner()
+        scanner.feed("\x1b]0;" + "x" * 10_000)
+        assert scanner.feed("\x1b]0;ok\x07") == ["ok"]
+
+
+class TestTitleTransition:
+    @pytest.mark.parametrize("title", ["[ ! ] Action Required", "[ . ] Action Required"])
+    def test_codex_prompt_title_means_needs_input(self, title):
+        assert title_transition(False, title, None) == (True, NEEDS_INPUT)
+        assert title_transition(False, title, WORKING) == (True, NEEDS_INPUT)
+
+    def test_prompt_title_is_reasserted_after_a_keystroke_cleared_it(self):
+        # Arrow keys inside the prompt clear the state; the blinking title
+        # arrives again and must put it back.
+        assert title_transition(True, "[ . ] Action Required", None) == (True, NEEDS_INPUT)
+
+    def test_leaving_the_prompt_resumes_the_turn(self):
+        assert title_transition(True, "⠋ fix the tabs", NEEDS_INPUT) == (False, WORKING)
+        assert title_transition(True, "⠋ fix the tabs", None) == (False, WORKING)
+
+    def test_leaving_the_prompt_does_not_undo_a_finished_turn(self):
+        assert title_transition(True, "fix the tabs", IDLE) == (False, False)
+
+    def test_ordinary_titles_leave_a_hook_set_prompt_alone(self):
+        # Claude Code keeps retitling while its own permission prompt is open.
+        assert title_transition(False, "✳ fix the tabs", NEEDS_INPUT) == (False, False)
+        assert title_transition(False, "✳ fix the tabs", WORKING) == (False, False)
+
+
+class TestTitleDrivenAttention:
+    @staticmethod
+    def pty_emitting(chunks: list[str]) -> AsyncMock:
+        pty = make_pty()
+
+        async def read():
+            for chunk in chunks:
+                yield chunk
+                await asyncio.sleep(0)
+            await asyncio.sleep(3600)
+
+        pty.read = read
+        return pty
+
+    @pytest.mark.asyncio
+    async def test_agent_terminal_title_sets_needs_input_and_pushes_once(self, temp_dir: Path):
+        session = PTYSession(id="codex", project_path=temp_dir, label="cade")
+        pty = self.pty_emitting([
+            "\x1b]0;[ ! ] Action Required\x07",
+            "\x1b]0;[ . ] Action Required\x07",
+            "\x1b]0;[ ! ] Action Required\x07",
+        ])
+        with patch("backend.push.PushService.send", new_callable=AsyncMock) as send:
+            terminal = session.add_terminal(SessionKey.CLAUDE, pty)
+            terminal.ensure_reader()
+            await asyncio.sleep(0.05)
+            terminal.output_task.cancel()
+        assert session.attention == NEEDS_INPUT
+        assert send.await_count == 1
+        assert send.await_args.args[0]["title"] == "cade: needs you"
+
+    @pytest.mark.asyncio
+    async def test_title_moving_on_marks_the_session_working(self, temp_dir: Path):
+        session = PTYSession(id="codex", project_path=temp_dir)
+        pty = self.pty_emitting([
+            "\x1b]0;[ ! ] Action Required\x07",
+            "\x1b]0;⠋ fix the tabs\x07",
+        ])
+        with patch("backend.push.PushService.send", new_callable=AsyncMock):
+            terminal = session.add_terminal(SessionKey.CLAUDE, pty)
+            terminal.ensure_reader()
+            await asyncio.sleep(0.05)
+            terminal.output_task.cancel()
+        assert session.attention == WORKING
+        apply_attention(session, None, None)  # stop the silence watcher
+
+    @pytest.mark.asyncio
+    async def test_manual_shell_titles_are_ignored(self, temp_dir: Path):
+        session = PTYSession(id="shell", project_path=temp_dir)
+        pty = self.pty_emitting(["\x1b]0;Action Required\x07"])
+        terminal = session.add_terminal(SessionKey.MANUAL, pty)
+        terminal.ensure_reader()
+        await asyncio.sleep(0.05)
+        terminal.output_task.cancel()
         assert session.attention is None
 
 

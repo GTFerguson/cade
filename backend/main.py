@@ -789,15 +789,10 @@ def create_app(config: Config | None = None) -> FastAPI:
         tells its attached clients, and pushes to subscribed phones when
         the agent needs someone.
         """
-        from backend.push import get_push_service
         from backend.terminal.attention import (
-            IDLE,
-            NEEDS_INPUT,
             AttentionEvent,
-            apply_attention,
+            announce_attention,
             attention_from_event,
-            broadcast_attention,
-            ensure_working_watch,
             next_attention,
             resolve_session,
         )
@@ -819,20 +814,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         if state is False:
             return JSONResponse({"status": "ignored"})
 
-        changed = apply_attention(session, state, body.message)
-        if changed:
-            await broadcast_attention(session)
-            ensure_working_watch(session)
-            if state in (NEEDS_INPUT, IDLE):
-                label = session.label or session.project_path.name
-                title = f"{label}: needs you" if state == NEEDS_INPUT else f"{label}: done"
-                await get_push_service().send({
-                    "title": title,
-                    "body": (body.message or "")[:200],
-                    "tag": f"cade-{session.id}",
-                    "sessionId": session.id,
-                    "url": f"{get_config().root_path}/",
-                })
+        await announce_attention(session, state, body.message)
         return JSONResponse({"status": "ok", "attention": session.attention})
 
     @app.get("/api/push/status")
