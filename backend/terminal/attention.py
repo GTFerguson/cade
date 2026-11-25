@@ -33,6 +33,12 @@ WORKING_POLL_SECONDS = 2.0
 # an approval it retitles the terminal instead, blinking a glyph in front of
 # this text.
 CODEX_PROMPT_TITLE = "action required"
+# The marker opens the title and is either all of it or set off from the
+# other title items (thread name, project) by a separator. A thread that is
+# merely named "Action required ..." runs straight on into more words.
+_PROMPT_TITLE = re.compile(
+    rf"^[\W_]*{re.escape(CODEX_PROMPT_TITLE)}\s*(?:$|[^\w\s])", re.IGNORECASE
+)
 
 # OSC 0 (icon + title) and OSC 2 (title), ended by BEL or ST.
 _TITLE_SEQUENCE = re.compile(r"\x1b\][02];([^\x07\x1b]*)(?:\x07|\x1b\\)")
@@ -67,7 +73,7 @@ def title_transition(
     to (False to leave it alone). Only a title that is a prompt, or the first
     title after one, says anything: every other title is a session name.
     """
-    prompting = re.sub(r"^[\W_]+", "", title.strip()).lower() == CODEX_PROMPT_TITLE
+    prompting = _PROMPT_TITLE.match(title) is not None
     if prompting:
         return True, NEEDS_INPUT
     # The prompt was answered and the turn carries on. A turn that ended

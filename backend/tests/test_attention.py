@@ -136,6 +136,15 @@ class TestTitleTransition:
         assert title_transition(False, title, None) == (True, NEEDS_INPUT)
         assert title_transition(False, title, WORKING) == (True, NEEDS_INPUT)
 
+    def test_prompt_title_followed_by_the_thread_name_means_needs_input(self):
+        # Codex joins its title items, so the prompt marker is followed by
+        # the thread name.
+        title = "[ ! ] Action Required | Review maker checklist"
+        assert title_transition(False, title, None) == (True, NEEDS_INPUT)
+
+    def test_a_thread_merely_named_like_the_prompt_is_a_session_name(self):
+        assert title_transition(False, "Action required fields in the form", None) == (False, False)
+
     def test_prompt_title_is_reasserted_after_a_keystroke_cleared_it(self):
         # Arrow keys inside the prompt clear the state; the blinking title
         # arrives again and must put it back.
