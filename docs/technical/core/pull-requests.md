@@ -77,7 +77,7 @@ These are constants, not settings.
 
 ## Boundaries
 
-- One GitHub account: whichever `gh` has active. Repositories under another account show nothing.
+- One GitHub account: whichever `gh` has active. Repositories that account cannot read show nothing.
 - No notifications, no list of pull requests, no roll-up on a closed workspace chip, and no rate-limit check. Those are in the plan.
 - A remote backend uses its own machine's `gh`, or shows nothing.
 - The phone does not show the badge.

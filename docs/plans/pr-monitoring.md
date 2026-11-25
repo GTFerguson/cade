@@ -43,12 +43,7 @@ The tab badge is built (`17aa85bc`, 25 Nov 2026) and documented in [[../technica
 
 ## Key challenges
 
-- **Two GitHub accounts.** The work (AirPLAi) repositories belong to a
-  separate work account; personal ones to `GTFerguson`. On this machine `gh`
-  is signed in to `GTFerguson` only, which owns 24 of the 25 repositories under
-  `~/projects`. `gh` holds several accounts with one active at a time, so the
-  poller must name the account per repository instead of switching the active
-  one under the agents that also use `gh`.
+- **GitHub accounts.** Checked 25 Nov 2026: `gh` on this machine is signed in to one account, `GTFerguson`, and that account can read the work organisation's repositories (it listed open and merged pull requests there). So one account covers both work and personal repositories, and nothing has to choose between accounts. If a repository ever needs a second `gh` account, the poller must name the account per repository instead of switching the active one under the agents that also use `gh`.
 - **A branch is not a pull request.** A tab's branch can change under it, a
   pull request can come from a fork, and several tabs can share a repository on
   different branches (worktrees). Matching is by repository and head branch,
@@ -72,9 +67,6 @@ The tab badge is built (`17aa85bc`, 25 Nov 2026) and documented in [[../technica
 
 ## Open questions
 
-- The work account needs `gh auth login` on this machine before its
-  repositories can be polled. How is a repository mapped to an account: by the
-  owner in its remote URL, or by tab group?
 - Is polling enough, or are webhooks through a relay worth their setup for
   faster notifications?
 - Should the badge show on a tab whose branch has a pull request that is not
