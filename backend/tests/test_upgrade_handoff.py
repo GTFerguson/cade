@@ -364,3 +364,63 @@ def test_a_shell_outlives_a_real_exec(tmp_path: Path):
     )
     assert result.returncode == 0, result.stderr[-2000:]
     assert "HANDOFF_OK" in result.stdout
+
+
+def test_exec_environment_makes_the_new_image_unpack_its_own_files():
+    # A one-file binary that finds its parent's unpack directory in the
+    # environment runs from it: new code against the old build's frontend
+    # and native libraries.
+    env = upgrade.exec_environment({"HOME": "/home/u", "_PYI_APPLICATION_HOME_DIR": "/tmp/_MEIold"})
+    assert env[upgrade.FRESH_UNPACK_FLAG] == "1"
+    assert env["HOME"] == "/home/u"
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="reads process state from /proc")
+def test_an_exited_shell_that_is_not_our_child_is_not_alive():
+    # After an upgrade the shells belong to the process that launched the new
+    # image, which never reaps them, so an exited shell stays a zombie.
+    from backend.terminal.pty import InheritedPTY
+
+    holder = subprocess.Popen(
+        [sys.executable, "-c",
+         "import subprocess, sys, time\n"
+         "p = subprocess.Popen(['true'])\n"
+         "time.sleep(0.3)\n"
+         "print(p.pid, flush=True)\n"
+         "time.sleep(30)\n"],
+        stdout=subprocess.PIPE, text=True,
+    )
+    try:
+        zombie_pid = int(holder.stdout.readline())
+        read_fd, write_fd = os.pipe()
+        os.close(write_fd)
+        pty = InheritedPTY(read_fd, zombie_pid)
+        assert pty.is_alive() is False
+        os.close(read_fd)
+    finally:
+        holder.kill()
+        holder.wait()
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="reads process state from /proc")
+def test_a_running_shell_that_is_not_our_child_is_alive():
+    from backend.terminal.pty import InheritedPTY
+
+    holder = subprocess.Popen(
+        [sys.executable, "-c",
+         "import subprocess, sys, time\n"
+         "p = subprocess.Popen(['sleep', '30'])\n"
+         "print(p.pid, flush=True)\n"
+         "time.sleep(30)\n"],
+        stdout=subprocess.PIPE, text=True,
+    )
+    try:
+        pid = int(holder.stdout.readline())
+        read_fd, write_fd = os.pipe()
+        os.close(write_fd)
+        assert InheritedPTY(read_fd, pid).is_alive() is True
+        os.close(read_fd)
+        os.kill(pid, 9)
+    finally:
+        holder.kill()
+        holder.wait()

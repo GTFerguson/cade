@@ -2,10 +2,12 @@
 
 The backend is the parent of every shell and holds every PTY master, so a
 restart ends every session. An upgrade instead replaces this process's
-program image with the new binary via ``os.execv``. The pid is unchanged,
-so the shells stay our children and the desktop app's handle on the sidecar
-stays valid; the PTY masters and the HTTP listening socket are plain file
-descriptors and survive the exec once their close-on-exec flag is cleared.
+program image with the new binary via ``os.execve``. The pid is unchanged,
+so the desktop app's handle on the sidecar stays valid; the PTY masters and
+the HTTP listening socket are plain file descriptors and survive the exec
+once their close-on-exec flag is cleared. A one-file build unpacks itself and
+runs the backend as a child of that pid, so there the shells end up our
+siblings rather than our children (see ``InheritedPTY.is_alive``).
 Everything that is not a descriptor (session ids, labels, scrollback,
 sequence numbers, chat history) is written to a handoff manifest and read
 back by the new image on startup.
@@ -38,7 +40,7 @@ import socket
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -103,6 +105,20 @@ def current_executable() -> str:
     no binary; the Python interpreter re-runs ``backend.main``.
     """
     return sys.executable
+
+
+# PyInstaller's switch for "start as a new instance". A one-file binary that
+# finds its launcher's variables in the environment takes itself for a worker
+# of that launcher and runs from the directory already unpacked, which after
+# an install holds the previous build's frontend, data files and native
+# libraries. With the switch set the bootloader unpacks its own copy, then
+# clears the switch so the backend's own subprocesses still share it.
+FRESH_UNPACK_FLAG = "PYINSTALLER_RESET_ENVIRONMENT"
+
+
+def exec_environment(environ: Mapping[str, str]) -> dict[str, str]:
+    """The environment the new image is started with."""
+    return {**environ, FRESH_UNPACK_FLAG: "1"}
 
 
 def exec_argv(executable: str, serve_argv: list[str], manifest_path: Path) -> list[str]:
@@ -616,7 +632,7 @@ async def perform_handoff(executable: str, *, manifest_path: Path = HANDOFF_FILE
                 handler.flush()
             except Exception:  # noqa: BLE001
                 pass
-        os.execv(argv[0], argv)
+        os.execve(argv[0], argv, exec_environment(os.environ))
     except BaseException:
         # Still the old image: undo what can be undone and keep serving.
         for session in registry.sessions():

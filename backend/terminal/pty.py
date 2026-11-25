@@ -268,6 +268,31 @@ class UnixPTY(BasePTY):
         return 0
 
 
+_ZOMBIE_STATES = ("Z", "X")
+
+
+def _is_running(pid: int) -> bool:
+    """Whether a process that is not our child exists and has not exited."""
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as f:
+            stat = f.read().decode("ascii", "replace")
+    except FileNotFoundError:
+        if os.path.isdir("/proc/self"):
+            return False
+        # No /proc on this platform: the signal probe is all there is.
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+    except OSError:
+        return True
+    # The state follows the command name, which is parenthesised and may
+    # itself contain spaces and parentheses.
+    state = stat.rpartition(")")[2].split()
+    return not state or state[0] not in _ZOMBIE_STATES
+
+
 class InheritedPTY(BasePTY):
     """A PTY whose master descriptor and child came from the previous program
     image of this process.
@@ -421,14 +446,15 @@ class InheritedPTY(BasePTY):
         try:
             pid, status = os.waitpid(self._pid, os.WNOHANG)
         except ChildProcessError:
-            # Not our child (should not happen after an exec, where the pid
-            # is kept); fall back to a signal-0 probe.
-            try:
-                os.kill(self._pid, 0)
+            # Not our child: a one-file build unpacks itself in a launcher
+            # process and runs the backend beneath it, so the shells stay
+            # children of the launcher. It never reaps them, and a signal
+            # still reaches an exited-but-unreaped process, so that state
+            # has to be read rather than probed.
+            if _is_running(self._pid):
                 return True
-            except ProcessLookupError:
-                self._exit_status = -1
-                return False
+            self._exit_status = -1
+            return False
         if pid == 0:
             return True
         self._exit_status = status
