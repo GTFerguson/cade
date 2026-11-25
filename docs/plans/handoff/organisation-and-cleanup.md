@@ -28,13 +28,17 @@ Tab groups became workspaces on 25 Nov: one open at a time, `Alt+j`/`Alt+k` to m
 
 **Open problem: the "update ready" marker did not appear in the desktop window** after two installs that changed the interface (15:59, 16:09), though the backend sent the new `frontendVersion` and the installed bundle shows the marker in a headless browser against the live backend. Gary reloaded by hand at 16:45. `cefbff7f` makes the page log `build-notice` and `update-ready` diagnostics ("Client diagnostic" in `~/.cade/logs/cade.log`); they report from the second install after it, since the running page predates it.
 
-**Not installed**: `95231e7e` (no `[claude]` corner label), `cefbff7f` (diagnostic), `2aaa6780` (outline). An install needs Gary's go-ahead each time; the permission check blocks it otherwise.
+**Not installed** (an install needs Gary's go-ahead each time; he said "no install yet, I'll tell you when"): everything after `3b1d00f9`, which is the `[claude]` label removal, the upgrade diagnostic, the workspace outline, phone workspaces, `Alt+w` / `Alt+Shift+w` for workspaces with `Alt+x` to close a tab, the pull request badge, the strip above the terminal, and the picker's workspace toggle moved to the top left.
+
+**Built 25 Nov, in `docs/technical/core/pull-requests.md`**: pull request badge on tabs and the strip above the terminal (pull request, branch and pending work, latest handoff). Neither has run in the installed app.
+
+**In discussion**: a mock at `docs/plans/design/workspace-board-mock.html`. Gary: the standalone board looked "trashy" and is dropped; he likes the strip (now built) and wants the picker updated "with some of this" (ticket and pull request on picker rows, a "finished" section with a clean-up key); second pass was "not too bad". Plans: `docs/plans/worktree-cleanup.md`, `docs/plans/pr-monitoring.md`. Linear integration is wanted (AirPLAi uses it; `~/projects/airplai/docs/plans/work-board.md` is the hand-kept board it would replace) and waits on three answers: an API key for CADE, whether handoffs can carry `ticket:` in frontmatter, where it shows. Docs no longer need approval: document what is built, as part of the work.
 
 ## Worktree / branch
 
 - Path: `/home/gary/projects/cade` (main checkout)
 - Branch: `main`, pushed
-- Last commit: `2aaa6780` Workspaces: the open workspace's colour runs round its chip and then under its tabs
+- Last commit: see `git log`; the strip above the terminal is the newest work
 
 **Installed build is `3b1d00f9`** (plus the tab-groups doc commit).
 
