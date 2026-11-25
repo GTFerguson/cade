@@ -382,6 +382,16 @@ class App {
       }
       const tab = this.tabManager.createTab(autoProject);
       this.tabManager.switchTab(tab.id);
+    } else if (WebSocketClient.takeResumeAfterUpgrade() && this.tabManager.hasSavedSession()) {
+      // This page replaced one that reloaded for an upgrade. The user did
+      // not close anything, so their tabs come back without the start screen
+      // asking; until they do, every agent's prompts would go unseen.
+      if (this.tabContentContainer) {
+        this.startSplash = new Splash(this.tabContentContainer);
+        this.startSplash.setLoading();
+        this.startSplashTimeout();
+      }
+      void this.handleResumeSession();
     } else {
       // Always show splash on startup - user chooses to resume or start fresh
       this.showStartSplash();

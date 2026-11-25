@@ -128,6 +128,15 @@ describe("moving a session between tab groups", () => {
   });
 });
 
+describe("reopening tabs after an upgrade reload", () => {
+  it("is asked for once by the page that reloaded, then forgotten", () => {
+    expect(WebSocketClient.takeResumeAfterUpgrade()).toBe(false);
+    WebSocketClient.markResumeAfterUpgrade();
+    expect(WebSocketClient.takeResumeAfterUpgrade()).toBe(true);
+    expect(WebSocketClient.takeResumeAfterUpgrade()).toBe(false);
+  });
+});
+
 describe("upgrade reload opt-in", () => {
   afterEach(() => {
     delete (window as any).__TAURI__;

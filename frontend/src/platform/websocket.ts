@@ -545,7 +545,35 @@ export class WebSocketClient extends BaseWSClient {
   // upgraded itself in place, and the page reloads once to pick up the new
   // frontend. Sessions survive the upgrade, so tabs re-attach as usual.
   private static knownBuild: string | null = null;
-  static onBuildChanged: (from: string, to: string) => void = () => window.location.reload();
+  static onBuildChanged: (from: string, to: string) => void = () => {
+    WebSocketClient.markResumeAfterUpgrade();
+    window.location.reload();
+  };
+
+  private static readonly RESUME_AFTER_UPGRADE_KEY = "cade-resume-after-upgrade";
+
+  /**
+   * Leave a note for the page that loads next: it replaces this one because
+   * the backend upgraded, so it should reopen the tabs without asking.
+   */
+  static markResumeAfterUpgrade(): void {
+    try {
+      window.sessionStorage.setItem(WebSocketClient.RESUME_AFTER_UPGRADE_KEY, "1");
+    } catch {
+      // Without storage the next page shows the start screen, as before.
+    }
+  }
+
+  /** True once after a reload caused by an upgrade; reading it clears it. */
+  static takeResumeAfterUpgrade(): boolean {
+    try {
+      const marked = window.sessionStorage.getItem(WebSocketClient.RESUME_AFTER_UPGRADE_KEY) === "1";
+      window.sessionStorage.removeItem(WebSocketClient.RESUME_AFTER_UPGRADE_KEY);
+      return marked;
+    } catch {
+      return false;
+    }
+  }
 
   private static noteBuild(build: string | undefined): void {
     if (!build) return;
