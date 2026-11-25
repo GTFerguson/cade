@@ -49,7 +49,6 @@ function applyZoom(factor: number, report: Report): void {
   zoomQueue = zoomQueue
     .then(() => import("@tauri-apps/api/webview"))
     .then(({ getCurrentWebview }) => getCurrentWebview().setZoom(factor))
-    .then(() => report(`zoom set to ${factor}`))
     .catch((e) => {
       console.error("[shell-listeners] Failed to set zoom:", e);
       report(`zoom to ${factor} failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -59,8 +58,8 @@ function applyZoom(factor: number, report: Report): void {
 let dispose: (() => void) | null = null;
 
 /**
- * `report` receives what happened to each zoom request. The desktop window
- * has no console to read, so the caller sends it to the backend log.
+ * `report` receives zoom requests that did not take effect. The desktop
+ * window has no console to read, so the caller sends it to the backend log.
  */
 export function installShellListeners(report: Report = () => {}): void {
   if (dispose) return;
@@ -74,10 +73,7 @@ export function installShellListeners(report: Report = () => {}): void {
 
   const onKeyDown = (e: KeyboardEvent): void => {
     if (!isZoomHotkey(e)) return;
-    if (!live()) {
-      report(`zoom key ${e.key} left to the shell: page was not loaded from the backend`);
-      return;
-    }
+    if (!live()) return;
     e.preventDefault();
     zoom = nextZoom(zoom, e.key);
     applyZoom(zoom, report);
