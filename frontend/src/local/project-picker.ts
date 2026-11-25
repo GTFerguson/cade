@@ -140,6 +140,8 @@ export class ProjectPicker {
   private root: HTMLDivElement;
   private headerEl: HTMLDivElement;
   private listEl: HTMLDivElement;
+  private mainEl: HTMLDivElement;
+  private sideEl: HTMLDivElement;
   private filterRow: HTMLDivElement;
   private filterInput: HTMLInputElement;
   private settingsEl: HTMLDivElement;
@@ -163,11 +165,12 @@ export class ProjectPicker {
   private request = 0;
 
   private filtering = false;
+  // The main column's entries come first, then the side column's.
   private entries: PickerEntry[] = [];
+  private mainCount = 0;
   private selected = 0;
   // Where the list was left when a project was opened, to come back to.
   private browseSelection = 0;
-  private selectListing = false;
   private allSessions = false;
   private group: string | null = null;
   private agent: string | null = null;
@@ -196,14 +199,19 @@ export class ProjectPicker {
     this.filterRow.appendChild(this.filterInput);
     body.appendChild(this.filterRow);
 
-    // Above the list, where they are seen before a project is chosen.
-    this.settingsEl = el("div", "picker-settings");
-    body.appendChild(this.settingsEl);
-
+    // Two columns: what is being browsed, and beside it the quick choices
+    // (open, running, recent), which are the same wherever you browse.
     this.listEl = el("div", "picker-list");
+    this.mainEl = el("div", "picker-column picker-column-main");
+    this.sideEl = el("div", "picker-column picker-column-side");
+    this.listEl.append(this.mainEl, this.sideEl);
     body.appendChild(this.listEl);
 
+    // In the top right corner, in a strip of their own above the lists so
+    // a long tab group list can never cover them.
+    this.settingsEl = el("div", "picker-settings");
     this.helpEl = el("div", "picker-help");
+    this.root.appendChild(this.settingsEl);
     this.root.appendChild(body);
     this.root.appendChild(this.helpEl);
     container.appendChild(this.root);
@@ -274,8 +282,6 @@ export class ProjectPicker {
     this.browsePath = listed.path;
     this.dirs = listed.dirs;
     this.loading = false;
-    // Having walked to a folder, start in its listing, below the quick choices.
-    this.selectListing = true;
     this.render();
   }
 
@@ -304,26 +310,30 @@ export class ProjectPicker {
 
   /** The sections on show: everything, or what the typed text narrows it to. */
   private currentSections(): PickerSection[] {
+    const browse = browseSections({
+      openTabs: this.options.openTabs,
+      recents: this.options.recents,
+      sessions: this.sessions,
+      // Typing searches every session, not only the few on show.
+      allSessions: this.allSessions || this.filtering,
+      projects: this.browsePath === this.projectsRoot ? this.projects : null,
+      dirs: this.dirs,
+      browsePath: this.browsePath,
+      native: this.options.native,
+    });
+    // The quick choices stay beside a project too, so the screen keeps its shape.
     const all =
       this.screen.kind === "project"
-        ? projectSections(this.screen.path, this.screen.handoffs)
-        : browseSections({
-            openTabs: this.options.openTabs,
-            recents: this.options.recents,
-            sessions: this.sessions,
-            // Typing searches every session, not only the few on show.
-            allSessions: this.allSessions || this.filtering,
-            projects: this.browsePath === this.projectsRoot ? this.projects : null,
-            dirs: this.dirs,
-            browsePath: this.browsePath,
-            native: this.options.native,
-          });
+        ? [...projectSections(this.screen.path, this.screen.handoffs), ...browse.filter((s) => s.side)]
+        : browse;
     if (!this.filtering) return all;
-    const { browse, filter } = parseQuery(this.filterInput.value);
+    const { browse: typedPath, filter } = parseQuery(this.filterInput.value);
     if (filter === "") return all;
-    // While a path is being typed only the folder listing is in play.
-    const scope = browse !== null ? all.slice(-1) : all;
-    return [{ title: browse !== null ? this.browsePath : null, entries: filterSections(scope, filter) }];
+    // While a path is being typed, or inside a project, only the main
+    // column is searched; otherwise everything is.
+    const mainOnly = typedPath !== null || this.screen.kind === "project";
+    const scope = mainOnly ? all.filter((s) => !s.side) : all;
+    return [{ title: typedPath !== null ? this.browsePath : "matches", entries: filterSections(scope, filter) }];
   }
 
   private onQueryChanged(): void {
@@ -340,32 +350,41 @@ export class ProjectPicker {
 
   private render(): void {
     const sections = this.currentSections();
-    this.entries = sections.flatMap((s) => s.entries);
-    if (this.selectListing && !this.loading) {
-      this.selectListing = false;
-      if (this.screen.kind === "browse" && sections.length > 1) {
-        this.selected = this.entries.length - sections[sections.length - 1]!.entries.length;
-      }
-    }
+    const main = sections.filter((s) => !s.side);
+    const side = sections.filter((s) => s.side);
+    this.entries = [...main, ...side].flatMap((s) => s.entries);
+    this.mainCount = main.reduce((n, s) => n + s.entries.length, 0);
     this.selected = Math.max(0, Math.min(this.selected, this.entries.length - 1));
 
     this.headerEl.textContent =
       this.screen.kind === "project" ? `[ ${folderName(this.screen.path).toUpperCase()} ]` : "[ OPEN PROJECT ]";
 
-    // Rebuilding the list resets its scroll position; keep it.
-    const scrollTop = this.listEl.scrollTop;
-    this.listEl.replaceChildren();
     let index = 0;
-    for (const section of sections) {
-      if (section.title !== null) this.listEl.appendChild(el("div", "picker-section", section.title));
-      for (const entry of section.entries) {
-        this.listEl.appendChild(this.entryElement(entry, index));
-        index++;
+    const fill = (column: HTMLElement, columnSections: PickerSection[]) => {
+      // Rebuilding a column resets its scroll position; keep it.
+      const scrollTop = column.scrollTop;
+      column.replaceChildren();
+      for (const section of columnSections) {
+        if (section.title !== null) {
+          const title = el("div", "picker-section", section.title);
+          // A path is case-sensitive, so it is not upper-cased like a name.
+          if (/^[/~]/.test(section.title)) title.classList.add("picker-section-path");
+          column.appendChild(title);
+        }
+        for (const entry of section.entries) {
+          column.appendChild(this.entryElement(entry, index));
+          index++;
+        }
       }
-    }
-    if (this.loading) this.listEl.appendChild(el("div", "picker-empty", "loading…"));
-    else if (this.entries.length === 0) this.listEl.appendChild(el("div", "picker-empty", "nothing matches"));
-    this.listEl.scrollTop = scrollTop;
+      column.scrollTop = scrollTop;
+    };
+    fill(this.mainEl, main);
+    fill(this.sideEl, side);
+    this.listEl.classList.toggle("picker-list-single", side.length === 0);
+    this.sideEl.hidden = side.length === 0;
+
+    if (this.loading) this.mainEl.appendChild(el("div", "picker-empty", "loading…"));
+    else if (this.mainCount === 0) this.mainEl.appendChild(el("div", "picker-empty", "nothing matches"));
     this.keepSelectedInView();
 
     this.renderSettings();
@@ -378,9 +397,9 @@ export class ProjectPicker {
    * next row is never in sight.
    */
   private keepSelectedInView(): void {
-    const list = this.listEl;
-    const selected = list.querySelector<HTMLElement>(".picker-option.selected");
-    if (!selected) return;
+    const selected = this.listEl.querySelector<HTMLElement>(".picker-option.selected");
+    const list = selected?.closest<HTMLElement>(".picker-column");
+    if (!selected || !list) return;
     const listRect = list.getBoundingClientRect();
     const rowRect = selected.getBoundingClientRect();
     const margin = rowRect.height * SCROLL_LOOKAHEAD_ROWS;
@@ -546,6 +565,7 @@ export class ProjectPicker {
         ]
       : [
           ["j/k", "move"],
+          ["tab", "other column"],
           ["l", "into folder"],
           ["h", this.screen.kind === "project" ? "back" : "up a folder"],
           ["/", "filter or type a path"],
@@ -603,6 +623,8 @@ export class ProjectPicker {
       case "Enter":
       case " ":
         return this.confirm();
+      case "Tab":
+        return this.switchColumn();
       case "/":
         return this.startFiltering();
       case "g":
@@ -620,9 +642,24 @@ export class ProjectPicker {
     action();
   }
 
+  /** Move up or down within the column the selection is in, wrapping. */
   private move(step: 1 | -1): void {
-    if (this.entries.length === 0) return;
-    this.selected = (this.selected + step + this.entries.length) % this.entries.length;
+    const inMain = this.selected < this.mainCount;
+    const start = inMain ? 0 : this.mainCount;
+    const size = inMain ? this.mainCount : this.entries.length - this.mainCount;
+    if (size === 0) return;
+    this.selected = start + ((this.selected - start + step + size) % size);
+    this.render();
+  }
+
+  /** Jump to the other column, landing on the row nearest the one left. */
+  private switchColumn(): void {
+    const sideCount = this.entries.length - this.mainCount;
+    if (this.mainCount === 0 || sideCount === 0) return;
+    this.selected =
+      this.selected < this.mainCount
+        ? this.mainCount + Math.min(this.selected, sideCount - 1)
+        : Math.min(this.selected - this.mainCount, this.mainCount - 1);
     this.render();
   }
 

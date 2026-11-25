@@ -1,7 +1,9 @@
 /* CADE — Project picker: the screen a new tab's project is chosen on.
-   Built from the full-pane selector standards in the design bible: centred
-   pane header, filled section headers, option rows with a red selection, the
-   segmented toggle for mode choices, and key help at the bottom right. */
+   Built from the full-pane selector standards in the design bible and laid
+   out like the help overlay: a centred pane header, two columns of sections
+   under filled title rows, option rows with a red selection. The choices a
+   new tab opens with sit in the top right corner, key help in the bottom
+   right. */
 
 .project-picker {
   position: absolute;
@@ -10,7 +12,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* From the top, so the header stays put as the lists change length. */
+  justify-content: flex-start;
   background: var(--bg-primary);
   font-family: var(--font-mono);
   outline: none;
@@ -20,10 +23,11 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 720px;
-  /* Leaves the header and toggles on screen however long the list is. */
-  max-height: calc(100% - 64px);
-  padding: 0 40px;
+  max-width: 1100px;
+  /* Takes what the strip above leaves; the columns scroll inside it. */
+  flex: 1;
+  min-height: 0;
+  padding: 8px 40px 24px;
   box-sizing: border-box;
 }
 
@@ -36,25 +40,31 @@
   flex-shrink: 0;
 }
 
-/* What the new tab is opened with: one segmented toggle per choice, side by
-   side under the header, each captioned with its name and key. */
+/* What the new tab is opened with: one segmented toggle per choice, in a
+   strip across the top with the toggles in its right corner, each captioned
+   with its name and key. The strip keeps its height when empty so the header
+   does not jump once the choices load. */
 .picker-settings {
+  align-self: stretch;
   display: flex;
-  justify-content: center;
-  gap: 24px;
-  margin-bottom: 20px;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 20px;
+  min-height: 52px;
+  padding: 16px 20px 0;
+  box-sizing: content-box;
   flex-shrink: 0;
 }
 
 .picker-settings[hidden] {
-  display: none;
+  visibility: hidden;
 }
 
 .picker-setting {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 6px;
+  align-items: flex-end;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -113,7 +123,23 @@
   font-size: 13px;
 }
 
+/* Two columns, each scrolling on its own: the listing being browsed on the
+   left, the quick choices on the right. */
 .picker-list {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 32px;
+  min-height: 0;
+}
+
+.picker-list.picker-list-single {
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  max-width: 720px;
+  align-self: center;
+}
+
+.picker-column {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -121,21 +147,21 @@
   overflow-y: auto;
 }
 
-/* Section header: the filled label the help overlay and the other selectors
-   use, at the same size as the rows beneath it. It is only as wide as its
-   text, so that a full-width filled row always means "selected". */
+.picker-column[hidden] {
+  display: none;
+}
+
+/* Section title: the filled row the help overlay heads its sections with. */
 .picker-section {
-  align-self: center;
-  max-width: 100%;
-  box-sizing: border-box;
   margin-top: 18px;
-  margin-bottom: 6px;
-  padding: 3px 12px;
+  margin-bottom: 8px;
+  padding: 3px 10px;
   background: var(--accent-red);
   color: var(--bg-primary);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 1px;
+  text-transform: uppercase;
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -147,11 +173,15 @@
   margin-top: 0;
 }
 
+.picker-section-path {
+  text-transform: none;
+}
+
 /* A row is three columns: the name at a fixed width so names line up down
    the list, what is known about it, and when or in what state on the right. */
 .picker-option {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 4fr) auto;
   align-items: baseline;
   column-gap: 16px;
   padding: 6px 16px;
@@ -233,21 +263,32 @@
 }
 
 /* On a phone the key list has no keyboard to describe and would cover the
-   list, and there is no width for three columns. */
+   list, and there is no width for two lists side by side or three columns
+   in a row. */
 @media (max-width: 768px) {
   .picker-help {
     display: none;
   }
 
   .picker-body {
-    padding: 0 12px;
-    max-height: calc(100% - 24px);
+    padding: 8px 12px 12px;
   }
 
   .picker-settings {
-    flex-direction: column;
-    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    min-height: 0;
+    padding: 12px 12px 0;
+  }
+
+  .picker-list {
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
+    overflow-y: auto;
+  }
+
+  .picker-column {
+    overflow-y: visible;
   }
 
   .picker-option,

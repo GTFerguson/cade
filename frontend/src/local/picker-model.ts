@@ -84,6 +84,11 @@ export type PickerEntry =
 export interface PickerSection {
   title: string | null;
   entries: PickerEntry[];
+  /**
+   * Shown in the side column: the quick choices (open, running, recent)
+   * that sit beside the main listing rather than in it.
+   */
+  side?: boolean;
 }
 
 export interface BrowseInput {
@@ -125,7 +130,7 @@ export function browseSections(
     openPaths.add(tab.path);
     open.push({ kind: "open", name: folderName(tab.path), path: tab.path, isActive: tab.isActive });
   }
-  if (open.length > 0) sections.push({ title: "open", entries: open });
+  if (open.length > 0) sections.push({ title: "open", entries: open, side: true });
 
   if (input.sessions.length > 0) {
     const ordered = sessionsByNeed(input.sessions);
@@ -134,14 +139,14 @@ export function browseSections(
     if (shown.length < ordered.length) {
       entries.push({ kind: "more", count: ordered.length - shown.length });
     }
-    sections.push({ title: "running without a tab", entries });
+    sections.push({ title: "running without a tab", entries, side: true });
   }
 
   const recent: PickerEntry[] = input.recents
     .filter((path) => !openPaths.has(path))
     .slice(0, recentsShown)
     .map((path) => ({ kind: "recent", name: folderName(path), path }));
-  if (recent.length > 0) sections.push({ title: "recent", entries: recent });
+  if (recent.length > 0) sections.push({ title: "recent", entries: recent, side: true });
 
   const listing: PickerEntry[] =
     input.projects !== null

@@ -63,6 +63,11 @@ const key = (k: string, init: KeyboardEventInit = {}) => {
   (document.activeElement ?? document.body).dispatchEvent(e);
   return e;
 };
+const column = (which: "main" | "side") => host.querySelector<HTMLElement>(`.picker-column-${which}`)!;
+const columnLabels = (which: "main" | "side") =>
+  [...column(which).querySelectorAll(".picker-option-label")].map((n) => n.textContent);
+const titles = (which: "main" | "side") =>
+  [...column(which).querySelectorAll(".picker-section")].map((n) => n.textContent);
 const labels = () => [...host.querySelectorAll(".picker-option-label")].map((n) => n.textContent);
 /** A row's detail and its right-hand column, joined the way they read across. */
 const metas = () =>
@@ -105,7 +110,7 @@ beforeEach(() => {
 });
 
 describe("the first screen", () => {
-  it("starts on the active tab's project, for a quick second tab on it", async () => {
+  it("lists projects on the left and the quick choices on the right", async () => {
     await open({
       openTabs: [
         { path: `${ROOT}/padarax`, isActive: false },
@@ -113,25 +118,61 @@ describe("the first screen", () => {
       ],
       recents: ["/p/old"],
     });
-    expect(labels()).toEqual(["[cade]", "[padarax]", "[old]", "[cade]", "[padarax]"]);
-    expect(selected()).toBe("[cade]");
-    expect(metas()[0]).toBe(`${ROOT}/cade | this tab`);
+    expect(titles("main")).toEqual([ROOT]);
+    expect(columnLabels("main")).toEqual(["[cade]", "[padarax]"]);
+    expect(titles("side")).toEqual(["open", "recent"]);
+    expect(columnLabels("side")).toEqual(["[cade]", "[padarax]", "[old]"]);
   });
 
-  it("lists every project in the backend's order with when each was last worked on", async () => {
+  it("starts on the most recently worked on project", async () => {
     await open({ openTabs: [{ path: `${ROOT}/padarax`, isActive: true }] });
-    expect(labels().slice(1)).toEqual(["[cade]", "[padarax]"]);
-    expect(metas().slice(1)).toEqual(["2 handoffs | 2h ago", "open | 3d ago"]);
+    expect(column("main").querySelector(".picker-option.selected .picker-option-label")!.textContent).toBe("[cade]");
   });
 
-  it("puts sessions to attach to above the projects and the system explorer last", async () => {
+  it("shows when each project was last worked on", async () => {
+    await open({ openTabs: [{ path: `${ROOT}/padarax`, isActive: true }] });
+    expect(metas().slice(0, 2)).toEqual(["2 handoffs | 2h ago", "open | 3d ago"]);
+  });
+
+  it("moves within a column, and Tab crosses to the other", async () => {
+    await open({ openTabs: [{ path: `${ROOT}/padarax`, isActive: true }], recents: ["/p/old"] });
+    key("j");
+    key("j");
+    expect(selected()).toBe("[cade]");
+    key("Tab");
+    expect(column("side").querySelector(".picker-option.selected .picker-option-label")!.textContent).toBe("[padarax]");
+    key("j");
+    expect(selected()).toBe("[old]");
+    key("j");
+    expect(column("side").querySelector(".picker-option.selected .picker-option-label")!.textContent).toBe("[padarax]");
+    key("Tab");
+    expect(column("main").querySelector(".picker-option.selected")).not.toBeNull();
+  });
+
+  it("opens the current tab's project in two keys: Tab, Enter", async () => {
+    await open({ openTabs: [{ path: `${ROOT}/cade`, isActive: true }] });
+    key("Tab");
+    key("Enter");
+    await settle();
+    expect(columnLabels("main")[0]).toBe("[+ new session]");
+  });
+
+  it("uses one column when there are no quick choices", async () => {
+    await open();
+    expect(host.querySelector(".picker-list")!.classList.contains("picker-list-single")).toBe(true);
+    expect(column("side").hidden).toBe(true);
+  });
+
+  it("puts sessions to attach to on the right and the system explorer last on the left", async () => {
     await open({ loadSessions: async () => [session], native: true });
-    expect(labels()).toEqual(["[api]", "[cade]", "[padarax]", "[open system explorer…]"]);
-    expect(metas()[0]).toBe("release prep");
+    expect(columnLabels("main")).toEqual(["[cade]", "[padarax]", "[open system explorer…]"]);
+    expect(columnLabels("side")).toEqual(["[api]"]);
+    expect(titles("side")).toEqual(["running without a tab"]);
   });
 
   it("attaches to a running session", async () => {
     await open({ loadSessions: async () => [session] });
+    key("Tab");
     key("Enter");
     expect(await result).toEqual({ kind: "attach", session });
   });
@@ -159,12 +200,13 @@ describe("sessions without a tab", () => {
 
   it("shows a few, project first and the task after it, then how many more", async () => {
     await open({ loadSessions: async () => many });
-    expect(labels().slice(0, 5)).toEqual(["[api]", "[api]", "[api]", "[api]", "[+ 3 more]"]);
-    expect(metas()[0]).toBe("Task 0");
+    expect(columnLabels("side")).toEqual(["[api]", "[api]", "[api]", "[api]", "[+ 3 more]"]);
+    expect(column("side").querySelector(".picker-option-meta")!.textContent).toBe("Task 0");
   });
 
   it("shows the rest when asked", async () => {
     await open({ loadSessions: async () => many });
+    key("Tab");
     for (let i = 0; i < 4; i++) key("j");
     key("Enter");
     expect(labels().filter((l) => l === "[api]").length).toBe(7);
@@ -180,8 +222,10 @@ describe("sessions without a tab", () => {
 
   it("marks one that is waiting on the user", async () => {
     await open({ loadSessions: async () => [{ ...session, attention: "input" } as LiveSessionInfo] });
-    expect(host.querySelector<HTMLElement>(".picker-option")!.dataset["state"]).toBe("input");
-    expect(metas()[0]).toBe("release prep | needs you");
+    const row = column("side").querySelector<HTMLElement>(".picker-option")!;
+    expect(row.dataset["state"]).toBe("input");
+    expect(row.querySelector(".picker-option-meta")!.textContent).toBe("release prep");
+    expect(row.querySelector(".picker-option-aside")!.textContent).toBe("needs you");
   });
 });
 
@@ -196,9 +240,11 @@ describe("walking folders", () => {
 
   it("goes down from an open or recent project too", async () => {
     await open({ openTabs: [{ path: `${ROOT}/cade`, isActive: true }] });
+    key("Tab");
     key("l");
     await settle();
-    expect(labels()).toEqual(["[cade]", "[backend/]", "[frontend/]", "[use this folder]"]);
+    expect(columnLabels("main")).toEqual(["[backend/]", "[frontend/]", "[use this folder]"]);
+    expect(columnLabels("side")).toEqual(["[cade]"]);
   });
 
   it("starts in the folder's own listing after walking to it, below the quick choices", async () => {
