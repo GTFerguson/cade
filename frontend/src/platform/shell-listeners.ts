@@ -1,15 +1,13 @@
 /**
- * Window-level behaviour the desktop shell normally provides for free.
+ * App zoom for a desktop window whose interface was loaded from the backend.
  *
- * Tauri wires app zoom (Ctrl+= / Ctrl+- / Ctrl+0) and window dragging from
- * `data-tauri-drag-region` elements through listeners it adds to the page
+ * Tauri wires Ctrl+= / Ctrl+- / Ctrl+0 through a listener it adds to the page
  * before any of our code runs. The desktop loader then replaces the document
- * with the interface served by the backend (see shell/loader.ts), and
- * replacing a document discards every listener on it and on its window. The
- * interface loaded that way has to put them back itself.
+ * with the interface served by the backend (see shell/loader.ts), after which
+ * those keys no longer zoom. The interface loaded that way handles them itself.
  *
- * The embedded page is not replaced, so the shell's own listeners survive
- * there; installing a second set would act twice on every key press.
+ * The embedded page is not replaced and keeps the shell's listener; a second
+ * one would zoom two steps per key press.
  */
 
 import { isZoomHotkey } from "../terminal/zoom-keys";
@@ -20,8 +18,6 @@ export const ZOOM_STEP = 0.2;
 export const MIN_ZOOM = 0.2;
 export const MAX_ZOOM = 10;
 const DEFAULT_ZOOM = 1;
-
-const DRAG_REGION_ATTRIBUTE = "data-tauri-drag-region";
 
 export function nextZoom(current: number, key: string): number {
   if (key === "0") return DEFAULT_ZOOM;
@@ -54,21 +50,6 @@ function applyZoom(factor: number): void {
     .catch((e) => console.error("[shell-listeners] Failed to set zoom:", e));
 }
 
-function onMouseDown(e: MouseEvent): void {
-  // Only the region itself drags: buttons and tabs inside it keep their clicks.
-  const target = e.target;
-  if (e.button !== 0 || !(target instanceof Element)) return;
-  if (!target.hasAttribute(DRAG_REGION_ATTRIBUTE)) return;
-  e.preventDefault();
-  const maximise = e.detail === 2;
-  import("@tauri-apps/api/window")
-    .then(({ getCurrentWindow }) => {
-      const appWindow = getCurrentWindow();
-      return maximise ? appWindow.toggleMaximize() : appWindow.startDragging();
-    })
-    .catch((err) => console.error("[shell-listeners] Failed to move window:", err));
-}
-
 let dispose: (() => void) | null = null;
 
 export function installShellListeners(): void {
@@ -88,10 +69,8 @@ export function installShellListeners(): void {
   };
 
   window.addEventListener("keydown", onKeyDown);
-  document.addEventListener("mousedown", onMouseDown);
   dispose = () => {
     window.removeEventListener("keydown", onKeyDown);
-    document.removeEventListener("mousedown", onMouseDown);
   };
 }
 

@@ -10,14 +10,9 @@ import {
 } from "./shell-listeners";
 
 const setZoom = vi.fn(async (_factor: number) => {});
-const startDragging = vi.fn(async () => {});
-const toggleMaximize = vi.fn(async () => {});
 
 vi.mock("@tauri-apps/api/webview", () => ({
   getCurrentWebview: () => ({ setZoom }),
-}));
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ startDragging, toggleMaximize }),
 }));
 
 function press(key: string, mods: KeyboardEventInit = { ctrlKey: true }): KeyboardEvent {
@@ -48,8 +43,6 @@ describe("nextZoom", () => {
 describe("installShellListeners", () => {
   beforeEach(() => {
     setZoom.mockClear();
-    startDragging.mockClear();
-    toggleMaximize.mockClear();
     localStorage.clear();
     document.body.innerHTML = "";
   });
@@ -118,27 +111,5 @@ describe("installShellListeners", () => {
     press("=");
     await Promise.resolve();
     expect(setZoom).not.toHaveBeenCalled();
-  });
-
-  it("drags the window from a drag region, and maximises on double click", async () => {
-    setShell(true, true);
-    installShellListeners();
-    const region = document.createElement("div");
-    region.setAttribute("data-tauri-drag-region", "");
-    const child = document.createElement("button");
-    region.appendChild(child);
-    document.body.appendChild(region);
-
-    region.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, detail: 1 }));
-    await vi.waitFor(() => expect(startDragging).toHaveBeenCalledTimes(1));
-
-    region.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, detail: 2 }));
-    await vi.waitFor(() => expect(toggleMaximize).toHaveBeenCalledTimes(1));
-
-    // A control inside the region is clicked, not dragged.
-    child.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, detail: 1 }));
-    region.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 2, detail: 1 }));
-    await Promise.resolve();
-    expect(startDragging).toHaveBeenCalledTimes(1);
   });
 });
