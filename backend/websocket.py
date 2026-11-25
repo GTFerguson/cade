@@ -1248,8 +1248,11 @@ class ConnectionHandler:
                     apply_attention,
                     attention_after_keystroke,
                     broadcast_attention,
+                    is_user_typing,
                 )
 
+                if not is_user_typing(input_data):
+                    return
                 after = attention_after_keystroke(self._session.attention)
                 if apply_attention(self._session, after, self._session.attention_message if after else None):
                     await broadcast_attention(self._session)

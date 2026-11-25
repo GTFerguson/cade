@@ -6,7 +6,7 @@ agent sets on its terminal, which is the only place Codex reports that it is
 waiting on an approval. The state is what the
 desktop tabs and the phone's session strip show and what a push notification
 is sent for. A keystroke into the session clears a waiting or finished state:
-the user is evidently dealing with it.
+the user is evidently dealing with it. Looking at the session does not.
 """
 
 from __future__ import annotations
@@ -125,6 +125,31 @@ def next_attention(current: str | None, event: AttentionEvent) -> str | None | b
     if event.event == "PostToolUse" and current == NEEDS_INPUT:
         return False
     return state
+
+
+# What a terminal emulator writes to a session on its own: focus changes,
+# answers to the agent's queries (cursor position, device attributes, mode
+# and keyboard-protocol state, window size, colours, version), and mouse
+# reports. Both agents ask for focus events, so merely switching to a tab
+# sends one.
+_TERMINAL_REPORT = re.compile(
+    r"\x1b\[[IO]"
+    r"|\x1b\[\d+;\d+R"
+    r"|\x1b\[[?>][\d;]*c"
+    r"|\x1b\[\d*n"
+    r"|\x1b\[\?[\d;]*\$y"
+    r"|\x1b\[\?\d+u"
+    r"|\x1b\[[\d;]*t"
+    r"|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"
+    r"|\x1bP[^\x1b]*\x1b\\"
+    r"|\x1b\[<[\d;]+[Mm]"
+    r"|\x1b\[M[\s\S]{3}"
+)
+
+
+def is_user_typing(data: str) -> bool:
+    """Whether input to a session contains anything the user typed."""
+    return bool(_TERMINAL_REPORT.sub("", data))
 
 
 def attention_after_keystroke(current: str | None) -> str | None:

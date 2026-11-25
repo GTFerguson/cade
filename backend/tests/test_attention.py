@@ -24,6 +24,7 @@ from backend.terminal.attention import (
     attention_after_keystroke,
     attention_from_event,
     ensure_working_watch,
+    is_user_typing,
     next_attention,
     resolve_session,
     title_transition,
@@ -220,6 +221,42 @@ class TestTitleDrivenAttention:
         assert session.attention is None
 
 
+class TestUserTyping:
+    """Input reaches a session from the terminal emulator as well as the user."""
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            "\x1b[I",                    # terminal gained focus
+            "\x1b[O",                    # terminal lost focus
+            "\x1b[12;40R",               # cursor position report
+            "\x1b[?1;2c",                # device attributes
+            "\x1b[>0;276;0c",            # secondary device attributes
+            "\x1b[0n",                   # device status
+            "\x1b[?2026;2$y",            # mode report
+            "\x1b[?1u",                  # keyboard protocol report
+            "\x1b[8;24;80t",             # window size report
+            "\x1b]11;rgb:0a0a/0a0a/0909\x1b\\",  # background colour reply
+            "\x1b]10;rgb:f8f8/f6f6/f2f2\x07",    # foreground colour reply
+            "\x1bP>|xterm.js(5.5.0)\x1b\\",      # terminal version reply
+            "\x1b[<0;10;5M",             # mouse press
+            "\x1b[<0;10;5m",             # mouse release
+            "\x1b[<64;10;5M",            # wheel
+            "\x1b[I\x1b[12;40R",         # several in one write
+            "",
+        ],
+    )
+    def test_terminal_reports_are_not_typing(self, data):
+        assert is_user_typing(data) is False
+
+    @pytest.mark.parametrize(
+        "data",
+        ["y", "\r", "hello", "\x1b", "\x1b[A", "\x1b[B", "\x03", "\t", "1", "\x1b[I y", "\x1b[13;2u"],
+    )
+    def test_keys_are_typing(self, data):
+        assert is_user_typing(data) is True
+
+
 class TestResolve:
     def test_prefers_session_id(self, temp_dir: Path):
         a = PTYSession(id="a", project_path=temp_dir)
@@ -281,6 +318,19 @@ class TestHandler:
             assert frames[-1]["attention"] is None
 
     @pytest.mark.asyncio
+    async def test_switching_to_a_tab_does_not_clear_its_status(self, temp_dir: Path):
+        # The terminal reports gaining focus by writing to the session; that
+        # is not the user answering anything.
+        session = PTYSession(id="s", project_path=temp_dir)
+        session.add_terminal(SessionKey.CLAUDE, make_pty())
+        apply_attention(session, NEEDS_INPUT, "Allow?")
+        h = attach_handler(session, temp_dir)
+        await h._handle_input({"type": MessageType.INPUT, "data": "\x1b[I"})
+        assert session.attention == NEEDS_INPUT
+        apply_attention(session, IDLE, None)
+        await h._handle_input({"type": MessageType.INPUT, "data": "\x1b[O\x1b[12;40R"})
+        assert session.attention == IDLE
+
     async def test_input_does_not_end_a_running_turn(self, temp_dir: Path):
         session = PTYSession(id="s", project_path=temp_dir)
         session.add_terminal(SessionKey.CLAUDE, make_pty())
