@@ -17,6 +17,7 @@ import { Layout } from "../ui/layout";
 import { MarkdownViewer } from "../markdown/markdown";
 import { RightPaneManager, type RightPaneMode } from "../right-pane";
 import { Splash } from "../ui/splash";
+import { McpAuthNudge } from "../chat/mcp-auth-nudge";
 import { TerminalManager } from "../terminal/terminal-manager";
 import type { CustomKeyHandler } from "../terminal/terminal";
 import { ErrorCode, SessionKey } from "@core/platform/protocol";
@@ -41,6 +42,7 @@ export class ProjectContextImpl implements IProjectContext {
   private splash: Splash | null = null;
   private saveTimeout: number | null = null;
   private pendingSession: SessionState | null = null;
+  private mcpAuthNudge = new McpAuthNudge((name, serverUrl) => this.showAuthToast(name, serverUrl));
   private isVisible = false;
   private focusedPane: PaneType = "terminal";
   private viewMode: TabViewMode = "workspace";
@@ -90,17 +92,12 @@ export class ProjectContextImpl implements IProjectContext {
 
       // Push MCP auth state to the statusline icon and warn on first connect.
       // The plug icon (bottom-right of chat) holds the actual auth instructions —
-      // toast just nudges the user toward it. Warning toasts persist until
-      // dismissed (see showNotificationLink).
+      // toast just nudges the user toward it, and only once the chat is on
+      // screen (McpAuthNudge). Warning toasts persist until dismissed (see
+      // showNotificationLink).
       if (msg.mcpStatus) {
         this.terminalManager?.getChatPane()?.setMcpStatus(msg.mcpStatus);
-        if (!msg.sessionRestored) {
-          for (const mcp of msg.mcpStatus) {
-            if (!mcp.authenticated && mcp.serverUrl) {
-              this.showAuthToast(mcp.name, mcp.serverUrl);
-            }
-          }
-        }
+        this.mcpAuthNudge.report(msg.mcpStatus, !msg.sessionRestored);
       }
     },
     fileTree: () => {
@@ -190,6 +187,14 @@ export class ProjectContextImpl implements IProjectContext {
     ) as HTMLElement;
 
     this.terminalManager = new TerminalManager(terminalEl, this.ws);
+    this.terminalManager.onModeChange((mode) => {
+      // The chat pane is created on first use, after the connect that
+      // reported the servers' state, so it is handed that state here.
+      if (mode === "chat") {
+        this.terminalManager?.getChatPane()?.setMcpStatus(this.mcpAuthNudge.status());
+      }
+      this.mcpAuthNudge.setChatVisible(mode === "chat");
+    });
     this.terminalManager.setOnAgentTitle((title) => this.onAgentTitleCb?.(title));
     this.terminalManager.initialize();
 
@@ -536,6 +541,7 @@ export class ProjectContextImpl implements IProjectContext {
     this.ws.on("mcp-status", (msg: { mcpStatus?: Array<{ name: string; authenticated: boolean; serverUrl?: string; reason?: string }> }) => {
       if (!msg.mcpStatus) return;
       this.terminalManager?.getChatPane()?.setMcpStatus(msg.mcpStatus);
+      this.mcpAuthNudge.amend(msg.mcpStatus);
       for (const mcp of msg.mcpStatus) {
         if (mcp.authenticated) {
           this.showNotification(`${mcp.name} authenticated — tools live`, "success");

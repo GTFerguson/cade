@@ -85,6 +85,7 @@ export class TerminalManager implements Component {
   }
 
   private onAgentTitle: ((title: string) => void) | null = null;
+  private modeListeners = new Set<(mode: TerminalMode) => void>();
 
   /** Hear about the window title the agent's terminal sets. */
   setOnAgentTitle(cb: (title: string) => void): void {
@@ -173,6 +174,12 @@ export class TerminalManager implements Component {
     }
 
     this.updateStatusIndicator();
+    for (const listener of this.modeListeners) listener(mode);
+  }
+
+  /** Called after the pane switches between the terminal and the chat. */
+  onModeChange(listener: (mode: TerminalMode) => void): void {
+    this.modeListeners.add(listener);
   }
 
   /**
