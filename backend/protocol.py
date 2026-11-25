@@ -18,8 +18,9 @@ class MessageType:
     WRITE_FILE = "write-file"  # Write file content: { type, path: str, content: str }
     CREATE_FILE = "create-file"  # Create new file: { type, path: str, content?: str }
     SAVE_SESSION = "save-session"  # Save session state: { type, state: SessionState }
-    SET_PROJECT = "set-project"  # Set project directory: { type, path: str, sessionId?: str, label?: str, lastSeq?: {sessionKey: int} }
+    SET_PROJECT = "set-project"  # Set project directory: { type, path: str, sessionId?: str, label?: str, group?: str, lastSeq?: {sessionKey: int} }
     SET_LABEL = "set-label"  # Rename the session: { type, label: str } (empty clears it)
+    SET_GROUP = "set-group"  # Move the session to a tab group: { type, group: str } (empty removes it from its group)
     PING = "ping"  # Liveness probe: { type, t?: number } — answered with PONG carrying the same t
     REPAINT = "repaint"  # Ask the TUI in a terminal to redraw itself: { type, sessionKey?: str }
     LIST_SESSIONS = "list-sessions"  # Request live PTY sessions on this backend: { type }
@@ -41,6 +42,7 @@ class MessageType:
     PONG = "pong"  # Liveness reply: { type, t?: number }
     PTY_SIZE = "pty-size"  # The PTY's current size and owner: { type, sessionKey, cols, rows, controller: str | None }
     SESSION_LIST = "session-list"  # Live sessions on this backend: { type, sessions: list[dict] }
+    GROUP_CHANGED = "group-changed"  # The session moved tab group: { type, sessionId, group: str | None }
     SESSION_ATTENTION = "session-attention"  # Agent needs the user: { type, sessionId, attention: "input"|"idle"|None, message? }
     FILE_LIST = "file-list"  # Flat file list: { type, root, files: list[str], truncated: bool }
     FILE_DIFF = "file-diff"  # Diff of one file: { type, path, diff, untracked, error? }

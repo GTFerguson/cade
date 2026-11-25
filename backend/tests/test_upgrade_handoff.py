@@ -44,7 +44,7 @@ async def _wait_for(predicate, timeout: float = 10.0) -> None:
 def test_manifest_round_trips_through_json(tmp_path: Path):
     manifest = upgrade.Manifest(
         sessions=[upgrade.SessionHandoff(
-            id="s1", project_path="/p", label="L", last_activity=1.0, created_at=0.5,
+            id="s1", project_path="/p", label="L", group="G", last_activity=1.0, created_at=0.5,
             mcp_config_path=None, attention="input", attention_message="m", attention_at=2.0,
             terminals=[upgrade.TerminalHandoff(
                 session_key="claude", master_fd=7, pid=99, last_seq=12,
@@ -58,6 +58,7 @@ def test_manifest_round_trips_through_json(tmp_path: Path):
     path = upgrade.write_manifest(manifest, tmp_path / "h.json")
     back = upgrade.read_manifest(path)
     assert back.to_dict() == manifest.to_dict()
+    assert back.sessions[0].group == "G"
     assert back.inherited_fds == [7, 5]
 
 

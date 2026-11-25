@@ -459,6 +459,12 @@ class NotifyRequest(BaseModel):
     style: str = "info"
 
 
+class TabGroupsRequest(BaseModel):
+    """The whole list of tab group definitions (see backend/terminal/tab_groups.py)."""
+
+    groups: list[dict]
+
+
 class AttentionRequest(BaseModel):
     """Posted by the agent hooks (see backend/hooks/attention_hook.py)."""
 
@@ -876,6 +882,34 @@ def create_app(config: Config | None = None) -> FastAPI:
         return JSONResponse({
             "sessions": describe_sessions(get_registry(), cfg.cli_agent.adapter_id),
         })
+
+    @app.get("/api/tab-groups")
+    async def get_tab_groups(
+        cade_session: str | None = Cookie(default=None),
+    ) -> JSONResponse:
+        """Tab group definitions: name, colour and auto-add folders."""
+        from backend.terminal.tab_groups import get_tab_group_store
+
+        cfg = get_config()
+        if cfg.auth_enabled and not validate_session_cookie(cade_session or "", cfg):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        groups = get_tab_group_store().load()
+        return JSONResponse({"groups": [g.to_dict() for g in groups]})
+
+    @app.put("/api/tab-groups")
+    async def put_tab_groups(
+        body: TabGroupsRequest,
+        cade_session: str | None = Cookie(default=None),
+    ) -> JSONResponse:
+        """Replace the tab group definitions with the list given."""
+        from backend.terminal.tab_groups import get_tab_group_store, parse_groups
+
+        cfg = get_config()
+        if cfg.auth_enabled and not validate_session_cookie(cade_session or "", cfg):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        groups = parse_groups(body.groups)
+        get_tab_group_store().save(groups)
+        return JSONResponse({"groups": [g.to_dict() for g in groups]})
 
     # --- In-place upgrade (backend.upgrade) ---
 

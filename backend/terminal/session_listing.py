@@ -24,6 +24,7 @@ def describe_session(session: PTYSession, agent_id: str) -> dict:
     return {
         "id": session.id,
         "label": session.label,
+        "group": session.group,
         "projectPath": str(session.project_path),
         "agent": agent_id,
         "createdAt": session.created_at,

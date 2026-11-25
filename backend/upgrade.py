@@ -212,12 +212,14 @@ class SessionHandoff:
     attention_message: str | None
     attention_at: float
     terminals: list[TerminalHandoff] = field(default_factory=list)
+    group: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "project_path": self.project_path,
             "label": self.label,
+            "group": self.group,
             "last_activity": self.last_activity,
             "created_at": self.created_at,
             "mcp_config_path": self.mcp_config_path,
@@ -233,6 +235,7 @@ class SessionHandoff:
             id=d["id"],
             project_path=d["project_path"],
             label=d.get("label"),
+            group=d.get("group"),
             last_activity=float(d.get("last_activity", time.time())),
             created_at=float(d.get("created_at", time.time())),
             mcp_config_path=d.get("mcp_config_path"),
@@ -315,6 +318,7 @@ async def export_sessions(registry: SessionRegistry) -> list[SessionHandoff]:
             id=session.id,
             project_path=str(session.project_path),
             label=session.label,
+            group=session.group,
             last_activity=session.last_activity,
             created_at=session.created_at,
             mcp_config_path=session.mcp_config_path,
@@ -364,6 +368,7 @@ def import_sessions(manifest: Manifest, registry: SessionRegistry) -> int:
             created_at=item.created_at,
             mcp_config_path=item.mcp_config_path,
             label=item.label,
+            group=item.group,
             attention=item.attention,
             attention_message=item.attention_message,
             attention_at=item.attention_at,

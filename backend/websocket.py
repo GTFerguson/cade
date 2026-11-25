@@ -60,6 +60,11 @@ from core.backend.providers.types import ChatDone, ChatError, ChatMessage, Syste
 from backend.session import load_session, save_session
 from backend.terminal.pty import PTYManager
 from backend.terminal.sessions import PTYSession, TerminalState, get_registry
+from backend.terminal.tab_groups import (
+    broadcast_group,
+    clean_group_name,
+    get_tab_group_store,
+)
 from backend.models import TerminalSize
 from core.backend.models import FileChangeEvent
 
@@ -152,6 +157,8 @@ class ConnectionHandler:
         self._subscribers: dict[str, OutputSubscriber] = {}
         # Display name the tab gave its session, for session listings.
         self._session_label: str | None = None
+        # Tab group the client asked for; only a new session takes it.
+        self._requested_group: str | None = None
         self._user_config = None
         self._chat_session: ChatSession | None = None
         self._chat_task: asyncio.Task | None = None
@@ -331,6 +338,7 @@ class ConnectionHandler:
                         label = data.get("label")
                         if isinstance(label, str) and label.strip():
                             self._session_label = label.strip()
+                        self._requested_group = clean_group_name(data.get("group"))
                         last_seq = data.get("lastSeq")
                         if isinstance(last_seq, dict):
                             self._client_seqs = {
@@ -476,6 +484,7 @@ class ConnectionHandler:
             self._session.connected_clients.add(self._ws)
             if self._session_label:
                 self._session.label = self._session_label
+            self._assign_initial_group()
             # On resume, restore the session's original working directory if the
             # incoming path differs (e.g. tab localStorage drifted to wrong project).
             if not self._is_new_session and self._session.project_path != self._working_dir:
@@ -771,6 +780,7 @@ class ConnectionHandler:
             "idleSeconds": idle_seconds,
             "wslHealthy": wsl_healthy,
             "connectionId": self._connection_id,
+            "group": self._session.group if self._session is not None else None,
             "cliAgent": {
                 "id": adapter.id,
                 "displayName": adapter.display_name,
@@ -1121,6 +1131,8 @@ class ConnectionHandler:
                 await self._handle_resize(data)
             elif msg_type == MessageType.SET_LABEL:
                 self._handle_set_label(data)
+            elif msg_type == MessageType.SET_GROUP:
+                await self._handle_set_group(data)
             elif msg_type == MessageType.PING:
                 await self._send({"type": MessageType.PONG, "t": data.get("t")})
             elif msg_type == MessageType.REPAINT:
@@ -1264,6 +1276,28 @@ class ConnectionHandler:
         self._session_label = cleaned or None
         if self._session is not None:
             self._session.label = self._session_label
+
+    def _assign_initial_group(self) -> None:
+        """Put a new session in the group the tab asked for, else by folder.
+
+        An existing session keeps its group: a stale copy in one browser's
+        storage must not undo a move made on another device.
+        """
+        if self._session is None or not self._is_new_session:
+            return
+        self._session.group = self._requested_group or (
+            get_tab_group_store().group_for_path(self._working_dir)
+        )
+
+    async def _handle_set_group(self, data: dict) -> None:
+        """The tab was moved to a tab group, or out of one."""
+        if self._kiosk_mode or self._session is None:
+            return
+        group = clean_group_name(data.get("group"))
+        if self._session.group == group:
+            return
+        self._session.group = group
+        await broadcast_group(self._session, exclude=self._ws)
 
     async def _handle_resize(self, data: dict) -> None:
         """Handle terminal resize under the one-size policy."""

@@ -245,6 +245,8 @@ class PTYSession:
     mcp_config_path: str | None = None
     # Display name the owning tab gave this session, for session listings.
     label: str | None = None
+    # Name of the tab group the session belongs to (see tab_groups.py).
+    group: str | None = None
     # Whether the agent needs the user: "input", "idle" or None (see attention.py).
     attention: str | None = None
     attention_message: str | None = None
