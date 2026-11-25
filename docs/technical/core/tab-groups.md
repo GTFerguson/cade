@@ -59,7 +59,7 @@ The rules for laying out grouped tabs are pure functions in `frontend/src/tabs/t
 
 ### Moving between workspaces
 
-`Alt+j` and `Alt+k` go to the next and previous workspace in tab bar order, wrapping (`TabManager.workspaceAt`). The switch happens on each press. Holding `Alt` for longer than `HOLD_MS` after a press brings up the list of workspaces (`frontend/src/tabs/workspace-switcher.ts`) with the open one marked, each with its tab count and the number waiting; letting go puts it away. The list is a view of what has already happened, never a pending choice, so a tap behaves the same whether or not the list had time to appear.
+`Alt+w` and `Alt+Shift+w` go to the next and previous workspace in tab bar order, wrapping (`TabManager.workspaceAt`). The switch happens on each press. Holding `Alt` for longer than `HOLD_MS` after a press brings up the list of workspaces (`frontend/src/tabs/workspace-switcher.ts`) with the open one marked, each with its tab count and the number waiting; letting go puts it away. The list is a view of what has already happened, never a pending choice, so a tap behaves the same whether or not the list had time to appear.
 
 ### Sliding
 

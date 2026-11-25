@@ -19,7 +19,7 @@ Architecture and essential developer documentation.
 - [[core/development-setup|Development Setup]] - Running CADE for development
 - [[core/frontend-architecture|Frontend Architecture]] - Component architecture and mobile support
 - [[core/remote-sessions|Remote Sessions]] - Multi-device terminal sessions: output broadcaster, sequenced reconnect, size policy, session directory, attention hooks, push, when a session ends
-- [[core/tab-groups|Tab Groups]] - Workspaces: one group of tabs open at a time, Alt+j/k and the held list, why the session owns its group, folder rules, attention roll-up
+- [[core/tab-groups|Tab Groups]] - Workspaces: one group of tabs open at a time, Alt+w / Alt+Shift+w and the held list, why the session owns its group, folder rules, attention roll-up
 - [[core/project-picker|Project Picker and Per-Tab Agent]] - One keyboard-driven picker for a new tab: projects, handoffs, tab group, and which agent the tab runs
 - [[core/agent-orchestration|Agent Orchestration]] - Multi-agent coordination, MCP tools, two-gate approval flow
 - [[core/agent-tools|Agent Tool System]] - File, discovery, and shell tools for LiteLLM agents; permission gating

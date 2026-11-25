@@ -11,8 +11,8 @@
  *   its own input via key forwarding)
  */
 
-import { describe, it, expect } from "vitest";
-import { shouldDelegateToPaneHandler } from "./keybindings";
+import { describe, it, expect, vi } from "vitest";
+import { altShortcut, shouldDelegateToPaneHandler, type KeybindingCallbacks } from "./keybindings";
 
 // Minimal mock that satisfies the target parameter shape
 function fakeTarget(opts: {
@@ -112,5 +112,34 @@ describe("shouldDelegateToPaneHandler", () => {
     // xterm.js forwards keystrokes to Neovim via its onData handler.
     const neovimTextarea = fakeTarget({ isXtermTextarea: true, insideNeovimPane: true });
     expect(shouldDelegateToPaneHandler(neovimTextarea, "viewer")).toBe(false);
+  });
+});
+
+describe("Alt shortcuts for tabs and workspaces", () => {
+  const callbacks = () =>
+    new Proxy({} as Record<string, ReturnType<typeof vi.fn>>, {
+      get: (seen, name: string) => (seen[name] ??= vi.fn()),
+    });
+  const press = (key: string) => {
+    const cb = callbacks();
+    altShortcut(key, cb as unknown as KeybindingCallbacks)?.();
+    return cb;
+  };
+
+  it("moves to the next workspace on w and the previous on Shift+w", () => {
+    expect(press("w")["nextWorkspace"]).toHaveBeenCalled();
+    expect(press("W")["previousWorkspace"]).toHaveBeenCalled();
+    expect(press("W")["nextWorkspace"]).not.toHaveBeenCalled();
+  });
+
+  it("closes the tab on x, not on w", () => {
+    expect(press("x")["closeTab"]).toHaveBeenCalled();
+    expect(press("w")["closeTab"]).not.toHaveBeenCalled();
+  });
+
+  it("leaves j and k to whatever has focus", () => {
+    const cb = callbacks() as unknown as KeybindingCallbacks;
+    expect(altShortcut("j", cb)).toBeNull();
+    expect(altShortcut("k", cb)).toBeNull();
   });
 });

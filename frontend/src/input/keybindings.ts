@@ -70,6 +70,53 @@ export interface KeybindingCallbacks {
   getPaneHandler: (pane: PaneType) => PaneKeyHandler | null;
 }
 
+/**
+ * The action an Alt+key shortcut triggers, or null when the key is not bound
+ * and should reach the terminal as a meta-key sequence.
+ */
+export function altShortcut(key: string, cb: KeybindingCallbacks): (() => void) | null {
+  const e = { key };
+
+  // Alt+1-9 / Alt+0: jump to tab by number (1-indexed; 0 = tab 10)
+  if (/^[1-9]$/.test(e.key)) return () => cb.goToTab(parseInt(e.key, 10) - 1);
+  if (e.key === "0") return () => cb.goToTab(9);
+
+  // Case-sensitive: lowercase focuses a pane, uppercase resizes it.
+  // Note: Alt+H/Alt+V may conflict with Firefox menus on Linux.
+  if (e.key === "h") return () => cb.focusPane("left");
+  if (e.key === "l") return () => cb.focusPane("right");
+  if (e.key === "H") return () => cb.resizePane("left");
+  if (e.key === "L") return () => cb.resizePane("right");
+
+  // Case-sensitive: cycle mode forward / backward
+  if (e.key === "m") return () => cb.cycleModeNext();
+  if (e.key === "M") return () => cb.cycleModePrev();
+
+  // Case-sensitive: next workspace, and with Shift the previous one
+  if (e.key === "w") return () => cb.nextWorkspace();
+  if (e.key === "W") return () => cb.previousWorkspace();
+
+  // Cycle agent prev/next
+  if (e.key === "[") return () => cb.cycleAgentPrev();
+  if (e.key === "]") return () => cb.cycleAgentNext();
+
+  switch (e.key.toLowerCase()) {
+    case "d": return () => cb.previousTab();
+    case "f": return () => cb.nextTab();
+    case "t": return () => cb.createTab();
+    case "x": return () => cb.closeTab();
+    case "q": return () => cb.toggleDashboard();
+    case "s": return () => cb.toggleTerminal();
+    case "v": return () => cb.toggleViewerCycle();
+    case "e": return () => cb.toggleEnhanced();
+    case "y": return () => cb.approveAgent();
+    case "n": return () => cb.rejectAgent();
+    case "r": return () => cb.createRemoteTab();
+    case "i": return () => cb.focusChatInput();
+    default: return null;
+  }
+}
+
 export interface PaneKeyHandler {
   handleKeydown(e: KeyboardEvent): boolean;
   handleKeyup?(e: KeyboardEvent): void;
@@ -267,45 +314,7 @@ export class KeybindingManager implements Component {
    * the terminal to suppress the key) agree on exactly which keys are reserved.
    */
   private resolveAltShortcut(e: KeyboardEvent): (() => void) | null {
-    const cb = this.callbacks;
-    if (!cb) return null;
-
-    // Alt+1-9 / Alt+0: jump to tab by number (1-indexed; 0 = tab 10)
-    if (/^[1-9]$/.test(e.key)) return () => cb.goToTab(parseInt(e.key, 10) - 1);
-    if (e.key === "0") return () => cb.goToTab(9);
-
-    // Case-sensitive: lowercase focuses a pane, uppercase resizes it.
-    // Note: Alt+H/Alt+V may conflict with Firefox menus on Linux.
-    if (e.key === "h") return () => cb.focusPane("left");
-    if (e.key === "l") return () => cb.focusPane("right");
-    if (e.key === "H") return () => cb.resizePane("left");
-    if (e.key === "L") return () => cb.resizePane("right");
-
-    // Case-sensitive: cycle mode forward / backward
-    if (e.key === "m") return () => cb.cycleModeNext();
-    if (e.key === "M") return () => cb.cycleModePrev();
-
-    // Cycle agent prev/next
-    if (e.key === "[") return () => cb.cycleAgentPrev();
-    if (e.key === "]") return () => cb.cycleAgentNext();
-
-    switch (e.key.toLowerCase()) {
-      case "d": return () => cb.previousTab();
-      case "f": return () => cb.nextTab();
-      case "j": return () => cb.nextWorkspace();
-      case "k": return () => cb.previousWorkspace();
-      case "t": return () => cb.createTab();
-      case "w": return () => cb.closeTab();
-      case "q": return () => cb.toggleDashboard();
-      case "s": return () => cb.toggleTerminal();
-      case "v": return () => cb.toggleViewerCycle();
-      case "e": return () => cb.toggleEnhanced();
-      case "y": return () => cb.approveAgent();
-      case "n": return () => cb.rejectAgent();
-      case "r": return () => cb.createRemoteTab();
-      case "i": return () => cb.focusChatInput();
-      default: return null;
-    }
+    return this.callbacks ? altShortcut(e.key, this.callbacks) : null;
   }
 
   /**
