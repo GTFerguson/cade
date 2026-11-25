@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Workspace board: mock</title>
+<title>Streams of work: mock</title>
 <style>
   :root {
     --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -27,10 +27,10 @@
   .notes { color: #8a8079; margin: 10px 0 0; padding-left: 18px; max-width: 86ch; }
   .notes li { margin-bottom: 3px; }
   .notes b { color: var(--text-secondary); font-weight: 600; }
-  kbd { font-family: inherit; color: var(--text-primary); background: var(--bg-tertiary); padding: 0 5px; border: 1px solid var(--border-color); }
+  .cap { font-size: 11px; color: var(--text-muted); margin: 18px 0 -8px; }
 
   /* A CADE window */
-  .window { border: 1px solid var(--border-color); background: var(--bg-primary); margin-top: 14px; max-width: 1320px; }
+  .window { border: 1px solid var(--border-color); background: var(--bg-primary); margin-top: 14px; max-width: 1320px; position: relative; }
   .tabbar { display: flex; align-items: flex-end; height: 36px; background: var(--bg-secondary); padding: 0 8px; }
   .tabbar > * { border-bottom: 1px solid var(--border-color); }
   .tabbar .fill { flex: 1; align-self: stretch; }
@@ -38,235 +38,238 @@
   .chip.closed { box-shadow: inset 2px 0 0 var(--c); color: color-mix(in srgb, var(--c) 75%, transparent); }
   .chip.open { box-shadow: inset 1px 0 0 var(--c), inset 0 1px 0 var(--c); border-right-color: var(--c); color: var(--c); font-weight: 700; }
   .chip .n { color: var(--text-muted); font-weight: 400; }
-  .chip .disc { background: var(--accent-orange); color: var(--bg-secondary); font-size: 10px; font-weight: 700; padding: 0 4px; border-radius: 8px; line-height: 15px; height: 15px; }
-  .chip .extra { font-size: 11px; font-weight: 400; }
   .tab { display: flex; gap: 8px; align-items: center; padding: 8px 12px; font-size: 12px; color: var(--text-muted); border-right: 1px solid var(--border-color); box-shadow: inset 0 -1px 0 var(--c, transparent); white-space: nowrap; }
   .tab.active { background: var(--bg-primary); color: var(--text-primary); font-weight: 700; border-bottom-color: var(--bg-primary); box-shadow: inset 0 2px 0 var(--text-primary), inset 0 -1px 0 var(--c, transparent); }
-  .tab.waiting { background: color-mix(in srgb, var(--accent-orange) 12%, transparent); color: var(--text-primary); }
   .tab .st { width: 10px; text-align: center; opacity: .6; }
-  .tab .tk { font-weight: 400; font-size: 11px; color: var(--text-muted); }
   .plus { padding: 8px 10px; color: var(--text-muted); }
-
   .st-input { color: var(--accent-orange); opacity: 1 !important; font-weight: 700; }
   .st-working { color: var(--accent-blue); opacity: 1 !important; }
   .st-idle { color: var(--accent-cyan); opacity: 1 !important; }
-  .pr { font-size: 11px; }
+  .pr { font-size: 11px; font-weight: 400; }
   .pr-fail { color: var(--accent-red); } .pr-run { color: var(--accent-blue); }
-  .pr-ok { color: var(--accent-green); } .pr-chg { color: var(--accent-yellow); } .pr-none { color: var(--text-muted); }
-  .muted { color: var(--text-muted); }
-  .hi { color: var(--text-primary); }
+  .pr-ok { color: var(--accent-green); } .pr-chg { color: var(--accent-yellow); }
+  .muted { color: var(--text-muted); } .hi { color: var(--text-primary); }
+  .g { color: var(--accent-green); } .o { color: var(--accent-orange); } .rd { color: var(--accent-red); } .b { color: var(--accent-blue); } .y { color: var(--accent-yellow); }
 
-  /* Full-pane screen */
-  .screen { padding: 22px 28px 0; min-height: 420px; display: flex; flex-direction: column; }
-  .screen-head { display: flex; align-items: baseline; gap: 18px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
-  .screen-title { color: var(--accent-red); letter-spacing: 2px; font-size: 14px; }
-  .screen-head .sum { margin-left: auto; font-size: 12px; }
-  .sum b { font-weight: 600; }
-  .filter { padding: 8px 0 2px; font-size: 12px; }
-  .section { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); padding: 14px 0 4px; display: flex; gap: 14px; align-items: baseline; }
-  .section .act { text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--accent-green); }
-  .row { display: grid; grid-template-columns: 16px 76px 96px minmax(180px, 1fr) 170px 190px 136px 52px; gap: 0 12px; padding: 4px 8px; font-size: 12px; white-space: nowrap; align-items: baseline; }
-  .row > * { overflow: hidden; text-overflow: ellipsis; }
-  .row.sel { background: color-mix(in srgb, var(--accent-red) 15%, transparent); }
-  .row.sel .title { color: var(--text-primary); }
-  .row.head { color: var(--text-muted); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; padding-top: 10px; }
-  .row .ticket { color: var(--text-secondary); }
-  .ls { font-size: 11px; }
-  .ls-prog { color: var(--accent-blue); } .ls-rev { color: var(--accent-yellow); } .ls-back { color: var(--text-muted); } .ls-done { color: var(--accent-green); }
-  .statusline { margin-top: auto; display: flex; gap: 16px; padding: 8px 0; border-top: 1px solid var(--border-color); font-size: 11px; color: var(--text-muted); margin-top: 18px; }
-  .statusline .mode { color: var(--accent-orange); font-weight: 700; }
-  .statusline b { color: var(--text-secondary); font-weight: 400; }
-
-  /* Picker variant */
-  .cols { display: grid; grid-template-columns: 1.1fr 1fr; gap: 0 28px; flex: 1; }
-  .col + .col { border-left: 1px solid var(--border-color); padding-left: 28px; }
-  .toggle { font-size: 12px; margin-left: auto; }
-  .toggle .on { color: var(--text-primary); border-bottom: 1px solid var(--accent-red); }
-  .line { display: flex; gap: 12px; padding: 4px 8px; font-size: 12px; white-space: nowrap; }
-  .line .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; }
-  .line.sel { background: color-mix(in srgb, var(--accent-red) 15%, transparent); color: var(--text-primary); }
-  .kv { display: grid; grid-template-columns: 92px 1fr; gap: 3px 12px; font-size: 12px; padding: 4px 0 10px; }
-  .kv dt { color: var(--text-muted); } .kv dd { margin: 0; }
-  .opt { display: flex; gap: 12px; padding: 5px 8px; font-size: 12px; }
-  .opt.sel { background: color-mix(in srgb, var(--accent-red) 15%, transparent); color: var(--text-primary); }
-  .opt .meta { margin-left: auto; color: var(--text-muted); }
-
-  /* Ambient variant */
-  .strip { display: flex; gap: 0; font-size: 11px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); white-space: nowrap; overflow: hidden; }
+  /* The strip under the tab bar */
+  .strip { display: flex; font-size: 11px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); white-space: nowrap; overflow: hidden; }
   .strip > span { padding: 5px 12px; border-right: 1px solid var(--border-color); }
-  .term { padding: 14px 18px; min-height: 280px; font-size: 12.5px; color: var(--text-secondary); position: relative; white-space: pre-wrap; }
-  .held { position: absolute; top: 118px; left: 50%; transform: translateX(-50%); min-width: 470px; background: var(--bg-secondary); border: 1px solid var(--border-color); font-size: 13px; white-space: nowrap; }
-  .held .r { display: flex; gap: 14px; padding: 7px 14px; color: var(--text-muted); box-shadow: inset 2px 0 0 var(--c); }
-  .held .r.on { color: var(--text-primary); background: color-mix(in srgb, var(--c) 18%, transparent); }
-  .held .r .name { flex: 1; }
-  .held .r span { font-size: 12px; }
+  .strip > span.grow { flex: 1; border-right: none; }
+  .term { padding: 14px 18px; min-height: 96px; font-size: 12.5px; color: var(--text-secondary); white-space: pre-wrap; }
   .cursor { background: var(--accent-green); color: var(--bg-primary); }
-  .g { color: var(--accent-green); } .o { color: var(--accent-orange); } .rd { color: var(--accent-red); } .b { color: var(--accent-blue); }
+
+  /* The picker, as project-picker.css draws it */
+  .picker { padding: 34px 40px 56px; min-height: 470px; }
+  .picker-inner { max-width: 1100px; margin: 0 auto; }
+  .picker-header { margin-bottom: 20px; font-size: 16px; letter-spacing: 2px; text-align: center; color: var(--accent-red); }
+  .picker-settings { position: absolute; top: 52px; right: 20px; display: flex; gap: 20px; font-size: 12px; }
+  .seg { display: flex; border: 1px solid var(--border-color); }
+  .seg span { padding: 6px 16px; color: var(--text-muted); }
+  .seg span.on { background: var(--accent-red); color: var(--bg-primary); font-weight: 600; }
+  .picker-list { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 32px; }
+  .picker-column { display: flex; flex-direction: column; gap: 2px; }
+  .picker-section { margin-top: 18px; margin-bottom: 8px; padding: 3px 10px; background: var(--accent-red); color: var(--bg-primary); font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .picker-section:first-child { margin-top: 0; }
+  .picker-section.path { text-transform: none; }
+  .picker-section.quiet { background: transparent; color: var(--text-muted); border-top: 1px solid var(--border-color); text-align: left; padding: 10px 16px 0; margin-bottom: 4px; }
+  .picker-section.quiet b { color: var(--accent-green); font-weight: 600; text-transform: none; letter-spacing: 0; }
+  .opt { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 6fr) 84px; align-items: baseline; column-gap: 16px; padding: 6px 16px; font-size: 13px; color: var(--text-secondary); }
+  .opt.narrow { grid-template-columns: minmax(0, 4fr) minmax(0, 4fr) 92px; }
+  .opt > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .opt .meta, .opt .aside { font-size: 11px; color: var(--text-muted); }
+  .opt .aside { text-align: right; overflow: visible; }
+  .opt .meta .tk { color: var(--text-secondary); }
+  .opt.sel { background: var(--accent-red); color: var(--bg-primary); }
+  .opt.sel .meta, .opt.sel .aside, .opt.sel .meta .tk, .opt.sel .pr { color: var(--bg-secondary); }
+  .opt.done { color: var(--text-muted); }
+  .opt.fact { grid-template-columns: 96px minmax(0, 1fr) 40px; }
+  .opt.handoff { grid-template-columns: minmax(0, 5fr) minmax(0, 5fr) 40px; }
+  .opt.fact .k { font-size: 11px; color: var(--text-muted); }
+  .picker-help { position: absolute; right: 20px; bottom: 16px; font-size: 11px; line-height: 1.6; text-align: right; color: var(--text-muted); }
+  .picker-help b { color: var(--accent-green); font-weight: 400; }
 </style>
 </head>
 <body>
 
-<h1>Workspace board: what it could feel like</h1>
-<p class="lede">Three ways to put tickets, handoffs, worktrees and pull requests in one place, plus what cleaning up looks like. All data here is invented. Nothing below is built; the tab bar, chips and pull request badges are as they are today.</p>
+<h1>Streams of work: the strip, and a fuller picker</h1>
+<p class="lede">Second pass. The separate board is dropped. What is kept: the strip under the tab bar, and the same facts folded into the picker you already have, drawn the way the picker is drawn today. All data is invented. Nothing here is built except the tab bar, the pull request badges and the picker's present layout.</p>
 
-<!-- ───────────────────────── A ───────────────────────── -->
-<h2><span>A</span> &nbsp;A board per workspace</h2>
-<p>A full-pane screen like the picker, opened with one key from anywhere in the workspace. One row per stream of work. Everything in a row is fetched, not typed: the ticket from Linear, the handoff and worktree from disk, the pull request from GitHub, the session from CADE.</p>
+<!-- ───────────────────────── 1 ───────────────────────── -->
+<h2><span>1</span> &nbsp;The strip</h2>
+<p>One line between the tab bar and the terminal, about the tab in front of you. It shows only what is known, so it is shorter on a tab with less going on, and absent on a tab outside any repository.</p>
 
+<div class="cap">a stream with a ticket, a pull request and a handoff</div>
 <div class="window">
   <div class="tabbar">
     <div class="chip closed" style="--c: var(--text-muted)"><span class="st">·</span><span class="n">1</span></div>
     <div class="chip open" style="--c: var(--accent-purple)">Work</div>
-    <div class="tab waiting" style="--c: var(--accent-purple)"><span class="st st-input">!</span>metrics <span class="pr pr-fail">#1561✗</span></div>
-    <div class="tab" style="--c: var(--accent-purple)"><span class="st st-working">●</span>evaluation <span class="pr pr-run">#1564…</span></div>
-    <div class="tab" style="--c: var(--accent-purple)"><span class="st">·</span>shot-precision <span class="pr pr-ok">#1540✓</span></div>
-    <div class="chip closed" style="--c: var(--accent-green)"><span class="st st-idle">✓</span>Personal <span class="n">4</span></div>
-    <div class="plus">+</div>
-    <div class="fill"></div>
-  </div>
-  <div class="screen">
-    <div class="screen-head">
-      <span class="screen-title">[ WORK ]</span>
-      <span class="muted">11 streams</span>
-      <span class="sum"><b class="o">1 waiting</b> &nbsp;·&nbsp; <b class="rd">1 failing</b> &nbsp;·&nbsp; <b class="g">18 finished</b> &nbsp;·&nbsp; <span class="muted">Linear read 40 s ago</span></span>
-    </div>
-    <div class="filter muted">/ filter</div>
-
-    <div class="row head"><span></span><span>ticket</span><span>linear</span><span>title</span><span>handoff</span><span>worktree</span><span>pull request</span><span>touched</span></div>
-
-    <div class="section">active</div>
-    <div class="row sel"><span class="st-input">!</span><span class="ticket">WRK-214</span><span class="ls ls-prog">In Progress</span><span class="title">Make the metrics page explorable</span><span>model-metrics</span><span class="muted">platform-metrics</span><span class="pr pr-fail">#1561 ✗ failing</span><span class="muted">4 m</span></div>
-    <div class="row"><span class="st-working">●</span><span class="ticket">WRK-215</span><span class="ls ls-prog">In Progress</span><span class="title">Evaluation configurable by event and tier</span><span>model-metrics</span><span class="muted">platform-evaluation</span><span class="pr pr-run">#1564 … running</span><span class="muted">now</span></div>
-    <div class="row"><span class="muted">·</span><span class="ticket">WRK-198</span><span class="ls ls-rev">In Review</span><span class="title">Shot detector precision on low-res feeds</span><span>shot-precision</span><span class="muted">platform-shot-precision</span><span class="pr pr-ok">#1540 ✓ approved</span><span class="muted">2 h</span></div>
-    <div class="row"><span class="muted">·</span><span class="ticket">WRK-221</span><span class="ls ls-prog">In Progress</span><span class="title">Report run cost and shared-worker overhead</span><span>model-metrics</span><span class="muted">platform-run-cost</span><span class="pr pr-chg">#1558 ✎ changes</span><span class="muted">1 d</span></div>
-    <div class="row"><span class="muted">·</span><span class="ticket">WRK-230</span><span class="ls ls-back">Backlog</span><span class="title">Possessions with selective pose</span><span>shooter-assist</span><span class="muted">—</span><span class="pr pr-none">—</span><span class="muted">2 d</span></div>
-
-    <div class="section">no ticket</div>
-    <div class="row"><span class="muted">·</span><span class="muted">—</span><span class="muted">—</span><span class="title">court-circle-anchor-fix</span><span>court-circle-anchor-fix</span><span class="muted">platform-court-circle</span><span class="pr pr-ok">#1533</span><span class="muted">3 d</span></div>
-    <div class="row"><span class="muted">·</span><span class="muted">—</span><span class="muted">—</span><span class="title">live-release-deadline-test</span><span class="muted">—</span><span class="muted">platform-deadline-test</span><span class="pr pr-none">—</span><span class="muted">9 d</span></div>
-
-    <div class="section">finished <span class="muted" style="text-transform:none;letter-spacing:0;font-size:12px">merged, clean, no session · 18 worktrees · 41 GB</span> <span class="act">[c] clean up</span></div>
-    <div class="row"><span class="g">✓</span><span class="ticket">WRK-180</span><span class="ls ls-done">Done</span><span class="title muted">Decode each graph once</span><span class="muted">graph-decode-once</span><span class="muted">platform-fast-decode</span><span class="pr muted">#1498 merged</span><span class="muted">11 d</span></div>
-    <div class="row"><span class="g">✓</span><span class="ticket">WRK-176</span><span class="ls ls-done">Done</span><span class="title muted">Court solve reuse across cameras</span><span class="muted">—</span><span class="muted">platform-court-reuse</span><span class="pr muted">#1487 merged</span><span class="muted">14 d</span></div>
-    <div class="row"><span class="muted"></span><span class="muted"></span><span class="muted"></span><span class="muted">… 16 more</span></div>
-
-    <div class="statusline"><span class="mode">BOARD</span><span><b>j/k</b> move</span><span><b>enter</b> open tab on handoff</span><span><b>p</b> pull request</span><span><b>t</b> ticket</span><span><b>c</b> clean up finished</span><span><b>/</b> filter</span><span style="margin-left:auto"><b>esc</b> back</span></div>
-  </div>
-</div>
-<ul class="notes">
-  <li><b>Enter</b> on a row opens a tab in that worktree with the agent reading the handoff, or switches to the tab if one is already open. The row with a session shows the same status mark its tab does.</li>
-  <li><b>No ticket</b> and <b>no handoff</b> show as gaps, which is what the hand-kept board is mostly for finding.</li>
-  <li><b>Finished</b> is the cleanup backlog, with its size. It is a verdict CADE works out; removing anything is the skill's job (D).</li>
-  <li>Costs a key and a screen. Nothing changes in the tab bar.</li>
-</ul>
-
-<!-- ───────────────────────── B ───────────────────────── -->
-<h2><span>B</span> &nbsp;Inside the picker</h2>
-<p>No new screen. The picker you already open for a new tab gains a second view of its left column: streams of work, as well as folders. The right column becomes the detail of whatever is selected, and Enter still means "open a tab".</p>
-
-<div class="window">
-  <div class="tabbar">
-    <div class="chip open" style="--c: var(--accent-purple)">Work</div>
-    <div class="tab active" style="--c: var(--accent-purple)"><span class="st st-input">!</span>metrics <span class="pr pr-fail">#1561✗</span></div>
-    <div class="tab" style="--c: var(--accent-purple)"><span class="st st-working">●</span>evaluation <span class="pr pr-run">#1564…</span></div>
-    <div class="chip closed" style="--c: var(--accent-green)"><span class="st st-idle">✓</span>Personal <span class="n">4</span></div>
-    <div class="plus">+</div>
-    <div class="fill"></div>
-  </div>
-  <div class="screen">
-    <div class="screen-head">
-      <span class="screen-title">[ OPEN ]</span>
-      <span class="toggle"><span class="muted">folders</span> &nbsp; <span class="on">streams</span> &nbsp;<span class="muted">(s)</span> &nbsp;&nbsp; <span class="muted">agent</span> <span class="hi">claude</span> &nbsp; <span class="muted">workspace</span> <span style="color: var(--accent-purple)">Work</span></span>
-    </div>
-    <div class="cols" style="padding-top: 6px">
-      <div class="col">
-        <div class="section">streams in work · 11</div>
-        <div class="line"><span class="st-input">!</span><span class="muted">WRK-214</span><span class="grow">Make the metrics page explorable</span><span class="pr pr-fail">#1561✗</span></div>
-        <div class="line"><span class="st-working">●</span><span class="muted">WRK-215</span><span class="grow">Evaluation configurable by event and tier</span><span class="pr pr-run">#1564…</span></div>
-        <div class="line sel"><span class="muted">·</span><span>WRK-198</span><span class="grow">Shot detector precision on low-res feeds</span><span class="pr pr-ok">#1540✓</span></div>
-        <div class="line"><span class="muted">·</span><span class="muted">WRK-221</span><span class="grow">Report run cost and shared-worker overhead</span><span class="pr pr-chg">#1558✎</span></div>
-        <div class="line"><span class="muted">·</span><span class="muted">WRK-230</span><span class="grow">Possessions with selective pose</span><span class="muted">—</span></div>
-        <div class="line"><span class="muted">·</span><span class="muted">—&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="grow">court-circle-anchor-fix</span><span class="pr pr-ok">#1533</span></div>
-        <div class="section">finished · 18 <span class="act">[c] clean up</span></div>
-        <div class="line muted"><span class="g">✓</span><span>WRK-180</span><span class="grow">Decode each graph once</span><span>merged</span></div>
-        <div class="line muted"><span></span><span></span><span class="grow">… 17 more</span></div>
-      </div>
-      <div class="col">
-        <div class="section">WRK-198</div>
-        <dl class="kv">
-          <dt>linear</dt><dd><span class="ls-rev">In Review</span> <span class="muted">· you · Computer Vision · parent WRK-150</span></dd>
-          <dt>pull request</dt><dd><span class="pr-ok">#1540 approved</span> <span class="muted">· checks passing · no conflicts</span></dd>
-          <dt>worktree</dt><dd>platform-shot-precision <span class="muted">· clean · nothing unpushed</span></dd>
-          <dt>session</dt><dd class="muted">none running</dd>
-        </dl>
-        <div class="section">open a tab</div>
-        <div class="opt sel"><span>new session from handoff</span><span class="meta">shot-precision · 2 h ago</span></div>
-        <div class="opt"><span>new session, no handoff</span></div>
-        <div class="opt"><span>older handoff</span><span class="meta">shot-detector · 6 d ago</span></div>
-      </div>
-    </div>
-    <div class="statusline"><span class="mode">OPEN</span><span><b>j/k</b> move</span><span><b>tab</b> other column</span><span><b>enter</b> open</span><span><b>s</b> folders / streams</span><span><b>a</b> agent</span><span><b>g</b> workspace</span><span><b>/</b> filter</span><span style="margin-left:auto"><b>esc</b> back</span></div>
-  </div>
-</div>
-<ul class="notes">
-  <li>One screen answers both "what am I working on" and "open a tab on it", and the keys are the ones the picker already has.</li>
-  <li>Less room per stream than A: no touched time, no handoff column, and the detail is one stream at a time.</li>
-  <li>The picker stops being only about opening tabs. Looking at the board means opening the "new tab" screen.</li>
-</ul>
-
-<!-- ───────────────────────── C ───────────────────────── -->
-<h2><span>C</span> &nbsp;No board: it lives where you already look</h2>
-<p>Nothing to open. The active tab gets a one-line strip saying what it is working on, and the list you already get by holding <kbd>Alt</kbd> after <kbd>Alt+w</kbd> carries each workspace's counts.</p>
-
-<div class="window">
-  <div class="tabbar">
-    <div class="chip closed" style="--c: var(--text-muted)"><span class="st">·</span><span class="n">1</span></div>
-    <div class="chip open" style="--c: var(--accent-purple)">Work <span class="extra g" title="finished worktrees">18✓</span></div>
     <div class="tab active" style="--c: var(--accent-purple)"><span class="st st-input">!</span>metrics <span class="pr pr-fail">#1561✗</span></div>
     <div class="tab" style="--c: var(--accent-purple)"><span class="st st-working">●</span>evaluation <span class="pr pr-run">#1564…</span></div>
     <div class="tab" style="--c: var(--accent-purple)"><span class="st">·</span>shot-precision <span class="pr pr-ok">#1540✓</span></div>
-    <div class="chip closed" style="--c: var(--accent-green)"><span class="disc">2</span>Personal <span class="n">4</span></div>
-    <div class="plus">+</div>
-    <div class="fill"></div>
+    <div class="chip closed" style="--c: var(--accent-green)"><span class="st st-idle">✓</span>Personal <span class="n">4</span></div>
+    <div class="plus">+</div><div class="fill"></div>
   </div>
   <div class="strip">
-    <span><span class="hi">WRK-214</span> <span class="ls-prog">In Progress</span></span>
+    <span><span class="hi">WRK-214</span> <span class="b">In Progress</span></span>
     <span class="hi">Make the metrics page explorable</span>
-    <span><span class="pr-fail">#1561 ✗ 2 checks failing</span> <span class="muted">· review required</span></span>
+    <span><span class="rd">#1561 ✗ 2 checks failing</span> <span class="muted">· review required</span></span>
+    <span><span class="muted">branch</span> gary/metrics <span class="o">· 3 uncommitted</span></span>
     <span><span class="muted">handoff</span> model-metrics <span class="muted">4 m</span></span>
-    <span><span class="muted">worktree</span> platform-metrics <span class="muted">· 3 uncommitted</span></span>
+    <span class="grow"></span>
   </div>
-  <div class="term"><span class="muted">● I've pushed the fix for the two failing checks. The lint failure was a stale
-  import; the test failure was the fixture path. Waiting on CI.</span>
+  <div class="term"><span class="muted">● I've pushed the fix for the two failing checks. Waiting on CI.</span>
 
-<span class="o">! Allow Bash: gh pr checks 1561 --watch ?</span>
-<span class="cursor"> </span>
-    <div class="held">
-      <div class="r" style="--c: var(--text-muted)"><span class="name">no workspace</span><span class="muted">1 tab</span></div>
-      <div class="r on" style="--c: var(--accent-purple)"><span class="name">Work</span><span class="o">! 1</span><span class="rd">1 PR failing</span><span class="g">18 finished</span><span>3 tabs</span></div>
-      <div class="r" style="--c: var(--accent-green)"><span class="name">Personal</span><span class="o">! 2</span><span class="muted">no PRs</span><span class="muted">2 finished</span><span>4 tabs</span></div>
-    </div>
+<span class="o">! Allow Bash: gh pr checks 1561 --watch ?</span> <span class="cursor"> </span></div>
+</div>
+
+<div class="cap">no ticket and no pull request yet: just where the work is</div>
+<div class="window">
+  <div class="tabbar">
+    <div class="chip open" style="--c: var(--accent-green)">Personal</div>
+    <div class="tab active" style="--c: var(--accent-green)"><span class="st st-working">●</span>cade</div>
+    <div class="tab" style="--c: var(--accent-green)"><span class="st">·</span>padarax</div>
+    <div class="plus">+</div><div class="fill"></div>
   </div>
+  <div class="strip">
+    <span><span class="muted">branch</span> main <span class="muted">· clean · 2 unpushed</span></span>
+    <span><span class="muted">handoff</span> organisation-and-cleanup <span class="muted">12 m</span></span>
+    <span class="grow"></span>
+  </div>
+  <div class="term" style="min-height: 60px"><span class="muted">● Running the frontend suite…</span></div>
+</div>
+
+<div class="cap">merged: the strip is where "this one is finished" is said</div>
+<div class="window">
+  <div class="tabbar">
+    <div class="chip open" style="--c: var(--accent-purple)">Work</div>
+    <div class="tab active" style="--c: var(--accent-purple)"><span class="st st-idle">✓</span>fast-decode</div>
+    <div class="plus">+</div><div class="fill"></div>
+  </div>
+  <div class="strip">
+    <span><span class="hi">WRK-180</span> <span class="g">Done</span></span>
+    <span class="hi">Decode each graph once</span>
+    <span><span class="g">#1498 merged</span> <span class="muted">11 d ago</span></span>
+    <span><span class="muted">branch</span> gary/fast-decode <span class="muted">· clean</span></span>
+    <span><span class="g">finished</span> <span class="muted">· this worktree can be removed</span></span>
+    <span class="grow"></span>
+  </div>
+  <div class="term" style="min-height: 60px"><span class="cursor"> </span></div>
 </div>
 <ul class="notes">
-  <li>Zero new keys and zero new screens. The strip is always about the tab in front of you, so there is nothing to keep in sync by hand.</li>
-  <li>It only shows work that has a tab open. Streams with no session (a backlog ticket, a parked handoff, the 18 finished worktrees) have nowhere to appear except as a count.</li>
-  <li>Costs one row of terminal height on every tab.</li>
+  <li>Each cell is a link: the ticket opens in Linear, the pull request on GitHub, the handoff in the viewer.</li>
+  <li>The pull request, branch and handoff cells can be built now. The ticket cells need Linear access.</li>
+  <li>Costs one row of terminal height on tabs that have something to say.</li>
 </ul>
 
-<!-- ───────────────────────── D ───────────────────────── -->
-<h2><span>D</span> &nbsp;Cleaning up, whichever of those leads to it</h2>
-<p>CADE never removes anything. "Clean up" opens a tab where an agent runs the cleanup skill on the finished list, shows what it will do, and waits.</p>
+<!-- ───────────────────────── 2 ───────────────────────── -->
+<h2><span>2</span> &nbsp;The picker, first screen</h2>
+<p>Same screen, same keys, same three columns per row (name, what is known, when or state). The middle and right columns now say what each folder is carrying. Finished work sinks to the bottom under its own line.</p>
+<p>New here: the ticket and title in the middle column, the pull request mark on the right, the same two on the right-hand lists, and the finished line with its key. The layout, colours and keys are the picker as it is today.</p>
+
+<div class="window">
+  <div class="tabbar">
+    <div class="chip open" style="--c: var(--accent-purple)">Work</div>
+    <div class="tab active" style="--c: var(--accent-purple)"><span class="st st-input">!</span>metrics <span class="pr pr-fail">#1561✗</span></div>
+    <div class="tab" style="--c: var(--accent-purple)"><span class="st st-working">●</span>evaluation <span class="pr pr-run">#1564…</span></div>
+    <div class="chip closed" style="--c: var(--accent-green)"><span class="st st-idle">✓</span>Personal <span class="n">4</span></div>
+    <div class="plus">+</div><div class="fill"></div>
+  </div>
+  <div class="picker-settings">
+    <div class="seg"><span class="on">claude</span><span>codex</span></div>
+    <div class="seg"><span>none</span><span class="on">Work</span><span>Personal</span></div>
+  </div>
+  <div class="picker"><div class="picker-inner">
+    <div class="picker-header">[ OPEN PROJECT ]</div>
+    <div class="picker-list">
+      <div class="picker-column">
+        <div class="picker-section path">/home/gary/projects/work/repos</div>
+        <div class="opt sel"><span>[platform-metrics/]</span><span class="meta new"><span class="tk">WRK-214</span> Make the metrics page explorable</span><span class="aside new"><span class="pr">#1561✗</span> &nbsp;4 m</span></div>
+        <div class="opt"><span>[platform-evaluation/]</span><span class="meta new"><span class="tk">WRK-215</span> Evaluation by event and tier</span><span class="aside new"><span class="pr pr-run">#1564…</span> &nbsp;now</span></div>
+        <div class="opt"><span>[platform-shot-precision/]</span><span class="meta new"><span class="tk">WRK-198</span> Shot precision on low-res feeds</span><span class="aside new"><span class="pr pr-ok">#1540✓</span> &nbsp;2 h</span></div>
+        <div class="opt"><span>[platform-run-cost/]</span><span class="meta new"><span class="tk">WRK-221</span> Report run cost and worker overhead</span><span class="aside new"><span class="pr pr-chg">#1558✎</span> &nbsp;1 d</span></div>
+        <div class="opt"><span>[platform-court-circle/]</span><span class="meta new">no ticket · court-circle-anchor-fix</span><span class="aside new"><span class="pr pr-ok">#1533</span> &nbsp;3 d</span></div>
+        <div class="opt"><span>[platform-deadline-test/]</span><span class="meta new">no ticket · no handoff</span><span class="aside">9 d</span></div>
+        <div class="opt"><span>[platform/]</span><span class="meta">main</span><span class="aside">2 d</span></div>
+        <div class="picker-section quiet new">finished · 18 · 41 GB &nbsp; <b>c</b> clean up</div>
+        <div class="opt done"><span>[platform-fast-decode/]</span><span class="meta"><span>WRK-180</span> Decode each graph once</span><span class="aside">merged 11 d</span></div>
+        <div class="opt done"><span>[platform-court-reuse/]</span><span class="meta"><span>WRK-176</span> Court solve reuse across cameras</span><span class="aside">merged 14 d</span></div>
+        <div class="opt done"><span class="muted">… 16 more</span><span></span><span></span></div>
+      </div>
+      <div class="picker-column">
+        <div class="picker-section">open</div>
+        <div class="opt narrow"><span>[metrics]</span><span class="meta new"><span class="tk">WRK-214</span> <span class="pr pr-fail">#1561✗</span></span><span class="aside o">needs you</span></div>
+        <div class="opt narrow"><span>[evaluation]</span><span class="meta new"><span class="tk">WRK-215</span> <span class="pr pr-run">#1564…</span></span><span class="aside b">working</span></div>
+        <div class="picker-section">running, no tab</div>
+        <div class="opt narrow"><span>[shot-prec]</span><span class="meta new"><span class="tk">WRK-198</span> <span class="pr pr-ok">#1540✓</span></span><span class="aside" style="color: var(--accent-cyan)">done · attach</span></div>
+        <div class="picker-section">recent</div>
+        <div class="opt narrow"><span>[platform-run-cost]</span><span class="meta new"><span class="tk">WRK-221</span> <span class="pr pr-chg">#1558✎</span></span><span class="aside">1 d</span></div>
+        <div class="opt narrow"><span>[cade]</span><span class="meta">~/projects/cade</span><span class="aside">3 d</span></div>
+      </div>
+    </div>
+  </div></div>
+  <div class="picker-help"><b>j/k</b> move<br><b>tab</b> other column<br><b>l</b> into folder<br><b>h</b> up a folder<br><b>/</b> filter or type a path<br><span class="new"><b>c</b> clean up finished</span><br><b>enter</b> choose<br><b>esc</b> cancel</div>
+</div>
+<ul class="notes">
+  <li>The list is still folders, most recently worked on first. A folder that is a worktree says which ticket and pull request it carries; a plain folder says what it says today.</li>
+  <li><b>No ticket</b> and <b>no handoff</b> read as plain words in the row, so the gaps the hand-kept board exists to find are visible while opening a tab.</li>
+  <li><b>Finished</b> is a verdict: pull request merged, nothing newer than the merge, clean, no session. The filter (<b>/</b>) matches ticket ids and titles as well as folder names.</li>
+</ul>
+
+<!-- ───────────────────────── 3 ───────────────────────── -->
+<h2><span>3</span> &nbsp;The picker, after choosing a folder</h2>
+<p>Today this screen is "new session" and the handoffs. The right column, which repeats the open tabs today, shows the stream instead: each line opens what it names.</p>
+
+<div class="window">
+  <div class="tabbar">
+    <div class="chip open" style="--c: var(--accent-purple)">Work</div>
+    <div class="tab active" style="--c: var(--accent-purple)"><span class="st st-input">!</span>metrics <span class="pr pr-fail">#1561✗</span></div>
+    <div class="tab" style="--c: var(--accent-purple)"><span class="st st-working">●</span>evaluation <span class="pr pr-run">#1564…</span></div>
+    <div class="plus">+</div><div class="fill"></div>
+  </div>
+  <div class="picker-settings">
+    <div class="seg"><span class="on">claude</span><span>codex</span></div>
+    <div class="seg"><span>none</span><span class="on">Work</span><span>Personal</span></div>
+  </div>
+  <div class="picker" style="min-height: 380px"><div class="picker-inner">
+    <div class="picker-header">[ PLATFORM-SHOT-PRECISION ]</div>
+    <div class="picker-list">
+      <div class="picker-column">
+        <div class="picker-section path">/home/gary/projects/work/repos/platform-shot-precision</div>
+        <div class="opt sel"><span>[+ new session]</span><span class="meta"></span><span class="aside"></span></div>
+        <div class="opt handoff"><span>Tighten the low-res threshold</span><span class="meta"><span class="tk">WRK-198</span> · shot-precision.md</span><span class="aside">2 h</span></div>
+        <div class="opt handoff"><span>First evaluation pass</span><span class="meta"><span class="tk">WRK-198</span> · shot-detector.md</span><span class="aside">6 d</span></div>
+        <div class="opt handoff"><span>Court quality reporting</span><span class="meta">no ticket · court-quality.md</span><span class="aside">9 d</span></div>
+      </div>
+      <div class="picker-column new">
+        <div class="picker-section">this stream</div>
+        <div class="opt fact"><span class="k">ticket</span><span><span class="hi">WRK-198</span> <span class="y">In Review</span></span><span class="aside">open</span></div>
+        <div class="opt fact"><span class="k">pull request</span><span><span class="pr-ok">#1540 ✓ approved</span></span><span class="aside">open</span></div>
+        <div class="opt fact"><span class="k">branch</span><span>gary/shot-precision <span class="muted">· clean</span></span><span class="aside"></span></div>
+        <div class="opt fact"><span class="k">session</span><span class="muted">none running</span><span class="aside"></span></div>
+        <div class="opt fact"><span class="k">last touched</span><span class="muted">2 h ago</span><span class="aside"></span></div>
+      </div>
+    </div>
+  </div></div>
+  <div class="picker-help"><b>j/k</b> move<br><b>tab</b> other column<br><b>h</b> back<br><b>enter</b> open<br><b>esc</b> cancel</div>
+</div>
+<ul class="notes">
+  <li>A handoff says which ticket it belongs to, read from its frontmatter. That one field is what makes everything else derivable.</li>
+  <li>Enter on the ticket or pull request line opens it in the browser; on a running session it attaches.</li>
+  <li>The open tabs, which this column shows today, are still one <b>h</b> away on the first screen.</li>
+</ul>
+
+<!-- ───────────────────────── 4 ───────────────────────── -->
+<h2><span>4</span> &nbsp;Cleaning up</h2>
+<p>Unchanged from the first pass. <b style="color: var(--accent-green)">c</b> in the picker opens a tab where an agent runs the cleanup skill on the finished list, shows what it will do, and waits. CADE itself never removes anything.</p>
 
 <div class="window">
   <div class="tabbar">
     <div class="chip open" style="--c: var(--accent-purple)">Work</div>
     <div class="tab" style="--c: var(--accent-purple)"><span class="st st-input">!</span>metrics <span class="pr pr-fail">#1561✗</span></div>
-    <div class="tab active waiting" style="--c: var(--accent-purple)"><span class="st st-input">!</span>cleanup</div>
-    <div class="plus">+</div>
-    <div class="fill"></div>
+    <div class="tab active" style="--c: var(--accent-purple)"><span class="st st-input">!</span>cleanup</div>
+    <div class="plus">+</div><div class="fill"></div>
   </div>
-  <div class="term" style="min-height: 0"><span class="muted">&gt; /clean-worktrees platform</span>
+  <div class="term"><span class="muted">&gt; /clean-worktrees platform</span>
 
 Checked 67 worktrees of <span class="hi">platform</span> against GitHub and their working trees.
 
@@ -285,14 +288,6 @@ Handoffs that name a removed worktree: graph-decode-once, court-solve-speed (lef
 
 <span class="o">! Remove 16 worktrees and their local branches? [y/N]</span> <span class="cursor"> </span></div>
 </div>
-<ul class="notes">
-  <li>The verdicts are CADE's, so the board, the count on a chip and the skill all agree on what "finished" means.</li>
-  <li>The skill only uses the git commands that refuse when work would be lost, and it says what it left and why.</li>
-  <li>Remote branches and edits to handoffs are left alone in this version.</li>
-</ul>
-
-<h2>How they combine</h2>
-<p>These are not exclusive. C is cheap and always on; A or B is where you go for the streams that have no tab. The real choice is between A and B: a board of its own, or the picker doing double duty.</p>
 
 </body>
 </html>

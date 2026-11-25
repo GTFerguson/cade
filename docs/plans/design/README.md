@@ -23,4 +23,4 @@ HTML visual explorations (not plans — these are design artifacts).
 | [[chat-tool-blocks-mockup.html]] | Tool block rendering mockups |
 | [[dashboard-demo.html]] | Dashboard component demos |
 | [[tab-states-mock.html]] | Tab bar: active marker and agent status, three options against the current look |
-| [[workspace-board-mock.html]] | Tickets, handoffs, worktrees and pull requests in one place: a board, the picker, or ambient; plus the cleanup flow |
+| [[workspace-board-mock.html]] | Streams of work: a strip under the tab bar for the active tab, tickets and pull requests in the picker, and the cleanup flow (second pass; the separate board was dropped) |
