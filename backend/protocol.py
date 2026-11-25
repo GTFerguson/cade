@@ -20,6 +20,7 @@ class MessageType:
     SAVE_SESSION = "save-session"  # Save session state: { type, state: SessionState }
     SET_PROJECT = "set-project"  # Set project directory: { type, path: str, sessionId?: str, label?: str, group?: str, agent?: str, lastSeq?: {sessionKey: int} }
     SET_LABEL = "set-label"  # Rename the session: { type, label: str } (empty clears it)
+    CLOSE_SESSION = "close-session"  # The tab was closed: { type }. Ends the session unless another client is attached.
     SET_GROUP = "set-group"  # Move the session to a tab group: { type, group: str } (empty removes it from its group)
     PING = "ping"  # Liveness probe: { type, t?: number } — answered with PONG carrying the same t
     REPAINT = "repaint"  # Ask the TUI in a terminal to redraw itself: { type, sessionKey?: str }

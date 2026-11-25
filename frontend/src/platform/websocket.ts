@@ -896,6 +896,16 @@ export class WebSocketClient extends BaseWSClient {
     this.send({ type: MessageType.SET_GROUP, group: group ?? "" } as unknown as ClientMessage);
   }
 
+  /**
+   * Tell the backend this tab is being closed, so the session ends with it
+   * (unless another device is attached). Sent before disconnecting: a plain
+   * disconnect leaves the session running, which is right for a reload and
+   * wrong for a tab the user closed.
+   */
+  sendCloseSession(): void {
+    this.send({ type: MessageType.CLOSE_SESSION } as unknown as ClientMessage);
+  }
+
   /** Record a group the backend reported, so a reconnect asks for the same one. */
   noteGroup(group: string | null): void {
     this.pendingGroup = group;

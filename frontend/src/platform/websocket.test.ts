@@ -117,6 +117,14 @@ describe("renaming a session", () => {
   });
 });
 
+describe("closing a tab", () => {
+  it("tells the backend, so the session ends with the tab", () => {
+    const { client, socket } = connectedClient();
+    client.sendCloseSession();
+    expect(socket.sent.map((m) => JSON.parse(m))).toContainEqual({ type: MessageType.CLOSE_SESSION });
+  });
+});
+
 describe("moving a session between tab groups", () => {
   it("sends the group, and an empty one to leave a group", () => {
     const { client, socket } = connectedClient();

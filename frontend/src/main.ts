@@ -909,6 +909,8 @@ class App {
    * Handle tab close.
    */
   private handleTabClose(id: string): void {
+    // Closing a tab ends its session; only losing the connection keeps it.
+    this.tabManager.getTabs().find((t) => t.id === id)?.ws.sendCloseSession();
     this.tabManager.closeTab(id);
   }
 
@@ -1409,8 +1411,10 @@ class App {
       },
       getOpenTabIds: () => this.tabManager.getTabs().map((t) => t.id),
       onCloseActiveTab: () => {
+        // The phone's action is "detach": it says it leaves the session
+        // running, so it only drops the tab and does not end the session.
         const id = this.tabManager.getActiveTabId();
-        if (id) this.handleTabClose(id);
+        if (id) this.tabManager.closeTab(id);
       },
       onAdoptSession: (session) => {
         const adopted = this.tabManager.adoptSession(

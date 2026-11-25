@@ -579,3 +579,49 @@ class TestOrphanCleanup:
             await registry._cleanup_orphaned()
 
         assert "alive=True" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# Closing a tab
+# ---------------------------------------------------------------------------
+
+
+class TestTabClose:
+    """A closed tab ends its session; a dropped connection does not."""
+
+    async def _session_with_handler(self, temp_dir: Path):
+        from backend.tests.test_multi_client_attach import attach_handler
+
+        registry = SessionRegistry()
+        mock_pty = make_mock_pty()
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
+            session, _ = await registry.get_or_create("session-1", temp_dir, "bash")
+        handler = attach_handler(session, temp_dir)
+        return registry, session, handler, mock_pty
+
+    @pytest.mark.asyncio
+    async def test_closing_the_only_tab_ends_the_session(self, temp_dir: Path):
+        registry, _, handler, mock_pty = await self._session_with_handler(temp_dir)
+        with patch("backend.websocket.get_registry", return_value=registry):
+            await handler._handle_close_session()
+        assert registry.get("session-1") is None
+        mock_pty.close.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_session_stays_while_another_device_is_attached(self, temp_dir: Path):
+        from backend.tests.test_multi_client_attach import attach_handler
+
+        registry, session, handler, mock_pty = await self._session_with_handler(temp_dir)
+        attach_handler(session, temp_dir)
+        with patch("backend.websocket.get_registry", return_value=registry):
+            await handler._handle_close_session()
+        assert registry.get("session-1") is session
+        mock_pty.close.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_dropped_connection_leaves_the_session_running(self, temp_dir: Path):
+        """A reload, an upgrade or a sleeping laptop must not kill the agent."""
+        registry, session, handler, mock_pty = await self._session_with_handler(temp_dir)
+        await registry.detach("session-1", handler._ws)
+        assert registry.get("session-1") is session
+        mock_pty.close.assert_not_awaited()

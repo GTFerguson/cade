@@ -1161,6 +1161,8 @@ class ConnectionHandler:
                 self._handle_set_label(data)
             elif msg_type == MessageType.SET_GROUP:
                 await self._handle_set_group(data)
+            elif msg_type == MessageType.CLOSE_SESSION:
+                await self._handle_close_session()
             elif msg_type == MessageType.PING:
                 await self._send({"type": MessageType.PONG, "t": data.get("t")})
             elif msg_type == MessageType.REPAINT:
@@ -1304,6 +1306,23 @@ class ConnectionHandler:
         self._session_label = cleaned or None
         if self._session is not None:
             self._session.label = self._session_label
+
+    async def _handle_close_session(self) -> None:
+        """The user closed this tab, so its shell and agent end with it.
+
+        A session outlives a dropped connection on purpose: a reload, an
+        upgrade or a sleeping laptop must not kill the agent. A closed tab is
+        different, it is the user saying they are done, and leaving the
+        session up would keep an agent running where nothing shows it. The
+        one exception is another device still attached, which keeps it.
+        """
+        session = self._session
+        if self._kiosk_mode or session is None or not self._session_id:
+            return
+        if session.connected_clients - {self._ws}:
+            return
+        logger.info("Tab closed; ending session %s", session.id)
+        await get_registry().remove(session.id)
 
     def _assign_initial_group(self) -> None:
         """Put a new session in the group the tab asked for, else by folder.

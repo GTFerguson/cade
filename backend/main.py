@@ -883,6 +883,28 @@ def create_app(config: Config | None = None) -> FastAPI:
             "sessions": describe_sessions(get_registry(), cfg.cli_agent.adapter_id),
         })
 
+    @app.delete("/api/sessions/{session_id}")
+    async def end_session(
+        session_id: str,
+        cade_session: str | None = Cookie(default=None),
+    ) -> JSONResponse:
+        """End a session nothing is attached to.
+
+        For sessions left running with no tab. One with a client attached is
+        in use and is refused: closing its tab is how that one ends.
+        """
+        cfg = get_config()
+        if cfg.auth_enabled and not validate_session_cookie(cade_session or "", cfg):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        registry = get_registry()
+        session = registry.get(session_id)
+        if session is None:
+            return JSONResponse({"error": "No such session"}, status_code=404)
+        if session.connected_clients:
+            return JSONResponse({"error": "Session is attached to a tab"}, status_code=409)
+        await registry.remove(session_id)
+        return JSONResponse({"status": "ended"})
+
     @app.get("/api/projects")
     async def get_projects(
         cade_session: str | None = Cookie(default=None),

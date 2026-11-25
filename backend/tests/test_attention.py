@@ -409,6 +409,27 @@ class TestRoute:
         res = client.get("/api/sessions")
         assert res.json()["sessions"][0]["attention"] == IDLE
 
+    def test_ending_a_session_nothing_is_attached_to(self, api_client, temp_dir: Path):
+        client, registry = api_client
+        session = PTYSession(id="left", project_path=temp_dir)
+        session.add_terminal(SessionKey.CLAUDE, make_pty())
+        registry._sessions["left"] = session
+        assert client.delete("/api/sessions/left").json() == {"status": "ended"}
+        assert registry.get("left") is None
+
+    def test_a_session_attached_to_a_tab_is_not_ended(self, api_client, temp_dir: Path):
+        client, registry = api_client
+        session = PTYSession(id="live", project_path=temp_dir)
+        session.add_terminal(SessionKey.CLAUDE, make_pty())
+        session.connected_clients.add(object())
+        registry._sessions["live"] = session
+        assert client.delete("/api/sessions/live").status_code == 409
+        assert registry.get("live") is session
+
+    def test_ending_an_unknown_session_is_404(self, api_client):
+        client, _ = api_client
+        assert client.delete("/api/sessions/nope").status_code == 404
+
     def test_push_subscribe_roundtrip(self, api_client):
         client, _ = api_client
         res = client.post("/api/push/subscribe", json={

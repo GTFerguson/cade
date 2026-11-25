@@ -37,6 +37,7 @@ export const MessageType = {
   CLIENT_DIAGNOSTIC: "client-diagnostic",
   SET_LABEL: "set-label",
   SET_GROUP: "set-group",
+  CLOSE_SESSION: "close-session",
   PING: "ping",
   REPAINT: "repaint",
   LIST_SESSIONS: "list-sessions",
