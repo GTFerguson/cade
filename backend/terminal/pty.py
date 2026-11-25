@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
+import subprocess
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -90,6 +92,59 @@ class BasePTY(ABC):
         return None
 
 
+_SCOPE_PROBE_TIMEOUT_SECONDS = 5
+_session_scope_prefix_cache: list[str] | None = None
+
+
+def session_scope_prefix() -> list[str]:
+    """Command prefix that runs a terminal session in its own systemd scope.
+
+    Without it every shell and agent started from a tab lives in the cgroup
+    of the app that launched CADE. When memory runs short, systemd-oomd picks
+    a whole cgroup to kill, so one heavy agent takes the backend and every
+    other session down with it. In its own scope a session is a candidate on
+    its own, and the kill is confined to it.
+
+    Empty when there is no usable systemd user manager (macOS, containers,
+    a server without a user session); the session then runs as a plain child.
+    The answer is probed once, because a failing systemd-run would otherwise
+    replace the user's shell with an error message.
+    """
+    global _session_scope_prefix_cache
+    if _session_scope_prefix_cache is not None:
+        return _session_scope_prefix_cache
+
+    prefix: list[str] = []
+    systemd_run = shutil.which("systemd-run")
+    if systemd_run:
+        candidate = [
+            systemd_run,
+            "--user", "--scope", "--quiet",
+            # Drop the unit as soon as its last process exits, even on failure.
+            "--collect",
+            "--description=CADE terminal session",
+            "--",
+        ]
+        try:
+            probe = subprocess.run(
+                [*candidate, "true"],
+                capture_output=True,
+                timeout=_SCOPE_PROBE_TIMEOUT_SECONDS,
+            )
+            if probe.returncode == 0:
+                prefix = candidate
+            else:
+                logger.info(
+                    "Sessions will share CADE's cgroup; systemd-run is unusable: %s",
+                    probe.stderr.decode(errors="replace").strip(),
+                )
+        except (OSError, subprocess.SubprocessError) as e:
+            logger.info("Sessions will share CADE's cgroup; systemd-run probe failed: %s", e)
+
+    _session_scope_prefix_cache = prefix
+    return prefix
+
+
 class UnixPTY(BasePTY):
     """Unix PTY implementation using pexpect."""
 
@@ -113,8 +168,18 @@ class UnixPTY(BasePTY):
                 spawn_env.update(env)
             spawn_env.setdefault("TERM", "xterm-256color")
 
+            # systemd-run --scope moves itself into the new scope and then
+            # execs the command, so the pid, the terminal and the environment
+            # are the same as for a direct spawn.
+            argv = pexpect.split_command_line(command)
+            # Only wrap a command that can be found. systemd-run always
+            # starts, so a mistyped command would otherwise spawn fine and
+            # die inside the scope, hiding the error pexpect raises for it.
+            if argv and shutil.which(argv[0], path=spawn_env.get("PATH")):
+                argv = [*session_scope_prefix(), *argv]
             self._process = pexpect.spawn(
-                command,
+                argv[0],
+                args=argv[1:],
                 cwd=str(cwd),
                 dimensions=(size.rows, size.cols),
                 encoding="utf-8",

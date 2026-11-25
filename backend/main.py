@@ -1789,9 +1789,12 @@ def setup_logging(debug: bool = False) -> None:
 
     logging.basicConfig(level=level, format=fmt, handlers=handlers)
 
+    # watchfiles logs a DEBUG line per watcher every few seconds while
+    # nothing changes. The desktop app always runs with --debug, and that
+    # chatter filled the 5 MB log in hours, rotating real history away.
+    logging.getLogger("watchfiles").setLevel(logging.WARNING)
     if not debug:
         logging.getLogger("uvicorn").setLevel(logging.WARNING)
-        logging.getLogger("watchfiles").setLevel(logging.WARNING)
 
 
 def run_serve(args: argparse.Namespace) -> None:
