@@ -33,6 +33,50 @@ beforeEach(() => {
   bar.render(TABS, "a");
 });
 
+describe("pull request badge", () => {
+  const PR = { number: 12, title: "Add a thing", url: "https://example.test/pr/12", draft: false, checks: "failing" as const, review: null, conflicts: false };
+  const badge = (id: string) => tabEl(id).querySelector<HTMLElement>(".tab-pr");
+
+  it("is absent on a tab whose branch has no pull request", () => {
+    expect(badge("a")).toBeNull();
+  });
+
+  it("shows the number and the state, without replacing the tab element", () => {
+    const before = tabEl("b");
+    bar.setPullRequest("b", PR);
+    expect(tabEl("b")).toBe(before);
+    expect(badge("b")!.textContent).toBe("#12\u2717");
+    expect(badge("b")!.dataset["state"]).toBe("failing");
+    expect(badge("a")).toBeNull();
+  });
+
+  it("follows a change of state and goes when the pull request does", () => {
+    bar.setPullRequest("b", PR);
+    bar.setPullRequest("b", { ...PR, checks: "passing", review: "approved" });
+    expect(tabEl("b").querySelectorAll(".tab-pr")).toHaveLength(1);
+    expect(badge("b")!.dataset["state"]).toBe("approved");
+    bar.setPullRequest("b", null);
+    expect(badge("b")).toBeNull();
+  });
+
+  it("survives a re-render", () => {
+    bar.setPullRequest("b", PR);
+    bar.render(TABS, "b");
+    expect(badge("b")!.textContent).toBe("#12\u2717");
+  });
+
+  it("asks for the pull request to be opened, without selecting the tab", () => {
+    const opened = vi.fn();
+    const selected = vi.fn();
+    bar.on("pr-open", opened);
+    bar.on("tab-select", selected);
+    bar.setPullRequest("b", PR);
+    badge("b")!.click();
+    expect(opened).toHaveBeenCalledWith(PR.url);
+    expect(selected).not.toHaveBeenCalled();
+  });
+});
+
 describe("update marker", () => {
   const marker = () => container.querySelector<HTMLElement>(".tab-update-marker");
 

@@ -33,6 +33,7 @@ def describe_session(session: PTYSession, agent_id: str) -> dict:
         "clients": len(session.connected_clients),
         "attention": session.attention,
         "attentionMessage": session.attention_message,
+        "pullRequest": session.pull_request,
         "terminals": terminals,
     }
 

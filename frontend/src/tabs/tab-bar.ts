@@ -19,6 +19,7 @@ import {
   type TabGroupDef,
 } from "./tab-groups";
 import { openTabMenu, type MenuEntry } from "./tab-menu";
+import { PR_DISPLAY, pullRequestState, pullRequestTitle, type PullRequestSummary } from "./pull-request";
 
 /** How long a workspace takes to slide open or shut. */
 export const ACCORDION_MS = 150;
@@ -67,6 +68,7 @@ export class TabBar implements Component {
   private pendingRender: [TabState[], string | null, TabBarGroups] | null = null;
 
   private status = new Map<string, TabStatus>();
+  private pullRequests = new Map<string, PullRequestSummary>();
   private tabs: TabState[] = [];
   private activeTabId: string | null = null;
   private groups: TabBarGroups = NO_GROUPS;
@@ -112,6 +114,9 @@ export class TabBar implements Component {
     this.groups = groups;
     for (const id of this.status.keys()) {
       if (!tabs.some((t) => t.id === id)) this.status.delete(id);
+    }
+    for (const id of this.pullRequests.keys()) {
+      if (!tabs.some((t) => t.id === id)) this.pullRequests.delete(id);
     }
     this.container.innerHTML = "";
     this.container.classList.toggle("empty", tabs.length === 0);
@@ -573,6 +578,8 @@ export class TabBar implements Component {
     });
 
     tabEl.appendChild(nameEl);
+    const badge = this.createPullRequestBadge(tab.id);
+    if (badge) tabEl.appendChild(badge);
     tabEl.appendChild(closeBtn);
 
     tabEl.addEventListener("click", () => {
@@ -603,6 +610,43 @@ export class TabBar implements Component {
       const loose = this.container.querySelector(".tab-group-chip--ungrouped");
       loose?.replaceWith(this.createUngroupedChip());
     }
+  }
+
+  /**
+   * Show the pull request for a tab's branch, or take the badge away with
+   * null. Updates the tab in place, as a status change does.
+   */
+  setPullRequest(tabId: string, pr: PullRequestSummary | null): void {
+    if (pr) this.pullRequests.set(tabId, pr);
+    else this.pullRequests.delete(tabId);
+    const tabEl = this.findTab(tabId);
+    if (!tabEl) return;
+    const badge = this.createPullRequestBadge(tabId);
+    const old = tabEl.querySelector(".tab-pr");
+    if (old && badge) old.replaceWith(badge);
+    else if (old) old.remove();
+    else if (badge) tabEl.querySelector(".tab-close")?.before(badge);
+  }
+
+  private createPullRequestBadge(tabId: string): HTMLElement | null {
+    const pr = this.pullRequests.get(tabId);
+    if (!pr) return null;
+    const state = pullRequestState(pr);
+    // A link in meaning, a button in fact: the page must not navigate away,
+    // and in the desktop window only the shell can open a browser.
+    const badge = document.createElement("button");
+    badge.className = "tab-pr";
+    badge.dataset["state"] = state;
+    if (pr.draft) badge.dataset["draft"] = "true";
+    badge.textContent = `#${pr.number}${PR_DISPLAY[state].mark}`;
+    badge.title = pullRequestTitle(pr);
+    badge.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.emit("pr-open", pr.url);
+    });
+    // A press on the badge is not the start of dragging its tab.
+    badge.addEventListener("pointerdown", (e) => e.stopPropagation());
+    return badge;
   }
 
   private findTab(tabId: string): HTMLElement | null {

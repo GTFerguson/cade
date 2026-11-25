@@ -44,6 +44,7 @@ class MessageType:
     PTY_SIZE = "pty-size"  # The PTY's current size and owner: { type, sessionKey, cols, rows, controller: str | None }
     SESSION_LIST = "session-list"  # Live sessions on this backend: { type, sessions: list[dict] }
     GROUP_CHANGED = "group-changed"  # The session moved tab group: { type, sessionId, group: str | None }
+    SESSION_PR = "session-pr"  # Pull request of the session's branch: { type, sessionId, pr: {number,title,url,draft,checks,review,conflicts}|None }
     SESSION_ATTENTION = "session-attention"  # Agent needs the user: { type, sessionId, attention: "input"|"idle"|None, message? }
     FILE_LIST = "file-list"  # Flat file list: { type, root, files: list[str], truncated: bool }
     FILE_DIFF = "file-diff"  # Diff of one file: { type, path, diff, untracked, error? }

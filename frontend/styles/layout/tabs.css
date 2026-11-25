@@ -113,6 +113,47 @@
   font-weight: 700;
 }
 
+/* The pull request for the tab's branch: its number, and a mark and colour
+   for the one thing most worth knowing about it (PR_DISPLAY in
+   tabs/pull-request.ts). */
+.tab-pr {
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.tab-pr:hover {
+  text-decoration: underline;
+}
+
+.tab-pr[data-state="conflicts"],
+.tab-pr[data-state="failing"] {
+  color: var(--accent-red);
+}
+
+.tab-pr[data-state="changes"] {
+  color: var(--accent-yellow);
+}
+
+.tab-pr[data-state="running"] {
+  color: var(--accent-blue);
+}
+
+.tab-pr[data-state="approved"],
+.tab-pr[data-state="passing"] {
+  color: var(--accent-green);
+}
+
+.tab-pr[data-draft="true"] {
+  opacity: 0.6;
+}
+
 .tab-close {
   display: flex;
   align-items: center;

@@ -50,6 +50,7 @@ export const MessageType = {
   PTY_SIZE: "pty-size",
   SESSION_LIST: "session-list",
   SESSION_ATTENTION: "session-attention",
+  SESSION_PR: "session-pr",
   GROUP_CHANGED: "group-changed",
   FILE_LIST: "file-list",
   FILE_DIFF: "file-diff",

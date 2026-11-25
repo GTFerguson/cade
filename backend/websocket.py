@@ -2345,6 +2345,10 @@ class ConnectionHandler:
 
             await self._send(attention_message(self._session))
             ensure_working_watch(self._session)
+        if self._session.pull_request is not None:
+            from backend.pull_requests import pr_message
+
+            await self._send(pr_message(self._session))
 
         task = asyncio.create_task(self._drain_output(session_key, sub, delivered_seq))
         self._output_tasks[session_key] = task

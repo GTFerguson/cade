@@ -32,6 +32,7 @@ import type {
   PongMessage,
   PtySizeMessage,
   SessionAttentionMessage,
+  SessionPrMessage,
   GroupChangedMessage,
   SessionListMessage,
   FileChangesMessage,
@@ -114,6 +115,7 @@ interface WebSocketEvents {
   pong: PongMessage;
   "session-list": SessionListMessage;
   "session-attention": SessionAttentionMessage;
+  "session-pr": SessionPrMessage;
   "group-changed": GroupChangedMessage;
   "file-list": FileListMessage;
   "file-diff": FileDiffMessage;

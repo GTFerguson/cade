@@ -254,6 +254,9 @@ class PTYSession:
     attention: str | None = None
     attention_message: str | None = None
     attention_at: float = 0.0
+    # Summary of the open pull request for the branch checked out in the
+    # project, or None (see backend/pull_requests.py).
+    pull_request: dict | None = None
 
     @property
     def pty(self) -> PTYManager:

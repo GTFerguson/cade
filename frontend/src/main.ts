@@ -45,7 +45,7 @@ import { hasConnectedProfileTab } from "./tabs/tab-manager";
 import type { TabState } from "./tabs";
 import type { LaunchPreset } from "./types";
 import { SessionKey } from "@core/platform/protocol";
-import { pickProjectFolder, getUserHomePath } from "@core/platform/tauri-bridge";
+import { openExternal, pickProjectFolder, getUserHomePath } from "@core/platform/tauri-bridge";
 import { setUserConfig } from "./config/user-config";
 import { applySavedTheme, onThemeChange, getSavedThemeId, themes } from "./config/themes";
 import { setMermaidConfig } from "@core/chat/markdown-renderer";
@@ -346,6 +346,7 @@ class App {
 
     // An upgrade that brings a new interface is offered, not applied: the
     // reload it needs redraws every terminal.
+    this.tabBar.on("pr-open", (url) => void openExternal(url));
     this.tabBar.on("update-reload", () => WebSocketClient.reloadForUpdate());
     this.tabBar.setUpdateReady(WebSocketClient.isUpdateReady());
     WebSocketClient.onUpdateReady(() => {
@@ -856,6 +857,8 @@ class App {
     // The socket is attached to exactly this tab's session, so every
     // attention frame on it is about this tab.
     tab.ws.on("group-changed", (msg) => this.adoptGroupFromBackend(tab, msg.group));
+
+    tab.ws.on("session-pr", (msg) => this.tabBar?.setPullRequest(tab.id, msg.pr));
 
     tab.ws.on("session-attention", (msg) => {
       const previous = this.attentionByTab.get(tab.id) ?? null;

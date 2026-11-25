@@ -8,7 +8,7 @@ tags: [plan, github, tabs, notifications]
 
 # Pull Request Monitoring
 
-Phase 3 of [[organisation-and-cleanup-roadmap]]. Nothing is built yet.
+Phase 3 of [[organisation-and-cleanup-roadmap]]. Step 1 (the tab badge) is built; steps 2 to 4 are not.
 
 ## Context
 
@@ -37,28 +37,16 @@ them; acting on one stays with the agent in the tab or with `gh`.
 
 The order above is the build order. Each step is usable without the next.
 
-## How the first step works
+## Step 1: built, not yet installed
 
-A backend poller asks the `gh` CLI, which is already signed in on the machine,
-so CADE stores no GitHub credentials of its own.
+The tab badge is built (25 Nov 2026) and awaits an install and a look in the real app.
 
-- **What is polled.** One call per repository that has a session open, not one
-  per tab: `gh pr list --json` for the repository returns every open pull
-  request with its head branch, checks, review decision and mergeable state,
-  and each session is matched to a pull request by its current branch.
-- **How often.** Slowly by default, faster for a pull request whose checks are
-  still running, and not at all for a repository with no session. The interval
-  is a setting. GitHub's GraphQL API, which `gh pr list` uses, allows a signed-in
-  user 5,000 points an hour (GitHub Docs, "Rate limits and query limits for the
-  GraphQL API"); a handful of repositories polled once a minute is a small share
-  of that, and the poller reads `gh api rate_limit` rather than assuming.
-- **Where it goes.** The session holds its pull request state, as it holds its
-  attention state, and the state travels the same way: in the `connected`
-  message and in a frame sent when it changes. The tab bar draws it beside the
-  agent status.
-- **When `gh` is missing or signed out.** No badge and one line in the log. No
-  toast, no prompt to sign in: a tab that never has a pull request should not
-  hear about GitHub at all.
+- `backend/pull_requests.py`: `PullRequestMonitor` polls `gh pr list` once per repository with a live session, every `POLL_SECONDS`, or `POLL_SECONDS_WHILE_RUNNING` while some pull request's checks are still running. Each session is matched by the branch checked out in its project and holds a summary in `PTYSession.pull_request`. A change is sent to the session's clients as `session-pr`, and the summary is sent once on attach and included in the session listing.
+- `frontend/src/tabs/pull-request.ts`: reduces the summary to the one state a tab shows, worst first (conflicts, failing checks, changes requested, running, approved, passing). The badge is the number plus a mark, coloured by state; its tooltip lists everything known; clicking it opens the pull request in the browser.
+- When `gh` is missing the monitor does not start, with one line in the log. When `gh` cannot answer for a repository, what was shown stays.
+- The parsing was checked against real `gh` output from a public repository. Polling has not yet run inside the installed app.
+
+Not done in this step: the rate-limit check (`gh api rate_limit`), a setting for the interval, and any roll-up on a closed workspace chip.
 
 ## Key challenges
 

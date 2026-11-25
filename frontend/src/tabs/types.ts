@@ -128,6 +128,8 @@ export interface TabBarEvents {
   "tab-add-remote": void;
   /** Load the newer interface the backend now serves. */
   "update-reload": void;
+  /** Open a tab's pull request, by its address, in the browser. */
+  "pr-open": string;
   /** Move a tab to a group, or out of its group with null. */
   "tab-set-group": { tabId: string; group: string | null };
   /** Start a new group holding this tab. */

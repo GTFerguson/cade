@@ -247,6 +247,13 @@ export interface GroupChangedMessage extends BaseMessage {
   group: string | null;
 }
 
+/** The pull request for the branch a session works on, or null for none. */
+export interface SessionPrMessage extends BaseMessage {
+  type: "session-pr";
+  sessionId: string;
+  pr: import("./tabs/pull-request").PullRequestSummary | null;
+}
+
 /** The agent in a session is waiting for the user, finished, or working again. */
 export interface SessionAttentionMessage extends BaseMessage {
   type: "session-attention";
