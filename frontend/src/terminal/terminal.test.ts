@@ -640,6 +640,83 @@ describe("Terminal PTY size policy", () => {
   });
 });
 
+describe("Terminal scrollback restore", () => {
+  let container: HTMLElement;
+  let ws: WebSocketClient;
+  let terminal: Terminal;
+  let xterm: any;
+
+  function setUp(visible: boolean): void {
+    vi.clearAllMocks();
+    container = document.createElement("div");
+    const side = visible ? 800 : 0;
+    Object.defineProperty(container, "offsetWidth", { value: side, configurable: true });
+    Object.defineProperty(container, "offsetHeight", { value: side, configurable: true });
+    document.body.appendChild(container);
+    ws = createMockWebSocket();
+    terminal = new Terminal(container, ws);
+    terminal.initialize();
+    xterm = (terminal as any).terminal;
+    xterm.resize.mockClear();
+    xterm.write.mockClear();
+    (ws.sendResize as any).mockClear?.();
+  }
+
+  /** The call that wrote the scrollback, as opposed to the reset before it. */
+  const scrollbackWrite = () => xterm.write.mock.calls.find((c: unknown[]) => c[0] === "SCREEN");
+
+  it("replays at the size the scrollback was drawn for, even in a hidden tab", () => {
+    setUp(false);
+    terminal.restore("SCREEN", { cols: 180, rows: 50 });
+
+    expect(xterm.resize).toHaveBeenCalledWith(180, 50);
+    const resized = xterm.resize.mock.invocationCallOrder[0];
+    const written = xterm.write.mock.invocationCallOrder[xterm.write.mock.calls.indexOf(scrollbackWrite())];
+    expect(resized).toBeLessThan(written);
+  });
+
+  it("does not ask the backend to resize the PTY to match itself", () => {
+    setUp(false);
+    terminal.restore("SCREEN", { cols: 180, rows: 50 });
+    expect(ws.sendResize).not.toHaveBeenCalled();
+  });
+
+  it("leaves the size alone when it already matches", () => {
+    setUp(true);
+    terminal.restore("SCREEN", { cols: xterm.cols, rows: xterm.rows });
+    expect(xterm.resize).not.toHaveBeenCalled();
+  });
+
+  it("replays at its own size when the backend does not say", () => {
+    setUp(true);
+    terminal.restore("SCREEN");
+    expect(xterm.resize).not.toHaveBeenCalled();
+    expect(scrollbackWrite()).toBeDefined();
+  });
+
+  it("goes back to fitting its container only once the scrollback is on screen", () => {
+    setUp(true);
+    const fit = (terminal as any).fitAddon.fit;
+    fit.mockClear();
+    terminal.restore("SCREEN", { cols: 180, rows: 50 });
+    expect(fit).not.toHaveBeenCalled();
+
+    scrollbackWrite()[1]();
+    expect(fit).toHaveBeenCalled();
+  });
+
+  it("keeps mirroring another device's size after a restore", () => {
+    setUp(true);
+    (terminal as any).connectionId = "me";
+    terminal.applyPtySize(40, 20, "phone");
+    const fit = (terminal as any).fitAddon.fit;
+    fit.mockClear();
+    terminal.restore("SCREEN", { cols: 40, rows: 20 });
+    scrollbackWrite()[1]();
+    expect(fit).not.toHaveBeenCalled();
+  });
+});
+
 describe("Terminal row lock and font size", () => {
   let container: HTMLElement;
   let ws: WebSocketClient;

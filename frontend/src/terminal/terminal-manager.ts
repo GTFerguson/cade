@@ -319,14 +319,17 @@ export class TerminalManager implements Component {
   private handleSessionRestored(message: SessionRestoredMessage): void {
     const sessionKey = message.sessionKey ?? SessionKey.CLAUDE;
 
+    const size =
+      message.cols !== undefined && message.rows !== undefined
+        ? { cols: message.cols, rows: message.rows }
+        : undefined;
+
     if (sessionKey === SessionKey.CLAUDE) {
-      this.claudeTerminal?.reset();
-      this.claudeTerminal?.write(message.scrollback);
+      this.claudeTerminal?.restore(message.scrollback, size);
     } else if (sessionKey === SessionKey.MANUAL) {
       // Lazily create manual terminal if needed for restore
       this.ensureManualTerminal();
-      this.manualTerminal?.reset();
-      this.manualTerminal?.write(message.scrollback);
+      this.manualTerminal?.restore(message.scrollback, size);
     }
   }
 

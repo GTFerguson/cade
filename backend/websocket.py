@@ -2309,13 +2309,20 @@ class ConnectionHandler:
         if replay is None:
             scrollback = terminal.get_scrollback()
             if scrollback:
-                await self._send({
+                restored: dict = {
                     "type": MessageType.SESSION_RESTORED,
                     "sessionId": self._session_id,
                     "scrollback": scrollback,
                     "sessionKey": session_key,
                     "seq": terminal.last_seq,
-                })
+                }
+                # The size the scrollback was drawn for. A client replaying it
+                # at any other width gets a scrambled screen, and a tab that
+                # is hidden when it reconnects has no size of its own yet.
+                if terminal.size is not None:
+                    restored["cols"] = terminal.size.cols
+                    restored["rows"] = terminal.size.rows
+                await self._send(restored)
             delivered_seq = terminal.last_seq
             # The buffer no longer starts at the beginning, so the replayed
             # stream may have been drawn for a different screen: ask the

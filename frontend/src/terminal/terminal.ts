@@ -645,6 +645,38 @@ export class Terminal implements Component {
    * Clears screen and scrollback buffer for clean slate before replay.
    * Avoids DECSTR (\x1b[!p) which triggers DA1 responses in xterm.js.
    */
+  /**
+   * Replace the screen with scrollback the backend kept, as on a reconnect.
+   *
+   * The scrollback is a TUI's output, positioned for the PTY's width. It is
+   * replayed at that width, not at whatever this terminal happens to be: a
+   * tab that is hidden when the page reloads cannot measure itself and sits
+   * at xterm's default size, and scrollback written into it there comes out
+   * scrambled and stays that way until the agent next redraws. Afterwards the
+   * terminal goes back to fitting its container; if that changes the size,
+   * the PTY is told and the TUI redraws for it.
+   */
+  restore(scrollback: string, size?: { cols: number; rows: number }): void {
+    if (!this.terminal) return;
+    if (size && (this.terminal.cols !== size.cols || this.terminal.rows !== size.rows)) {
+      // Matching the PTY is not a request to resize it.
+      this.applyingPtySize = true;
+      try {
+        this.terminal.resize(size.cols, size.rows);
+      } finally {
+        this.applyingPtySize = false;
+      }
+    }
+    this.reset();
+    // xterm parses writes asynchronously, so refit only once the scrollback
+    // is on screen; resizing mid-parse would scramble it all over again.
+    this.terminal.write(scrollback, () => {
+      if (this.fixedSize !== null) return;
+      this.lastSentSize = null;
+      this.fit();
+    });
+  }
+
   reset(): void {
     if (this.terminal == null) {
       return;

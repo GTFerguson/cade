@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from backend.config import Config
+from backend.models import TerminalSize
 from backend.protocol import MessageType, SessionKey
 from backend.terminal.pty import PTYManager
 from backend.terminal.sessions import PTYSession, SessionRegistry, set_registry
@@ -100,6 +101,32 @@ class TestAttach:
         assert restored[0]["scrollback"] == "old news"
         assert restored[0]["seq"] == 2
         assert sent(h._ws, MessageType.OUTPUT) == []
+        await h._cleanup()
+
+    @pytest.mark.asyncio
+    async def test_cold_attach_says_what_size_the_scrollback_was_drawn_for(self, temp_dir: Path):
+        """A hidden tab has no size of its own to replay the scrollback at."""
+        session = PTYSession(id="s", project_path=temp_dir)
+        terminal = session.add_terminal(SessionKey.CLAUDE, make_pty())
+        terminal.size = TerminalSize(cols=180, rows=50)
+        terminal.publish("screen")
+        h = attach_handler(session, temp_dir)
+        await h._attach_terminal(SessionKey.CLAUDE)
+
+        restored = sent(h._ws, MessageType.SESSION_RESTORED)[0]
+        assert (restored["cols"], restored["rows"]) == (180, 50)
+        await h._cleanup()
+
+    @pytest.mark.asyncio
+    async def test_cold_attach_leaves_the_size_out_when_nobody_has_set_one(self, temp_dir: Path):
+        session = PTYSession(id="s", project_path=temp_dir)
+        terminal = session.add_terminal(SessionKey.CLAUDE, make_pty())
+        terminal.publish("screen")
+        h = attach_handler(session, temp_dir)
+        await h._attach_terminal(SessionKey.CLAUDE)
+
+        restored = sent(h._ws, MessageType.SESSION_RESTORED)[0]
+        assert "cols" not in restored
         await h._cleanup()
 
     @pytest.mark.asyncio

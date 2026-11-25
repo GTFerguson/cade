@@ -422,6 +422,9 @@ export interface SessionRestoredMessage extends BaseMessage {
   sessionKey?: AnySessionKey;
   /** Sequence the scrollback runs up to. */
   seq?: number;
+  /** The PTY size the scrollback was drawn for, when the backend knows it. */
+  cols?: number;
+  rows?: number;
 }
 
 /**
