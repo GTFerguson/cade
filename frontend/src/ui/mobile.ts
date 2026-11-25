@@ -15,7 +15,7 @@ import { CommandMenu, type OverflowTab } from "./mobile/command-menu";
 import { FileExplorer } from "./mobile/file-explorer";
 import { FileViewer } from "./mobile/file-viewer";
 import { DashboardScreen } from "./mobile/dashboard-screen";
-import { SessionStrip, neighbourTab, type StripTab } from "./mobile/session-strip";
+import { SessionStrip, neighbourTab, workspaceTabs, type StripTab } from "./mobile/session-strip";
 import { FileSearch } from "./mobile/file-search";
 import { RecentFiles, recordChange, type RecentChange } from "./mobile/recent-files";
 import { setupPinchZoom } from "./mobile/pinch-zoom";
@@ -184,7 +184,7 @@ export class MobileUI implements Component {
   }
 
   private switchRelative(direction: 1 | -1): void {
-    const target = neighbourTab(this.callbacks.getTabs(), direction);
+    const target = neighbourTab(workspaceTabs(this.callbacks.getTabs()), direction);
     if (!target) return;
     this.screenManager.popToRoot();
     this.activeViewer = null;

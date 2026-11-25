@@ -149,12 +149,25 @@ export class CommandMenu implements MobileScreen {
     }
 
     this.addSection(list, "sessions");
-    for (const tab of this.callbacks.getTabs()) {
+    // Under their workspaces, when there are any: this list is the phone's
+    // way from one workspace to another, so it shows where each session is.
+    const tabs = this.callbacks.getTabs();
+    const inWorkspaces = tabs.some((t) => t.group);
+    let heading: string | null | undefined;
+    for (const tab of tabs) {
+      const group = tab.group ?? null;
+      if (inWorkspaces && group !== heading) {
+        heading = group;
+        this.addWorkspaceLabel(list, group, tab.groupColour);
+      }
       this.addTabOption(list, tab);
     }
     // Sessions already running on this backend (started elsewhere) that
     // this device can attach to.
-    for (const session of this.callbacks.getLiveSessions()) {
+    const live = this.callbacks.getLiveSessions();
+    // Without its own label this run would read as part of the last workspace.
+    if (inWorkspaces && live.length > 0) this.addWorkspaceLabel(list, "on server");
+    for (const session of live) {
       this.addLiveSessionOption(list, session);
     }
     this.addOption(list, "[detach]", "leave it running, close this tab", () =>
@@ -188,6 +201,14 @@ export class CommandMenu implements MobileScreen {
     const label = document.createElement("div");
     label.className = "section-label";
     label.textContent = title;
+    container.appendChild(label);
+  }
+
+  private addWorkspaceLabel(container: HTMLElement, group: string | null, colour?: string): void {
+    const label = document.createElement("div");
+    label.className = "workspace-label";
+    label.textContent = group ?? "no workspace";
+    if (group && colour) label.style.color = colour;
     container.appendChild(label);
   }
 

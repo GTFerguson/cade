@@ -311,6 +311,11 @@
   font-weight: 700;
 }
 
+.session-strip-elsewhere {
+  color: var(--accent-orange);
+  font-weight: 700;
+}
+
 .session-strip-dots {
   display: inline-flex;
   gap: 5px;
@@ -491,6 +496,13 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.mobile-command-menu .workspace-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 10px 16px 2px;
 }
 
 .mobile-command-menu .section-label {

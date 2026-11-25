@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import { SessionStrip, neighbourTab } from "./session-strip";
+import { SessionStrip, neighbourTab, waitingElsewhere, workspaceTabs } from "./session-strip";
 
 const tabs = (active: string, ids = ["a", "b", "c"]) =>
   ids.map((id) => ({ id, name: id, isActive: id === active, unread: false }));
@@ -14,6 +14,46 @@ describe("neighbourTab", () => {
 
   it("has nowhere to go with a single tab", () => {
     expect(neighbourTab(tabs("a", ["a"]), 1)).toBeNull();
+  });
+});
+
+describe("the open workspace on the phone", () => {
+  const mixed = (active: string) => [
+    { id: "l", name: "l", isActive: active === "l", unread: false },
+    { id: "w1", name: "w1", isActive: active === "w1", unread: false, group: "Work" },
+    { id: "w2", name: "w2", isActive: active === "w2", unread: false, group: "Work", attention: "input" as const },
+    { id: "h1", name: "h1", isActive: active === "h1", unread: false, group: "Home", attention: "input" as const },
+  ];
+
+  it("is the active tab's group, or the ungrouped tabs", () => {
+    expect(workspaceTabs(mixed("w1")).map((t) => t.id)).toEqual(["w1", "w2"]);
+    expect(workspaceTabs(mixed("l")).map((t) => t.id)).toEqual(["l"]);
+  });
+
+  it("keeps the arrows inside it", () => {
+    expect(neighbourTab(workspaceTabs(mixed("w2")), 1)?.id).toBe("w1");
+  });
+
+  it("counts sessions waiting in the other workspaces only", () => {
+    expect(waitingElsewhere(mixed("w1"))).toBe(1);
+    expect(waitingElsewhere(mixed("l"))).toBe(2);
+  });
+
+  it("draws a dot per session of the workspace and flags waiting elsewhere", () => {
+    const strip = new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn() });
+    strip.render(mixed("w1"), null);
+    expect(strip.element.querySelectorAll(".session-strip-dot")).toHaveLength(2);
+    expect(strip.element.querySelector(".session-strip-elsewhere")!.textContent).toBe("!1");
+
+    strip.render(mixed("h1"), null);
+    expect(strip.element.querySelector(".session-strip-elsewhere")!.textContent).toBe("!1");
+    expect(strip.element.querySelectorAll(".session-strip-dot")).toHaveLength(1);
+  });
+
+  it("shows no flag when nothing is waiting elsewhere", () => {
+    const strip = new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn() });
+    strip.render(mixed("h1").filter((t) => t.group !== "Work"), null);
+    expect(strip.element.querySelector(".session-strip-elsewhere")).toBeNull();
   });
 });
 

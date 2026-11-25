@@ -93,7 +93,8 @@ The chip carries its group's colour on its name and as a bar on its left edge. A
 
 - A group carries a name and a colour only. Settings such as a default folder or a GitHub account are not part of it.
 - Definitions are per backend and are not synchronised between a local and a remote backend.
-- The phone shows the active session's group in the session strip; it has no chips or workspace switching.
+- The phone has no chips. Its session strip names the open workspace, its arrows and swipes stay inside it (`workspaceTabs` in `frontend/src/ui/mobile/session-strip.ts`), and a `!N` there counts sessions waiting in other workspaces. The command menu lists sessions under their workspaces, which is how to move between them.
+- Moving a tab to another workspace is done from the tab's right-click menu; there is no key for it.
 - There are no key chords for collapsing a group or showing only one.
 
 ## See Also

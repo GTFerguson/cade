@@ -1,8 +1,9 @@
 /**
  * One-line strip above the mobile terminal naming the current session,
- * with a dot per open tab so unread output elsewhere is visible at a
- * glance. ‹ › and a horizontal swipe move between sessions; tapping the
- * name opens the command menu.
+ * with a dot per tab of its workspace so unread output beside it is visible
+ * at a glance. ‹ › and a horizontal swipe move between those sessions, as
+ * the tab keys do on the desktop; tapping the name opens the command menu,
+ * which lists every workspace.
  */
 
 import { escapeHtml } from "@core/ui/menu-nav";
@@ -35,6 +36,22 @@ export function neighbourTab<T extends { id: string; isActive: boolean }>(
   const idx = tabs.findIndex((t) => t.isActive);
   if (idx === -1) return tabs[0]!;
   return tabs[(idx + direction + tabs.length) % tabs.length]!;
+}
+
+/**
+ * The tabs of the open workspace: those in the active tab's group, or the
+ * ungrouped ones when it is in none. Every tab when none is active.
+ */
+export function workspaceTabs<T extends { isActive: boolean; group?: string }>(tabs: T[]): T[] {
+  const active = tabs.find((t) => t.isActive);
+  if (!active) return tabs;
+  return tabs.filter((t) => (t.group ?? null) === (active.group ?? null));
+}
+
+/** How many tabs outside the open workspace are waiting on the user. */
+export function waitingElsewhere(tabs: StripTab[]): number {
+  const here = new Set(workspaceTabs(tabs));
+  return tabs.filter((t) => !here.has(t) && t.attention === "input").length;
 }
 
 export class SessionStrip {
@@ -98,7 +115,10 @@ export class SessionStrip {
     return btn;
   }
 
-  render(tabs: StripTab[], agentLabel?: string | null): void {
+  /** `tabs` is every open tab; the strip shows the open workspace's. */
+  render(allTabs: StripTab[], agentLabel?: string | null): void {
+    const tabs = workspaceTabs(allTabs);
+    const elsewhere = waitingElsewhere(allTabs);
     const active = tabs.find((t) => t.isActive);
     const name = active?.name ?? "no session";
     this.nameEl.innerHTML =
@@ -106,7 +126,12 @@ export class SessionStrip {
         ? `<span class="session-strip-group" style="color: ${escapeHtml(active.groupColour ?? "inherit")}">${escapeHtml(active.group)}</span> `
         : "") +
       escapeHtml(name) +
-      (agentLabel ? `<span class="session-strip-agent"> · ${escapeHtml(agentLabel)}</span>` : "");
+      (agentLabel ? `<span class="session-strip-agent"> · ${escapeHtml(agentLabel)}</span>` : "") +
+      // Sessions waiting in a workspace that is not on show would otherwise
+      // have no mark anywhere on this screen.
+      (elsewhere > 0
+        ? ` <span class="session-strip-elsewhere" title="waiting in another workspace">!${elsewhere}</span>`
+        : "");
 
     this.dotsEl.innerHTML = tabs
       .map((t) => {
