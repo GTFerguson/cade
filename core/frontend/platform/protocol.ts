@@ -51,6 +51,7 @@ export const MessageType = {
   SESSION_LIST: "session-list",
   SESSION_ATTENTION: "session-attention",
   SESSION_PR: "session-pr",
+  SESSION_CONTEXT: "session-context",
   GROUP_CHANGED: "group-changed",
   FILE_LIST: "file-list",
   FILE_DIFF: "file-diff",

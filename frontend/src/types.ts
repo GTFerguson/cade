@@ -254,6 +254,13 @@ export interface SessionPrMessage extends BaseMessage {
   pr: import("./tabs/pull-request").PullRequestSummary | null;
 }
 
+/** Branch, pending work and latest handoff of a session's project, or null. */
+export interface SessionContextMessage extends BaseMessage {
+  type: "session-context";
+  sessionId: string;
+  context: import("./tabs/context-strip").SessionContext | null;
+}
+
 /** The agent in a session is waiting for the user, finished, or working again. */
 export interface SessionAttentionMessage extends BaseMessage {
   type: "session-attention";

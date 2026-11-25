@@ -257,6 +257,9 @@ class PTYSession:
     # Summary of the open pull request for the branch checked out in the
     # project, or None (see backend/pull_requests.py).
     pull_request: dict | None = None
+    # Branch, pending work and latest handoff of the project, or None (see
+    # backend/session_context.py).
+    context: dict | None = None
 
     @property
     def pty(self) -> PTYManager:

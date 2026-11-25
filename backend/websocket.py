@@ -2349,6 +2349,13 @@ class ConnectionHandler:
             from backend.pull_requests import pr_message
 
             await self._send(pr_message(self._session))
+        # Read now, not at the next poll: a tab that has just attached is
+        # being looked at, and what it had may predate a long absence.
+        from backend.session_context import context_message, get_session_context_monitor
+
+        if self._session.context is not None:
+            await self._send(context_message(self._session))
+        get_session_context_monitor().refresh_soon(self._session)
 
         task = asyncio.create_task(self._drain_output(session_key, sub, delivered_seq))
         self._output_tasks[session_key] = task

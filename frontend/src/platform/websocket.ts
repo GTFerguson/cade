@@ -33,6 +33,7 @@ import type {
   PtySizeMessage,
   SessionAttentionMessage,
   SessionPrMessage,
+  SessionContextMessage,
   GroupChangedMessage,
   SessionListMessage,
   FileChangesMessage,
@@ -116,6 +117,7 @@ interface WebSocketEvents {
   "session-list": SessionListMessage;
   "session-attention": SessionAttentionMessage;
   "session-pr": SessionPrMessage;
+  "session-context": SessionContextMessage;
   "group-changed": GroupChangedMessage;
   "file-list": FileListMessage;
   "file-diff": FileDiffMessage;

@@ -21,7 +21,7 @@ Architecture and essential developer documentation.
 - [[core/remote-sessions|Remote Sessions]] - Multi-device terminal sessions: output broadcaster, sequenced reconnect, size policy, session directory, attention hooks, push, when a session ends
 - [[core/tab-groups|Tab Groups]] - Workspaces: one group of tabs open at a time, Alt+w / Alt+Shift+w and the held list, why the session owns its group, folder rules, attention roll-up
 - [[core/project-picker|Project Picker and Per-Tab Agent]] - One keyboard-driven picker for a new tab: projects, handoffs, tab group, and which agent the tab runs
-- [[core/pull-requests|Pull Request State on Tabs]] - The `gh` poller and the tab badge for a branch's pull request: checks, review, conflicts
+- [[core/pull-requests|Pull Request and Work State on Tabs]] - The `gh` poller and tab badge for a branch's pull request, and the strip above the terminal: pull request, branch and pending work, latest handoff
 - [[core/agent-orchestration|Agent Orchestration]] - Multi-agent coordination, MCP tools, two-gate approval flow
 - [[core/agent-tools|Agent Tool System]] - File, discovery, and shell tools for LiteLLM agents; permission gating
 - [[core/prompt-composition|Prompt Composition]] - Modular system prompt assembly from markdown modules

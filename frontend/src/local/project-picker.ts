@@ -475,7 +475,7 @@ export class ProjectPicker {
     });
     // No caption: the key help already names each toggle and its key.
     toggle.setAttribute("role", "group");
-    toggle.setAttribute("aria-label", name === "group" ? "tab group" : name);
+    toggle.setAttribute("aria-label", name === "group" ? "workspace" : name);
     row.appendChild(toggle);
     return row;
   }
@@ -567,7 +567,7 @@ export class ProjectPicker {
           ["h", this.screen.kind === "project" ? "back" : "up a folder"],
           ["/", "filter or type a path"],
           ...(this.canSwitchAgent() ? ([["a", "agent"]] as [string, string][]) : []),
-          ...(this.options.groups.length > 0 ? ([["g", "tab group"]] as [string, string][]) : []),
+          ...(this.options.groups.length > 0 ? ([["g", "workspace"]] as [string, string][]) : []),
           ["enter", this.screen.kind === "project" ? "open" : "choose"],
           ["esc", "cancel"],
         ];

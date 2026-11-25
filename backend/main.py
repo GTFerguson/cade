@@ -316,6 +316,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pull_requests = get_pull_request_monitor()
     pull_requests.start()
 
+    from backend.session_context import get_session_context_monitor
+
+    session_contexts = get_session_context_monitor()
+    session_contexts.start()
+
     wsl_task = asyncio.create_task(_check_wsl_health_async())
 
     if config.auto_open_browser:
@@ -334,6 +339,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     logger.info("CADE shutting down")
     await pull_requests.stop()
+    await session_contexts.stop()
 
     # Retrieve discovery files from the deferred setup task
     discovery_files: list[Path] = []

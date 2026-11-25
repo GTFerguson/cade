@@ -2,8 +2,8 @@
    Built from the full-pane selector standards in the design bible and laid
    out like the help overlay: a centred pane header, two columns of sections
    under filled title rows, option rows with a red selection. The choices a
-   new tab opens with sit in the top right corner, key help in the bottom
-   right. */
+   new tab opens with sit in the top corners (workspace left, agent right),
+   key help in the bottom right. */
 
 .project-picker {
   position: absolute;
@@ -41,8 +41,8 @@
 }
 
 /* What the new tab is opened with: one segmented toggle per choice, in a
-   strip across the top with the toggles in its right corner; the key help
-   names them. The strip keeps its height when empty so the header
+   strip across the top, the workspace in its left corner and the agent in
+   its right; the key help names them. The strip keeps its height when empty so the header
    does not jump once the choices load. */
 .picker-settings {
   align-self: stretch;
@@ -66,6 +66,14 @@
   align-items: flex-end;
   gap: 4px;
   min-width: 0;
+}
+
+/* The workspace the tab joins sits in the left corner, apart from the agent:
+   it says where the tab goes, the other says what runs in it. */
+.picker-setting[data-setting="group"] {
+  order: -1;
+  margin-right: auto;
+  align-items: flex-start;
 }
 
 /* The shared toggle is full-width and centred with a bottom margin for use

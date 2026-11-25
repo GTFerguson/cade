@@ -18,6 +18,7 @@ import { MarkdownViewer } from "../markdown/markdown";
 import { RightPaneManager, type RightPaneMode } from "../right-pane";
 import { Splash } from "../ui/splash";
 import { McpAuthNudge } from "../chat/mcp-auth-nudge";
+import { ContextStrip } from "./context-strip";
 import { apiBase } from "../config/config";
 import { TerminalManager } from "../terminal/terminal-manager";
 import type { CustomKeyHandler } from "../terminal/terminal";
@@ -43,6 +44,7 @@ export class ProjectContextImpl implements IProjectContext {
   private splash: Splash | null = null;
   private saveTimeout: number | null = null;
   private pendingSession: SessionState | null = null;
+  private contextStrip: ContextStrip | null = null;
   private mcpAuthNudge = new McpAuthNudge((name, serverUrl) => this.showAuthToast(name, serverUrl));
   private isVisible = false;
   private focusedPane: PaneType = "terminal";
@@ -196,6 +198,15 @@ export class ProjectContextImpl implements IProjectContext {
       }
       this.mcpAuthNudge.setChatVisible(mode === "chat");
     });
+    // Above the terminal, inside its pane, so it is as wide as the terminal
+    // and belongs to this tab.
+    this.contextStrip = new ContextStrip({
+      onOpenUrl: (url) => void openExternal(url),
+      onOpenFile: (relPath) => this.openInViewer(relPath),
+    });
+    terminalEl.insertBefore(this.contextStrip.element, terminalEl.querySelector(".terminal-content"));
+    this.ws.on("session-pr", (msg) => this.contextStrip?.setPullRequest(msg.pr));
+    this.ws.on("session-context", (msg) => this.contextStrip?.setContext(msg.context));
     this.terminalManager.setOnAgentTitle((title) => this.onAgentTitleCb?.(title));
     this.terminalManager.initialize();
 
@@ -434,16 +445,7 @@ export class ProjectContextImpl implements IProjectContext {
       this.scheduleSave();
     });
 
-    this.terminalManager.setOnOpenFile((rawPath) => {
-      const path = this.resolveAndFindFile(rawPath);
-      this.rightPane?.setMode("markdown");
-      const viewer = this.rightPane?.getViewer();
-      if (viewer) {
-        viewer.setDashboardReturn(null);
-        viewer.loadFile(path);
-        this.fileTree?.revealFile(path);
-      }
-    });
+    this.terminalManager.setOnOpenFile((rawPath) => this.openInViewer(rawPath));
 
     this.rightPane.getViewer().on("link-click", async (path) => {
       this.rightPane?.setMode("markdown");
@@ -551,6 +553,18 @@ export class ProjectContextImpl implements IProjectContext {
     });
 
     this.hide();
+  }
+
+  /** Show a project file in the viewer and point the file tree at it. */
+  private openInViewer(rawPath: string): void {
+    const path = this.resolveAndFindFile(rawPath);
+    this.rightPane?.setMode("markdown");
+    const viewer = this.rightPane?.getViewer();
+    if (viewer) {
+      viewer.setDashboardReturn(null);
+      viewer.loadFile(path);
+      this.fileTree?.revealFile(path);
+    }
   }
 
   /**
@@ -1040,6 +1054,7 @@ export class ProjectContextImpl implements IProjectContext {
     if (this.saveTimeout != null) {
       window.clearTimeout(this.saveTimeout);
     }
+    this.contextStrip?.dispose();
 
     this.saveSessionNow();
 

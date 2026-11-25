@@ -352,6 +352,65 @@
   padding: 8px 2px;
 }
 
+/* One line above the terminal on where the tab's work stands. It cancels
+   the pane's own padding so it runs edge to edge under the tab bar. */
+.context-strip {
+  display: flex;
+  flex-shrink: 0;
+  margin: -8px -2px 8px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.context-strip[hidden] {
+  display: none;
+}
+
+/* When the line is too long for the pane the later cells give way first,
+   each cutting off with an ellipsis; the pull request keeps its room. */
+.context-strip-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 5px 12px;
+  border: none;
+  border-right: 1px solid var(--border-color);
+  background: transparent;
+  font: inherit;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.context-strip-cell[data-kind="pr"] {
+  flex-shrink: 0;
+}
+
+button.context-strip-cell {
+  cursor: pointer;
+}
+
+button.context-strip-cell:hover {
+  background: var(--bg-hover);
+}
+
+.context-strip-cell [data-tone="muted"] { color: var(--text-muted); }
+.context-strip-cell [data-tone="good"] { color: var(--accent-green); }
+.context-strip-cell [data-tone="bad"] { color: var(--accent-red); }
+.context-strip-cell [data-tone="warn"] { color: var(--accent-orange); }
+.context-strip-cell [data-tone="review"] { color: var(--accent-yellow); }
+.context-strip-cell [data-tone="busy"] { color: var(--accent-blue); }
+
+/* The phone's screen is one session already named by its own strip. */
+@media (max-width: 768px) {
+  .context-strip {
+    display: none;
+  }
+}
+
 .terminal-content {
   flex: 1;
   min-height: 0;
