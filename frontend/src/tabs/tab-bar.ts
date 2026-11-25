@@ -59,7 +59,9 @@ export class TabBar implements Component {
 
   private status = new Map<string, TabStatus>();
   private tabs: TabState[] = [];
+  private activeTabId: string | null = null;
   private groups: TabBarGroups = NO_GROUPS;
+  private updateReady = false;
   // A name being typed, of a tab or of a group. Holds back re-renders.
   private renaming = false;
   // The first click of a double-click selects the tab, which re-renders the
@@ -91,6 +93,7 @@ export class TabBar implements Component {
     }
     this.pendingRender = null;
     this.tabs = tabs;
+    this.activeTabId = activeTabId;
     this.groups = groups;
     for (const id of this.status.keys()) {
       if (!tabs.some((t) => t.id === id)) this.status.delete(id);
@@ -172,6 +175,7 @@ export class TabBar implements Component {
     });
 
     tabArea.appendChild(addButton);
+    if (this.updateReady) tabArea.appendChild(this.createUpdateMarker());
     this.container.appendChild(tabArea);
 
     if (isTauri) {
@@ -183,6 +187,28 @@ export class TabBar implements Component {
       const windowControls = this.createWindowControls();
       this.container.appendChild(windowControls);
     }
+  }
+
+  /**
+   * Show or hide the marker for a newer interface waiting to be loaded.
+   * Loading it redraws every terminal, so it waits for a click.
+   */
+  setUpdateReady(ready: boolean): void {
+    if (this.updateReady === ready) return;
+    this.updateReady = ready;
+    this.render(this.tabs, this.activeTabId, this.groups);
+  }
+
+  private createUpdateMarker(): HTMLElement {
+    const marker = document.createElement("button");
+    marker.className = "tab-update-marker";
+    marker.textContent = "update ready";
+    marker.title = "A new version of CADE is installed. Click to reload; your tabs reopen.";
+    marker.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.emit("update-reload", undefined);
+    });
+    return marker;
   }
 
   private isDragging(): boolean {

@@ -402,6 +402,8 @@ export interface ConnectedMessage extends BaseMessage {
   group?: string | null;
   /** Identity of the backend build; a change between connects means an in-place upgrade. */
   buildVersion?: string;
+  /** Identity of the interface the backend serves; absent from a backend that predates it. */
+  frontendVersion?: string;
   cliAgent?: CliAgentInfo;
   mcpStatus?: Array<{
     name: string;

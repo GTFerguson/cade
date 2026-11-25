@@ -32,6 +32,7 @@ Sequence (``UpgradeCoordinator.request`` to ``perform_handoff``):
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -96,6 +97,29 @@ def build_id() -> str:
 
 
 _PROCESS_START = time.time()
+
+
+def frontend_dist() -> Path:
+    """Where the built interface this backend serves lives."""
+    bundle = getattr(sys, "_MEIPASS", None)
+    if getattr(sys, "frozen", False) and bundle:
+        return Path(bundle) / "frontend" / "dist"
+    return Path(__file__).parent.parent / "frontend" / "dist"
+
+
+def frontend_id(dist: Path | None = None) -> str | None:
+    """Identity of the interface this backend serves, or None without one.
+
+    An upgrade that changes only the backend leaves this alone, which is how
+    a tab knows its page is still current and need not be replaced. The
+    entry page names its scripts and styles by content hash, so hashing the
+    page covers them all.
+    """
+    try:
+        page = ((dist or frontend_dist()) / "index.html").read_bytes()
+    except OSError:
+        return None
+    return hashlib.sha256(page).hexdigest()[:16]
 
 
 def current_executable() -> str:

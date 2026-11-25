@@ -31,7 +31,7 @@ from backend.terminal.sessions import OutputSubscriber
 from backend.connection_registry import get_connection_registry
 from backend.errors import CADEError, ProtocolError
 from backend.files.operations import create_file, write_file_content
-from backend.upgrade import build_id
+from backend.upgrade import build_id, frontend_id
 from backend.files.tree import (
     build_directory_children,
     build_file_tree_cached,
@@ -822,12 +822,17 @@ class ConnectionHandler:
             },
         }
 
-        # A tab reloads its page when this changes between connects, to pick
-        # up the frontend of the build the backend upgraded itself to. Only a
-        # client that asked gets it: one whose page the backend does not
-        # serve would gain nothing from reloading.
+        # A change in these between connects tells a tab the backend
+        # upgraded itself and may now serve a newer page than the tab runs.
+        # Only a client that asked gets them: one whose page the backend
+        # does not serve would gain nothing from reloading.
         if self._reload_on_upgrade:
             message["buildVersion"] = build_id()
+            # Lets the page tell an upgrade that replaced its own code from
+            # one that only changed the backend, which it can ignore.
+            frontend = frontend_id()
+            if frontend:
+                message["frontendVersion"] = frontend
 
         # Frontend-visible subset of the project-local launch preset.
         # (The provider block was consumed in _setup and registered on the

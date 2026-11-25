@@ -413,7 +413,8 @@ export class WebSocketClient extends BaseWSClient {
 
     if (typed.type === MessageType.CONNECTED) {
       this.livenessArmed = true;
-      WebSocketClient.noteBuild((message as ConnectedMessage).buildVersion);
+      const connected = message as ConnectedMessage;
+      WebSocketClient.noteBuild(connected.buildVersion, connected.frontendVersion);
       this.fireBridged("connected", message as ConnectedMessage);
       return true;
     }
@@ -543,16 +544,40 @@ export class WebSocketClient extends BaseWSClient {
     return !isTauri() || (window as any).__LIVE_FRONTEND__ === true;
   }
 
-  // The build this page's JS belongs to, learned from the first connected
-  // message of any tab. One page serves every tab, so this is static: when
-  // a later connect (any tab) reports a different build the backend has
-  // upgraded itself in place, and the page reloads once to pick up the new
-  // frontend. Sessions survive the upgrade, so tabs re-attach as usual.
+  // The interface build this page's JS belongs to, learned from the first
+  // connected message of any tab. One page serves every tab, so this is
+  // static. A later connect (any tab) reporting a different one means the
+  // backend upgraded itself in place and now serves a newer interface.
   private static knownBuild: string | null = null;
+  private static updateReady = false;
+  private static updateReadyListeners = new Set<() => void>();
+
+  /**
+   * A newer interface is being served than the one this page runs. The page
+   * is not replaced there and then: a reload redraws every terminal, and the
+   * old interface keeps working against the upgraded backend, so the user
+   * picks the moment (reloadForUpdate) or gets it at the next start.
+   */
   static onBuildChanged: (from: string, to: string) => void = () => {
+    WebSocketClient.updateReady = true;
+    for (const listener of WebSocketClient.updateReadyListeners) listener();
+  };
+
+  static isUpdateReady(): boolean {
+    return WebSocketClient.updateReady;
+  }
+
+  /** Called when a newer interface becomes available. Returns an unsubscribe. */
+  static onUpdateReady(listener: () => void): () => void {
+    WebSocketClient.updateReadyListeners.add(listener);
+    return () => WebSocketClient.updateReadyListeners.delete(listener);
+  }
+
+  /** Load the newer interface, reopening the tabs without the start screen. */
+  static reloadForUpdate(): void {
     WebSocketClient.markResumeAfterUpgrade();
     window.location.reload();
-  };
+  }
 
   private static readonly RESUME_AFTER_UPGRADE_KEY = "cade-resume-after-upgrade";
 
@@ -579,7 +604,13 @@ export class WebSocketClient extends BaseWSClient {
     }
   }
 
-  private static noteBuild(build: string | undefined): void {
+  /**
+   * The interface's own identity decides whether the page is stale; an
+   * upgrade that only changed the backend leaves it alone. A backend too old
+   * to report one is judged by its build id, as before.
+   */
+  private static noteBuild(backend: string | undefined, frontend: string | undefined): void {
+    const build = frontend ?? backend;
     if (!build) return;
     if (WebSocketClient.knownBuild === null) {
       WebSocketClient.knownBuild = build;
@@ -595,6 +626,7 @@ export class WebSocketClient extends BaseWSClient {
   /** Test hook: forget the build this page was first connected to. */
   static resetKnownBuild(): void {
     WebSocketClient.knownBuild = null;
+    WebSocketClient.updateReady = false;
   }
 
   private static readonly TREE_STORM_THRESHOLD = 20;

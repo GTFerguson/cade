@@ -101,6 +101,19 @@ def test_build_id_is_stable_within_a_process():
     assert upgrade.build_id() == upgrade.build_id()
 
 
+def test_frontend_id_follows_the_entry_page(tmp_path):
+    (tmp_path / "index.html").write_text('<script src="/assets/main-aaa.js">')
+    first = upgrade.frontend_id(tmp_path)
+    assert first and first == upgrade.frontend_id(tmp_path)
+
+    (tmp_path / "index.html").write_text('<script src="/assets/main-bbb.js">')
+    assert upgrade.frontend_id(tmp_path) != first
+
+
+def test_frontend_id_is_absent_without_a_built_interface(tmp_path):
+    assert upgrade.frontend_id(tmp_path) is None
+
+
 # ---------------------------------------------------------------------------
 # Listener
 # ---------------------------------------------------------------------------

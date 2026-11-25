@@ -342,6 +342,12 @@ class App {
       this.handleAddRemoteTab();
     });
 
+    // An upgrade that brings a new interface is offered, not applied: the
+    // reload it needs redraws every terminal.
+    this.tabBar.on("update-reload", () => WebSocketClient.reloadForUpdate());
+    this.tabBar.setUpdateReady(WebSocketClient.isUpdateReady());
+    WebSocketClient.onUpdateReady(() => this.tabBar?.setUpdateReady(true));
+
     this.tabManager.on("tab-created", (tab) => {
       this.initializeTabContext(tab);
       this.initMobileUIIfNeeded();

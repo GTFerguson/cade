@@ -171,6 +171,26 @@ class TestWebSocketConnection:
             })
             assert self._connected(ws)["buildVersion"]
 
+    def test_frontend_id_accompanies_the_build_id(
+        self, client: TestClient, temp_dir: Path, monkeypatch
+    ):
+        """The page needs both: the build id says the backend changed, the
+        frontend id says whether its own code did."""
+        from backend import websocket as ws_mod
+
+        monkeypatch.setattr(ws_mod, "frontend_id", lambda: "f00d")
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": MessageType.SET_PROJECT, "path": str(temp_dir)})
+            assert "frontendVersion" not in self._connected(ws)
+
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({
+                "type": MessageType.SET_PROJECT,
+                "path": str(temp_dir),
+                "reloadOnUpgrade": True,
+            })
+            assert self._connected(ws)["frontendVersion"] == "f00d"
+
     def test_build_id_withheld_when_no_handshake_arrives(self, client: TestClient):
         with client.websocket_connect("/ws") as ws:
             assert "buildVersion" not in self._connected(ws)

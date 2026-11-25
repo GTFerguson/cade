@@ -33,6 +33,32 @@ beforeEach(() => {
   bar.render(TABS, "a");
 });
 
+describe("update marker", () => {
+  const marker = () => container.querySelector<HTMLElement>(".tab-update-marker");
+
+  it("is absent until a newer interface is waiting", () => {
+    expect(marker()).toBeNull();
+    bar.setUpdateReady(true);
+    expect(marker()).not.toBeNull();
+  });
+
+  it("survives a re-render and keeps the active tab", () => {
+    bar.setUpdateReady(true);
+    expect(tabEl("a").classList.contains("active")).toBe(true);
+    bar.render(TABS, "b");
+    expect(marker()).not.toBeNull();
+  });
+
+  it("asks for the reload only when clicked", () => {
+    const reload = vi.fn();
+    bar.on("update-reload", reload);
+    bar.setUpdateReady(true);
+    expect(reload).not.toHaveBeenCalled();
+    marker()!.click();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("agent status", () => {
   it("shows no activity until a state is reported", () => {
     expect(tabEl("a").dataset["status"]).toBe("none");

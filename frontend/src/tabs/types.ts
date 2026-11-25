@@ -126,6 +126,8 @@ export interface TabBarEvents {
   "tab-rename": { tabId: string; name: string };
   "tab-add": void;
   "tab-add-remote": void;
+  /** Load the newer interface the backend now serves. */
+  "update-reload": void;
   /** Move a tab to a group, or out of its group with null. */
   "tab-set-group": { tabId: string; group: string | null };
   /** Start a new group holding this tab. */

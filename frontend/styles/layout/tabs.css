@@ -176,6 +176,34 @@
   color: var(--text-primary);
 }
 
+/* A newer interface is installed and waiting. Pushed to the far end of the
+   bar and on the tabs' text line, like the plus. */
+.tab-update-marker {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  padding: 8px 10px;
+  border: none;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: var(--accent-green);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  pointer-events: auto;
+}
+
+.tab-update-marker::before {
+  content: "\2191";
+  margin-right: 6px;
+}
+
+.tab-update-marker:hover {
+  text-decoration: underline;
+}
+
 /* Drag-to-reorder: the dragged tab rides above the siblings sliding under it.
    The outline is inset: WebKitGTK leaves trails of anything painted outside a
    transformed element's box, and a layer per tab lets it move them without

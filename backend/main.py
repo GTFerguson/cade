@@ -83,11 +83,7 @@ logger = logging.getLogger(__name__)
 BACKEND_DIR = Path(__file__).parent
 PROJECT_ROOT = BACKEND_DIR.parent
 
-# Check if running as PyInstaller bundle
-if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-    FRONTEND_DIST = Path(sys._MEIPASS) / "frontend" / "dist"
-else:
-    FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
+FRONTEND_DIST = upgrade_mod.frontend_dist()
 
 # When launched by the Tauri desktop app, CADE_RESOURCE_DIR points to the
 # directory where Tauri placed bundled assets (ms-playwright, usage-rule.md).

@@ -173,11 +173,60 @@ describe("upgrade reload opt-in", () => {
 });
 
 describe("build identity", () => {
+  const announceUpdate = WebSocketClient.onBuildChanged;
+
   beforeEach(() => {
     WebSocketClient.resetKnownBuild();
+    WebSocketClient.onBuildChanged = announceUpdate;
   });
 
-  it("reloads the page once when a reconnect reports a different backend build", () => {
+  const connectWith = (versions: { buildVersion?: string; frontendVersion?: string }) => {
+    const { socket } = connectedClient();
+    socket.simulateMessage({ type: MessageType.CONNECTED, workingDir: "/proj", ...versions });
+  };
+
+  it("leaves the page alone when an upgrade changed only the backend", () => {
+    const changes: string[] = [];
+    WebSocketClient.onBuildChanged = (_from, to) => changes.push(to);
+    connectWith({ buildVersion: "aaa", frontendVersion: "ui-1" });
+    connectWith({ buildVersion: "bbb", frontendVersion: "ui-1" });
+    expect(changes).toEqual([]);
+  });
+
+  it("notices a new interface even when the backend build id is unchanged", () => {
+    const changes: string[] = [];
+    WebSocketClient.onBuildChanged = (_from, to) => changes.push(to);
+    connectWith({ buildVersion: "aaa", frontendVersion: "ui-1" });
+    connectWith({ buildVersion: "aaa", frontendVersion: "ui-2" });
+    expect(changes).toEqual(["ui-2"]);
+  });
+
+  it("announces a new interface instead of reloading the page", () => {
+    const reload = vi.fn();
+    const location = Object.getOwnPropertyDescriptor(window, "location")!;
+    Object.defineProperty(window, "location", { configurable: true, value: { ...window.location, reload } });
+    try {
+      let announced = 0;
+      const stop = WebSocketClient.onUpdateReady(() => announced++);
+      connectWith({ buildVersion: "aaa", frontendVersion: "ui-1" });
+      expect(WebSocketClient.isUpdateReady()).toBe(false);
+
+      connectWith({ buildVersion: "bbb", frontendVersion: "ui-2" });
+      expect(WebSocketClient.isUpdateReady()).toBe(true);
+      expect(announced).toBe(1);
+      expect(reload).not.toHaveBeenCalled();
+
+      // The reload the user asks for reopens their tabs without the start screen.
+      WebSocketClient.reloadForUpdate();
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(WebSocketClient.takeResumeAfterUpgrade()).toBe(true);
+      stop();
+    } finally {
+      Object.defineProperty(window, "location", location);
+    }
+  });
+
+  it("judges a backend that reports no interface identity by its build id", () => {
     const changes: Array<[string, string]> = [];
     WebSocketClient.onBuildChanged = (from, to) => changes.push([from, to]);
 
