@@ -127,15 +127,56 @@ should the top level answer first: "what needs me", "what is running", or
 
 ## 5. Mobile experience
 
-**What it adds.** The phone follows the desktop model: workspaces in the
-session strip, pull request state, the same picker.
+**The problem.** The phone shows a desktop terminal on a small screen: dense,
+hard to read, and awkward to type into. With several projects running, most of
+the time on the phone is spent finding the session that is blocked and
+answering it.
 
-**Integration points.** The remaining items in [[remote-access-overhaul]]
-(measurement on a device, chat parity, QR sign-in) stay in that plan; this
-phase covers what phases 1–4 change for the phone.
+**What it adds.**
 
-**Open questions.** What is wrong with the phone today in daily use? No
-specific complaints are recorded yet.
+- **Quick-draw mode.** A queue of the sessions that are blocked, permission
+  prompts first, then agents waiting on a question, then finished turns. The
+  screen shows one at a time: the tab name and workspace across the top, what
+  the agent is asking, and the answer controls. Answering moves straight to
+  the next one. Empty queue, empty screen.
+- **One-tap permission answers.** A permission prompt becomes a card naming
+  the tool and what it wants to do, with large buttons for the prompt's own
+  choices (allow, allow always, deny). A button sends the same keystroke the
+  terminal would take, so nothing new has to be trusted.
+- **A reading view in place of the terminal.** The agent's last message and
+  recent tool calls as wrapped text and collapsed blocks, built from the
+  agent's own session transcript rather than from terminal output. The raw
+  terminal stays one tap away for anything the reading view does not cover.
+- The phone follows the desktop model for the rest: workspaces in the session
+  strip, pull request state, the same picker.
+
+**Key challenges.**
+
+- The permission card needs the tool name and its input. Claude Code can
+  supply both through a hook; Codex only retitles its terminal, so its prompt
+  has to be read from the screen, which is fragile.
+- The answer keys differ by agent and by prompt (two choices or three), so the
+  buttons must come from the prompt actually shown, never a fixed layout: a
+  wrong key on an approval is the one mistake this mode must not make.
+- The reading view depends on each agent's transcript format, which neither
+  agent promises to keep stable.
+- An answer given on the phone must clear the prompt on the desktop tab too,
+  and the reverse, without a stale card inviting a second answer.
+
+**Integration points.** Attention state and push
+(`backend/terminal/attention.py`), agent hooks (`backend/hooks/`), the session
+strip and composer (`frontend/src/ui/mobile/`), transcript lookup
+(`backend/cc_session_resolver.py`). The remaining items in
+[[remote-access-overhaul]] (measurement on a device, chat parity, QR sign-in)
+stay in that plan.
+
+**Open questions.**
+
+- Is the reading view the default on the phone, with the terminal as the
+  fallback, or the other way round until it has proved itself?
+- Should finished turns sit in the queue at all, or only sessions that are
+  truly blocked?
+- Does quick-draw belong on desktop too, as a "next blocked tab" key?
 
 ## 6. Cleanup and modernisation
 
