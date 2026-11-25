@@ -347,6 +347,14 @@
   background: var(--bg-hover);
 }
 
+/* The open workspace is outlined as one shape with its tabs: the colour runs
+   up the chip's left side, over its top and down its right, then along the
+   bottom of the tabs. Under the chip itself the bar's own line is kept. */
+.tab-group-chip[data-collapsed="false"] {
+  border-right-color: var(--group-colour);
+  box-shadow: inset 1px 0 0 var(--group-colour), inset 0 1px 0 var(--group-colour);
+}
+
 /* A closed workspace is one of several to choose from; the open one is the
    heading of the tabs beside it. */
 .tab-group-chip[data-collapsed="true"] .tab-group-name {
