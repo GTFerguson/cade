@@ -22,6 +22,9 @@ export interface OverflowTab {
   /** Output arrived while another tab was active. */
   unread?: boolean;
   attention?: "input" | "idle" | "working" | null;
+  /** Tab group the tab is in, and the CSS colour the group is drawn in. */
+  group?: string;
+  groupColour?: string;
 }
 
 export interface CommandMenuCallbacks {

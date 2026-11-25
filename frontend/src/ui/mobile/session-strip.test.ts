@@ -32,6 +32,24 @@ describe("SessionStrip", () => {
     expect(dots[2]!.classList.contains("unread")).toBe(true);
   });
 
+  it("shows the active session's tab group in the group's colour", () => {
+    const strip = new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn() });
+    const list = tabs("b").map((t) =>
+      t.id === "b" ? { ...t, group: "Work", groupColour: "var(--accent-purple)" } : t,
+    );
+    strip.render(list);
+    const group = strip.element.querySelector<HTMLElement>(".session-strip-group")!;
+    expect(group.textContent).toBe("Work");
+    expect(group.style.color).toBe("var(--accent-purple)");
+    expect(strip.element.querySelector(".session-strip-name")!.textContent).toBe("Work b");
+  });
+
+  it("shows no group for an ungrouped session", () => {
+    const strip = new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn() });
+    strip.render(tabs("a"));
+    expect(strip.element.querySelector(".session-strip-group")).toBeNull();
+  });
+
   it("switches on arrow taps and opens the menu from the name", () => {
     const onSwitchRelative = vi.fn();
     const onOpenMenu = vi.fn();

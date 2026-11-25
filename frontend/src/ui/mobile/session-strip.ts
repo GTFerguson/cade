@@ -14,6 +14,9 @@ export interface StripTab {
   unread: boolean;
   /** Set by attention hooks: the agent is waiting for input, or finished a turn. */
   attention?: "input" | "idle" | "working" | null;
+  /** Tab group the tab is in, and the CSS colour the group is drawn in. */
+  group?: string;
+  groupColour?: string;
 }
 
 export interface SessionStripCallbacks {
@@ -99,6 +102,9 @@ export class SessionStrip {
     const active = tabs.find((t) => t.isActive);
     const name = active?.name ?? "no session";
     this.nameEl.innerHTML =
+      (active?.group
+        ? `<span class="session-strip-group" style="color: ${escapeHtml(active.groupColour ?? "inherit")}">${escapeHtml(active.group)}</span> `
+        : "") +
       escapeHtml(name) +
       (agentLabel ? `<span class="session-strip-agent"> · ${escapeHtml(agentLabel)}</span>` : "");
 

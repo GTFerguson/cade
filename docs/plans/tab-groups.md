@@ -96,14 +96,14 @@ saved tabs.
    `tab-manager.ts`).
 3. ~~Tab bar: chips, colour line, collapse, roll-up, menus.~~ Shipped
    (`tab-bar.ts`, `tab-menu.ts`, `styles/layout/tabs.css`).
-4. Phone: group name in the session strip. Not started; grouped dots wait for
-   phase 5 of the roadmap.
+4. ~~Phone: group name in the session strip.~~ Shipped
+   (`frontend/src/ui/mobile/session-strip.ts`). Grouped dots wait for phase 5
+   of the roadmap.
 
 Still to do before this plan can be deleted:
 
 - Use it in the installed app for a few days. Only rendered in a headless
   browser so far, never against a live backend.
-- Step 4.
 - Move the design section into `docs/technical/` (needs approval).
 
 ## Open questions

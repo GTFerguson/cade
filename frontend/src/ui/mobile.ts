@@ -177,6 +177,8 @@ export class MobileUI implements Component {
       isActive: t.isActive,
       unread: t.unread ?? false,
       attention: t.attention ?? null,
+      ...(t.group && { group: t.group }),
+      ...(t.groupColour && { groupColour: t.groupColour }),
     }));
     this.strip.render(tabs, this.agentLabel);
   }

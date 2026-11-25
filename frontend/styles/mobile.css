@@ -307,6 +307,10 @@
   color: var(--text-muted);
 }
 
+.session-strip-group {
+  font-weight: 700;
+}
+
 .session-strip-dots {
   display: inline-flex;
   gap: 5px;

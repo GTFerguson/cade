@@ -31,6 +31,7 @@ import type { AttentionState, LiveSessionInfo } from "./types";
 import { WebSocketClient } from "./platform/websocket";
 import { sessionsToAdopt } from "./tabs/tab-manager";
 import {
+  groupColourVar,
   newGroupName,
   withAutoAdd,
   withGroupDef,
@@ -1142,6 +1143,8 @@ class App {
       collapsed: this.tabManager.getCollapsedGroups(),
       defs: this.groupDefs,
     });
+    // The phone's session strip draws the group in its colour too.
+    this.mobileUI?.refresh();
   }
 
   /** Keep the new group definitions, redraw, and store them on the backend. */
@@ -1362,6 +1365,10 @@ class App {
           isActive: t.id === activeId,
           unread: this.unreadTabs.has(t.id),
           attention: this.attentionByTab.get(t.id) ?? null,
+          ...(t.group && {
+            group: t.group,
+            groupColour: groupColourVar(this.groupDefs.find((d) => d.name === t.group)?.colour),
+          }),
         }));
       },
       onSwitchTab: (id) => {

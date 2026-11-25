@@ -40,8 +40,7 @@ what is waiting.
 In progress: see [[tab-groups]]. Built as Chrome-style tab groups rather than a
 one-workspace-at-a-time switcher: a group is a name and a colour stored on the
 backend session, its tabs sit behind a collapsible chip, and a collapsed chip
-shows what its tabs need. Backend, tab state and tab bar are built; the phone's
-session strip is not.
+shows what its tabs need. Built, not yet used in the installed app.
 
 ## 2. One project picker
 
