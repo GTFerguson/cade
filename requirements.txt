@@ -7,6 +7,16 @@ watchfiles>=0.21.0
 # TOML parsing (Python 3.10 and earlier - tomllib built-in from 3.11)
 tomli>=2.0.0;python_version<"3.11"
 
+# Config and data files (launch presets, memory entries, ~/.cade/.env)
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# Neovim pane
+pynvim>=0.5.0
+
+# Push notifications to the phone
+pywebpush>=2.0.0
+
 # LLM providers
 litellm>=1.40.0
 langchain-core>=0.2.0
