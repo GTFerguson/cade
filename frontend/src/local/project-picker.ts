@@ -28,6 +28,7 @@ import {
   parentPath,
   parseQuery,
   projectSections,
+  sessionTask,
   type AgentInfo,
   type BrowseDir,
   type HandoffInfo,
@@ -40,6 +41,8 @@ import {
 /** Listed when the backend cannot say where the projects are. */
 const FALLBACK_BROWSE_PATH = "~/projects";
 const AGENT_STORAGE_KEY = "cade-picker-agent";
+/** Rows kept in view beyond the selected one while moving through the list. */
+const SCROLL_LOOKAHEAD_ROWS = 2;
 
 export type PickerResult =
   /**
@@ -165,6 +168,7 @@ export class ProjectPicker {
   // Where the list was left when a project was opened, to come back to.
   private browseSelection = 0;
   private selectListing = false;
+  private allSessions = false;
   private group: string | null = null;
   private agent: string | null = null;
 
@@ -307,6 +311,8 @@ export class ProjectPicker {
             openTabs: this.options.openTabs,
             recents: this.options.recents,
             sessions: this.sessions,
+            // Typing searches every session, not only the few on show.
+            allSessions: this.allSessions || this.filtering,
             projects: this.browsePath === this.projectsRoot ? this.projects : null,
             dirs: this.dirs,
             browsePath: this.browsePath,
@@ -346,6 +352,8 @@ export class ProjectPicker {
     this.headerEl.textContent =
       this.screen.kind === "project" ? `[ ${folderName(this.screen.path).toUpperCase()} ]` : "[ OPEN PROJECT ]";
 
+    // Rebuilding the list resets its scroll position; keep it.
+    const scrollTop = this.listEl.scrollTop;
     this.listEl.replaceChildren();
     let index = 0;
     for (const section of sections) {
@@ -357,10 +365,31 @@ export class ProjectPicker {
     }
     if (this.loading) this.listEl.appendChild(el("div", "picker-empty", "loading…"));
     else if (this.entries.length === 0) this.listEl.appendChild(el("div", "picker-empty", "nothing matches"));
-    this.listEl.querySelector<HTMLElement>(".picker-option.selected")?.scrollIntoView?.({ block: "nearest" });
+    this.listEl.scrollTop = scrollTop;
+    this.keepSelectedInView();
 
     this.renderSettings();
     this.renderHelp();
+  }
+
+  /**
+   * Scroll so the selected row has rows visible on both sides of it. Without
+   * the margin the list only moves when the selection hits its edge, and the
+   * next row is never in sight.
+   */
+  private keepSelectedInView(): void {
+    const list = this.listEl;
+    const selected = list.querySelector<HTMLElement>(".picker-option.selected");
+    if (!selected) return;
+    const listRect = list.getBoundingClientRect();
+    const rowRect = selected.getBoundingClientRect();
+    const margin = rowRect.height * SCROLL_LOOKAHEAD_ROWS;
+    const top = rowRect.top - listRect.top + list.scrollTop;
+    const bottom = top + rowRect.height;
+    if (top - margin < list.scrollTop) list.scrollTop = Math.max(0, top - margin);
+    else if (bottom + margin > list.scrollTop + list.clientHeight) {
+      list.scrollTop = bottom + margin - list.clientHeight;
+    }
   }
 
   private canSwitchAgent(): boolean {
@@ -375,7 +404,12 @@ export class ProjectPicker {
         this.settingRow(
           "agent",
           "a",
-          usable.map((a) => ({ label: a.name, selected: a.id === this.agent, pick: () => this.setAgent(a.id) })),
+          usable.map((a) => ({
+            // Lowercase like every other option; a tab group keeps the name it was given.
+            label: a.name.toLowerCase(),
+            selected: a.id === this.agent,
+            pick: () => this.setAgent(a.id),
+          })),
         ),
       );
     }
@@ -401,8 +435,8 @@ export class ProjectPicker {
   }
 
   /**
-   * One choice the new tab is opened with: every option on show with the
-   * current one marked, and the key that steps through them.
+   * One choice the new tab is opened with, as the segmented toggle used for
+   * mode choices elsewhere: every option on show, the current one filled.
    */
   private settingRow(
     name: string,
@@ -411,16 +445,22 @@ export class ProjectPicker {
   ): HTMLElement {
     const row = el("div", "picker-setting");
     row.dataset["setting"] = name;
-    row.appendChild(el("span", "picker-setting-label", name === "group" ? "tab group" : name));
-    for (const choice of choices) {
-      const option = el("button", "picker-choice", choice.label);
-      option.type = "button";
-      option.tabIndex = -1;
-      option.classList.toggle("selected", choice.selected);
-      option.addEventListener("click", choice.pick);
-      row.appendChild(option);
+    const toggle = el("div", "big-toggle picker-toggle");
+    choices.forEach((choice, i) => {
+      if (i > 0) toggle.appendChild(el("div", "big-toggle-divider"));
+      const half = el("div", "big-toggle-half picker-choice", choice.label);
+      half.classList.toggle("active", choice.selected);
+      half.classList.toggle("selected", choice.selected);
+      half.addEventListener("click", choice.pick);
+      toggle.appendChild(half);
+    });
+    row.appendChild(toggle);
+    const caption = el("div", "picker-setting-caption", name === "group" ? "tab group" : name);
+    if (choices.length > 1) {
+      caption.append(" ");
+      caption.appendChild(el("span", "picker-help-key", key));
     }
-    if (choices.length > 1) row.appendChild(el("span", "picker-setting-key", key));
+    row.appendChild(caption);
     return row;
   }
 
@@ -429,54 +469,63 @@ export class ProjectPicker {
     option.classList.toggle("selected", index === this.selected);
     option.dataset["kind"] = entry.kind;
 
+    // Three columns: what it is, what is known about it, and (right-aligned)
+    // when it was last touched or what state it is in.
     let label = "";
-    let meta = "";
+    let detail = "";
+    let aside = "";
     switch (entry.kind) {
       case "open":
         label = `[${entry.name}]`;
-        meta = entry.isActive ? `${entry.path} · this tab` : entry.path;
+        detail = entry.path;
+        aside = entry.isActive ? "this tab" : "";
         break;
       case "recent":
         label = `[${entry.name}]`;
-        meta = entry.path;
+        detail = entry.path;
         break;
       case "project": {
         const p = entry.project;
         label = `[${p.name}]`;
         const handoffs = p.handoffs === 0 ? "" : p.handoffs === 1 ? "1 handoff" : `${p.handoffs} handoffs`;
-        meta = [ago(p.modified, this.now()), handoffs, entry.open ? "open" : ""].filter(Boolean).join(" · ");
+        detail = [handoffs, entry.open ? "open" : ""].filter(Boolean).join(" · ");
+        aside = ago(p.modified, this.now());
         break;
       }
       case "session": {
         const s = entry.session;
-        label = `[${s.label?.trim() || folderName(s.projectPath)}]`;
-        const state = s.attention === "input" ? " · needs you" : s.attention === "idle" ? " · done" : "";
-        meta = `attach · ${s.agent}${state}`;
+        label = `[${folderName(s.projectPath)}]`;
+        detail = sessionTask(s) || "unnamed session";
+        aside = s.attention === "input" ? "needs you" : s.attention === "idle" ? "done" : s.attention === "working" ? "working" : "";
+        if (s.attention) option.dataset["state"] = s.attention;
         break;
       }
+      case "more":
+        label = `[+ ${entry.count} more]`;
+        break;
       case "dir":
         label = `[${entry.name}/]`;
         break;
       case "here":
         label = "[use this folder]";
-        meta = entry.path;
+        detail = entry.path;
         break;
       case "system":
         label = "[open system explorer…]";
         break;
       case "new":
-        label = "[new session]";
+        label = "[+ new session]";
         break;
       case "handoff":
         label = `[${entry.handoff.title}]`;
-        meta = [entry.handoff.name.replace(/\.md$/, ""), ago(entry.handoff.modified, this.now())]
-          .filter(Boolean)
-          .join(" · ");
+        detail = entry.handoff.name.replace(/\.md$/, "");
+        aside = ago(entry.handoff.modified, this.now());
         break;
     }
 
     option.appendChild(el("span", "picker-option-label", label));
-    if (meta) option.appendChild(el("span", "picker-option-meta", meta));
+    option.appendChild(el("span", "picker-option-meta", detail));
+    option.appendChild(el("span", "picker-option-aside", aside));
     option.addEventListener("click", () => {
       this.selected = index;
       // A click on a plain folder goes into it, as in any file browser;
@@ -642,6 +691,9 @@ export class ProjectPicker {
     switch (entry.kind) {
       case "session":
         return this.finish({ kind: "attach", session: entry.session });
+      case "more":
+        this.allSessions = true;
+        return this.render();
       case "system":
         return this.finish({ kind: "system", group: this.group, agent: this.agent });
       case "project":

@@ -46,8 +46,13 @@ export interface OpenTab {
 }
 
 export const RECENTS_LIMIT = 15;
-/** Recent projects shown when nothing is typed; the rest are reachable by filtering. */
-export const RECENTS_SHOWN = 6;
+/**
+ * How many recent projects, and how many sessions without a tab, are shown
+ * before anything is typed. Both are shortcuts above the full project list,
+ * so they stay short enough that the list is still on screen below them.
+ */
+export const RECENTS_SHOWN = 4;
+export const SESSIONS_SHOWN = 4;
 
 /** The list with a project moved to the front, without repeats, capped. */
 export function withRecent(recents: string[], path: string, limit = RECENTS_LIMIT): string[] {
@@ -61,6 +66,8 @@ export type PickerEntry =
   | { kind: "recent"; name: string; path: string }
   /** A session running on the backend with no tab here: attaches to it. */
   | { kind: "session"; session: LiveSessionInfo }
+  /** The sessions left out of a shortened list; choosing it shows them all. */
+  | { kind: "more"; count: number }
   /** A project under the main working folder. */
   | { kind: "project"; project: ProjectInfo; open: boolean }
   /** A plain folder, when browsing away from the projects folder. */
@@ -83,6 +90,8 @@ export interface BrowseInput {
   openTabs: OpenTab[];
   recents: string[];
   sessions: LiveSessionInfo[];
+  /** Show every session without a tab, not only the first few. */
+  allSessions?: boolean;
   /** Projects, when the folder being browsed is the main working folder. */
   projects: ProjectInfo[] | null;
   dirs: BrowseDir[];
@@ -119,10 +128,13 @@ export function browseSections(
   if (open.length > 0) sections.push({ title: "open", entries: open });
 
   if (input.sessions.length > 0) {
-    sections.push({
-      title: "running, no tab here",
-      entries: input.sessions.map((session) => ({ kind: "session", session })),
-    });
+    const ordered = sessionsByNeed(input.sessions);
+    const shown = input.allSessions ? ordered : ordered.slice(0, SESSIONS_SHOWN);
+    const entries: PickerEntry[] = shown.map((session) => ({ kind: "session", session }));
+    if (shown.length < ordered.length) {
+      entries.push({ kind: "more", count: ordered.length - shown.length });
+    }
+    sections.push({ title: "running without a tab", entries });
   }
 
   const recent: PickerEntry[] = input.recents
@@ -146,6 +158,35 @@ export function browseSections(
   sections.push({ title: input.browsePath, entries: listing });
 
   return sections;
+}
+
+const ATTENTION_RANK: Record<string, number> = { input: 0, idle: 1, working: 2 };
+
+/**
+ * Sessions with the ones waiting on the user first, then finished, then
+ * working, then the rest. Order within each is kept (most recent first).
+ */
+export function sessionsByNeed(sessions: LiveSessionInfo[]): LiveSessionInfo[] {
+  const rank = (s: LiveSessionInfo) => ATTENTION_RANK[s.attention ?? ""] ?? 3;
+  return sessions
+    .map((session, order) => ({ session, order }))
+    .sort((a, b) => rank(a.session) - rank(b.session) || a.order - b.order)
+    .map((x) => x.session);
+}
+
+/**
+ * What a session is about, without the parts shown elsewhere on its row. An
+ * agent titles its terminal "Action Required | <task> | <project>"; the
+ * project has its own column and the state its own mark, so only the task is
+ * left. Empty for a session nobody has named.
+ */
+export function sessionTask(session: Pick<LiveSessionInfo, "label" | "projectPath">): string {
+  const project = folderName(session.projectPath).toLowerCase();
+  return (session.label ?? "")
+    .split("|")
+    .map((part) => part.trim())
+    .filter((part) => part && part.toLowerCase() !== project && part.toLowerCase() !== "action required")
+    .join(" | ");
 }
 
 /** The second screen: one project. */
@@ -174,6 +215,7 @@ export function entryPath(entry: PickerEntry): string | null {
       return entry.path;
     case "session":
     case "system":
+    case "more":
       return null;
   }
 }
@@ -189,12 +231,13 @@ export function entryText(entry: PickerEntry): string {
     case "dir":
       return entry.name;
     case "session":
-      return `${entry.session.label ?? ""} ${entry.session.projectPath}`;
+      return `${folderName(entry.session.projectPath)} ${sessionTask(entry.session)}`;
     case "handoff":
       return `${entry.handoff.title} ${entry.handoff.name}`;
     case "here":
     case "system":
     case "new":
+    case "more":
       return "";
   }
 }

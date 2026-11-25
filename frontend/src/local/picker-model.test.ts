@@ -7,6 +7,7 @@ import type { LiveSessionInfo } from "../types";
 import {
   RECENTS_LIMIT,
   RECENTS_SHOWN,
+  SESSIONS_SHOWN,
   ago,
   browseSections,
   filterSections,
@@ -18,6 +19,8 @@ import {
   parentPath,
   parseQuery,
   projectSections,
+  sessionTask,
+  sessionsByNeed,
   withRecent,
   type AgentInfo,
   type BrowseInput,
@@ -67,6 +70,8 @@ const name = (e: PickerEntry): string => {
       return `recent:${e.name}`;
     case "handoff":
       return `handoff:${e.handoff.name}`;
+    case "more":
+      return `more:${e.count}`;
     default:
       return e.kind;
   }
@@ -131,10 +136,41 @@ describe("browseSections", () => {
     });
     expect(summary(browseSections(i))).toEqual([
       ["open", ["open:a!"]],
-      ["running, no tab here", ["session:s1"]],
+      ["running without a tab", ["session:s1"]],
       ["recent", ["recent:z"]],
       ["/home/me/projects", ["project:cade", "system"]],
     ]);
+  });
+});
+
+describe("sessions without a tab", () => {
+  const withState = (id: string, attention: string | null) =>
+    ({ ...session(id, "/p/x"), attention }) as LiveSessionInfo;
+
+  it("shows only the first few and says how many are left", () => {
+    const sessions = Array.from({ length: SESSIONS_SHOWN + 3 }, (_, n) => session(`s${n}`, "/p/x"));
+    const entries = browseSections(input({ sessions, projects: [] }))[0]!.entries.map(name);
+    expect(entries).toEqual(["session:s0", "session:s1", "session:s2", "session:s3", "more:3"]);
+  });
+
+  it("shows them all when asked", () => {
+    const sessions = Array.from({ length: SESSIONS_SHOWN + 3 }, (_, n) => session(`s${n}`, "/p/x"));
+    const entries = browseSections(input({ sessions, allSessions: true, projects: [] }))[0]!.entries;
+    expect(entries.length).toBe(sessions.length);
+  });
+
+  it("puts the ones waiting on the user first, then finished, then working", () => {
+    const sessions = [withState("plain", null), withState("busy", "working"), withState("done", "idle"), withState("ask", "input")];
+    expect(sessionsByNeed(sessions).map((s) => s.id)).toEqual(["ask", "done", "busy", "plain"]);
+  });
+
+  it("names a session by its task, without the project or the state the row already shows", () => {
+    const s = (label: string | null) => ({ label, projectPath: "/home/me/projects/airplai" });
+    expect(sessionTask(s("Action Required | Review model metrics | airplai"))).toBe("Review model metrics");
+    expect(sessionTask(s("Review model metrics | airplai"))).toBe("Review model metrics");
+    expect(sessionTask(s("release prep"))).toBe("release prep");
+    expect(sessionTask(s("airplai"))).toBe("");
+    expect(sessionTask(s(null))).toBe("");
   });
 });
 

@@ -64,7 +64,13 @@ const key = (k: string, init: KeyboardEventInit = {}) => {
   return e;
 };
 const labels = () => [...host.querySelectorAll(".picker-option-label")].map((n) => n.textContent);
-const metas = () => [...host.querySelectorAll(".picker-option")].map((n) => n.querySelector(".picker-option-meta")?.textContent ?? "");
+/** A row's detail and its right-hand column, joined the way they read across. */
+const metas = () =>
+  [...host.querySelectorAll(".picker-option")].map((n) =>
+    [n.querySelector(".picker-option-meta")?.textContent, n.querySelector(".picker-option-aside")?.textContent]
+      .filter(Boolean)
+      .join(" | "),
+  );
 const selected = () => host.querySelector(".picker-option.selected .picker-option-label")?.textContent;
 const setting = (name: string) =>
   host.querySelector(`.picker-setting[data-setting="${name}"] .picker-choice.selected`)?.textContent ?? null;
@@ -109,18 +115,19 @@ describe("the first screen", () => {
     });
     expect(labels()).toEqual(["[cade]", "[padarax]", "[old]", "[cade]", "[padarax]"]);
     expect(selected()).toBe("[cade]");
-    expect(metas()[0]).toBe(`${ROOT}/cade · this tab`);
+    expect(metas()[0]).toBe(`${ROOT}/cade | this tab`);
   });
 
   it("lists every project in the backend's order with when each was last worked on", async () => {
     await open({ openTabs: [{ path: `${ROOT}/padarax`, isActive: true }] });
     expect(labels().slice(1)).toEqual(["[cade]", "[padarax]"]);
-    expect(metas().slice(1)).toEqual(["2h ago · 2 handoffs", "3d ago · open"]);
+    expect(metas().slice(1)).toEqual(["2 handoffs | 2h ago", "open | 3d ago"]);
   });
 
   it("puts sessions to attach to above the projects and the system explorer last", async () => {
     await open({ loadSessions: async () => [session], native: true });
-    expect(labels()).toEqual(["[release prep]", "[cade]", "[padarax]", "[open system explorer…]"]);
+    expect(labels()).toEqual(["[api]", "[cade]", "[padarax]", "[open system explorer…]"]);
+    expect(metas()[0]).toBe("release prep");
   });
 
   it("attaches to a running session", async () => {
@@ -140,6 +147,41 @@ describe("the first screen", () => {
     await open({ api: makeApi({ projects: async () => null }) });
     expect(labels()).toEqual(["[cade/]", "[nkrdn/]", "[padarax/]", "[use this folder]"]);
     expect(setting("agent")).toBeNull();
+  });
+});
+
+describe("sessions without a tab", () => {
+  const many = Array.from({ length: 7 }, (_, n) => ({
+    ...session,
+    id: `s${n}`,
+    label: `Task ${n} | api`,
+  })) as LiveSessionInfo[];
+
+  it("shows a few, project first and the task after it, then how many more", async () => {
+    await open({ loadSessions: async () => many });
+    expect(labels().slice(0, 5)).toEqual(["[api]", "[api]", "[api]", "[api]", "[+ 3 more]"]);
+    expect(metas()[0]).toBe("Task 0");
+  });
+
+  it("shows the rest when asked", async () => {
+    await open({ loadSessions: async () => many });
+    for (let i = 0; i < 4; i++) key("j");
+    key("Enter");
+    expect(labels().filter((l) => l === "[api]").length).toBe(7);
+    expect(host.querySelector(".project-picker")).not.toBeNull();
+  });
+
+  it("searches every one of them when filtering", async () => {
+    await open({ loadSessions: async () => many });
+    key("/");
+    await type("Task 6");
+    expect(metas()).toEqual(["Task 6"]);
+  });
+
+  it("marks one that is waiting on the user", async () => {
+    await open({ loadSessions: async () => [{ ...session, attention: "input" } as LiveSessionInfo] });
+    expect(host.querySelector<HTMLElement>(".picker-option")!.dataset["state"]).toBe("input");
+    expect(metas()[0]).toBe("release prep | needs you");
   });
 });
 
@@ -208,9 +250,9 @@ describe("inside a project", () => {
     await open();
     key("Enter");
     await settle();
-    expect(labels()).toEqual(["[new session]", "[Organisation roadmap]", "[Remote access]"]);
-    expect(metas()).toEqual(["", "roadmap · 1h ago", "remote · 1d ago"]);
-    expect(selected()).toBe("[new session]");
+    expect(labels()).toEqual(["[+ new session]", "[Organisation roadmap]", "[Remote access]"]);
+    expect(metas()).toEqual(["", "roadmap | 1h ago", "remote | 1d ago"]);
+    expect(selected()).toBe("[+ new session]");
   });
 
   it("shows a project without handoffs the same way, so Enter never opens a tab by surprise", async () => {
@@ -218,7 +260,7 @@ describe("inside a project", () => {
     key("j");
     key("Enter");
     await settle();
-    expect(labels()).toEqual(["[new session]"]);
+    expect(labels()).toEqual(["[+ new session]"]);
     expect(host.querySelector(".project-picker")).not.toBeNull();
   });
 
@@ -276,10 +318,10 @@ describe("inside a project", () => {
 describe("agent and tab group", () => {
   it("starts on the backend's default agent and switches with a", async () => {
     await open();
-    expect(setting("agent")).toBe("Claude Code");
-    expect(choices("agent")).toEqual(["Claude Code", "Codex"]);
+    expect(setting("agent")).toBe("claude code");
+    expect(choices("agent")).toEqual(["claude code", "codex"]);
     key("a");
-    expect(setting("agent")).toBe("Codex");
+    expect(setting("agent")).toBe("codex");
     key("Enter");
     await settle();
     key("Enter");
@@ -289,7 +331,7 @@ describe("agent and tab group", () => {
   it("switches agent on a click of its name", async () => {
     await open();
     host.querySelectorAll<HTMLElement>('.picker-setting[data-setting="agent"] .picker-choice')[1]!.click();
-    expect(setting("agent")).toBe("Codex");
+    expect(setting("agent")).toBe("codex");
   });
 
   it("offers only the agents that are installed", async () => {
@@ -304,7 +346,7 @@ describe("agent and tab group", () => {
       }),
     });
     await open({ api });
-    expect(choices("agent")).toEqual(["Claude Code"]);
+    expect(choices("agent")).toEqual(["claude code"]);
   });
 
   it("remembers the agent for the next time the picker opens", async () => {
@@ -313,7 +355,7 @@ describe("agent and tab group", () => {
     key("Escape");
     await result;
     await open();
-    expect(setting("agent")).toBe("Codex");
+    expect(setting("agent")).toBe("codex");
   });
 
   it("switches agent inside a project too, and carries it with a handoff", async () => {
@@ -351,7 +393,7 @@ describe("outside the projects folder", () => {
     await type("/srv/");
     key("Enter");
     await settle();
-    expect(labels()).toEqual(["[new session]"]);
+    expect(labels()).toEqual(["[+ new session]"]);
     key("Enter");
     expect(await result).toMatchObject({ kind: "project", path: "/srv/site", handoff: null });
   });

@@ -1,4 +1,7 @@
-/* CADE — Project picker: the screen a new tab's project is chosen on */
+/* CADE — Project picker: the screen a new tab's project is chosen on.
+   Built from the full-pane selector standards in the design bible: centred
+   pane header, filled section headers, option rows with a red selection, the
+   segmented toggle for mode choices, and key help at the bottom right. */
 
 .project-picker {
   position: absolute;
@@ -17,9 +20,9 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 640px;
-  /* Leaves the header and group line on screen however long the list is. */
-  max-height: calc(100% - 80px);
+  max-width: 720px;
+  /* Leaves the header and toggles on screen however long the list is. */
+  max-height: calc(100% - 64px);
   padding: 0 40px;
   box-sizing: border-box;
 }
@@ -30,6 +33,53 @@
   letter-spacing: 2px;
   text-align: center;
   color: var(--accent-red);
+  flex-shrink: 0;
+}
+
+/* What the new tab is opened with: one segmented toggle per choice, side by
+   side under the header, each captioned with its name and key. */
+.picker-settings {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+
+.picker-settings[hidden] {
+  display: none;
+}
+
+.picker-setting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* The shared toggle is full-width and centred with a bottom margin for use
+   on its own line; here two of them sit in a row and size to their options. */
+.picker-toggle {
+  width: auto;
+  max-width: none;
+  margin: 0;
+}
+
+.picker-toggle .big-toggle-half {
+  flex: none;
+  padding: 6px 16px;
+  white-space: nowrap;
+}
+
+.picker-toggle .big-toggle-half:not(.active):hover {
+  background: var(--bg-hover);
+}
+
+.picker-setting-caption {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--text-muted);
 }
 
 .picker-filter {
@@ -40,6 +90,7 @@
   padding: 6px 10px;
   border: 1px solid var(--border-focus);
   background: var(--bg-secondary);
+  flex-shrink: 0;
 }
 
 .picker-filter[hidden] {
@@ -70,13 +121,22 @@
   overflow-y: auto;
 }
 
+/* Section header: the filled label the help overlay and the other selectors
+   use, at the same size as the rows beneath it. It is only as wide as its
+   text, so that a full-width filled row always means "selected". */
 .picker-section {
-  margin-top: 14px;
-  padding: 0 16px 4px;
-  border-bottom: 1px solid var(--border-color);
-  font-size: 11px;
+  align-self: center;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-top: 18px;
+  margin-bottom: 6px;
+  padding: 3px 12px;
+  background: var(--accent-red);
+  color: var(--bg-primary);
+  font-size: 13px;
+  font-weight: 600;
   letter-spacing: 1px;
-  color: var(--text-muted);
+  text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -87,15 +147,23 @@
   margin-top: 0;
 }
 
+/* A row is three columns: the name at a fixed width so names line up down
+   the list, what is known about it, and when or in what state on the right. */
 .picker-option {
-  display: flex;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr) auto;
   align-items: baseline;
-  gap: 12px;
-  padding: 5px 16px;
+  column-gap: 16px;
+  padding: 6px 16px;
   font-size: 13px;
   color: var(--text-secondary);
   cursor: pointer;
   flex-shrink: 0;
+}
+
+/* A handoff's title is the whole point of its row, so it takes the room. */
+.picker-option[data-kind="handoff"] {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) auto;
 }
 
 .picker-option:hover {
@@ -107,20 +175,39 @@
   color: var(--bg-primary);
 }
 
-.picker-option-label {
-  white-space: nowrap;
-}
-
+.picker-option-label,
 .picker-option-meta {
   min-width: 0;
-  font-size: 11px;
-  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.picker-option.selected .picker-option-meta {
+.picker-option-meta,
+.picker-option-aside {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.picker-option-aside {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.picker-option[data-state="input"] .picker-option-aside {
+  color: var(--accent-orange);
+}
+
+.picker-option[data-state="idle"] .picker-option-aside {
+  color: var(--accent-cyan);
+}
+
+.picker-option[data-state="working"] .picker-option-aside {
+  color: var(--accent-blue);
+}
+
+.picker-option.selected .picker-option-meta,
+.picker-option.selected .picker-option-aside {
   color: var(--bg-secondary);
 }
 
@@ -129,59 +216,6 @@
   font-size: 13px;
   text-align: center;
   color: var(--text-muted);
-}
-
-/* What the new tab is opened with. Every option is on show with the current
-   one marked, above the list so it is seen before a project is chosen. */
-.picker-settings {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 16px;
-  padding: 0 16px;
-  font-size: 12px;
-  flex-shrink: 0;
-}
-
-.picker-settings[hidden] {
-  display: none;
-}
-
-.picker-setting {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.picker-setting-label {
-  width: 80px;
-  color: var(--text-muted);
-}
-
-.picker-choice {
-  padding: 2px 8px;
-  border: 1px solid var(--border-color);
-  border-radius: 0;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  cursor: pointer;
-}
-
-.picker-choice:hover {
-  color: var(--text-primary);
-}
-
-.picker-choice.selected {
-  border-color: var(--accent-green);
-  color: var(--accent-green);
-  font-weight: 700;
-}
-
-.picker-setting-key {
-  margin-left: 4px;
-  color: var(--accent-green);
 }
 
 .picker-help {
@@ -198,7 +232,8 @@
   color: var(--accent-green);
 }
 
-/* On a phone the key list has no keyboard to describe and would cover the list. */
+/* On a phone the key list has no keyboard to describe and would cover the
+   list, and there is no width for three columns. */
 @media (max-width: 768px) {
   .picker-help {
     display: none;
@@ -209,7 +244,20 @@
     max-height: calc(100% - 24px);
   }
 
-  .picker-option {
+  .picker-settings {
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .picker-option,
+  .picker-option[data-kind="handoff"] {
+    grid-template-columns: minmax(0, 1fr) auto;
     padding: 10px 12px;
+  }
+
+  .picker-option-meta {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 }
