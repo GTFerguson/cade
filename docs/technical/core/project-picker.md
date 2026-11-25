@@ -25,7 +25,7 @@ Two columns:
 | Left | The folder being browsed. At the projects folder, every project in it, most recently worked on first. Elsewhere, plain folders. |
 | Right | Quick choices: projects already open in a tab, sessions running on the backend with no tab, and projects opened lately on this device. |
 
-Keys: `j`/`k` move within a column, Tab crosses between them, `h`/`l` walk up and down folders and never open anything, Enter chooses. `/` filters, or takes a typed path. Choosing a folder shows its second screen: a new session, then the project's handoffs newest first. `a` switches the agent and `g` the tab group; both are shown in a strip at the top right. The system folder dialog is the last entry.
+Keys: `j`/`k` move within a column, Tab crosses between them, `h`/`l` walk up and down folders and never open anything, Enter chooses. `/` filters, or takes a typed path. Choosing a folder shows its second screen: a new session, then the project's handoffs newest first. `a` switches the agent and `g` the tab group; both are shown in a strip at the top right. The group starts as the workspace that is open, so a new tab joins the work on screen unless `g` says otherwise. The system folder dialog is the last entry.
 
 The picker resolves to one of three results (`PickerResult`): open a tab on a project (with optional group, agent and handoff), attach a tab to a session already running, or fall back to the system dialog.
 
