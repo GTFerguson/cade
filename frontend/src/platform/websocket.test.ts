@@ -117,6 +117,17 @@ describe("renaming a session", () => {
   });
 });
 
+describe("moving a session between tab groups", () => {
+  it("sends the group, and an empty one to leave a group", () => {
+    const { client, socket } = connectedClient();
+    client.sendSetGroup("Work");
+    client.sendSetGroup(null);
+    const sent = socket.sent.map((m) => JSON.parse(m));
+    expect(sent).toContainEqual({ type: MessageType.SET_GROUP, group: "Work" });
+    expect(sent).toContainEqual({ type: MessageType.SET_GROUP, group: "" });
+  });
+});
+
 describe("upgrade reload opt-in", () => {
   afterEach(() => {
     delete (window as any).__TAURI__;

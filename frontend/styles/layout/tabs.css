@@ -279,3 +279,180 @@
   outline: none;
   pointer-events: auto;
 }
+
+/* Tab groups: a chip in the group's colour, then the group's tabs, each
+   carrying a line in that colour. A collapsed group is the chip alone. */
+.tab-run,
+.tab-group {
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.tab-group-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--group-colour) 14%, transparent);
+  box-shadow: inset 0 -2px 0 var(--group-colour);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: normal;
+  color: var(--group-colour);
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.tab-group-chip:hover {
+  background: color-mix(in srgb, var(--group-colour) 24%, transparent);
+}
+
+.tab-group-chip:focus-visible {
+  outline: 1px solid var(--border-focus);
+  outline-offset: -1px;
+}
+
+.tab-group-name {
+  font-weight: 700;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-group-count {
+  color: var(--text-muted);
+}
+
+.tab-group-chip .tab-name-input {
+  width: 120px;
+  flex: none;
+}
+
+.tab-group .tab {
+  box-shadow: inset 0 -2px 0 var(--group-colour);
+}
+
+.tab-group .tab.active {
+  box-shadow: inset 0 2px 0 var(--text-primary), inset 0 -2px 0 var(--group-colour);
+}
+
+.tab-group .tab.tab-dragging {
+  box-shadow: inset 0 0 0 1px var(--border-focus);
+}
+
+/* What a collapsed group's tabs need, in the same glyphs and colours as a
+   tab's own status. Empty when no tab inside reports anything. */
+.tab-group-status {
+  font-weight: 700;
+  line-height: 1;
+}
+
+.tab-group-status:empty {
+  display: none;
+}
+
+.tab-group-chip[data-status="input"] .tab-group-status {
+  color: var(--accent-orange);
+  animation: tab-status-breathe 1.2s ease-in-out infinite;
+}
+
+.tab-group-chip[data-status="working"] .tab-group-status {
+  color: var(--accent-blue);
+  animation: tab-status-breathe 1.4s ease-in-out infinite;
+}
+
+.tab-group-chip[data-status="idle"] .tab-group-status {
+  color: var(--accent-cyan);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-group-chip[data-status] .tab-group-status {
+    animation: none;
+  }
+}
+
+/* Right-click menu for tabs and group chips. */
+.tab-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 180px;
+  max-width: 360px;
+  padding: 4px 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.tab-menu-item {
+  display: block;
+  width: 100%;
+  padding: 5px 12px 5px 24px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  position: relative;
+}
+
+.tab-menu-item:hover,
+.tab-menu-item:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.tab-menu-item[data-checked="true"]::before {
+  content: "\2713";
+  position: absolute;
+  left: 9px;
+}
+
+.tab-menu-heading {
+  padding: 5px 12px 2px;
+  color: var(--text-muted);
+}
+
+.tab-menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border-color);
+}
+
+.tab-menu-swatches {
+  display: flex;
+  gap: 6px;
+  padding: 6px 12px;
+}
+
+.tab-menu-swatch {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: var(--swatch);
+  cursor: pointer;
+}
+
+.tab-menu-swatch:hover,
+.tab-menu-swatch:focus-visible {
+  border-color: var(--text-primary);
+  outline: none;
+}
+
+.tab-menu-swatch[aria-pressed="true"] {
+  box-shadow: 0 0 0 1px var(--bg-secondary), 0 0 0 2px var(--text-primary);
+}

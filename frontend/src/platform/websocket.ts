@@ -8,6 +8,7 @@ import { BaseWSClient, type WSAuthFailedEvent } from "@core/platform/ws-client";
 import { appendTokenToUrl } from "../auth/tokenManager";
 import { getStoredIdToken } from "../auth/googleAuth";
 import { basePath, config, isRemoteBrowserAccess, isTauri } from "../config/config";
+import type { TabGroupDef } from "../tabs/tab-groups";
 import { ErrorCode, MessageType, type AnySessionKey } from "@core/platform/protocol";
 import type {
   AgentKilledMessage,
@@ -31,6 +32,7 @@ import type {
   PongMessage,
   PtySizeMessage,
   SessionAttentionMessage,
+  GroupChangedMessage,
   SessionListMessage,
   FileChangesMessage,
   FileChildrenMessage,
@@ -112,6 +114,7 @@ interface WebSocketEvents {
   pong: PongMessage;
   "session-list": SessionListMessage;
   "session-attention": SessionAttentionMessage;
+  "group-changed": GroupChangedMessage;
   "file-list": FileListMessage;
   "file-diff": FileDiffMessage;
   error: ErrorMessage;
@@ -149,6 +152,7 @@ export class WebSocketClient extends BaseWSClient {
   private pendingInitialPrompt: string | null = null;
   private pendingChatHandoff: string | null = null;
   private pendingLabel: string | null = null;
+  private pendingGroup: string | null = null;
 
   // Last output sequence seen per terminal, handed back on reconnect so the
   // server replays only the gap. Cleared when the session id changes.
@@ -330,6 +334,9 @@ export class WebSocketClient extends BaseWSClient {
       }
       if (this.pendingLabel !== null) {
         message.label = this.pendingLabel;
+      }
+      if (this.pendingGroup !== null) {
+        message.group = this.pendingGroup;
       }
       if (Object.keys(this.lastSeq).length > 0) {
         message.lastSeq = { ...this.lastSeq };
@@ -788,6 +795,7 @@ export class WebSocketClient extends BaseWSClient {
     initialPrompt?: string,
     chatHandoff?: string,
     label?: string,
+    group?: string,
   ): void {
     this.pendingProjectPath = path;
     if ((sessionId ?? null) !== this.pendingSessionId) {
@@ -795,6 +803,7 @@ export class WebSocketClient extends BaseWSClient {
     }
     this.pendingSessionId = sessionId ?? null;
     this.pendingLabel = label ?? null;
+    this.pendingGroup = group ?? null;
     this.pendingDashboardFile = dashboardFile ?? null;
     this.pendingProviderOverride = providerOverride ?? null;
     this.pendingInitialPrompt = initialPrompt ?? null;
@@ -812,6 +821,9 @@ export class WebSocketClient extends BaseWSClient {
       }
       if (label !== undefined) {
         message.label = label;
+      }
+      if (group !== undefined) {
+        message.group = group;
       }
       if (dashboardFile !== undefined) {
         message.dashboardFile = dashboardFile;
@@ -836,6 +848,20 @@ export class WebSocketClient extends BaseWSClient {
   sendSetLabel(label: string): void {
     this.pendingLabel = label;
     this.send({ type: MessageType.SET_LABEL, label } as unknown as ClientMessage);
+  }
+
+  /**
+   * Move the session to a tab group, or out of its group with null.
+   * Remembered so a reconnect to a restarted backend restores it.
+   */
+  sendSetGroup(group: string | null): void {
+    this.pendingGroup = group;
+    this.send({ type: MessageType.SET_GROUP, group: group ?? "" } as unknown as ClientMessage);
+  }
+
+  /** Record a group the backend reported, so a reconnect asks for the same one. */
+  noteGroup(group: string | null): void {
+    this.pendingGroup = group;
   }
 
   sendRepaint(sessionKey?: AnySessionKey): void {
@@ -873,6 +899,25 @@ export class WebSocketClient extends BaseWSClient {
     if (!res.ok) return [];
     const body = (await res.json()) as { sessions?: LiveSessionInfo[] };
     return body.sessions ?? [];
+  }
+
+  /** Tab group definitions held by the backend this page is served from. */
+  static async fetchTabGroups(): Promise<TabGroupDef[]> {
+    const res = await fetch(`${basePath}/api/tab-groups`, { credentials: "include" });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { groups?: TabGroupDef[] };
+    return body.groups ?? [];
+  }
+
+  /** Replace the backend's tab group definitions. Returns false when it refused. */
+  static async saveTabGroups(groups: TabGroupDef[]): Promise<boolean> {
+    const res = await fetch(`${basePath}/api/tab-groups`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ groups }),
+    });
+    return res.ok;
   }
 
   /**

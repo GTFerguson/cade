@@ -10,9 +10,29 @@ import { buildTunnelArgs } from "../remote/profile-utils";
 import type { EventHandler } from "../types";
 import type { AppState, TabInfo, TabManagerEvents, TabState } from "./types";
 import type { RemoteProfile } from "../remote/types";
+import { arrangeByGroup, moveWithinRun, nearestVisible, visibleTabs } from "./tab-groups";
 
 const STORAGE_KEY = "cade-app-state";
-const STATE_VERSION = 1;
+const STATE_VERSION = 2;
+
+/**
+ * Saved state in the current shape, or null when it cannot be used. State
+ * from before tab groups is carried over with no groups rather than dropped.
+ */
+export function migrateAppState(raw: unknown): AppState | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const state = raw as Partial<AppState>;
+  if (!Array.isArray(state.tabs)) return null;
+  if (state.version !== 1 && state.version !== STATE_VERSION) return null;
+  return {
+    version: STATE_VERSION,
+    tabs: state.tabs,
+    activeTabId: typeof state.activeTabId === "string" ? state.activeTabId : "",
+    collapsedGroups: Array.isArray(state.collapsedGroups)
+      ? state.collapsedGroups.filter((g): g is string => typeof g === "string")
+      : [],
+  };
+}
 
 // Clear session state in dev-dummy mode for clean testing
 const CLEAR_SESSION = import.meta.env.VITE_CLEAR_SESSION === "true";
@@ -74,6 +94,7 @@ export function hasConnectedProfileTab(
 export class TabManager {
   private tabs: Map<string, TabState> = new Map();
   private activeTabId: string | null = null;
+  private collapsedGroups = new Set<string>();
   private handlers: Map<
     keyof TabManagerEvents,
     Set<EventHandler<TabManagerEvents[keyof TabManagerEvents]>>
@@ -108,10 +129,11 @@ export class TabManager {
     const state = this.loadState();
 
     if (state && state.tabs.length > 0) {
-      for (const tabInfo of state.tabs) {
+      for (const tabInfo of arrangeByGroup(state.tabs)) {
         const tabState = this.createTabState(tabInfo);
         this.tabs.set(tabInfo.id, tabState);
       }
+      this.collapsedGroups = new Set(state.collapsedGroups);
 
       const activeId = state.activeTabId;
       if (this.tabs.has(activeId)) {
@@ -119,6 +141,7 @@ export class TabManager {
       } else {
         this.activeTabId = state.tabs[0]!.id;
       }
+      this.revealGroupOf(this.activeTabId);
 
       this.emit("tabs-changed", this.getTabs());
     }
@@ -185,7 +208,12 @@ export class TabManager {
    * The tab id *is* the session id, so connecting attaches rather than
    * spawning a new PTY. Returns the existing tab if one is already open.
    */
-  adoptSession(sessionId: string, projectPath: string, label?: string | null): TabState {
+  adoptSession(
+    sessionId: string,
+    projectPath: string,
+    label?: string | null,
+    group?: string | null,
+  ): TabState {
     const existing = this.tabs.get(sessionId);
     if (existing) return existing;
 
@@ -196,9 +224,11 @@ export class TabManager {
       name,
       // A label that differs from the folder name was chosen by someone.
       ...(name !== getProjectName(projectPath) && { customName: true }),
+      ...(group && { group }),
     });
 
     this.tabs.set(sessionId, tabState);
+    this.reorder(arrangeByGroup(this.getTabs()));
     this.saveState();
 
     this.emit("tab-created", tabState);
@@ -212,7 +242,8 @@ export class TabManager {
    */
   async createRemoteTab(
     profile: RemoteProfile,
-    projectPath?: string
+    projectPath?: string,
+    group?: string,
   ): Promise<TabState> {
     if (!this.isTauri && profile.connectionType === "ssh-tunnel") {
       throw new Error(
@@ -274,6 +305,7 @@ export class TabManager {
       isRemote: true,
       remoteProfileId: profile.id,
       remoteUrl: profile.url,
+      ...(group && { group }),
     };
     const tabState = this.createTabState(tabInfo, profile.authToken);
     if (tunnelPid !== undefined) {
@@ -281,6 +313,7 @@ export class TabManager {
     }
 
     this.tabs.set(id, tabState);
+    this.reorder(arrangeByGroup(this.getTabs()));
     this.saveState();
 
     this.emit("tab-created", tabState);
@@ -368,12 +401,13 @@ export class TabManager {
 
     if (this.activeTabId === id) {
       const remaining = this.getTabs();
-      this.activeTabId = remaining.length > 0 ? remaining[0]!.id : null;
-      if (this.activeTabId) {
-        const newActive = this.tabs.get(this.activeTabId);
-        if (newActive) {
-          this.emit("tab-switched", newActive);
-        }
+      // A tab on show comes first: closing a tab should not open a group
+      // the user had collapsed while other tabs are in view.
+      const next = this.getVisibleTabs()[0] ?? remaining[0] ?? null;
+      this.activeTabId = next ? next.id : null;
+      if (next) {
+        this.revealGroupOf(next.id);
+        this.emit("tab-switched", next);
       }
     }
 
@@ -392,15 +426,17 @@ export class TabManager {
     }
 
     this.activeTabId = id;
+    const revealed = this.revealGroupOf(id);
     this.saveState();
     this.emit("tab-switched", tab);
+    if (revealed) this.emit("tabs-changed", this.getTabs());
   }
 
   /**
    * Switch to the next tab (cycling).
    */
   nextTab(): void {
-    const tabs = this.getTabs();
+    const tabs = this.getVisibleTabs();
     if (tabs.length <= 1) {
       return;
     }
@@ -417,7 +453,7 @@ export class TabManager {
    * Switch to the previous tab (cycling).
    */
   previousTab(): void {
-    const tabs = this.getTabs();
+    const tabs = this.getVisibleTabs();
     if (tabs.length <= 1) {
       return;
     }
@@ -434,7 +470,7 @@ export class TabManager {
    * Switch to a tab by index (0-9).
    */
   goToTab(index: number): void {
-    const tabs = this.getTabs();
+    const tabs = this.getVisibleTabs();
     const tab = tabs[index];
     if (tab) {
       this.switchTab(tab.id);
@@ -442,21 +478,138 @@ export class TabManager {
   }
 
   /**
-   * Move a tab to a new position in the bar.
+   * Move a tab to a new position among the tabs it sits with: its group, or
+   * the ungrouped tabs beside it. `toIndex` counts within that run.
    */
   moveTab(id: string, toIndex: number): void {
     const tabs = this.getTabs();
-    const fromIndex = tabs.findIndex((t) => t.id === id);
-    if (fromIndex === -1) return;
-    const clamped = Math.max(0, Math.min(toIndex, tabs.length - 1));
-    if (clamped === fromIndex) return;
-
-    const [moved] = tabs.splice(fromIndex, 1);
-    tabs.splice(clamped, 0, moved!);
-    // Map iteration order is insertion order, so rebuilding it is the reorder.
-    this.tabs = new Map(tabs.map((t) => [t.id, t]));
+    const moved = moveWithinRun(tabs, id, toIndex);
+    if (moved === tabs) return;
+    this.reorder(moved);
     this.saveState();
     this.emit("tabs-changed", this.getTabs());
+  }
+
+  /** Tabs on show: every tab not inside a collapsed group. */
+  getVisibleTabs(): TabState[] {
+    return visibleTabs(this.getTabs(), this.collapsedGroups);
+  }
+
+  getCollapsedGroups(): ReadonlySet<string> {
+    return this.collapsedGroups;
+  }
+
+  /** Names of the groups that hold at least one tab, in tab bar order. */
+  getGroupNames(): string[] {
+    const names = new Set<string>();
+    for (const tab of this.tabs.values()) if (tab.group) names.add(tab.group);
+    return [...names];
+  }
+
+  /**
+   * Put a tab in a group, or take it out with null. It joins the end of the
+   * group. Returns the tab when its group changed.
+   */
+  setTabGroup(id: string, group: string | null): TabState | null {
+    const tab = this.tabs.get(id);
+    const name = group?.trim() || null;
+    if (!tab || (tab.group ?? null) === name) return null;
+
+    const from = this.getTabs().findIndex((t) => t.id === id);
+    const tabs = this.getTabs().filter((t) => t.id !== id);
+    // The tab goes to the end of the group it joins, or just past the group
+    // it leaves. With no such group on the bar it stays where it is.
+    const anchor = name ?? tab.group ?? null;
+    const last = tabs.map((t) => t.group ?? null).lastIndexOf(anchor);
+    if (name === null) delete tab.group;
+    else tab.group = name;
+    tabs.splice(last !== -1 ? last + 1 : Math.min(from, tabs.length), 0, tab);
+    this.reorder(arrangeByGroup(tabs));
+    if (id === this.activeTabId) this.revealGroupOf(id);
+    this.saveState();
+    this.emit("tabs-changed", this.getTabs());
+    return tab;
+  }
+
+  /**
+   * Collapse a group to its chip, or expand it. Collapsing the group that
+   * holds the active tab moves to the nearest tab still on show.
+   */
+  setGroupCollapsed(group: string, collapsed: boolean): void {
+    if (this.collapsedGroups.has(group) === collapsed) return;
+    if (collapsed) this.collapsedGroups.add(group);
+    else this.collapsedGroups.delete(group);
+    this.leaveHiddenTab();
+    this.saveState();
+    this.emit("tabs-changed", this.getTabs());
+  }
+
+  toggleGroupCollapsed(group: string): void {
+    this.setGroupCollapsed(group, !this.collapsedGroups.has(group));
+  }
+
+  /** Expand one group and collapse every other, moving into it if needed. */
+  showOnlyGroup(group: string): void {
+    this.collapsedGroups = new Set(this.getGroupNames().filter((g) => g !== group));
+    const active = this.getActiveTab();
+    if (active?.group && active.group !== group) {
+      const first = this.getTabs().find((t) => t.group === group);
+      if (first) {
+        this.activeTabId = first.id;
+        this.emit("tab-switched", first);
+      }
+    }
+    this.saveState();
+    this.emit("tabs-changed", this.getTabs());
+  }
+
+  /**
+   * Rename a group, merging into an existing group of the new name. Returns
+   * the tabs that moved, whose sessions need telling.
+   */
+  renameGroup(group: string, name: string): TabState[] {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === group) return [];
+    const moved = this.getTabs().filter((t) => t.group === group);
+    for (const tab of moved) tab.group = trimmed;
+    if (this.collapsedGroups.delete(group)) this.collapsedGroups.add(trimmed);
+    this.reorder(arrangeByGroup(this.getTabs()));
+    this.leaveHiddenTab();
+    this.saveState();
+    this.emit("tabs-changed", this.getTabs());
+    return moved;
+  }
+
+  /** Take every tab out of a group. Returns the tabs that left it. */
+  ungroup(group: string): TabState[] {
+    const moved = this.getTabs().filter((t) => t.group === group);
+    for (const tab of moved) delete tab.group;
+    this.collapsedGroups.delete(group);
+    this.saveState();
+    this.emit("tabs-changed", this.getTabs());
+    return moved;
+  }
+
+  /** Expand the group a tab is in. Returns true when it was collapsed. */
+  private revealGroupOf(id: string | null): boolean {
+    const group = id ? this.tabs.get(id)?.group : undefined;
+    return group ? this.collapsedGroups.delete(group) : false;
+  }
+
+  /** If the active tab's group is collapsed, move to the nearest tab on show. */
+  private leaveHiddenTab(): void {
+    const active = this.getActiveTab();
+    if (!active?.group || !this.collapsedGroups.has(active.group)) return;
+    const next = nearestVisible(this.getTabs(), active.id, this.collapsedGroups);
+    // With every tab collapsed away the active one stays on screen.
+    if (!next) return;
+    this.activeTabId = next.id;
+    this.emit("tab-switched", next);
+  }
+
+  private reorder(tabs: TabState[]): void {
+    // Map iteration order is insertion order, so rebuilding it is the reorder.
+    this.tabs = new Map(tabs.map((t) => [t.id, t]));
   }
 
   /**
@@ -593,13 +746,7 @@ export class TabManager {
         return null;
       }
 
-      const state = JSON.parse(json) as AppState;
-
-      if (state.version !== STATE_VERSION) {
-        return null;
-      }
-
-      return state;
+      return migrateAppState(JSON.parse(json));
     } catch {
       return null;
     }
@@ -616,6 +763,7 @@ export class TabManager {
         name: tab.name,
       };
       if (tab.customName) info.customName = true;
+      if (tab.group) info.group = tab.group;
       if (tab.isRemote !== undefined) info.isRemote = tab.isRemote;
       if (tab.remoteProfileId !== undefined) info.remoteProfileId = tab.remoteProfileId;
       if (tab.remoteUrl !== undefined) info.remoteUrl = tab.remoteUrl;
@@ -626,6 +774,8 @@ export class TabManager {
       version: STATE_VERSION,
       tabs,
       activeTabId: this.activeTabId ?? "",
+      // Only groups that still have tabs, so the list cannot grow for ever.
+      collapsedGroups: this.getGroupNames().filter((g) => this.collapsedGroups.has(g)),
     };
 
     try {

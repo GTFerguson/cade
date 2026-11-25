@@ -152,6 +152,8 @@ export interface SetProjectMessage extends BaseMessage {
   reloadOnUpgrade?: boolean;
   /** Tab name, shown to other devices listing this backend's sessions. */
   label?: string;
+  /** Tab group the tab was last in. Only a session being created takes it. */
+  group?: string;
   /**
    * Last output sequence seen per terminal. On reconnect the server replays
    * only what came after it instead of the whole scrollback.
@@ -216,6 +218,8 @@ export interface LiveTerminalInfo {
 export interface LiveSessionInfo {
   id: string;
   label: string | null;
+  /** Name of the session's tab group. Absent from backends that predate groups. */
+  group?: string | null;
   projectPath: string;
   agent: string;
   createdAt: number;
@@ -233,6 +237,13 @@ export interface SessionListMessage extends BaseMessage {
 }
 
 export type AttentionState = "input" | "idle" | "working" | null;
+
+/** Another device moved the session to a tab group, or out of one. */
+export interface GroupChangedMessage extends BaseMessage {
+  type: "group-changed";
+  sessionId: string;
+  group: string | null;
+}
 
 /** The agent in a session is waiting for the user, finished, or working again. */
 export interface SessionAttentionMessage extends BaseMessage {
@@ -382,6 +393,11 @@ export interface ConnectedMessage extends BaseMessage {
   launchPreset?: LaunchPreset;
   slashCommands?: Array<{ name: string; description: string }>;
   connectionId?: string;
+  /**
+   * The session's tab group, null for none. Absent from a backend that
+   * predates groups, in which case the tab keeps the group it has.
+   */
+  group?: string | null;
   /** Identity of the backend build; a change between connects means an in-place upgrade. */
   buildVersion?: string;
   cliAgent?: CliAgentInfo;

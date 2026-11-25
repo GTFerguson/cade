@@ -7,6 +7,16 @@ import type { TabBarEvents, TabState } from "./types";
 import { minimizeWindow, toggleMaximizeWindow, closeWindow } from "@core/platform/tauri-bridge";
 import { TabDragController } from "./tab-drag";
 import { tabDisplayName } from "./session-title";
+import {
+  GROUP_COLOURS,
+  groupAutoAdds,
+  groupColourVar,
+  groupRollup,
+  parentFolder,
+  tabRuns,
+  type TabGroupDef,
+} from "./tab-groups";
+import { openTabMenu, type MenuEntry } from "./tab-menu";
 
 /** Two clicks on a tab's name within this window start a rename. */
 const RENAME_DOUBLE_CLICK_MS = 400;
@@ -15,6 +25,14 @@ interface TabStatus {
   state: AttentionState;
   message: string | null;
 }
+
+/** What the bar needs to know about groups beyond each tab's own group name. */
+export interface TabBarGroups {
+  collapsed: ReadonlySet<string>;
+  defs: TabGroupDef[];
+}
+
+const NO_GROUPS: TabBarGroups = { collapsed: new Set(), defs: [] };
 
 /**
  * How each agent state reads on a tab. The glyph differs per state so the
@@ -33,13 +51,17 @@ export class TabBar implements Component {
     Set<EventHandler<TabBarEvents[keyof TabBarEvents]>>
   > = new Map();
 
-  private drag: TabDragController | null = null;
+  // One per run of tabs, so a drag stays inside the tab's own group.
+  private drags: TabDragController[] = [];
   // Tab updates that arrive mid-drag, applied on drop so a re-render can't
   // pull the tab out from under the pointer.
-  private pendingRender: [TabState[], string | null] | null = null;
+  private pendingRender: [TabState[], string | null, TabBarGroups] | null = null;
 
   private status = new Map<string, TabStatus>();
-  private renamingTabId: string | null = null;
+  private tabs: TabState[] = [];
+  private groups: TabBarGroups = NO_GROUPS;
+  // A name being typed, of a tab or of a group. Holds back re-renders.
+  private renaming = false;
   // The first click of a double-click selects the tab, which re-renders the
   // bar and replaces the element, so the browser's own dblclick never fires.
   private lastNameClick: { tabId: string; at: number } | null = null;
@@ -56,14 +78,20 @@ export class TabBar implements Component {
   /**
    * Render the tab bar with the given tabs.
    */
-  render(tabs: TabState[], activeTabId: string | null = null): void {
+  render(
+    tabs: TabState[],
+    activeTabId: string | null = null,
+    groups: TabBarGroups = NO_GROUPS,
+  ): void {
     // A re-render replaces every tab element, which would drop a tab being
     // dragged or throw away a name being typed.
-    if (this.drag?.isDragging() || this.renamingTabId !== null) {
-      this.pendingRender = [tabs, activeTabId];
+    if (this.isDragging() || this.renaming) {
+      this.pendingRender = [tabs, activeTabId, groups];
       return;
     }
     this.pendingRender = null;
+    this.tabs = tabs;
+    this.groups = groups;
     for (const id of this.status.keys()) {
       if (!tabs.some((t) => t.id === id)) this.status.delete(id);
     }
@@ -92,18 +120,22 @@ export class TabBar implements Component {
     const tabList = document.createElement("div");
     tabList.className = "tab-list";
 
-    this.drag = new TabDragController(
-      tabList,
-      (tabId, toIndex) => this.emit("tab-reorder", { tabId, toIndex }),
-      () => {
-        if (this.pendingRender) this.render(...this.pendingRender);
-      },
-    );
-
-    for (const tab of tabs) {
-      const tabEl = this.createTabElement(tab, tab.id === activeTabId);
-      this.drag.attach(tabEl);
-      tabList.appendChild(tabEl);
+    this.drags = [];
+    for (const run of tabRuns(tabs)) {
+      const collapsed = run.group !== null && groups.collapsed.has(run.group);
+      const runEl = collapsed ? null : this.createRunElement(run.tabs, activeTabId);
+      if (run.group === null) {
+        tabList.appendChild(runEl!);
+        continue;
+      }
+      const groupEl = document.createElement("div");
+      groupEl.className = "tab-group";
+      groupEl.dataset["group"] = run.group;
+      groupEl.dataset["collapsed"] = String(collapsed);
+      groupEl.style.setProperty("--group-colour", groupColourVar(this.groupDef(run.group)?.colour));
+      groupEl.appendChild(this.createChipElement(run.group, collapsed));
+      if (runEl) groupEl.appendChild(runEl);
+      tabList.appendChild(groupEl);
     }
 
     tabArea.appendChild(tabList);
@@ -144,6 +176,186 @@ export class TabBar implements Component {
       const windowControls = this.createWindowControls();
       this.container.appendChild(windowControls);
     }
+  }
+
+  private isDragging(): boolean {
+    return this.drags.some((d) => d.isDragging());
+  }
+
+  private groupDef(group: string): TabGroupDef | undefined {
+    return this.groups.defs.find((d) => d.name === group);
+  }
+
+  /**
+   * A run of tabs that can be reordered among themselves. Each run has its
+   * own drag controller, which is what keeps a drag from crossing into or out
+   * of a group.
+   */
+  private createRunElement(tabs: TabState[], activeTabId: string | null): HTMLElement {
+    const runEl = document.createElement("div");
+    runEl.className = "tab-run";
+    const drag = new TabDragController(
+      runEl,
+      (tabId, toIndex) => this.emit("tab-reorder", { tabId, toIndex }),
+      () => {
+        if (this.pendingRender) this.render(...this.pendingRender);
+      },
+    );
+    this.drags.push(drag);
+    for (const tab of tabs) {
+      const tabEl = this.createTabElement(tab, tab.id === activeTabId);
+      drag.attach(tabEl);
+      runEl.appendChild(tabEl);
+    }
+    return runEl;
+  }
+
+  /**
+   * The chip that heads a group. Click collapses or expands the group;
+   * collapsed, it stands in for the tabs and shows what they need.
+   */
+  private createChipElement(group: string, collapsed: boolean): HTMLElement {
+    // Not a <button>: the name turns into a text field during a rename, and
+    // a field inside a button cannot be clicked into or take a space.
+    const chip = document.createElement("div");
+    chip.className = "tab-group-chip";
+    chip.setAttribute("role", "button");
+    chip.tabIndex = 0;
+    chip.setAttribute("aria-expanded", String(!collapsed));
+
+    const statusEl = document.createElement("span");
+    statusEl.className = "tab-group-status";
+    chip.appendChild(statusEl);
+
+    const nameEl = document.createElement("span");
+    nameEl.className = "tab-group-name";
+    nameEl.textContent = group;
+    chip.appendChild(nameEl);
+
+    if (collapsed) {
+      const countEl = document.createElement("span");
+      countEl.className = "tab-group-count";
+      countEl.textContent = String(this.tabs.filter((t) => t.group === group).length);
+      chip.appendChild(countEl);
+    }
+
+    this.paintChip(chip, group, collapsed);
+    chip.addEventListener("click", () => this.emit("group-toggle", group));
+    chip.addEventListener("keydown", (e) => {
+      if (e.target !== chip || (e.key !== "Enter" && e.key !== " ")) return;
+      e.preventDefault();
+      this.emit("group-toggle", group);
+    });
+    chip.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      openTabMenu(e.clientX, e.clientY, this.chipMenu(group));
+    });
+    return chip;
+  }
+
+  /** Show on a collapsed group's chip what the tabs inside it need. */
+  private paintChip(chip: HTMLElement, group: string, collapsed: boolean): void {
+    const members = this.tabs.filter((t) => t.group === group);
+    const rollup = collapsed
+      ? groupRollup(members.map((t) => this.status.get(t.id)?.state ?? null))
+      : { state: "none" as const, waiting: 0 };
+    const statusEl = chip.querySelector<HTMLElement>(".tab-group-status");
+    chip.dataset["status"] = rollup.state;
+    const names = members.map((t) => tabDisplayName(t)).join(", ");
+    const action = collapsed ? "Click to expand" : "Click to collapse";
+    if (statusEl) {
+      statusEl.textContent =
+        rollup.state === "none"
+          ? ""
+          : STATUS_DISPLAY[rollup.state].glyph + (rollup.waiting > 1 ? String(rollup.waiting) : "");
+    }
+    const needs =
+      rollup.state === "input"
+        ? `${rollup.waiting} waiting on you. `
+        : rollup.state === "none"
+          ? ""
+          : `${STATUS_DISPLAY[rollup.state].title}. `;
+    chip.title = `${group}: ${names}\n${needs}${action}, right-click for more`;
+  }
+
+  private findChip(group: string): HTMLElement | null {
+    for (const el of this.container.querySelectorAll<HTMLElement>(".tab-group")) {
+      if (el.dataset["group"] === group) return el.querySelector<HTMLElement>(".tab-group-chip");
+    }
+    return null;
+  }
+
+  private tabMenu(tab: TabState): MenuEntry[] {
+    const entries: MenuEntry[] = [];
+    const others = [...new Set(this.tabs.map((t) => t.group).filter((g): g is string => !!g))]
+      .filter((g) => g !== tab.group);
+    if (others.length > 0) {
+      entries.push({ kind: "heading", label: "Move to group" });
+      for (const group of others) {
+        entries.push({
+          kind: "action",
+          label: group,
+          action: () => this.emit("tab-set-group", { tabId: tab.id, group }),
+        });
+      }
+      entries.push({ kind: "separator" });
+    }
+    entries.push({
+      kind: "action",
+      label: "New group",
+      action: () => this.emit("tab-new-group", tab.id),
+    });
+    if (tab.group) {
+      entries.push({
+        kind: "action",
+        label: "Remove from group",
+        action: () => this.emit("tab-set-group", { tabId: tab.id, group: null }),
+      });
+    }
+    entries.push({ kind: "separator" });
+    entries.push({ kind: "action", label: "Rename tab", action: () => this.startRename(tab.id) });
+    entries.push({ kind: "action", label: "Close tab", action: () => this.emit("tab-close", tab.id) });
+    return entries;
+  }
+
+  private chipMenu(group: string): MenuEntry[] {
+    const def = this.groupDef(group);
+    const entries: MenuEntry[] = [
+      { kind: "action", label: "Rename group", action: () => this.startGroupRename(group) },
+      {
+        kind: "swatches",
+        label: "Group colour",
+        options: GROUP_COLOURS.map((c) => ({ value: c, css: groupColourVar(c) })),
+        selected: def?.colour ?? "",
+        onPick: (colour) => this.emit("group-colour", { group, colour }),
+      },
+      { kind: "separator" },
+      { kind: "action", label: "Show only this group", action: () => this.emit("group-solo", group) },
+    ];
+    // Offer the folder above each of the group's projects: "everything under
+    // here belongs to this group" is the rule people mean.
+    const folders = new Set<string>();
+    for (const tab of this.tabs) {
+      const folder = tab.group === group && !tab.isRemote ? parentFolder(tab.projectPath) : null;
+      if (folder) folders.add(folder);
+    }
+    for (const path of def?.paths ?? []) folders.add(path);
+    if (folders.size > 0) {
+      entries.push({ kind: "separator" });
+      entries.push({ kind: "heading", label: "Add new tabs under" });
+      for (const folder of folders) {
+        const enabled = groupAutoAdds(def, folder);
+        entries.push({
+          kind: "action",
+          label: folder,
+          checked: enabled,
+          action: () => this.emit("group-auto-add", { group, folder, enabled: !enabled }),
+        });
+      }
+    }
+    entries.push({ kind: "separator" });
+    entries.push({ kind: "action", label: "Ungroup", action: () => this.emit("group-ungroup", group) });
+    return entries;
   }
 
   /**
@@ -205,6 +417,10 @@ export class TabBar implements Component {
     tabEl.addEventListener("click", () => {
       this.emit("tab-select", tab.id);
     });
+    tabEl.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      openTabMenu(e.clientX, e.clientY, this.tabMenu(tab));
+    });
 
     return tabEl;
   }
@@ -218,6 +434,9 @@ export class TabBar implements Component {
     const tabEl = this.findTab(tabId);
     const statusEl = tabEl?.querySelector<HTMLElement>(".tab-status");
     if (tabEl && statusEl) this.paintStatus(tabEl, statusEl, { state, message });
+    const group = this.tabs.find((t) => t.id === tabId)?.group;
+    const chip = group ? this.findChip(group) : null;
+    if (chip && group) this.paintChip(chip, group, this.groups.collapsed.has(group));
   }
 
   private findTab(tabId: string): HTMLElement | null {
@@ -241,26 +460,36 @@ export class TabBar implements Component {
    * name, Escape keeps the old one.
    */
   startRename(tabId: string): void {
-    if (this.renamingTabId !== null || this.drag?.isDragging()) return;
-    const tabEl = this.findTab(tabId);
-    const nameEl = tabEl?.querySelector<HTMLElement>(".tab-name");
-    if (!tabEl || !nameEl) return;
+    const nameEl = this.findTab(tabId)?.querySelector<HTMLElement>(".tab-name");
+    if (nameEl) this.editName(nameEl, "Tab name", (name) => this.emit("tab-rename", { tabId, name }));
+  }
+
+  /** Swap a group chip's name for a text field, as for a tab. */
+  startGroupRename(group: string): void {
+    const nameEl = this.findChip(group)?.querySelector<HTMLElement>(".tab-group-name");
+    if (nameEl) {
+      this.editName(nameEl, "Group name", (name) => this.emit("group-rename", { group, name }));
+    }
+  }
+
+  private editName(nameEl: HTMLElement, label: string, commit: (name: string) => void): void {
+    if (this.renaming || this.isDragging()) return;
 
     const input = document.createElement("input");
     input.className = "tab-name-input";
     input.type = "text";
     input.value = nameEl.textContent ?? "";
     input.spellcheck = false;
-    input.setAttribute("aria-label", "Tab name");
+    input.setAttribute("aria-label", label);
 
     let finished = false;
-    const finish = (commit: boolean) => {
+    const finish = (keep: boolean) => {
       if (finished) return;
       finished = true;
       const name = input.value;
-      this.renamingTabId = null;
+      this.renaming = false;
       input.replaceWith(nameEl);
-      if (commit) this.emit("tab-rename", { tabId, name });
+      if (keep) commit(name);
       if (this.pendingRender) this.render(...this.pendingRender);
     };
 
@@ -271,12 +500,13 @@ export class TabBar implements Component {
       else if (e.key === "Escape") finish(false);
     });
     input.addEventListener("blur", () => finish(true));
-    // Pressing inside the field must not start a tab drag or switch tabs.
+    // Pressing inside the field must not start a tab drag, switch tabs or
+    // collapse the group.
     for (const type of ["pointerdown", "mousedown", "click"] as const) {
       input.addEventListener(type, (e) => e.stopPropagation());
     }
 
-    this.renamingTabId = tabId;
+    this.renaming = true;
     nameEl.replaceWith(input);
     input.focus();
     input.select();

@@ -30,6 +30,14 @@ import { registerServiceWorker } from "./push";
 import type { AttentionState, LiveSessionInfo } from "./types";
 import { WebSocketClient } from "./platform/websocket";
 import { sessionsToAdopt } from "./tabs/tab-manager";
+import {
+  newGroupName,
+  withAutoAdd,
+  withGroupDef,
+  withGroupRenamed,
+  withoutGroupDef,
+  type TabGroupDef,
+} from "./tabs/tab-groups";
 import { attachOptionLabel } from "./ui/splash-attach";
 import { ProjectContextImpl, TabBar, TabManager } from "./tabs";
 import { hasConnectedProfileTab } from "./tabs/tab-manager";
@@ -60,6 +68,8 @@ class App {
   private unreadTabs = new Set<string>();
   /** Per-tab agent attention, from the session-attention hook events. */
   private attentionByTab = new Map<string, AttentionState>();
+  /** Colour and auto-add folders of each tab group, as the backend holds them. */
+  private groupDefs: TabGroupDef[] = [];
   /** Polls the backend's live sessions while the start splash is up. */
   private splashSessionTimer: number | null = null;
   private tabContentContainer: HTMLElement | null = null;
@@ -316,6 +326,9 @@ class App {
       this.tabManager.moveTab(tabId, toIndex);
     });
 
+    this.wireTabGroupEvents(this.tabBar);
+    this.loadGroupDefs();
+
     this.tabBar.on("tab-add", () => {
       this.handleAddTab();
     });
@@ -338,7 +351,7 @@ class App {
     });
 
     this.tabManager.on("tabs-changed", (tabs) => {
-      this.tabBar?.render(tabs, this.tabManager.getActiveTabId());
+      this.renderTabBar();
       for (const id of this.unreadTabs) {
         if (!tabs.some((t) => t.id === id)) this.unreadTabs.delete(id);
       }
@@ -630,6 +643,9 @@ class App {
 
     tab.ws.on("connected", (message) => {
       this.tabManager.setConnected(tab.id, true);
+      // The session decides its group. A backend that predates groups sends
+      // none, and the tab then keeps the group it has.
+      if (message.group !== undefined) this.adoptGroupFromBackend(tab, message.group);
       // Only accept the server's workingDir if this tab had no saved path.
       // The server echoes back whatever the frontend sent — letting it
       // overwrite an existing tab path causes drift when the backend
@@ -801,6 +817,8 @@ class App {
 
     // The socket is attached to exactly this tab's session, so every
     // attention frame on it is about this tab.
+    tab.ws.on("group-changed", (msg) => this.adoptGroupFromBackend(tab, msg.group));
+
     tab.ws.on("session-attention", (msg) => {
       const previous = this.attentionByTab.get(tab.id) ?? null;
       this.attentionByTab.set(tab.id, msg.attention);
@@ -832,6 +850,7 @@ class App {
         tab.initialPrompt,
         tab.chatHandoff,
         tabDisplayName(tab),
+        tab.group,
       );
 
       // Auth is project-driven now: connect first; if the project's launch.yml
@@ -868,10 +887,7 @@ class App {
 
     tab.context?.focus();
 
-    this.tabBar?.render(
-      this.tabManager.getTabs(),
-      this.tabManager.getActiveTabId()
-    );
+    this.renderTabBar();
   }
 
   /**
@@ -1112,8 +1128,98 @@ class App {
     this.stopSplashSessionPoll();
     this.startSplash?.setLoading();
     this.startSplashTimeout();
-    const tab = this.tabManager.adoptSession(session.id, session.projectPath, session.label);
+    const tab = this.tabManager.adoptSession(
+      session.id,
+      session.projectPath,
+      session.label,
+      session.group,
+    );
     this.tabManager.switchTab(tab.id);
+  }
+
+  private renderTabBar(): void {
+    this.tabBar?.render(this.tabManager.getTabs(), this.tabManager.getActiveTabId(), {
+      collapsed: this.tabManager.getCollapsedGroups(),
+      defs: this.groupDefs,
+    });
+  }
+
+  /** Keep the new group definitions, redraw, and store them on the backend. */
+  private setGroupDefs(defs: TabGroupDef[]): void {
+    if (defs === this.groupDefs) return;
+    this.groupDefs = defs;
+    this.renderTabBar();
+    WebSocketClient.saveTabGroups(defs)
+      .then((ok) => {
+        if (!ok) console.warn("[CADE] Backend refused the tab group definitions");
+      })
+      .catch((e) => console.warn("[CADE] Could not save tab group definitions:", e));
+  }
+
+  /** Move a tab to a group (null for none) and tell its session. */
+  private moveTabToGroup(tabId: string, group: string | null): void {
+    const moved = this.tabManager.setTabGroup(tabId, group);
+    moved?.ws.sendSetGroup(group);
+    this.mobileUI?.refresh();
+  }
+
+  /** A group the session's backend reported; nothing to send back. */
+  private adoptGroupFromBackend(tab: TabState, group: string | null): void {
+    tab.ws.noteGroup(group);
+    this.tabManager.setTabGroup(tab.id, group);
+    // A group named by a folder rule may have been defined on another device.
+    if (group && !this.groupDefs.some((d) => d.name === group)) this.loadGroupDefs();
+  }
+
+  private loadGroupDefs(): void {
+    WebSocketClient.fetchTabGroups()
+      .then((defs) => {
+        this.groupDefs = defs;
+        this.renderTabBar();
+      })
+      .catch((e) => console.warn("[CADE] Could not load tab group definitions:", e));
+  }
+
+  private wireTabGroupEvents(tabBar: TabBar): void {
+    tabBar.on("tab-set-group", ({ tabId, group }) => this.moveTabToGroup(tabId, group));
+
+    tabBar.on("tab-new-group", (tabId) => {
+      const taken = [...this.tabManager.getGroupNames(), ...this.groupDefs.map((d) => d.name)];
+      const name = newGroupName(taken);
+      this.setGroupDefs(withGroupDef(this.groupDefs, name));
+      this.moveTabToGroup(tabId, name);
+      // Straight into naming it, as the placeholder name is never the one wanted.
+      tabBar.startGroupRename(name);
+    });
+
+    tabBar.on("group-toggle", (group) => this.tabManager.toggleGroupCollapsed(group));
+    tabBar.on("group-solo", (group) => this.tabManager.showOnlyGroup(group));
+
+    tabBar.on("group-rename", ({ group, name }) => {
+      const moved = this.tabManager.renameGroup(group, name);
+      if (moved.length === 0) return;
+      const renamed = moved[0]!.group!;
+      for (const tab of moved) tab.ws.sendSetGroup(renamed);
+      this.setGroupDefs(withGroupRenamed(withGroupDef(this.groupDefs, group), group, renamed));
+    });
+
+    tabBar.on("group-colour", ({ group, colour }) => {
+      this.setGroupDefs(withGroupDef(this.groupDefs, group, { colour }));
+    });
+
+    tabBar.on("group-ungroup", (group) => {
+      for (const tab of this.tabManager.ungroup(group)) tab.ws.sendSetGroup(null);
+      // Its folder rule goes too, or the next tab opened there would bring
+      // the group straight back.
+      this.setGroupDefs(withoutGroupDef(this.groupDefs, group));
+    });
+
+    tabBar.on("group-auto-add", ({ group, folder, enabled }) => {
+      const def = this.groupDefs.find((d) => d.name === group);
+      this.setGroupDefs(
+        withGroupDef(this.groupDefs, group, { paths: withAutoAdd(def, folder, enabled) }),
+      );
+    });
   }
 
   /**
@@ -1161,7 +1267,7 @@ class App {
             const sorted = [...projects].sort((a, b) => (b.lastUsed ?? 0) - (a.lastUsed ?? 0));
             resumePath = sorted[0]?.path ?? profile.defaultPath ?? undefined;
           }
-          const newTab = await this.tabManager.createRemoteTab(profile, resumePath);
+          const newTab = await this.tabManager.createRemoteTab(profile, resumePath, tab.group);
           this.tabManager.switchTab(newTab.id);
         } catch (error) {
           console.error("Failed to reconnect remote tab:", error);
@@ -1172,7 +1278,7 @@ class App {
     }
 
     const updatedTabs = this.tabManager.getTabs();
-    this.tabBar?.render(updatedTabs, this.tabManager.getActiveTabId());
+    this.renderTabBar();
 
     if (updatedTabs.length === 0) {
       this.showStartSplash();
@@ -1271,6 +1377,7 @@ class App {
           session.id,
           session.projectPath,
           session.label,
+          session.group,
         );
         this.tabManager.switchTab(adopted.id);
       },

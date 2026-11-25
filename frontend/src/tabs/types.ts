@@ -26,6 +26,12 @@ export interface TabInfo {
    * a session is re-attached, so it is not saved.
    */
   agentTitle?: string;
+  /**
+   * Name of the tab group the tab is in. The session on the backend decides
+   * it; this copy lets tabs come back in their groups after the backend
+   * restarts and has forgotten them.
+   */
+  group?: string;
   isRemote?: boolean;
   remoteProfileId?: string;
   remoteUrl?: string;
@@ -52,6 +58,8 @@ export interface AppState {
   version: number;
   tabs: TabInfo[];
   activeTabId: string;
+  /** Groups shown as a chip only. Per browser, unlike the groups themselves. */
+  collapsedGroups: string[];
 }
 
 /**
@@ -112,4 +120,14 @@ export interface TabBarEvents {
   "tab-rename": { tabId: string; name: string };
   "tab-add": void;
   "tab-add-remote": void;
+  /** Move a tab to a group, or out of its group with null. */
+  "tab-set-group": { tabId: string; group: string | null };
+  /** Start a new group holding this tab. */
+  "tab-new-group": string;
+  "group-toggle": string;
+  "group-solo": string;
+  "group-rename": { group: string; name: string };
+  "group-colour": { group: string; colour: string };
+  "group-ungroup": string;
+  "group-auto-add": { group: string; folder: string; enabled: boolean };
 }
