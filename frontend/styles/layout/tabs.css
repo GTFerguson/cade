@@ -149,20 +149,27 @@
   color: var(--accent-red);
 }
 
+/* Shares a tab's padding, border and text line, so the plus is centred on
+   the same line as the tab names whatever the font's metrics are. */
 .tab-add-button {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
+  padding: 8px 10px;
   border: none;
+  border-bottom: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
-  font-size: 22px;
+  font-family: var(--font-mono);
+  font-size: 12px;
   cursor: pointer;
   margin-left: 4px;
   flex-shrink: 0;
   pointer-events: auto;
+}
+
+/* An empty line box of the tab name's height for the plus to centre on. */
+.tab-add-button::before {
+  content: "\200b";
 }
 
 .tab-add-button:hover {

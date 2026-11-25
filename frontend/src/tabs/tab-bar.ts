@@ -143,7 +143,14 @@ export class TabBar implements Component {
     const addButton = document.createElement("button");
     addButton.className = "tab-add-button";
     addButton.title = "Open new project (Shift+click for remote)";
-    addButton.textContent = "+";
+    addButton.setAttribute("aria-label", "Open new project");
+    // Drawn, not typed: a "+" glyph sits wherever its font puts it, which is
+    // not the middle of the line the tab names are on.
+    addButton.innerHTML = `
+      <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true">
+        <path d="M5.5 0.5v10M0.5 5.5h10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      </svg>
+    `;
 
     // Capture shiftKey on mousedown before Tauri's drag region processing
     // can strip modifier keys from the synthesized click event
