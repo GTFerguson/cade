@@ -63,7 +63,7 @@
   .v-current .tab[data-status="input"] { box-shadow: inset 0 2px 0 var(--accent-orange); background: color-mix(in srgb, var(--accent-orange) 10%, transparent); }
 
   /* ── A: the top line belongs to the active tab; waiting keeps the tint ── */
-  .v-a .tab.active { box-shadow: inset 0 2px 0 var(--accent-green); }
+  .v-a .tab.active { box-shadow: inset 0 2px 0 var(--text-primary); }
   .v-a .tab.active .tab-name { font-weight: 700; }
   .v-a .tab[data-status="input"] { background: color-mix(in srgb, var(--accent-orange) 12%, transparent); }
   .v-a .tab.active[data-status="input"] { background: color-mix(in srgb, var(--accent-orange) 12%, var(--bg-primary)); }
@@ -85,7 +85,7 @@
   .v-b .tab[data-status="input"]:not(.active) { background: color-mix(in srgb, var(--accent-orange) 8%, transparent); }
 
   /* ── C: status is a solid chip; the tab itself is never tinted ── */
-  .v-c .tab.active { box-shadow: inset 0 2px 0 var(--accent-green); }
+  .v-c .tab.active { box-shadow: inset 0 2px 0 var(--text-primary); }
   .v-c .tab.active .tab-name { font-weight: 700; }
   .v-c .tab-status { width: 16px; height: 16px; line-height: 16px; font-size: 11px; font-weight: 700; opacity: 1; }
   .v-c .tab[data-status="working"] .tab-status { color: var(--accent-blue); outline: 1px solid var(--accent-blue); outline-offset: -1px; }
@@ -121,11 +121,11 @@
     { id: "current", title: "Current",
       rule: "<b>Active:</b> lighter background, brighter name. <b>Waiting:</b> orange top line and tint. The waiting tab outshouts the active one, and an active waiting tab looks the same as an inactive one." },
     { id: "a", title: "A. Top line is the active tab",
-      rule: "<b>Active:</b> green top line, bold name. <b>Waiting:</b> orange tint and glyph, no line. <b>Finished:</b> a fainter cyan tint and a cyan-leaning name. One meaning per signal: the line says where you are, the tint says what is blocked, and a tab can carry both." },
+      rule: "<b>Active:</b> top line in the text colour, bold name. <b>Waiting:</b> orange tint and glyph, no line. <b>Finished:</b> a fainter cyan tint and a cyan-leaning name. The active line has no hue of its own, so it cannot be mistaken for any status colour. One meaning per signal: the line says where you are, the tint says what is blocked, and a tab can carry both." },
     { id: "b", title: "B. Raised active tab, status underline",
       rule: "<b>Active:</b> outlined tab that opens into the pane, bold name. <b>Status:</b> a coloured line under the name for working, finished and waiting; finished also gets a cyan-leaning name. Quietest of the three; tints are kept only on inactive tabs." },
     { id: "c", title: "C. Status chip",
-      rule: "<b>Active:</b> green top line, bold name. <b>Status:</b> a chip in front of the name: solid orange for waiting, soft cyan for finished, outlined blue for working. Waiting and finished also colour the name. No tab is ever tinted, so the active tab is never out-shouted, and the chip survives narrow tabs." },
+      rule: "<b>Active:</b> top line in the text colour, bold name. <b>Status:</b> a chip in front of the name: solid orange for waiting, soft cyan for finished, outlined blue for working. Waiting and finished also colour the name. No tab is ever tinted, so the active tab is never out-shouted, and the chip survives narrow tabs." },
   ];
 
   function bar(scene) {
