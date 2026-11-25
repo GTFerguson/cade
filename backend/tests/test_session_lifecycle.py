@@ -491,3 +491,91 @@ class TestSessionRegistry:
         with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
             with pytest.raises(PTYError, match="spawn"):
                 await registry.get_or_create("session-1", temp_dir, "wsl")
+
+
+# ---------------------------------------------------------------------------
+# Orphan cleanup tests
+# ---------------------------------------------------------------------------
+
+
+class TestOrphanCleanup:
+    """A session is reaped only when nothing could still be using it.
+
+    Age alone is not a reason: a tab left open for more than a day is still
+    in use, and closing its PTY kills the agent mid-request while the pane
+    keeps showing its last frame.
+    """
+
+    MAX_AGE = 100.0
+
+    async def _registry_with_session(self, temp_dir: Path, alive: bool = True):
+        registry = SessionRegistry(session_max_age=self.MAX_AGE)
+        mock_pty = make_mock_pty(alive=alive)
+        with patch("backend.terminal.sessions.PTYManager", return_value=mock_pty):
+            session, _ = await registry.get_or_create("session-1", temp_dir, "bash")
+        return registry, session, mock_pty
+
+    @pytest.mark.asyncio
+    async def test_old_attached_session_survives(self, temp_dir: Path):
+        registry, session, mock_pty = await self._registry_with_session(temp_dir)
+        await registry.attach("session-1", MagicMock())
+        session.created_at -= self.MAX_AGE * 10
+        session.last_activity -= self.MAX_AGE * 10
+
+        await registry._cleanup_orphaned()
+
+        assert registry.get("session-1") is session
+        mock_pty.close.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_old_session_recently_detached_survives(self, temp_dir: Path):
+        """Detaching (a window reload, a laptop sleep) restarts the grace period."""
+        registry, session, mock_pty = await self._registry_with_session(temp_dir)
+        ws = MagicMock()
+        await registry.attach("session-1", ws)
+        session.created_at -= self.MAX_AGE * 10
+        await registry.detach("session-1", ws)
+
+        await registry._cleanup_orphaned()
+
+        assert registry.get("session-1") is session
+        mock_pty.close.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_detached_session_idle_past_max_age_is_reaped(self, temp_dir: Path):
+        registry, session, mock_pty = await self._registry_with_session(temp_dir)
+        session.last_activity -= self.MAX_AGE + 1
+
+        await registry._cleanup_orphaned()
+
+        assert registry.get("session-1") is None
+        mock_pty.close.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_dead_session_is_reaped_even_when_attached(self, temp_dir: Path):
+        registry, session, mock_pty = await self._registry_with_session(
+            temp_dir, alive=False
+        )
+        await registry.attach("session-1", MagicMock())
+
+        await registry._cleanup_orphaned()
+
+        assert registry.get("session-1") is None
+
+    @pytest.mark.asyncio
+    async def test_cleanup_log_reports_liveness_before_closing(
+        self, temp_dir: Path, caplog: pytest.LogCaptureFixture
+    ):
+        """Liveness read after close() is always False, which hides the cause."""
+        registry, session, mock_pty = await self._registry_with_session(temp_dir)
+        session.last_activity -= self.MAX_AGE + 1
+
+        async def mark_dead() -> None:
+            mock_pty.is_alive.return_value = False
+
+        mock_pty.close.side_effect = mark_dead
+
+        with caplog.at_level("INFO", logger="backend.terminal.sessions"):
+            await registry._cleanup_orphaned()
+
+        assert "alive=True" in caplog.text

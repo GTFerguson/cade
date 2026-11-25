@@ -670,34 +670,46 @@ class SessionRegistry:
                 logger.exception("Error in cleanup loop: %s", e)
 
     async def _cleanup_orphaned(self) -> None:
-        """Remove sessions older than max_age."""
+        """Remove dead sessions and sessions no client has used for max_age.
+
+        Total age is deliberately not a criterion: a tab kept open for more
+        than max_age is still in use, and closing its PTY would kill the
+        agent mid-request while the pane keeps showing its last frame.
+        """
         now = time.time()
-        sessions_to_close: list[tuple[str, "Session"]] = []
+        sessions_to_close: list[tuple[str, "Session", bool]] = []
 
         # Collect sessions to close while holding lock
         async with self._lock:
             to_remove = []
             for session_id, session in self._sessions.items():
-                age = now - session.created_at
-                if age > self._session_max_age:
+                if not session.is_alive():
                     to_remove.append(session_id)
-                elif not session.is_alive():
+                elif session.connected_clients:
+                    continue
+                # last_activity is refreshed on attach and detach, so this
+                # measures how long the session has had no client at all.
+                elif now - session.last_activity > self._session_max_age:
                     to_remove.append(session_id)
 
-            # Remove from registry and collect for closure
+            # Remove from registry and collect for closure. Liveness is read
+            # now because closing the session always makes it report dead.
             for session_id in to_remove:
                 session = self._sessions.pop(session_id, None)
                 if session is not None:
-                    sessions_to_close.append((session_id, session))
+                    sessions_to_close.append((session_id, session, session.is_alive()))
 
         # Close sessions outside the lock to avoid blocking
-        for session_id, session in sessions_to_close:
+        for session_id, session, was_alive in sessions_to_close:
             try:
-                age_seconds = now - session.created_at
                 await self._close_session(session)
                 logger.info(
-                    "Cleaned up orphaned session: %s (age=%.0fs, project=%s, alive=%s)",
-                    session_id, age_seconds, session.project_path, session.is_alive(),
+                    "Cleaned up orphaned session: %s (age=%.0fs, idle=%.0fs, project=%s, alive=%s)",
+                    session_id,
+                    now - session.created_at,
+                    now - session.last_activity,
+                    session.project_path,
+                    was_alive,
                 )
             except Exception as e:
                 logger.error("Error closing orphaned session %s: %s", session_id, e)
