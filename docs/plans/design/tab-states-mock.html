@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tab states: mock</title>
+<style>
+  :root { --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 40px 80px;
+    background: #050505; color: #c4b9ad;
+    font-family: var(--font-mono); font-size: 13px; line-height: 1.5;
+  }
+  h1 { font-size: 18px; color: #f8f6f2; margin: 0 0 4px; font-weight: 600; }
+  h2 { font-size: 14px; color: #f8f6f2; margin: 44px 0 2px; font-weight: 600; }
+  p { margin: 0 0 12px; max-width: 78ch; }
+  .lede { color: #8a8079; }
+  .rule { color: #8a8079; margin-bottom: 14px; }
+  .rule b { color: #c4b9ad; font-weight: 600; }
+
+  /* Theme tokens, copied from frontend/src/config/themes.ts */
+  .theme-dark {
+    --bg-primary: #0a0a09; --bg-secondary: #111110; --bg-hover: #222120;
+    --text-primary: #f8f6f2; --text-muted: #5e5955; --border-color: #2a2827;
+    --accent-blue: #0a9dff; --accent-green: #aeee00; --accent-orange: #ffa724; --accent-cyan: #8cffba;
+    --chip-ink: #0a0a09;
+  }
+  .theme-light {
+    --bg-primary: #f5efe3; --bg-secondary: #ede6d7; --bg-hover: #ddd4c0;
+    --text-primary: #2a2520; --text-muted: #6f665a; --border-color: #d5cbb7;
+    --accent-blue: #1b5f9c; --accent-green: #436810; --accent-orange: #9c500a; --accent-cyan: #0f6a62;
+    --chip-ink: #f5efe3;
+  }
+
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 1100px) { .pair { grid-template-columns: 1fr; } }
+  .frame { border: 1px solid #2a2827; }
+  .frame-label { font-size: 11px; color: #5e5955; padding: 4px 8px; background: #0d0d0c; border-bottom: 1px solid #2a2827; }
+  .scene + .scene { border-top: 1px dashed #2a2827; }
+  .scene-label { font-size: 11px; padding: 6px 10px 0; background: var(--bg-secondary); color: var(--text-muted); }
+
+  /* ── Shared tab bar skeleton (matches frontend/styles/layout/tabs.css) ── */
+  .tab-bar { display: flex; align-items: flex-end; height: 36px; padding: 0 8px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); overflow: hidden; }
+  .pane { height: 26px; background: var(--bg-primary); }
+  .tab {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color); border-right: 1px solid var(--border-color);
+    margin-bottom: -1px; max-width: 200px; min-width: 80px; position: relative; cursor: pointer;
+  }
+  .tab-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--text-muted); }
+  .tab-status { flex-shrink: 0; width: 10px; text-align: center; font-size: 12px; line-height: 1; color: var(--text-muted); opacity: .6; }
+  .tab.active { background: var(--bg-primary); border-bottom-color: var(--bg-primary); }
+  .tab.active .tab-name { color: var(--text-primary); }
+  .tab[data-status="working"] .tab-status { color: var(--accent-blue); opacity: 1; animation: breathe 1.4s ease-in-out infinite; }
+  .tab[data-status="idle"] .tab-status { color: var(--accent-cyan); opacity: 1; }
+  .tab[data-status="input"] .tab-status { color: var(--accent-orange); opacity: 1; font-weight: 700; animation: breathe 1.2s ease-in-out infinite; }
+  .tab[data-status="input"] .tab-name { color: var(--text-primary); }
+  @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .tab-status { animation: none !important; } }
+
+  /* ── Current: waiting takes the top line and a tint; active has neither ── */
+  .v-current .tab[data-status="input"] { box-shadow: inset 0 2px 0 var(--accent-orange); background: color-mix(in srgb, var(--accent-orange) 10%, transparent); }
+
+  /* ── A: the top line belongs to the active tab; waiting keeps the tint ── */
+  .v-a .tab.active { box-shadow: inset 0 2px 0 var(--accent-green); }
+  .v-a .tab.active .tab-name { font-weight: 700; }
+  .v-a .tab[data-status="input"] { background: color-mix(in srgb, var(--accent-orange) 12%, transparent); }
+  .v-a .tab.active[data-status="input"] { background: color-mix(in srgb, var(--accent-orange) 12%, var(--bg-primary)); }
+  /* Finished is also yours to deal with, at about half the volume of waiting. */
+  .v-a .tab[data-status="idle"] { background: color-mix(in srgb, var(--accent-cyan) 6%, transparent); }
+  .v-a .tab.active[data-status="idle"] { background: color-mix(in srgb, var(--accent-cyan) 6%, var(--bg-primary)); }
+  .v-a .tab[data-status="idle"] .tab-name { color: color-mix(in srgb, var(--accent-cyan) 55%, var(--text-primary)); }
+
+  /* ── B: active is a raised, outlined tab; status is a line under the tab ── */
+  .v-b .tab { border-top: 1px solid transparent; border-left: 1px solid transparent; border-right-color: transparent; }
+  .v-b .tab.active { border-color: var(--text-muted); border-bottom-color: var(--bg-primary); padding-top: 10px; }
+  .v-b .tab.active .tab-name { font-weight: 700; }
+  .v-b .tab[data-status]:not([data-status="none"])::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 3px; height: 2px; }
+  .v-b .tab[data-status="working"]::after { background: var(--accent-blue); opacity: .55; }
+  .v-b .tab[data-status="idle"]::after { background: var(--accent-cyan); opacity: .85; }
+  .v-b .tab[data-status="idle"]:not(.active) { background: color-mix(in srgb, var(--accent-cyan) 4%, transparent); }
+  .v-b .tab[data-status="idle"] .tab-name { color: color-mix(in srgb, var(--accent-cyan) 55%, var(--text-primary)); }
+  .v-b .tab[data-status="input"]::after { background: var(--accent-orange); }
+  .v-b .tab[data-status="input"]:not(.active) { background: color-mix(in srgb, var(--accent-orange) 8%, transparent); }
+
+  /* ── C: status is a solid chip; the tab itself is never tinted ── */
+  .v-c .tab.active { box-shadow: inset 0 2px 0 var(--accent-green); }
+  .v-c .tab.active .tab-name { font-weight: 700; }
+  .v-c .tab-status { width: 16px; height: 16px; line-height: 16px; font-size: 11px; font-weight: 700; opacity: 1; }
+  .v-c .tab[data-status="working"] .tab-status { color: var(--accent-blue); outline: 1px solid var(--accent-blue); outline-offset: -1px; }
+  .v-c .tab[data-status="idle"] .tab-status { background: color-mix(in srgb, var(--accent-cyan) 28%, transparent); color: var(--accent-cyan); animation: none; }
+  .v-c .tab[data-status="idle"] .tab-name { color: color-mix(in srgb, var(--accent-cyan) 55%, var(--text-primary)); }
+  .v-c .tab[data-status="input"] .tab-status { background: var(--accent-orange); color: var(--chip-ink); }
+  .v-c .tab[data-status="input"] .tab-name { color: var(--accent-orange); }
+</style>
+</head>
+<body>
+
+<h1>Tab states</h1>
+<p class="lede">Two questions a tab has to answer at a glance: <b style="color:#c4b9ad">where am I</b> (active) and <b style="color:#c4b9ad">what needs me</b> (status). Each option is shown in True Black and Daylight, with the active tab moved across four scenes so every combination appears, including an active tab that is itself waiting.</p>
+
+<div id="variants"></div>
+
+<script>
+  const GLYPH = { input: "!", working: "●", idle: "✓", none: "·" };
+  const TABS = [
+    { name: "api-server", status: "none" },
+    { name: "Fix login redirect", status: "working" },
+    { name: "Action Required | Review schema", status: "input" },
+    { name: "Add retry to uploader", status: "idle" },
+    { name: "web-client", status: "none" },
+  ];
+  const SCENES = [
+    { active: 4, label: "active tab has nothing to report" },
+    { active: 1, label: "active tab is working" },
+    { active: 2, label: "active tab is waiting on you" },
+    { active: 3, label: "active tab has finished" },
+  ];
+  const VARIANTS = [
+    { id: "current", title: "Current",
+      rule: "<b>Active:</b> lighter background, brighter name. <b>Waiting:</b> orange top line and tint. The waiting tab outshouts the active one, and an active waiting tab looks the same as an inactive one." },
+    { id: "a", title: "A. Top line is the active tab",
+      rule: "<b>Active:</b> green top line, bold name. <b>Waiting:</b> orange tint and glyph, no line. <b>Finished:</b> a fainter cyan tint and a cyan-leaning name. One meaning per signal: the line says where you are, the tint says what is blocked, and a tab can carry both." },
+    { id: "b", title: "B. Raised active tab, status underline",
+      rule: "<b>Active:</b> outlined tab that opens into the pane, bold name. <b>Status:</b> a coloured line under the name for working, finished and waiting; finished also gets a cyan-leaning name. Quietest of the three; tints are kept only on inactive tabs." },
+    { id: "c", title: "C. Status chip",
+      rule: "<b>Active:</b> green top line, bold name. <b>Status:</b> a chip in front of the name: solid orange for waiting, soft cyan for finished, outlined blue for working. Waiting and finished also colour the name. No tab is ever tinted, so the active tab is never out-shouted, and the chip survives narrow tabs." },
+  ];
+
+  function bar(scene) {
+    const tabs = TABS.map((t, i) =>
+      `<div class="tab${i === scene.active ? " active" : ""}" data-status="${t.status}">` +
+      `<span class="tab-status">${GLYPH[t.status]}</span><span class="tab-name">${t.name}</span></div>`).join("");
+    return `<div class="scene"><div class="scene-label">${scene.label}</div><div class="tab-bar">${tabs}</div><div class="pane"></div></div>`;
+  }
+  function frame(theme, label, v) {
+    return `<div class="frame"><div class="frame-label">${label}</div><div class="${theme} v-${v.id}">${SCENES.map(bar).join("")}</div></div>`;
+  }
+  document.getElementById("variants").innerHTML = VARIANTS.map((v) =>
+    `<h2>${v.title}</h2><p class="rule">${v.rule}</p>` +
+    `<div class="pair">${frame("theme-dark", "True Black", v)}${frame("theme-light", "Daylight", v)}</div>`).join("");
+</script>
+</body>
+</html>

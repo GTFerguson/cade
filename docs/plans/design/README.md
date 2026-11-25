@@ -22,3 +22,4 @@ HTML visual explorations (not plans — these are design artifacts).
 | [[chat-pane-mocks.html]] | Chat pane UI mockups |
 | [[chat-tool-blocks-mockup.html]] | Tool block rendering mockups |
 | [[dashboard-demo.html]] | Dashboard component demos |
+| [[tab-states-mock.html]] | Tab bar: active marker and agent status, three options against the current look |
