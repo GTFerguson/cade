@@ -122,6 +122,9 @@ class Config:
     cors_origins: list[str] = field(default_factory=list)
     root_path: str = ""
     cli_agent: CliAgent = field(default_factory=CliAgent)
+    # The folder whose subfolders are the user's projects; the project picker
+    # lists them. Set with CADE_PROJECTS_ROOT.
+    projects_root: Path = field(default_factory=lambda: Path.home() / "projects")
 
     @classmethod
     def from_env(cls) -> Config:
@@ -158,6 +161,9 @@ class Config:
             cors_origins=cors_origins,
             root_path=os.getenv("CADE_ROOT_PATH", ""),
             cli_agent=CliAgent.from_env(),
+            projects_root=Path(
+                os.getenv("CADE_PROJECTS_ROOT", str(Path.home() / "projects"))
+            ).expanduser(),
         )
 
     def update_from_args(
@@ -190,6 +196,7 @@ class Config:
             cors_origins=self.cors_origins,
             root_path=self.root_path,
             cli_agent=self.cli_agent,
+            projects_root=self.projects_root,
         )
 
     def validate_shell_command(self) -> None:

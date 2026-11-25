@@ -148,8 +148,12 @@ def prepare_cli_orchestrator_env(
     auth_token: str = "",
     session_id: str | None = None,
     project_dir: Path | None = None,
+    agent: object | None = None,
 ) -> dict[str, str]:
     """Build PTY env vars wiring the CLI coding agent to CADE's orchestrator MCP.
+
+    ``agent`` is the descriptor of the agent this session runs; without it the
+    backend's configured agent is assumed.
 
     For Claude Code the agent reads the generated JSON via ``--mcp-config``.
     For Codex/Cursor the adapter merges the server entries into the agent's
@@ -166,7 +170,7 @@ def prepare_cli_orchestrator_env(
     from backend.config import get_config
     from backend.terminal.cli_agent_adapters import adapter_from_descriptor
 
-    adapter = adapter_from_descriptor(get_config().cli_agent)
+    adapter = adapter_from_descriptor(agent or get_config().cli_agent)
     if adapter.capabilities.mcp:
         servers = json.loads(path.read_text(encoding="utf-8")).get("mcpServers", {})
         try:
@@ -187,16 +191,20 @@ def prepare_cli_orchestrator_env(
     return env
 
 
-def remove_adapter_mcp_config(project_dir: Path | None = None) -> None:
-    """Remove CADE-managed MCP entries from the active adapter's native config.
+def remove_adapter_mcp_config(
+    project_dir: Path | None = None, agent: object | None = None
+) -> None:
+    """Remove CADE-managed MCP entries from an agent's native config.
 
-    Called alongside ``remove_mcp_config`` during session teardown.
+    Called alongside ``remove_mcp_config`` during session teardown. ``agent``
+    is the descriptor of the agent the session ran; without it the backend's
+    configured agent is assumed.
     """
     from backend.config import get_config
     from backend.terminal.cli_agent_adapters import adapter_from_descriptor
 
     try:
-        adapter = adapter_from_descriptor(get_config().cli_agent)
+        adapter = adapter_from_descriptor(agent or get_config().cli_agent)
         adapter.remove_mcp_config(project_dir)
     except Exception as exc:
         logger.debug("Adapter MCP cleanup skipped: %s", exc)

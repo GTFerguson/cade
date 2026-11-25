@@ -883,6 +883,38 @@ def create_app(config: Config | None = None) -> FastAPI:
             "sessions": describe_sessions(get_registry(), cfg.cli_agent.adapter_id),
         })
 
+    @app.get("/api/projects")
+    async def get_projects(
+        cade_session: str | None = Cookie(default=None),
+    ) -> JSONResponse:
+        """Projects under the main working folder, most recently worked on
+        first, and the agents a new tab can run."""
+        from backend.projects import list_projects
+        from backend.terminal.session_agents import selectable_agents
+
+        cfg = get_config()
+        if cfg.auth_enabled and not validate_session_cookie(cade_session or "", cfg):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        return JSONResponse({
+            "root": str(cfg.projects_root),
+            "projects": list_projects(cfg.projects_root),
+            "agents": selectable_agents(cfg.cli_agent),
+        })
+
+    @app.get("/api/projects/handoffs")
+    async def get_project_handoffs(
+        path: str,
+        cade_session: str | None = Cookie(default=None),
+    ) -> JSONResponse:
+        """A project's handoff briefs, most recently edited first."""
+        from backend.projects import list_handoffs
+
+        cfg = get_config()
+        if cfg.auth_enabled and not validate_session_cookie(cade_session or "", cfg):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        project = Path(path).expanduser().resolve()
+        return JSONResponse({"path": str(project), "handoffs": list_handoffs(project)})
+
     @app.get("/api/tab-groups")
     async def get_tab_groups(
         cade_session: str | None = Cookie(default=None),

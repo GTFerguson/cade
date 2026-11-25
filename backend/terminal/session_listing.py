@@ -26,7 +26,7 @@ def describe_session(session: PTYSession, agent_id: str) -> dict:
         "label": session.label,
         "group": session.group,
         "projectPath": str(session.project_path),
-        "agent": agent_id,
+        "agent": session.agent or agent_id,
         "createdAt": session.created_at,
         "lastActivity": session.last_activity,
         "alive": session.is_alive(),

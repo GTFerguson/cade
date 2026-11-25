@@ -18,7 +18,7 @@ class MessageType:
     WRITE_FILE = "write-file"  # Write file content: { type, path: str, content: str }
     CREATE_FILE = "create-file"  # Create new file: { type, path: str, content?: str }
     SAVE_SESSION = "save-session"  # Save session state: { type, state: SessionState }
-    SET_PROJECT = "set-project"  # Set project directory: { type, path: str, sessionId?: str, label?: str, group?: str, lastSeq?: {sessionKey: int} }
+    SET_PROJECT = "set-project"  # Set project directory: { type, path: str, sessionId?: str, label?: str, group?: str, agent?: str, lastSeq?: {sessionKey: int} }
     SET_LABEL = "set-label"  # Rename the session: { type, label: str } (empty clears it)
     SET_GROUP = "set-group"  # Move the session to a tab group: { type, group: str } (empty removes it from its group)
     PING = "ping"  # Liveness probe: { type, t?: number } — answered with PONG carrying the same t

@@ -45,6 +45,7 @@ from backend.project_services import (
     acquire_project,
     release_project,
 )
+from backend.projects import doc_title
 from backend.protocol import ErrorCode, MessageType, SessionKey
 from core.backend.providers.config import (
     DEFAULT_CONTEXT_BUDGET_HARD_LIMIT,
@@ -60,6 +61,11 @@ from core.backend.providers.types import ChatDone, ChatError, ChatMessage, Syste
 from backend.session import load_session, save_session
 from backend.terminal.pty import PTYManager
 from backend.terminal.sessions import PTYSession, TerminalState, get_registry
+from backend.terminal.session_agents import (
+    agent_descriptor,
+    agent_env,
+    clean_agent_id,
+)
 from backend.terminal.tab_groups import (
     broadcast_group,
     clean_group_name,
@@ -159,6 +165,10 @@ class ConnectionHandler:
         self._session_label: str | None = None
         # Tab group the client asked for; only a new session takes it.
         self._requested_group: str | None = None
+        # CLI agent the tab asked for, and the descriptor this connection's
+        # session actually runs (the session's own choice wins once it exists).
+        self._requested_agent: str | None = None
+        self._cli_agent = self._config.cli_agent
         self._user_config = None
         self._chat_session: ChatSession | None = None
         self._chat_task: asyncio.Task | None = None
@@ -339,6 +349,7 @@ class ConnectionHandler:
                         if isinstance(label, str) and label.strip():
                             self._session_label = label.strip()
                         self._requested_group = clean_group_name(data.get("group"))
+                        self._requested_agent = clean_agent_id(data.get("agent"))
                         last_seq = data.get("lastSeq")
                         if isinstance(last_seq, dict):
                             self._client_seqs = {
@@ -409,12 +420,25 @@ class ConnectionHandler:
             logger.info("Kiosk mode enabled — PTY, file watcher, and CC features disabled")
         from backend.claude_profiles import terminal_env as claude_profile_env
 
+        # A session that already exists runs the agent it was started with;
+        # only a session being created takes the agent this tab asked for.
+        existing = get_registry().get(self._session_id) if self._session_id else None
+        self._cli_agent = agent_descriptor(
+            existing.agent if existing is not None else self._requested_agent,
+            self._config.cli_agent,
+        )
+
         # The Claude profile applies whether or not the agent auto-starts: a
         # `claude` typed into the tab later must get the same account.
         self._cli_pty_env = {
             **claude_profile_env(self._working_dir),
             **self._prepare_cli_orchestrator_env(),
         }
+        # Only when it differs from the configured agent: the resume wrapper
+        # already defaults to that one, and leaving the environment alone
+        # keeps an agent the user configured by hand in charge.
+        if self._cli_agent is not self._config.cli_agent:
+            self._cli_pty_env.update(agent_env(self._cli_agent))
         # The attention hook and the resume wrapper identify this tab by it.
         if self._session_id:
             self._cli_pty_env["CADE_SESSION_ID"] = self._session_id
@@ -480,7 +504,10 @@ class ConnectionHandler:
                 initial_prompt=self._initial_prompt,
                 pty_env=self._cli_pty_env or None,
                 resume_on_exit=self._auto_resume_handoff,
+                cli_agent=self._cli_agent,
             )
+            if self._is_new_session and self._cli_agent is not self._config.cli_agent:
+                self._session.agent = self._cli_agent.adapter_id
             self._session.connected_clients.add(self._ws)
             if self._session_label:
                 self._session.label = self._session_label
@@ -613,6 +640,7 @@ class ConnectionHandler:
             auth_token=self._config.auth_token,
             session_id=self._session_id,
             project_dir=self._config.working_dir,
+            agent=self._cli_agent,
         )
 
         from backend.permissions.manager import get_permission_manager
@@ -770,7 +798,7 @@ class ConnectionHandler:
 
         from backend.terminal.cli_agent_adapters import adapter_from_descriptor
 
-        adapter = adapter_from_descriptor(self._config.cli_agent)
+        adapter = adapter_from_descriptor(self._cli_agent)
 
         message: dict = {
             "type": MessageType.CONNECTED,
@@ -1568,34 +1596,6 @@ class ConnectionHandler:
         """
         root = self._resolve_root(data.get("root") if data else None)
 
-        def _title(path: Path) -> str:
-            # Prefer a frontmatter `title:` or the first `# ` heading; fall back
-            # to the filename so every row has a human-readable label.
-            try:
-                with path.open(encoding="utf-8") as fh:
-                    in_frontmatter = False
-                    for i, raw in enumerate(fh):
-                        line = raw.rstrip("\n")
-                        if i == 0 and line.strip() == "---":
-                            in_frontmatter = True
-                            continue
-                        if in_frontmatter:
-                            if line.strip() == "---":
-                                in_frontmatter = False
-                                continue
-                            if line.lower().startswith("title:"):
-                                t = line.split(":", 1)[1].strip().strip("\"'")
-                                if t:
-                                    return t
-                            continue
-                        if line.startswith("# "):
-                            return line[2:].strip()
-                        if i > 40:  # title lives near the top; stop scanning
-                            break
-            except OSError:
-                pass
-            return path.stem
-
         def _entry(path: Path) -> dict:
             try:
                 mtime = path.stat().st_mtime
@@ -1605,7 +1605,7 @@ class ConnectionHandler:
                 "name": path.name,
                 "relPath": str(path.relative_to(root)),
                 "modified": mtime,
-                "title": _title(path),
+                "title": doc_title(path),
             }
 
         plans_dir = root / "docs" / "plans"
@@ -2499,7 +2499,7 @@ class ConnectionHandler:
             mcp_path = self._cli_pty_env.get("CADE_CLI_MCP_CONFIG")
             cmd = build_launch_command(
                 self._initial_prompt,
-                self._config.cli_agent,
+                self._cli_agent,
                 mcp_path,
                 resume_on_exit=self._auto_resume_handoff,
             )

@@ -247,6 +247,9 @@ class PTYSession:
     label: str | None = None
     # Name of the tab group the session belongs to (see tab_groups.py).
     group: str | None = None
+    # Adapter id of the CLI agent the tab asked for (see session_agents.py).
+    # None means the backend's configured agent.
+    agent: str | None = None
     # Whether the agent needs the user: "input", "idle" or None (see attention.py).
     attention: str | None = None
     attention_message: str | None = None
@@ -433,6 +436,7 @@ class SessionRegistry:
         initial_prompt: str | None = None,
         pty_env: dict[str, str] | None = None,
         resume_on_exit: bool = True,
+        cli_agent: "CliAgent | None" = None,
     ) -> tuple[PTYSession, bool]:
         """Get an existing session or create a new one.
 
@@ -443,6 +447,7 @@ class SessionRegistry:
             size: Terminal size
             auto_start_claude: Whether to auto-start claude command
             resume_on_exit: Relaunch the agent into a fresh handoff brief on exit
+            cli_agent: The agent to start; the configured one when omitted
             dummy_mode: Whether to run in dummy mode
             network_timeout: Max time to wait for network readiness (seconds)
 
@@ -471,6 +476,7 @@ class SessionRegistry:
                 initial_prompt,
                 pty_env,
                 resume_on_exit,
+                cli_agent,
             )
             self._sessions[session_id] = session
             logger.info("Created new session: %s at %s", session_id, project_path)
@@ -488,6 +494,7 @@ class SessionRegistry:
         initial_prompt: str | None = None,
         pty_env: dict[str, str] | None = None,
         resume_on_exit: bool = True,
+        cli_agent: "CliAgent | None" = None,
     ) -> PTYSession:
         """Create a new PTY session with the primary (claude) terminal."""
         pty = PTYManager()
@@ -543,7 +550,7 @@ class SessionRegistry:
                 mcp_path = (pty_env or {}).get("CADE_CLI_MCP_CONFIG")
                 cmd = build_launch_command(
                     initial_prompt,
-                    get_config().cli_agent,
+                    cli_agent or get_config().cli_agent,
                     mcp_path,
                     resume_on_exit=resume_on_exit,
                 )
@@ -657,8 +664,14 @@ class SessionRegistry:
                 remove_adapter_mcp_config,
                 remove_mcp_config,
             )
+            from backend.config import get_config
+            from backend.terminal.session_agents import agent_descriptor
+
             remove_mcp_config(session.mcp_config_path)
-            remove_adapter_mcp_config(session.project_path)
+            remove_adapter_mcp_config(
+                session.project_path,
+                agent_descriptor(session.agent, get_config().cli_agent),
+            )
 
     async def _cleanup_loop(self) -> None:
         """Periodically clean up orphaned sessions."""
