@@ -6,6 +6,8 @@
  *  - "cc" (Claude Code): single accept-edits toggle
  */
 
+import { apiBase } from "../config/config";
+
 interface PermissionState {
   providerType: "api" | "cc";
   allowRead: boolean;
@@ -204,7 +206,7 @@ export class PermissionsButton {
 
   private async loadState(): Promise<void> {
     try {
-      const res = await fetch("/api/permissions/state", {
+      const res = await fetch(`${apiBase()}/api/permissions/state`, {
         headers: this._connectionHeaders(),
       });
       if (!res.ok) return;
@@ -239,7 +241,7 @@ export class PermissionsButton {
     this.updateFlyoutState();
 
     try {
-      await fetch("/api/permissions/set", {
+      await fetch(`${apiBase()}/api/permissions/set`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...this._connectionHeaders() },
         body: JSON.stringify({ name: key, value }),

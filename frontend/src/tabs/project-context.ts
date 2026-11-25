@@ -18,6 +18,7 @@ import { MarkdownViewer } from "../markdown/markdown";
 import { RightPaneManager, type RightPaneMode } from "../right-pane";
 import { Splash } from "../ui/splash";
 import { McpAuthNudge } from "../chat/mcp-auth-nudge";
+import { apiBase } from "../config/config";
 import { TerminalManager } from "../terminal/terminal-manager";
 import type { CustomKeyHandler } from "../terminal/terminal";
 import { ErrorCode, SessionKey } from "@core/platform/protocol";
@@ -774,7 +775,7 @@ export class ProjectContextImpl implements IProjectContext {
       action.disabled = true;
       action.textContent = "Opening…";
       try {
-        const res = await fetch(`${this.basePath()}/api/mcp/oauth/start`, {
+        const res = await fetch(`${apiBase()}/api/mcp/oauth/start`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -805,13 +806,6 @@ export class ProjectContextImpl implements IProjectContext {
     toast.appendChild(close);
 
     this.container.appendChild(toast);
-  }
-
-  /** Backend path prefix for fetches (root_path). */
-  private basePath(): string {
-    // Dynamically reads the same BASE_URL used elsewhere; avoids a static
-    // import in case ProjectContext is mounted before config is ready.
-    return (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
   }
 
   private showNotification(message: string, style: string = "info"): void {

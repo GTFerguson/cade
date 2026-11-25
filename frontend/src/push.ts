@@ -4,7 +4,7 @@
  * phone with CADE closed learns that an agent is waiting.
  */
 
-import { basePath } from "./config/config";
+import { apiBase, basePath } from "./config/config";
 
 export type PushState = "unsupported" | "denied" | "off" | "on";
 
@@ -60,7 +60,7 @@ async function api<T>(path: string, body?: unknown): Promise<T | null> {
       init.headers = { "Content-Type": "application/json" };
       init.body = JSON.stringify(body);
     }
-    const res = await fetch(`${basePath}/api/push/${path}`, init);
+    const res = await fetch(`${apiBase()}/api/push/${path}`, init);
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {

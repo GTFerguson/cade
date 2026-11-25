@@ -1,4 +1,5 @@
 import type { MemorySymbol, MemoryEntry, MemoryEvidence } from "./types";
+import { apiBase } from "../config/config";
 
 export class SymbolDetailPane {
   private currentSymbol: MemorySymbol | null = null;
@@ -292,7 +293,7 @@ export class SymbolDetailPane {
     if (!this.projectPath) return;
     const uri = `http://nkrdn.knowledge/memory#${uuid}`;
     try {
-      await fetch("/api/memory/archive", {
+      await fetch(`${apiBase()}/api/memory/archive`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ project: this.projectPath, uri }),

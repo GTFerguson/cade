@@ -1,6 +1,7 @@
 import type { WebSocketClient } from "../platform/websocket";
 import type { NkrdnGraphMessage, GraphModule, MemorySymbol, MemoryEntry, OrphanMemory } from "./types";
 import { isGraphModule } from "./types";
+import { apiBase } from "../config/config";
 
 export class MemoryGraphTree {
   private data: NkrdnGraphMessage | null = null;
@@ -350,7 +351,7 @@ export class MemoryGraphTree {
     if (!this.projectPath) return;
     const uri = `http://nkrdn.knowledge/memory#${orphan.uuid}`;
     try {
-      await fetch("/api/memory/archive", {
+      await fetch(`${apiBase()}/api/memory/archive`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ project: this.projectPath, uri }),
@@ -362,7 +363,7 @@ export class MemoryGraphTree {
     if (!this.projectPath) return;
     const uri = `http://nkrdn.knowledge/memory#${orphan.uuid}`;
     try {
-      await fetch("/api/memory/retarget", {
+      await fetch(`${apiBase()}/api/memory/retarget`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ project: this.projectPath, uri, target_name: targetName }),

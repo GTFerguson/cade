@@ -27,6 +27,7 @@ import { getMermaidConfig } from "./mermaid-theme";
 import { handleViewModeScroll, scrollCodeBlocksHorizontally, createScrollState } from "./scroll";
 import type { ScrollState } from "./scroll";
 import { getUserConfig } from "../config/user-config";
+import { apiBase } from "../config/config";
 import {
   createEditorModeState,
   handleNormalModeKey,
@@ -568,7 +569,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
 
     if (this.projectPath) {
       try {
-        const res = await fetch(`/api/project/filters?project=${encodeURIComponent(this.projectPath)}`);
+        const res = await fetch(`${apiBase()}/api/project/filters?project=${encodeURIComponent(this.projectPath)}`);
         if (res.ok) {
           const data = await res.json() as { exclude?: string[] };
           textarea.value = (data.exclude ?? []).join("\n");
@@ -587,7 +588,7 @@ export class MarkdownViewer implements Component, PaneKeyHandler {
       if (!this.projectPath) return;
       const patterns = textarea.value.split("\n").map((p) => p.trim()).filter(Boolean);
       try {
-        await fetch("/api/project/filters", {
+        await fetch(`${apiBase()}/api/project/filters`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ project: this.projectPath, exclude: patterns }),

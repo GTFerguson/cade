@@ -26,7 +26,7 @@ import { DiagramViewer } from "@core/chat/diagram-viewer";
 import { ContextBudgetIndicator } from "../components/context-budget-indicator";
 import { PermissionsButton } from "./permissions-button";
 import { MCPStatusIcon, type MCPEntry } from "./mcp-status-icon";
-import { basePath as chatBasePath } from "../config/config";
+import { apiBase } from "../config/config";
 import { linkifyElement, patchLinks } from "@core/chat/linkify";
 import { registerCallouts } from "../markdown/callouts";
 import { getMermaidConfig } from "../markdown/mermaid-theme";
@@ -143,7 +143,7 @@ export class ChatPane implements Component, PaneKeyHandler {
       mermaidConfig: getMermaidConfig(),
       selfCorrect: {
         fix: async (code: string, format: string, error: string): Promise<string> => {
-          const res = await fetch("/api/fix-diagram", {
+          const res = await fetch(`${apiBase()}/api/fix-diagram`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ code, format, error }),
@@ -188,7 +188,7 @@ export class ChatPane implements Component, PaneKeyHandler {
 
     this.contextBudget = new ContextBudgetIndicator();
     this.permissionsButton = new PermissionsButton();
-    this.mcpStatusIcon = new MCPStatusIcon({ apiPrefix: chatBasePath });
+    this.mcpStatusIcon = new MCPStatusIcon({ apiPrefix: apiBase() });
 
     this.orchToggleEl = document.createElement("button");
     this.orchToggleEl.className = "statusline-orch-toggle";
@@ -1056,7 +1056,7 @@ export class ChatPane implements Component, PaneKeyHandler {
 
     const uri = `http://nkrdn.knowledge/memory#${uriStem}`;
     try {
-      const res = await fetch("/api/memory/archive", {
+      const res = await fetch(`${apiBase()}/api/memory/archive`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ project: this.projectPath, uri }),
