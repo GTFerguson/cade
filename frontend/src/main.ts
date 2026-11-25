@@ -52,7 +52,8 @@ import { setMermaidConfig } from "@core/chat/markdown-renderer";
 import { getMermaidConfig } from "./markdown/mermaid-theme";
 import { RemoteProfileManager } from "./remote/profile-manager";
 import { RemoteProjectSelector } from "./remote/RemoteProjectSelector";
-import { LocalProjectSelector } from "./local/LocalProjectSelector";
+import { ProjectPicker } from "./local/project-picker";
+import { loadRecentProjects, rememberRecentProject } from "./local/recent-projects";
 import { Splash } from "./ui/splash";
 import type { RemoteProfile } from "./remote/types";
 import { getAuthToken, setAuthToken } from "./auth/tokenManager";
@@ -71,6 +72,7 @@ class App {
   private attentionByTab = new Map<string, AttentionState>();
   /** Colour and auto-add folders of each tab group, as the backend holds them. */
   private groupDefs: TabGroupDef[] = [];
+  private projectPickerOpen = false;
   /** Polls the backend's live sessions while the start splash is up. */
   private splashSessionTimer: number | null = null;
   private tabContentContainer: HTMLElement | null = null;
@@ -912,28 +914,41 @@ class App {
    * Handle add tab button click.
    */
   private async handleAddTab(): Promise<void> {
-    let path: string | null;
+    // The key that opens the picker must not stack a second one on top.
+    if (!this.tabContentContainer || this.projectPickerOpen) return;
+    this.projectPickerOpen = true;
+    const activeTabId = this.tabManager.getActiveTabId();
+    const tabs = this.tabManager.getTabs();
+    const picker = new ProjectPicker(this.tabContentContainer, {
+      // A remote tab's path is on another machine; it is not a project to open here.
+      openTabs: tabs
+        .filter((t) => !t.isRemote)
+        .map((t) => ({ path: t.projectPath, name: t.name, isActive: t.id === activeTabId })),
+      recents: loadRecentProjects(),
+      groups: [...new Set([...this.tabManager.getGroupNames(), ...this.groupDefs.map((d) => d.name)])],
+      native: isTauri(),
+      loadSessions: async () =>
+        sessionsToAdopt(await WebSocketClient.fetchSessionList(), tabs.map((t) => t.id)),
+    });
+    const choice = await picker.show().finally(() => {
+      this.projectPickerOpen = false;
+    });
+    if (!choice) return;
 
-    if (isTauri()) {
-      path = await pickProjectFolder(this.defaultProjectPath);
-    } else {
-      if (!this.tabContentContainer) return;
-      const activeTabId = this.tabManager.getActiveTabId();
-      const openTabs = this.tabManager.getTabs().map((t) => ({
-        path: t.projectPath,
-        name: t.name,
-        isActive: t.id === activeTabId,
-      }));
-      const selector = new LocalProjectSelector(this.tabContentContainer, openTabs);
-      path = await selector.show();
+    if (choice.kind === "attach") {
+      this.attachFromSplash(choice.session);
+      return;
     }
 
-    if (path) {
-      this.startSplash?.setLoading();
-      this.startSplashTimeout();
-      const tab = this.tabManager.createTab(path);
-      this.tabManager.switchTab(tab.id);
-    }
+    const path =
+      choice.kind === "system" ? await pickProjectFolder(this.defaultProjectPath) : choice.path;
+    if (!path) return;
+
+    rememberRecentProject(path);
+    this.startSplash?.setLoading();
+    this.startSplashTimeout();
+    const tab = this.tabManager.createTab(path, choice.group ? { group: choice.group } : undefined);
+    this.tabManager.switchTab(tab.id);
   }
 
   /**

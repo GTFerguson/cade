@@ -43,25 +43,23 @@ onto a chip to change its group.
 
 ## 2. One project picker
 
-**What it adds.** The keyboard-driven picker used in the browser
-(`frontend/src/local/LocalProjectSelector.ts`) replaces the native folder
-dialog on desktop (`pickProjectFolder`, called from `frontend/src/main.ts`).
-It lists the projects already open first, so opening a second tab on the same
-project is two key presses, then the project folder listing below.
+Built 25 Nov 2026, not yet installed: `frontend/src/local/project-picker.ts`
+(view), `picker-model.ts` (what is listed and how it is filtered),
+`recent-projects.ts`. One keyboard-driven picker on desktop, browser and phone
+in place of the native folder dialog. It lists the projects already open (the
+active tab's first, so a second tab on it is one key press), sessions running
+with no tab on this device, recent projects, then a folder listing. `/` filters
+all of them by typing, and text that starts like a path browses there. `g`
+chooses the tab group the new tab goes in. The system folder dialog stays
+reachable on desktop as the last entry.
 
-**Improvements to make while unifying it.**
+**Left.**
 
-- Recently used projects, not only the currently open ones.
-- Type-to-filter, using the fuzzy matcher the phone already has
-  (`frontend/src/ui/mobile/fuzzy.ts`).
-- Choose the agent (Claude Code, Codex) and the tab group at the point of
-  opening.
-- Live sessions that have no tab on this device, so attaching is part of the
-  same picker instead of a separate splash option.
-- Its own styles: it currently borrows the remote selector's class names.
-
-**Open questions.** Should the native dialog stay reachable for folders outside
-the usual project roots, or is path entry in the picker enough?
+- Choosing the agent (Claude Code, Codex) at the point of opening. The agent is
+  a setting of the whole backend today (`Config.cli_agent`), so this needs the
+  session to carry its own agent first.
+- Recent projects are kept per browser. A phone does not see what the desktop
+  opened.
 
 ## 3. Pull request monitoring
 

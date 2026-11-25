@@ -91,7 +91,7 @@ function dashboardPayload(
   };
 }
 
-// ── Mock browse API for LocalProjectSelector ────────────────────────
+// ── Mock browse API for the project picker ────────────────────────
 // Mirrors what /api/browse returns so the file picker works in demo mode.
 
 const MOCK_FS: Record<string, string[]> = {

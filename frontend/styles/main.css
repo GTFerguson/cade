@@ -30,6 +30,7 @@
 @import "./screens/splash.css";
 @import "./screens/overlays.css";
 @import "./screens/remote.css";
+@import "./screens/project-picker.css";
 
 /* Mobile (overrides desktop) */
 @import "./mobile.css";

@@ -698,7 +698,7 @@ document.removeEventListener("keydown", this.handler, true);
 document.addEventListener("keydown", this.handler);
 ```
 
-This applies to: `LocalProjectSelector`, `RemoteProjectSelector`, and any full-pane overlay triggered from an existing tab. The `Splash` screen already uses capture phase for the same reason.
+This applies to: `ProjectPicker`, `RemoteProjectSelector`, and any full-pane overlay triggered from an existing tab. The `Splash` screen already uses capture phase for the same reason.
 
 **Scrollable lists — 2-item lookahead buffer:**
 

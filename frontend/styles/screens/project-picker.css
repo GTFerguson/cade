@@ -1,0 +1,177 @@
+/* CADE — Project picker: the screen a new tab's project is chosen on */
+
+.project-picker {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  font-family: var(--font-mono);
+  outline: none;
+}
+
+.picker-body {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 640px;
+  /* Leaves the header and group line on screen however long the list is. */
+  max-height: calc(100% - 80px);
+  padding: 0 40px;
+  box-sizing: border-box;
+}
+
+.picker-header {
+  margin-bottom: 20px;
+  font-size: 16px;
+  letter-spacing: 2px;
+  text-align: center;
+  color: var(--accent-red);
+}
+
+.picker-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-focus);
+  background: var(--bg-secondary);
+}
+
+.picker-filter[hidden] {
+  display: none;
+}
+
+.picker-filter-prompt {
+  color: var(--accent-green);
+  font-size: 13px;
+}
+
+.picker-filter-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.picker-section {
+  margin-top: 14px;
+  padding: 0 16px 4px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.picker-section:first-child {
+  margin-top: 0;
+}
+
+.picker-option {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.picker-option:hover {
+  background: var(--bg-hover);
+}
+
+.picker-option.selected {
+  background: var(--accent-red);
+  color: var(--bg-primary);
+}
+
+.picker-option-label {
+  white-space: nowrap;
+}
+
+.picker-option-meta {
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-option.selected .picker-option-meta {
+  color: var(--bg-secondary);
+}
+
+.picker-empty {
+  padding: 16px 0;
+  font-size: 13px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.picker-group {
+  margin-top: 16px;
+  padding: 0 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.picker-group[hidden] {
+  display: none;
+}
+
+.picker-group-value {
+  color: var(--text-primary);
+}
+
+.picker-help {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  font-size: 11px;
+  line-height: 1.6;
+  text-align: right;
+  color: var(--text-muted);
+}
+
+.picker-help-key {
+  color: var(--accent-green);
+}
+
+/* On a phone the key list has no keyboard to describe and would cover the list. */
+@media (max-width: 768px) {
+  .picker-help {
+    display: none;
+  }
+
+  .picker-body {
+    padding: 0 12px;
+    max-height: calc(100% - 24px);
+  }
+
+  .picker-option {
+    padding: 10px 12px;
+  }
+}

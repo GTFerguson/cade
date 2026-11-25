@@ -183,7 +183,7 @@ export class TabManager {
    */
   createTab(
     projectPath: string,
-    opts?: { initialPrompt?: string; chatHandoff?: string },
+    opts?: { initialPrompt?: string; chatHandoff?: string; group?: string },
   ): TabState {
     const id = generateId();
     const name = getProjectName(projectPath);
@@ -191,9 +191,11 @@ export class TabManager {
     const tabInfo: TabInfo = { id, projectPath, name };
     if (opts?.initialPrompt) tabInfo.initialPrompt = opts.initialPrompt;
     if (opts?.chatHandoff) tabInfo.chatHandoff = opts.chatHandoff;
+    if (opts?.group) tabInfo.group = opts.group;
     const tabState = this.createTabState(tabInfo);
 
     this.tabs.set(id, tabState);
+    this.reorder(arrangeByGroup(this.getTabs()));
     this.saveState();
 
     this.emit("tab-created", tabState);
