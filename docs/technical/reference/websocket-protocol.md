@@ -1,7 +1,7 @@
 ---
 title: WebSocket Protocol Reference
 created: 2026-02-25
-updated: 2026-10-22
+updated: 2026-11-25
 status: complete
 tags: [reference, protocol, websocket, api]
 ---
@@ -51,15 +51,17 @@ See [[../core/remote-sessions]] for the broadcaster, replay and size policy behi
 
 | Type | Direction | Payload | Description |
 |------|-----------|---------|-------------|
-| `connected` | S->C | `{ workingDir, connectionId, cliAgent, ... }` | Connection established. `connectionId` is what `pty-size.controller` refers to. |
-| `set-project` | C->S | `{ path, sessionId?, label?, lastSeq?, dashboardFile?, providerOverride?, initialPrompt?, chatHandoff? }` | Set project directory. `label` names the session in listings. `lastSeq` maps session keys to the last `output.seq` seen, so a reconnect replays only the gap. `initialPrompt` seeds a new Claude Code CLI session (`claude "<prompt>"`); `chatHandoff` is a one-shot path the frontend uses to prime enhanced chat — both set only for a tab spawned from the Plans pane. See [[frontend-architecture#Plans & Handoffs Pane]]. |
+| `connected` | S->C | `{ workingDir, connectionId, cliAgent, group, ... }` | Connection established. `connectionId` is what `pty-size.controller` refers to. `group` is the session's tab group, or `null`; see [[../core/tab-groups]]. |
+| `set-project` | C->S | `{ path, sessionId?, label?, group?, lastSeq?, dashboardFile?, providerOverride?, initialPrompt?, chatHandoff? }` | Set project directory. `label` names the session in listings. `group` is the tab group the tab was last in; only a session being created takes it. `lastSeq` maps session keys to the last `output.seq` seen, so a reconnect replays only the gap. `initialPrompt` seeds a new Claude Code CLI session (`claude "<prompt>"`); `chatHandoff` is a one-shot path the frontend uses to prime enhanced chat — both set only for a tab spawned from the Plans pane. See [[frontend-architecture#Plans & Handoffs Pane]]. |
 | `save-session` | C->S | `{ state }` | Persist session state |
 | `session-restored` | S->C | `{ sessionId, scrollback, sessionKey?, seq }` | Cold attach: full sanitized scrollback running up to `seq`. Not sent when the gap could be replayed as `output`. |
 | `ping` | C->S | `{ t? }` | Liveness probe; answered with `pong` carrying the same `t` |
 | `pong` | S->C | `{ t? }` | Liveness reply |
 | `list-sessions` | C->S | `{}` | Live sessions on this backend |
-| `session-list` | S->C | `{ sessions: LiveSession[] }` | `LiveSession = { id, label, projectPath, agent, createdAt, lastActivity, alive, clients, attention, attentionMessage, terminals }`. Same shape as `GET /api/sessions`. |
+| `session-list` | S->C | `{ sessions: LiveSession[] }` | `LiveSession = { id, label, group, projectPath, agent, createdAt, lastActivity, alive, clients, attention, attentionMessage, terminals }`. Same shape as `GET /api/sessions`. |
 | `session-attention` | S->C | `{ sessionId, attention, message? }` | The agent needs the user (`"input"`), finished a turn (`"idle"`) or is working again (`null`). Sent to the session's clients on change and once on attach. |
+| `set-group` | C->S | `{ group }` | Move the session to a tab group; an empty string takes it out of its group. |
+| `group-changed` | S->C | `{ sessionId, group }` | Another client moved the session. Sent to the session's other clients, not to the one that moved it. |
 | `startup-status` | S->C | `{ message }` | Startup progress indicator |
 | `get-latest-plan` | C->S | `{}` | Request most recent plan file |
 

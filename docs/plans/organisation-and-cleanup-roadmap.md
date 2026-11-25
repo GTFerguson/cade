@@ -37,10 +37,9 @@ what is waiting.
 
 ## 1. Tab groups (was "workspaces above tabs")
 
-In progress: see [[tab-groups]]. Built as Chrome-style tab groups rather than a
-one-workspace-at-a-time switcher: a group is a name and a colour stored on the
-backend session, its tabs sit behind a collapsible chip, and a collapsed chip
-shows what its tabs need. Built, not yet used in the installed app.
+Shipped 25 Nov 2026: see [[../technical/core/tab-groups]]. Left for later: key
+chords for collapsing a group and for showing only one, and dragging a tab
+onto a chip to change its group.
 
 ## 2. One project picker
 

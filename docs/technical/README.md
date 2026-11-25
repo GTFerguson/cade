@@ -1,7 +1,7 @@
 ---
 title: Technical Documentation
 created: 2026-01-16
-updated: 2026-10-14
+updated: 2026-11-25
 status: active
 tags: [index, technical]
 ---
@@ -19,6 +19,7 @@ Architecture and essential developer documentation.
 - [[core/development-setup|Development Setup]] - Running CADE for development
 - [[core/frontend-architecture|Frontend Architecture]] - Component architecture and mobile support
 - [[core/remote-sessions|Remote Sessions]] - Multi-device terminal sessions: output broadcaster, sequenced reconnect, size policy, session directory, attention hooks, push
+- [[core/tab-groups|Tab Groups]] - Grouping tabs behind collapsible chips: why the session owns its group, definitions and folder rules, attention roll-up
 - [[core/agent-orchestration|Agent Orchestration]] - Multi-agent coordination, MCP tools, two-gate approval flow
 - [[core/agent-tools|Agent Tool System]] - File, discovery, and shell tools for LiteLLM agents; permission gating
 - [[core/prompt-composition|Prompt Composition]] - Modular system prompt assembly from markdown modules
