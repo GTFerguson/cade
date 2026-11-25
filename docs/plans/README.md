@@ -22,8 +22,9 @@ Intent before code exists. Plans are ephemeral — once the work ships and desig
 | [[dashboard/agent-ui-system]] | partially-shipped | Phases 2–4; missing components |
 | [[permissions/dynamic-permission-management]] | planning | All phases (foundation ready) |
 | [[remote-access-overhaul]] | partially-shipped | Phases 1–4 shipped and graduated; device measurement, chat parity, QR, topology decision |
-| [[infrastructure/seamless-upgrade]] | partially-shipped | Phases 1–3 shipped (exec-in-place, API, CLI, build-id reload); UX toasts, versioned install dirs, session host |
+| [[infrastructure/seamless-upgrade]] | partially-shipped | Phases 1–3 shipped (exec-in-place, API, CLI, "update ready" marker in place of a reload); UX toasts, versioned install dirs, session host |
 | [[organisation-and-cleanup-roadmap]] | planning | Roadmap: workspaces above tabs, one project picker, PR monitoring, organisational surfaces, mobile, cleanup |
+| [[pr-monitoring]] | planning | Phase 3 of the roadmap: tab badge first, then per-group list, notifications, open-agent-on-PR |
 | [[right-pane-browser]] | planning | Phase 1: URL in the viewer frame |
 | [[integrated-scout-browser]] | planning | Session awareness, live view, take-over, agent tools, remote |
 

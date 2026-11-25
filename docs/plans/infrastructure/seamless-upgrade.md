@@ -163,6 +163,14 @@ Until this fix an in-place upgrade of the installed app never loaded the new fro
 
 Verified on a throwaway frozen backend with its own home directory and one shell session: the new image unpacked a fresh directory and removed the old one, the session stayed alive, the build's frontend was served, a killed shell was reported as exited, and a second upgrade repeated all of it. Then on the installed app: nine sessions resumed and the served entry script matched the build.
 
+### The page no longer reloads itself (25 Nov 2026)
+
+Every install reloaded the window, which redraws every terminal, even when only the backend had changed. Two changes (`1691e3a9`):
+
+- **The page is judged by its own identity.** `connected` carries `frontendVersion` next to `buildVersion`: a hash of the built `index.html`, which names its scripts and styles by content hash (`frontend_id` in `backend/upgrade.py`). A tab compares that, so an upgrade that leaves the interface alone is invisible to it. A backend that sends none is judged by its build id as before.
+- **A changed interface is offered, not applied.** The tab bar shows "update ready" at its right end; clicking it reloads and reopens the tabs (`WebSocketClient.reloadForUpdate`, `TabBar.setUpdateReady`). Until then the old interface runs against the new backend, which is the state a desktop window on its built-in copy has always been in. A message type the old interface does not know is the risk to watch for.
+
+The install that first carries this still reloads the window once, because the page running at that moment is the old code.
 
 ## Remaining phases
 

@@ -68,6 +68,8 @@ takes a typed path. The system explorer is the last entry.
 
 ## 3. Pull request monitoring
 
+Plan: [[pr-monitoring]].
+
 **What it adds.**
 
 - On each tab, the state of the pull request for that tab's branch: checks,
