@@ -28,7 +28,7 @@ docs/technical/
 For **planned** features, improvements, and roadmap items.
 
 **Key Files:**
-- `README.md` - Main roadmap overview (**changes require user approval**)
+- `README.md` - Main roadmap overview
 - `blocking-issues.md` - Critical issues that block development progress
 - Feature-specific planning docs
 
@@ -74,34 +74,14 @@ For **active planning** and development tasks.
 3. If large/deferred -> move to `docs/future/`
 4. Delete completed/obsolete plans
 
-## User Approval Requirements
+## Keeping Docs Maintained
 
-> [!IMPORTANT]
-> All documentation in `docs/` holds importance and requires user approval before modification.
+Docs are maintained as part of the work, with no approval step (Gary, 25 Nov 2026: "docs should always be maintained, but when its actually built, not before, plans are for before, then they get real docs").
 
-### `docs/` Directory - Requires Approval
-
-**At each development milestone**, prompt the user for permission to update documentation in `docs/`:
-- `docs/technical/` - Any additions, modifications, or deletions
-- `docs/future/` - Any changes (roadmap changes especially require explicit approval)
-
-**When to prompt:**
-- After completing a feature or fix
-- When implementation differs from planned approach
-- Before adding new documentation files
-- Before removing or significantly restructuring existing docs
-
-**Example prompt:**
-> "I've completed [feature/fix]. Would you like me to update the relevant documentation in `docs/technical/` to reflect these changes?"
-
-### `docs/plans/` Directory - No Approval Needed
-
-The `docs/plans/` directory is for quick, working documents during active development:
-- Create, modify, or delete freely
-- Use for scratch planning and work-in-progress
-- Reorganize as needed during development
-
-This allows rapid iteration without interrupting workflow, while protecting the curated documentation in `docs/`.
+- **When something is built, document it.** Write or update the doc in `docs/technical/` in the same piece of work as the code, and `docs/user/` when users are affected. Do not ask first and do not leave it for a later session.
+- **Only what is built.** A doc in `docs/technical/` describes code that exists. Intent, designs and work not yet started belong in `docs/plans/`. When the code lands, the plan's durable content moves to the real doc and the plan shrinks or is deleted.
+- **Say what was not verified.** If something is built but has not yet run in the real app, the doc can say so; that is still documenting what exists.
+- **The roadmap's direction is Gary's.** Recording in `docs/future/` that something shipped, or moving its detail out, needs no approval. Adding a major feature to the roadmap, dropping one or changing priorities is a product decision: raise it with him.
 
 ## Key Principles
 
@@ -133,12 +113,7 @@ Each document should focus on ONE system or area:
 
 ### 4. Roadmap Changes
 
-The main roadmap (`docs/future/README.md`) requires **user approval** for:
-- Adding new major features
-- Changing priorities
-- Removing planned features
-
-Minor additions to other improvement docs do not require approval.
+The main roadmap (`docs/future/README.md`) is updated freely to reflect what has shipped. What it plans (new major features, priorities, removals) is Gary's decision; see [[#Keeping Docs Maintained]].
 
 ## Formatting Standards
 

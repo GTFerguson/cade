@@ -37,16 +37,9 @@ them; acting on one stays with the agent in the tab or with `gh`.
 
 The order above is the build order. Each step is usable without the next.
 
-## Step 1: built, not yet installed
+## Step 1: shipped
 
-The tab badge is built (25 Nov 2026) and awaits an install and a look in the real app.
-
-- `backend/pull_requests.py`: `PullRequestMonitor` polls `gh pr list` once per repository with a live session, every `POLL_SECONDS`, or `POLL_SECONDS_WHILE_RUNNING` while some pull request's checks are still running. Each session is matched by the branch checked out in its project and holds a summary in `PTYSession.pull_request`. A change is sent to the session's clients as `session-pr`, and the summary is sent once on attach and included in the session listing.
-- `frontend/src/tabs/pull-request.ts`: reduces the summary to the one state a tab shows, worst first (conflicts, failing checks, changes requested, running, approved, passing). The badge is the number plus a mark, coloured by state; its tooltip lists everything known; clicking it opens the pull request in the browser.
-- When `gh` is missing the monitor does not start, with one line in the log. When `gh` cannot answer for a repository, what was shown stays.
-- The parsing was checked against real `gh` output from a public repository. Polling has not yet run inside the installed app.
-
-Not done in this step: the rate-limit check (`gh api rate_limit`), a setting for the interval, and any roll-up on a closed workspace chip.
+The tab badge is built (`17aa85bc`, 25 Nov 2026) and documented in [[../technical/core/pull-requests]]. Still to do from this step: a look at it in the installed app, the rate-limit check (`gh api rate_limit`), and a setting for the interval.
 
 ## Key challenges
 

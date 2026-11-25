@@ -10,14 +10,14 @@ Quick orientation for AI agents working on CADE. This is a signpost document - d
 
 ```
 cade/
-├── docs/                    # Maintained documentation (approval required)
+├── docs/                    # Maintained documentation
 │   ├── README.md            # Navigation hub
 │   ├── technical/           # Implemented systems
 │   │   ├── core/            # Architecture, getting started
 │   │   ├── reference/       # API documentation
 │   │   └── design/          # Design rationale
 │   ├── future/              # Roadmap & planned features
-│   ├── plans/               # Active development notes (no approval needed)
+│   ├── plans/               # Intent before code exists
 │   └── user/                # End-user documentation
 ├── .claude/rules/           # Project-specific conventions
 └── CLAUDE.md                # This file
@@ -44,7 +44,7 @@ cade/
 
 Rules are defined in `.claude/rules/` - read these files for full details:
 
-- **documentation-organization.md** - Doc structure and approval workflow
+- **documentation-organization.md** - Doc structure and when each kind of doc is written
 
 Global rules (apply to all projects) are in `~/.claude/rules/`:
 
@@ -71,15 +71,17 @@ Existing scenarios: `mobile-npc`, `mobile-explore`, `mobile-walk`, `mobile-noexi
 
 ## Development Workflow
 
-### `docs/plans/` - Working documents
+### `docs/plans/` - Before it is built
+- Plans hold intent: what to build and why, before the code exists
 - Create, modify, delete freely during development
-- For active planning, brainstorming, and work-in-progress
 - Delete or migrate when complete
 
-### `docs/` - Curated documentation
-- **Requires user approval** for content changes
-- Minor fixes (typos, broken links) allowed without approval
-- Prompt user at milestones: "Would you like me to update the documentation?"
+### `docs/` - Once it is built
+- Keep it maintained as part of the work, without asking: when something is
+  built, write or update its doc in `docs/technical/` (and `docs/user/` where
+  users are affected) in the same piece of work
+- Only for what is actually built. Something still planned stays in
+  `docs/plans/`; it gets a real doc when the code exists, not before
 
 ### Lifecycle
 

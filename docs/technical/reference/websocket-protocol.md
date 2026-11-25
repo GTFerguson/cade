@@ -58,8 +58,9 @@ See [[../core/remote-sessions]] for the broadcaster, replay and size policy behi
 | `ping` | C->S | `{ t? }` | Liveness probe; answered with `pong` carrying the same `t` |
 | `pong` | S->C | `{ t? }` | Liveness reply |
 | `list-sessions` | C->S | `{}` | Live sessions on this backend |
-| `session-list` | S->C | `{ sessions: LiveSession[] }` | `LiveSession = { id, label, group, projectPath, agent, createdAt, lastActivity, alive, clients, attention, attentionMessage, terminals }`. Same shape as `GET /api/sessions`. |
+| `session-list` | S->C | `{ sessions: LiveSession[] }` | `LiveSession = { id, label, group, projectPath, agent, createdAt, lastActivity, alive, clients, attention, attentionMessage, pullRequest, terminals }`. Same shape as `GET /api/sessions`. |
 | `session-attention` | S->C | `{ sessionId, attention, message? }` | The agent needs the user (`"input"`), finished a turn (`"idle"`) or is working again (`null`). Sent to the session's clients on change and once on attach. |
+| `session-pr` | S->C | `{ sessionId, pr }` | The pull request for the branch the session works on: `{ number, title, url, draft, checks, review, conflicts }`, or `null` for none. Sent on change and once on attach when there is one; see [[../core/pull-requests]]. |
 | `set-group` | C->S | `{ group }` | Move the session to a tab group; an empty string takes it out of its group. |
 | `close-session` | C->S | `{}` | The user closed the tab. Ends the session unless another client is attached; see [[../core/remote-sessions#When a session ends]]. |
 | `group-changed` | S->C | `{ sessionId, group }` | Another client moved the session. Sent to the session's other clients, not to the one that moved it. |
