@@ -301,20 +301,23 @@ class TestHTTPMCPToolAdapterRefresh:
         self, tmp_path: pathlib.Path,
     ) -> None:
         """The module-level refresh helper must touch every live adapter
-        whose server_name matches, leaving others alone."""
+        whose server_name matches, leaving others alone.
+
+        The server name is unique to this test: adapters other tests made
+        for a shared name can still be alive and would be counted too."""
         from core.backend.providers.http_mcp_tools import refresh_adapters_for_server
         creds_dir = tmp_path / ".claude"
         creds_dir.mkdir()
         (creds_dir / ".credentials.json").write_text(
-            '{"mcpOAuth": {"alphaxiv|abc": {"accessToken": "tok-A", "expiresAt": 0}}}'
+            '{"mcpOAuth": {"refresh-target|abc": {"accessToken": "tok-A", "expiresAt": 0}}}'
         )
         with patch.object(pathlib.Path, "home", return_value=tmp_path):
-            a1 = HTTPMCPToolAdapter("https://api.example.com/mcp", server_name="alphaxiv")
-            a2 = HTTPMCPToolAdapter("https://api.example.com/mcp", server_name="alphaxiv")
+            a1 = HTTPMCPToolAdapter("https://api.example.com/mcp", server_name="refresh-target")
+            a2 = HTTPMCPToolAdapter("https://api.example.com/mcp", server_name="refresh-target")
             a3 = HTTPMCPToolAdapter("https://other.example.com/mcp", server_name="other")
             for a in (a1, a2, a3):
                 a._connect_failed = True
-            count = await refresh_adapters_for_server("alphaxiv")
+            count = await refresh_adapters_for_server("refresh-target")
         assert count == 2
         assert a1._connect_failed is False
         assert a2._connect_failed is False

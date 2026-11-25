@@ -412,7 +412,9 @@ class TestLoadUserConfig:
 
     def test_load_default_config(self) -> None:
         """Should return default config when no files exist."""
-        config = load_user_config(None)
+        # The developer's own ~/.cade config must not decide the defaults.
+        with patch("backend.config.get_user_config_paths", return_value=[]):
+            config = load_user_config(None)
         assert config.appearance.colors.bg_primary == "#0a0a09"
         assert config.keybindings.globals.prefix == "C-a"
         assert config.behavior.session.auto_start_claude is True

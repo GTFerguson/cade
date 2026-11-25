@@ -22,8 +22,11 @@ def test_root_is_the_enclosing_git_repo(tmp_path):
     assert nkrdn_db_path(sub) == tmp_path / ".nkrdn" / "knowledge_base.db"
 
 
-def test_root_falls_back_to_project_dir_outside_git(tmp_path):
-    assert nkrdn_root(tmp_path) == tmp_path
+def test_root_falls_back_to_project_dir_outside_git():
+    # No ancestor of this path exists, so none can hold a .git; a real temp
+    # directory inherits whatever sits above it on the machine running this.
+    project = Path("/cade-test-no-such-root/project/app")
+    assert nkrdn_root(project) == project
 
 
 def test_rebuild_runs_plain_nkrdn_rebuild_from_the_repo_root(tmp_path):

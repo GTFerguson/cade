@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -169,9 +170,10 @@ async def test_no_provider_returns_error():
 
 # --- /clear and /compact regression tests ---
 
-def _make_handler(ws, working_dir: str = "/tmp") -> "ConnectionHandler":
+def _make_handler(ws, working_dir: Path = Path("/tmp")) -> "ConnectionHandler":
     from backend.websocket import ConnectionHandler
     config = MagicMock()
+    # A Path, as the real Config supplies: the handler joins onto it.
     config.working_dir = working_dir
     handler = ConnectionHandler(ws, config)
     handler._closed = False
@@ -184,7 +186,7 @@ def _make_handler(ws, working_dir: str = "/tmp") -> "ConnectionHandler":
 async def test_clear_wipes_session_and_sends_compact(tmp_path):
     """/clear resets the session and sends chat-compact with empty context."""
     ws = MockWebSocket()
-    handler = _make_handler(ws, str(tmp_path))
+    handler = _make_handler(ws, tmp_path)
 
     # Seed a session with some history first
     from core.backend.chat.session import get_chat_registry
@@ -208,7 +210,7 @@ async def test_clear_wipes_session_and_sends_compact(tmp_path):
 async def test_compact_approved_resets_session_and_sends_opening(tmp_path):
     """/compact: approved preview resets session and sends opening message with file path."""
     ws = MockWebSocket()
-    handler = _make_handler(ws, str(tmp_path))
+    handler = _make_handler(ws, tmp_path)
 
     # Seed a session with an assistant message (the generated handoff)
     from core.backend.chat.session import get_chat_registry
@@ -252,7 +254,7 @@ async def test_compact_approved_resets_session_and_sends_opening(tmp_path):
 async def test_compact_rejected_leaves_session_intact(tmp_path):
     """/compact: rejected preview does not reset the session."""
     ws = MockWebSocket()
-    handler = _make_handler(ws, str(tmp_path))
+    handler = _make_handler(ws, tmp_path)
 
     from core.backend.chat.session import get_chat_registry
     registry = get_chat_registry()

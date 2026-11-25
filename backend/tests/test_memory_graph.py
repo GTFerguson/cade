@@ -49,6 +49,9 @@ def client(app) -> TestClient:
 @pytest.fixture
 def project_with_graph(tmp_path: Path) -> Path:
     """Create a minimal project with .nkrdn/graph.ttl and knowledge_base.db."""
+    # The graph is looked up at the enclosing git root; mark this directory
+    # as one so nothing above the temp directory can claim that role.
+    (tmp_path / ".git").mkdir()
     nkrdn_dir = tmp_path / ".nkrdn"
     nkrdn_dir.mkdir()
 
