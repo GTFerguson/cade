@@ -88,15 +88,29 @@ saved tabs.
 
 ## Build order
 
-1. Backend: session field, listing, upgrade handoff, `set-project` /
-   `set-group` / `group-changed`, definitions file and endpoint, folder rule.
-2. Frontend state: `TabInfo.group`, version 2 state with migration, tab manager
-   operations (set group, adjacency, collapse, skip collapsed).
-3. Tab bar: chips, colour line, collapse, roll-up, menus.
-4. Phone: group name in the session strip. Grouped dots wait for phase 5.
+1. ~~Backend: session field, listing, upgrade handoff, `set-project` /
+   `set-group` / `group-changed`, definitions file and endpoint, folder
+   rule.~~ Shipped in `aededd3e` (`backend/terminal/tab_groups.py`).
+2. ~~Frontend state: `TabInfo.group`, version 2 state with migration, tab
+   manager operations.~~ Shipped (`frontend/src/tabs/tab-groups.ts`,
+   `tab-manager.ts`).
+3. ~~Tab bar: chips, colour line, collapse, roll-up, menus.~~ Shipped
+   (`tab-bar.ts`, `tab-menu.ts`, `styles/layout/tabs.css`).
+4. Phone: group name in the session strip. Not started; grouped dots wait for
+   phase 5 of the roadmap.
+
+Still to do before this plan can be deleted:
+
+- Use it in the installed app for a few days. Only rendered in a headless
+  browser so far, never against a live backend.
+- Step 4.
+- Move the design section into `docs/technical/` (needs approval).
 
 ## Open questions
 
-- Key chords for collapse and "show only this group".
+- Key chords for collapse and "show only this group". None exist yet; both
+  are mouse only.
+- Dragging a tab onto a chip to change its group. Today a drag only reorders
+  within the tab's own group and the menu changes group.
 - Whether a group's definition should be shared between a local and a remote
   backend, or stay per backend as planned here.

@@ -28,42 +28,20 @@ what is waiting.
 
 | # | Phase | Why this order |
 |---|-------|----------------|
-| 1 | Workspaces above tabs | Felt daily, and it settles where tab state lives |
-| 2 | One project picker | Small, and the picker is where a workspace is chosen |
-| 3 | Pull request monitoring | Builds on the tab and workspace badges from phase 1 |
+| 1 | Tab groups | Felt daily, and it settles where tab state lives |
+| 2 | One project picker | Small, and the picker is where a tab group is chosen |
+| 3 | Pull request monitoring | Builds on the tab and group badges from phase 1 |
 | 4 | Organisational surfaces | Needs phases 1–3 to know what it is organising |
 | 5 | Mobile experience | Follows the desktop model once it has settled |
 | 6 | Cleanup and modernisation | Runs alongside; each item is independent |
 
-## 1. Workspaces above tabs
+## 1. Tab groups (was "workspaces above tabs")
 
-**What it adds.** A workspace is a named group of tabs. The tab bar shows the
-active workspace's tabs only. Switching workspace is one key chord. Sessions in
-other workspaces keep running, and their status (working, needs input, done)
-rolls up to a badge on the workspace so a waiting agent is never hidden.
-
-**Key challenges.**
-
-- Tabs live in browser storage (`cade-app-state`, `frontend/src/tabs/tab-manager.ts`)
-  while sessions live on the backend. A grouping kept only in the browser is
-  lost when storage is cleared and is invisible to the phone.
-- A tab adopted from another device (`adoptSession`) needs a workspace too.
-- Rolling attention up must not turn into noise: a workspace with five idle
-  "done" tabs should not look like one that needs input.
-
-**Integration points.** `TabInfo` / `AppState` (`frontend/src/tabs/types.ts`),
-the tab bar, `PTYSession` and the session listing
-(`backend/terminal/session_listing.py`), the attention state
-(`backend/terminal/attention.py`), the phone's session strip.
-
-**Open questions.**
-
-- Does the workspace belong to the session on the backend (my recommendation,
-  so every device agrees), with only tab order kept per browser?
-- Are tabs assigned by a path rule (everything under one folder is AirPLAi),
-  by hand, or both?
-- Is a workspace only a filter on the tab bar, or does it also carry settings
-  such as a default project folder, theme accent, or GitHub account?
+In progress: see [[tab-groups]]. Built as Chrome-style tab groups rather than a
+one-workspace-at-a-time switcher: a group is a name and a colour stored on the
+backend session, its tabs sit behind a collapsible chip, and a collapsed chip
+shows what its tabs need. Backend, tab state and tab bar are built; the phone's
+session strip is not.
 
 ## 2. One project picker
 
@@ -78,7 +56,7 @@ project is two key presses, then the project folder listing below.
 - Recently used projects, not only the currently open ones.
 - Type-to-filter, using the fuzzy matcher the phone already has
   (`frontend/src/ui/mobile/fuzzy.ts`).
-- Choose the agent (Claude Code, Codex) and the workspace at the point of
+- Choose the agent (Claude Code, Codex) and the tab group at the point of
   opening.
 - Live sessions that have no tab on this device, so attaching is part of the
   same picker instead of a separate splash option.
@@ -93,7 +71,7 @@ the usual project roots, or is path entry in the picker enough?
 
 - On each tab, the state of the pull request for that tab's branch: checks,
   review state, conflicts with base.
-- Per workspace, a panel of open pull requests: mine, and those waiting on my
+- Per tab group, a panel of open pull requests: mine, and those waiting on my
   review.
 - Notifications through the existing attention and push path when checks fail,
   a review is requested, or a pull request is approved.
@@ -136,7 +114,7 @@ answering it.
 
 - **Quick-draw mode.** A queue of the sessions that are blocked, permission
   prompts first, then agents waiting on a question, then finished turns. The
-  screen shows one at a time: the tab name and workspace across the top, what
+  screen shows one at a time: the tab name and group across the top, what
   the agent is asking, and the answer controls. Answering moves straight to
   the next one. Empty queue, empty screen.
 - **One-tap permission answers.** A permission prompt becomes a card naming
@@ -147,7 +125,7 @@ answering it.
   recent tool calls as wrapped text and collapsed blocks, built from the
   agent's own session transcript rather than from terminal output. The raw
   terminal stays one tap away for anything the reading view does not cover.
-- The phone follows the desktop model for the rest: workspaces in the session
+- The phone follows the desktop model for the rest: tab groups in the session
   strip, pull request state, the same picker.
 
 **Key challenges.**
@@ -195,8 +173,9 @@ Found by a size and dependency survey on 2026-11-25, not a line-by-line audit.
 
 **Other items.**
 
-- The provider registry still carries `cli`, `failover`, `subprocess` and
-  `websocket` branches although only `api` serves chat.
+- The provider registry carries `cli` and `failover` branches although only
+  `api` serves chat. `subprocess` and `websocket` are not dead: project-local
+  `launch.yml` providers use them.
 - Dependencies behind current: Vite 5, Vitest 2, marked 9, Milkdown 7.3.
 - Three markdown stacks (marked, mertex.md, Milkdown); both jsdom and
   happy-dom installed, plus puppeteer.
