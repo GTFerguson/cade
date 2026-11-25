@@ -162,6 +162,7 @@ export class HelpOverlay implements Component {
 
     const tabBindings: Binding[] = [
       { label: "prev / next tab", key: "Alt+d / Alt+f" },
+      { label: "next / prev workspace (hold for list)", key: "Alt+j / Alt+k" },
       { label: "new tab", key: "Alt+t" },
       { label: "close tab", key: "Alt+w" },
       { label: "new remote tab", key: "Alt+r" },

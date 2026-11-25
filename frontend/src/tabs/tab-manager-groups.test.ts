@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { TabManager, migrateAppState } from "./tab-manager";
 import type { AppState, TabState } from "./types";
+import { UNGROUPED } from "./tab-groups";
 
 const STORAGE_KEY = "cade-app-state";
 const saved = () => JSON.parse(localStorage.getItem(STORAGE_KEY)!) as AppState;
@@ -72,8 +73,22 @@ describe("collapsing", () => {
     manager.setTabGroup(c.id, "Work");
   });
 
-  it("takes a collapsed group's tabs out of next and previous", () => {
-    manager.setGroupCollapsed("Work", true);
+  it("keeps only the active tab's workspace open", () => {
+    manager.setTabGroup(d.id, "Home");
+    expect([...manager.getCollapsedGroups()]).toEqual(["Work", "Home"]);
+    manager.switchTab(b.id);
+    expect(manager.getOpenWorkspace()).toBe("Work");
+    expect([...manager.getCollapsedGroups()]).toEqual([UNGROUPED, "Home"]);
+  });
+
+  it("numbers only the open workspace's tabs, leaving ungrouped ones out", () => {
+    manager.switchTab(c.id);
+    expect(manager.getVisibleTabs()).toEqual([b, c]);
+    manager.goToTab(0);
+    expect(manager.getActiveTabId()).toBe(b.id);
+  });
+
+  it("keeps next and previous inside what is on show", () => {
     manager.nextTab();
     expect(manager.getActiveTabId()).toBe(d.id);
     manager.nextTab();
@@ -81,56 +96,79 @@ describe("collapsing", () => {
   });
 
   it("numbers tabs by what is on show", () => {
-    manager.setGroupCollapsed("Work", true);
     manager.goToTab(1);
     expect(manager.getActiveTabId()).toBe(d.id);
   });
 
-  it("moves off the active tab when its group collapses", () => {
-    manager.switchTab(b.id);
-    const switched = vi.fn();
-    manager.on("tab-switched", switched);
-    manager.setGroupCollapsed("Work", true);
-    expect(manager.getActiveTabId()).toBe(d.id);
-    expect(switched).toHaveBeenCalledWith(d);
-  });
-
-  it("keeps the active tab when nothing else is on show", () => {
-    for (const t of [a, d]) manager.setTabGroup(t.id, "Work");
-    manager.switchTab(b.id);
-    manager.setGroupCollapsed("Work", true);
-    expect(manager.getActiveTabId()).toBe(b.id);
-  });
-
-  it("expands a group when one of its tabs is switched to", () => {
-    manager.setGroupCollapsed("Work", true);
+  it("redraws the bar when a switch crosses into another workspace, and not otherwise", () => {
     const changed = vi.fn();
     manager.on("tabs-changed", changed);
+    manager.switchTab(d.id);
+    expect(changed).not.toHaveBeenCalled();
     manager.switchTab(c.id);
-    expect(manager.getCollapsedGroups().has("Work")).toBe(false);
     expect(changed).toHaveBeenCalled();
   });
 
-  it("does not open a collapsed group when the active tab closes", async () => {
-    manager.setGroupCollapsed("Work", true);
-    await manager.closeTab(a.id);
-    expect(manager.getActiveTabId()).toBe(d.id);
-    expect(manager.getCollapsedGroups().has("Work")).toBe(true);
+  it("stays in the workspace when its active tab closes", async () => {
+    manager.switchTab(b.id);
+    await manager.closeTab(b.id);
+    expect(manager.getActiveTabId()).toBe(c.id);
   });
 
-  it("shows only one group", () => {
-    manager.setTabGroup(d.id, "Home");
-    manager.switchTab(d.id);
-    manager.showOnlyGroup("Work");
-    expect([...manager.getCollapsedGroups()]).toEqual(["Home"]);
-    expect(manager.getActiveTabId()).toBe(b.id);
-  });
-
-  it("remembers collapsed groups, and forgets ones with no tabs left", () => {
-    manager.setGroupCollapsed("Work", true);
+  it("saves which groups are closed", () => {
     expect(saved().collapsedGroups).toEqual(["Work"]);
     manager.ungroup("Work");
     expect(saved().collapsedGroups).toEqual([]);
+  });
+});
+
+describe("moving between workspaces", () => {
+  beforeEach(() => {
+    manager.setTabGroup(b.id, "Work");
+    manager.setTabGroup(c.id, "Work");
+    manager.setTabGroup(d.id, "Home");
+  });
+
+  it("lists each group and the ungrouped tabs as stops, in tab bar order", () => {
+    expect(manager.getWorkspaces()).toEqual([null, "Work", "Home"]);
+    manager.setTabGroup(a.id, "Home");
+    expect(manager.getWorkspaces()).toEqual(["Work", "Home"]);
+  });
+
+  it("steps to the next and previous workspace, wrapping", () => {
+    expect(manager.workspaceAt(1)).toBe("Work");
+    expect(manager.workspaceAt(-1)).toBe("Home");
+    manager.switchWorkspace("Home");
+    expect(manager.workspaceAt(1)).toBeNull();
+  });
+
+  it("opens a workspace on its first tab the first time", () => {
+    manager.switchWorkspace("Work");
+    expect(manager.getActiveTabId()).toBe(b.id);
+  });
+
+  it("comes back to the tab that was last active there", () => {
+    manager.switchTab(c.id);
+    manager.switchWorkspace("Home");
+    expect(manager.getActiveTabId()).toBe(d.id);
+    manager.switchWorkspace("Work");
+    expect(manager.getActiveTabId()).toBe(c.id);
+    manager.switchWorkspace(null);
+    expect(manager.getActiveTabId()).toBe(a.id);
+  });
+
+  it("forgets a remembered tab that has left the workspace", () => {
+    manager.switchTab(c.id);
+    manager.switchWorkspace("Home");
+    manager.setTabGroup(c.id, "Home");
+    manager.switchWorkspace("Work");
+    expect(manager.getActiveTabId()).toBe(b.id);
+  });
+
+  it("does nothing when asked for the workspace already open", () => {
+    manager.switchTab(c.id);
+    manager.switchWorkspace("Work");
+    expect(manager.getActiveTabId()).toBe(c.id);
   });
 });
 
@@ -141,7 +179,6 @@ describe("renaming and ungrouping", () => {
   });
 
   it("renames a group and returns the tabs to tell the backend about", () => {
-    manager.setGroupCollapsed("Work", true);
     expect(manager.renameGroup("Work", " AirPLAi ")).toEqual([b, c]);
     expect(manager.getGroupNames()).toEqual(["AirPLAi"]);
     expect(manager.getCollapsedGroups().has("AirPLAi")).toBe(true);

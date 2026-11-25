@@ -10,7 +10,7 @@ import { buildTunnelArgs } from "../remote/profile-utils";
 import type { EventHandler } from "../types";
 import type { AppState, TabInfo, TabManagerEvents, TabState } from "./types";
 import type { RemoteProfile } from "../remote/types";
-import { arrangeByGroup, moveWithinRun, nearestVisible, visibleTabs } from "./tab-groups";
+import { arrangeByGroup, moveWithinRun, UNGROUPED, visibleTabs } from "./tab-groups";
 
 const STORAGE_KEY = "cade-app-state";
 const STATE_VERSION = 2;
@@ -94,7 +94,9 @@ export function hasConnectedProfileTab(
 export class TabManager {
   private tabs: Map<string, TabState> = new Map();
   private activeTabId: string | null = null;
-  private collapsedGroups = new Set<string>();
+  // The tab last active in each workspace, so that coming back to one
+  // returns to where the user was. Ungrouped tabs are keyed by "".
+  private lastTabInWorkspace = new Map<string, string>();
   private handlers: Map<
     keyof TabManagerEvents,
     Set<EventHandler<TabManagerEvents[keyof TabManagerEvents]>>
@@ -133,7 +135,6 @@ export class TabManager {
         const tabState = this.createTabState(tabInfo);
         this.tabs.set(tabInfo.id, tabState);
       }
-      this.collapsedGroups = new Set(state.collapsedGroups);
 
       const activeId = state.activeTabId;
       if (this.tabs.has(activeId)) {
@@ -141,7 +142,7 @@ export class TabManager {
       } else {
         this.activeTabId = state.tabs[0]!.id;
       }
-      this.revealGroupOf(this.activeTabId);
+      this.rememberActive();
 
       this.emit("tabs-changed", this.getTabs());
     }
@@ -400,16 +401,17 @@ export class TabManager {
       }
     }
 
+    const closedGroup = this.tabs.get(id)?.group ?? null;
     this.tabs.delete(id);
 
     if (this.activeTabId === id) {
       const remaining = this.getTabs();
-      // A tab on show comes first: closing a tab should not open a group
-      // the user had collapsed while other tabs are in view.
-      const next = this.getVisibleTabs()[0] ?? remaining[0] ?? null;
+      // Stay in the workspace the closed tab was in while it has tabs left.
+      const next =
+        remaining.find((t) => (t.group ?? null) === closedGroup) ?? remaining[0] ?? null;
       this.activeTabId = next ? next.id : null;
       if (next) {
-        this.revealGroupOf(next.id);
+        this.rememberActive();
         this.emit("tab-switched", next);
       }
     }
@@ -428,11 +430,13 @@ export class TabManager {
       return;
     }
 
+    const before = this.getOpenWorkspace();
     this.activeTabId = id;
-    const revealed = this.revealGroupOf(id);
+    this.rememberActive();
     this.saveState();
     this.emit("tab-switched", tab);
-    if (revealed) this.emit("tabs-changed", this.getTabs());
+    // Moving to another workspace closes the one left and opens this one.
+    if (this.getOpenWorkspace() !== before) this.emit("tabs-changed", this.getTabs());
   }
 
   /**
@@ -493,13 +497,64 @@ export class TabManager {
     this.emit("tabs-changed", this.getTabs());
   }
 
-  /** Tabs on show: every tab not inside a collapsed group. */
+  /** Tabs on show: those of the open workspace. */
   getVisibleTabs(): TabState[] {
-    return visibleTabs(this.getTabs(), this.collapsedGroups);
+    return visibleTabs(this.getTabs(), this.getCollapsedGroups());
   }
 
+  /**
+   * The workspace on show: the active tab's group, or null when that tab is
+   * in none. Only one is open at a time, so that next, previous and numbered
+   * tab keys stay inside it however many sessions are running.
+   */
+  getOpenWorkspace(): string | null {
+    return this.getActiveTab()?.group ?? null;
+  }
+
+  /**
+   * Every workspace but the open one, the ungrouped tabs counting as one
+   * (UNGROUPED). Derived, so it cannot go stale.
+   */
   getCollapsedGroups(): ReadonlySet<string> {
-    return this.collapsedGroups;
+    const open = this.getOpenWorkspace();
+    return new Set(
+      this.getWorkspaces().filter((g) => g !== open).map((g) => g ?? UNGROUPED),
+    );
+  }
+
+  /**
+   * The stops when moving between workspaces, in tab bar order: each group,
+   * and null for the ungrouped tabs when there are any.
+   */
+  getWorkspaces(): (string | null)[] {
+    const seen = new Set<string | null>();
+    for (const tab of this.getTabs()) seen.add(tab.group ?? null);
+    return [...seen];
+  }
+
+  /**
+   * Open a workspace, on the tab that was last active in it. Opening the one
+   * already open changes nothing.
+   */
+  switchWorkspace(group: string | null): void {
+    if (group === this.getOpenWorkspace() && this.activeTabId !== null) return;
+    const members = this.getTabs().filter((t) => (t.group ?? null) === group);
+    const remembered = this.lastTabInWorkspace.get(group ?? "");
+    const target = members.find((t) => t.id === remembered) ?? members[0];
+    if (target) this.switchTab(target.id);
+  }
+
+  /** The workspace `step` stops along from the open one, wrapping. */
+  workspaceAt(step: number): string | null {
+    const stops = this.getWorkspaces();
+    if (stops.length === 0) return null;
+    const at = Math.max(0, stops.indexOf(this.getOpenWorkspace()));
+    return stops[wrapIndex(at, step, stops.length)] ?? null;
+  }
+
+  private rememberActive(): void {
+    const active = this.getActiveTab();
+    if (active) this.lastTabInWorkspace.set(active.group ?? "", active.id);
   }
 
   /** Names of the groups that hold at least one tab, in tab bar order. */
@@ -528,42 +583,10 @@ export class TabManager {
     else tab.group = name;
     tabs.splice(last !== -1 ? last + 1 : Math.min(from, tabs.length), 0, tab);
     this.reorder(arrangeByGroup(tabs));
-    if (id === this.activeTabId) this.revealGroupOf(id);
+    if (id === this.activeTabId) this.rememberActive();
     this.saveState();
     this.emit("tabs-changed", this.getTabs());
     return tab;
-  }
-
-  /**
-   * Collapse a group to its chip, or expand it. Collapsing the group that
-   * holds the active tab moves to the nearest tab still on show.
-   */
-  setGroupCollapsed(group: string, collapsed: boolean): void {
-    if (this.collapsedGroups.has(group) === collapsed) return;
-    if (collapsed) this.collapsedGroups.add(group);
-    else this.collapsedGroups.delete(group);
-    this.leaveHiddenTab();
-    this.saveState();
-    this.emit("tabs-changed", this.getTabs());
-  }
-
-  toggleGroupCollapsed(group: string): void {
-    this.setGroupCollapsed(group, !this.collapsedGroups.has(group));
-  }
-
-  /** Expand one group and collapse every other, moving into it if needed. */
-  showOnlyGroup(group: string): void {
-    this.collapsedGroups = new Set(this.getGroupNames().filter((g) => g !== group));
-    const active = this.getActiveTab();
-    if (active?.group && active.group !== group) {
-      const first = this.getTabs().find((t) => t.group === group);
-      if (first) {
-        this.activeTabId = first.id;
-        this.emit("tab-switched", first);
-      }
-    }
-    this.saveState();
-    this.emit("tabs-changed", this.getTabs());
   }
 
   /**
@@ -575,9 +598,7 @@ export class TabManager {
     if (!trimmed || trimmed === group) return [];
     const moved = this.getTabs().filter((t) => t.group === group);
     for (const tab of moved) tab.group = trimmed;
-    if (this.collapsedGroups.delete(group)) this.collapsedGroups.add(trimmed);
     this.reorder(arrangeByGroup(this.getTabs()));
-    this.leaveHiddenTab();
     this.saveState();
     this.emit("tabs-changed", this.getTabs());
     return moved;
@@ -587,27 +608,9 @@ export class TabManager {
   ungroup(group: string): TabState[] {
     const moved = this.getTabs().filter((t) => t.group === group);
     for (const tab of moved) delete tab.group;
-    this.collapsedGroups.delete(group);
     this.saveState();
     this.emit("tabs-changed", this.getTabs());
     return moved;
-  }
-
-  /** Expand the group a tab is in. Returns true when it was collapsed. */
-  private revealGroupOf(id: string | null): boolean {
-    const group = id ? this.tabs.get(id)?.group : undefined;
-    return group ? this.collapsedGroups.delete(group) : false;
-  }
-
-  /** If the active tab's group is collapsed, move to the nearest tab on show. */
-  private leaveHiddenTab(): void {
-    const active = this.getActiveTab();
-    if (!active?.group || !this.collapsedGroups.has(active.group)) return;
-    const next = nearestVisible(this.getTabs(), active.id, this.collapsedGroups);
-    // With every tab collapsed away the active one stays on screen.
-    if (!next) return;
-    this.activeTabId = next.id;
-    this.emit("tab-switched", next);
   }
 
   private reorder(tabs: TabState[]): void {
@@ -779,7 +782,7 @@ export class TabManager {
       tabs,
       activeTabId: this.activeTabId ?? "",
       // Only groups that still have tabs, so the list cannot grow for ever.
-      collapsedGroups: this.getGroupNames().filter((g) => this.collapsedGroups.has(g)),
+      collapsedGroups: [...this.getCollapsedGroups()].filter((g) => g !== UNGROUPED),
     };
 
     try {

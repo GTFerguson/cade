@@ -106,6 +106,8 @@ export interface ProjectPickerOptions {
   recents: string[];
   /** Names of the tab groups a new tab can be put in. */
   groups: string[];
+  /** The group the new tab starts in; `g` changes it. Null for the folder rule. */
+  group?: string | null;
   /** Whether the system folder dialog is available (the desktop app). */
   native: boolean;
   /** Live sessions with no tab on this device. Loaded after the picker opens. */
@@ -179,6 +181,7 @@ export class ProjectPicker {
 
   constructor(container: HTMLElement, private options: ProjectPickerOptions) {
     this.api = options.api ?? backendPickerApi;
+    this.group = options.group ?? null;
     this.now = options.now ?? (() => Date.now() / 1000);
 
     this.root = el("div", "project-picker");

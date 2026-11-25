@@ -43,6 +43,8 @@ export interface KeybindingCallbacks {
   resizePane: (direction: "left" | "right") => void;
   nextTab: () => void;
   previousTab: () => void;
+  nextWorkspace: () => void;
+  previousWorkspace: () => void;
   goToTab: (index: number) => void;
   createTab: () => void;
   createRemoteTab: () => void;
@@ -290,6 +292,8 @@ export class KeybindingManager implements Component {
     switch (e.key.toLowerCase()) {
       case "d": return () => cb.previousTab();
       case "f": return () => cb.nextTab();
+      case "j": return () => cb.nextWorkspace();
+      case "k": return () => cb.previousWorkspace();
       case "t": return () => cb.createTab();
       case "w": return () => cb.closeTab();
       case "q": return () => cb.toggleDashboard();

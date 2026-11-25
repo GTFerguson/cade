@@ -54,6 +54,7 @@ import { RemoteProfileManager } from "./remote/profile-manager";
 import { RemoteProjectSelector } from "./remote/RemoteProjectSelector";
 import { ProjectPicker } from "./local/project-picker";
 import { handoffPrompt } from "./local/picker-model";
+import { WorkspaceSwitcher, type WorkspaceRow } from "./tabs/workspace-switcher";
 import { loadRecentProjects, rememberRecentProject } from "./local/recent-projects";
 import { Splash } from "./ui/splash";
 import type { RemoteProfile } from "./remote/types";
@@ -66,6 +67,7 @@ import { setEntityResolver } from "./platform/entity-resolver";
 class App {
   private tabManager: TabManager;
   private tabBar: TabBar | null = null;
+  private workspaceSwitcher: WorkspaceSwitcher | null = null;
   private mobileUI: MobileUI | null = null;
   /** Tabs that produced output while another tab was active. */
   private unreadTabs = new Set<string>();
@@ -425,6 +427,8 @@ class App {
       previousTab: () => {
         this.tabManager.previousTab();
       },
+      nextWorkspace: () => this.stepWorkspace(1),
+      previousWorkspace: () => this.stepWorkspace(-1),
       goToTab: (index) => {
         this.tabManager.goToTab(index);
       },
@@ -936,6 +940,8 @@ class App {
         .map((t) => ({ path: t.projectPath, isActive: t.id === activeTabId })),
       recents: loadRecentProjects(),
       groups: [...new Set([...this.tabManager.getGroupNames(), ...this.groupDefs.map((d) => d.name)])],
+      // A new tab belongs with the work on screen unless told otherwise.
+      group: this.tabManager.getOpenWorkspace(),
       native: isTauri(),
       loadSessions: async () =>
         sessionsToAdopt(await WebSocketClient.fetchSessionList(), tabs.map((t) => t.id)),
@@ -1224,6 +1230,29 @@ class App {
       .catch((e) => console.warn("[CADE] Could not load tab group definitions:", e));
   }
 
+  /** Move to the next or previous workspace; holding the key lists them. */
+  private stepWorkspace(step: number): void {
+    if (this.tabManager.getWorkspaces().length < 2) return;
+    this.tabManager.switchWorkspace(this.tabManager.workspaceAt(step));
+    this.workspaceSwitcher ??= new WorkspaceSwitcher(document.body, () => this.workspaceRows());
+    this.workspaceSwitcher.noteSwitch();
+  }
+
+  private workspaceRows(): WorkspaceRow[] {
+    const tabs = this.tabManager.getTabs();
+    const open = this.tabManager.getOpenWorkspace();
+    return this.tabManager.getWorkspaces().map((name) => {
+      const members = tabs.filter((t) => (t.group ?? null) === name);
+      return {
+        name,
+        colour: this.groupDefs.find((d) => d.name === name)?.colour,
+        tabs: members.length,
+        waiting: members.filter((t) => this.tabBar?.attentionOf(t.id) === "input").length,
+        open: name === open,
+      };
+    });
+  }
+
   private wireTabGroupEvents(tabBar: TabBar): void {
     tabBar.on("tab-set-group", ({ tabId, group }) => this.moveTabToGroup(tabId, group));
 
@@ -1236,8 +1265,9 @@ class App {
       tabBar.startGroupRename(name);
     });
 
-    tabBar.on("group-toggle", (group) => this.tabManager.toggleGroupCollapsed(group));
-    tabBar.on("group-solo", (group) => this.tabManager.showOnlyGroup(group));
+    // One workspace is open at a time, so a chip is a way into its workspace.
+    tabBar.on("group-toggle", (group) => this.tabManager.switchWorkspace(group || null));
+    tabBar.on("group-solo", (group) => this.tabManager.switchWorkspace(group || null));
 
     tabBar.on("group-rename", ({ group, name }) => {
       const moved = this.tabManager.renameGroup(group, name);
@@ -1461,6 +1491,7 @@ class App {
     this.themeSelector.dispose();
     this.mobileUI?.dispose();
     this.tabBar?.dispose();
+    this.workspaceSwitcher?.dispose();
     this.tabManager.dispose();
   }
 }

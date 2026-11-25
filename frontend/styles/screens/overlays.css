@@ -15,6 +15,56 @@
 }
 
 /* ==========================================================================
+   Workspace list, up while the workspace key is held
+   ========================================================================== */
+
+.workspace-switcher {
+  position: fixed;
+  top: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 900;
+  min-width: 260px;
+  max-height: 70vh;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.workspace-switcher-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 14px;
+  color: var(--text-muted);
+  box-shadow: inset 2px 0 0 var(--group-colour);
+}
+
+.workspace-switcher-row.open {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--group-colour) 18%, transparent);
+}
+
+.workspace-switcher-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-switcher-waiting {
+  color: var(--accent-orange);
+}
+
+.workspace-switcher-count {
+  min-width: 2ch;
+  text-align: right;
+}
+
+/* ==========================================================================
    Help Overlay
    ========================================================================== */
 

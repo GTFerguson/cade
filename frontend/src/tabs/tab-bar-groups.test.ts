@@ -64,6 +64,44 @@ describe("layout", () => {
   });
 });
 
+describe("ungrouped tabs while a workspace is open", () => {
+  const looseChip = () => container.querySelector<HTMLElement>(".tab-group-chip--ungrouped");
+
+  it("are tabs on the bar while they are the open workspace", () => {
+    bar.render(TABS, "a", groups(["Work", "Home"]));
+    expect(shownTabs()).toBe("a b");
+    expect(looseChip()).toBeNull();
+  });
+
+  it("fold into one chip with their count, wherever they sit on the bar", () => {
+    bar.render(TABS, "w1", groups(["", "Home"]));
+    expect(shownTabs()).toBe("w1 w2");
+    expect(container.querySelectorAll(".tab-group-chip--ungrouped")).toHaveLength(1);
+    expect(looseChip()!.querySelector(".tab-group-count")!.textContent).toBe("2");
+  });
+
+  it("show on the chip that one of them is waiting", () => {
+    bar.setAttention("b", "input");
+    bar.render(TABS, "w1", groups(["", "Home"]));
+    expect(looseChip()!.dataset["status"]).toBe("input");
+  });
+
+  it("update the chip when one starts waiting while they are hidden", () => {
+    bar.render(TABS, "w1", groups(["", "Home"]));
+    expect(looseChip()!.dataset["status"]).toBe("none");
+    bar.setAttention("b", "input");
+    expect(looseChip()!.dataset["status"]).toBe("input");
+  });
+
+  it("are opened by clicking the chip", () => {
+    const toggled = vi.fn();
+    bar.on("group-toggle", toggled);
+    bar.render(TABS, "w1", groups(["", "Home"]));
+    looseChip()!.click();
+    expect(toggled).toHaveBeenCalledWith("");
+  });
+});
+
 describe("what a collapsed group needs", () => {
   beforeEach(() => bar.render(TABS, "a", groups(["Work"])));
 
@@ -173,7 +211,7 @@ describe("group menu", () => {
   });
 
   it.each([
-    ["Show only this group", "group-solo"],
+    ["Open this workspace", "group-solo"],
     ["Ungroup", "group-ungroup"],
   ] as const)("%s", (label, event) => {
     const handler = vi.fn();

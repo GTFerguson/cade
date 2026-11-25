@@ -14,6 +14,7 @@ import {
   groupRollup,
   parentFolder,
   tabRuns,
+  UNGROUPED,
   type TabGroupDef,
 } from "./tab-groups";
 import { openTabMenu, type MenuEntry } from "./tab-menu";
@@ -124,11 +125,16 @@ export class TabBar implements Component {
     tabList.className = "tab-list";
 
     this.drags = [];
+    let looseChipDrawn = false;
     for (const run of tabRuns(tabs)) {
-      const collapsed = run.group !== null && groups.collapsed.has(run.group);
+      const collapsed = groups.collapsed.has(run.group ?? UNGROUPED);
       const runEl = collapsed ? null : this.createRunElement(run.tabs, activeTabId);
       if (run.group === null) {
-        tabList.appendChild(runEl!);
+        // Ungrouped tabs can sit either side of a group; closed, they are
+        // one chip however many stretches they are in.
+        if (runEl) tabList.appendChild(runEl);
+        else if (!looseChipDrawn) tabList.appendChild(this.createUngroupedChip());
+        looseChipDrawn = true;
         continue;
       }
       const groupEl = document.createElement("div");
@@ -197,6 +203,11 @@ export class TabBar implements Component {
     if (this.updateReady === ready) return;
     this.updateReady = ready;
     this.render(this.tabs, this.activeTabId, this.groups);
+  }
+
+  /** The agent state last reported for a tab, null when none was. */
+  attentionOf(tabId: string): AttentionState {
+    return this.status.get(tabId)?.state ?? null;
   }
 
   private createUpdateMarker(): HTMLElement {
@@ -286,6 +297,44 @@ export class TabBar implements Component {
     return chip;
   }
 
+  /**
+   * Stands in for the ungrouped tabs while a workspace is open. It has no
+   * name to show or menu to offer, only the way back to those tabs.
+   */
+  private createUngroupedChip(): HTMLElement {
+    const members = this.tabs.filter((t) => !t.group);
+    const rollup = groupRollup(members.map((t) => this.status.get(t.id)?.state ?? null));
+    const chip = document.createElement("div");
+    chip.className = "tab-group-chip tab-group-chip--ungrouped";
+    chip.setAttribute("role", "button");
+    chip.tabIndex = 0;
+    chip.dataset["status"] = rollup.state;
+    chip.title = `Tabs in no workspace: ${members.map((t) => tabDisplayName(t)).join(", ")}`;
+    chip.style.setProperty("--group-colour", groupColourVar(undefined));
+
+    const statusEl = document.createElement("span");
+    statusEl.className = "tab-group-status";
+    statusEl.textContent =
+      rollup.state === "none"
+        ? ""
+        : STATUS_DISPLAY[rollup.state].glyph + (rollup.waiting > 1 ? String(rollup.waiting) : "");
+    chip.appendChild(statusEl);
+
+    const countEl = document.createElement("span");
+    countEl.className = "tab-group-count";
+    countEl.textContent = String(members.length);
+    chip.appendChild(countEl);
+
+    const open = () => this.emit("group-toggle", UNGROUPED);
+    chip.addEventListener("click", open);
+    chip.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      open();
+    });
+    return chip;
+  }
+
   /** Show on a collapsed group's chip what the tabs inside it need. */
   private paintChip(chip: HTMLElement, group: string, collapsed: boolean): void {
     const members = this.tabs.filter((t) => t.group === group);
@@ -363,7 +412,7 @@ export class TabBar implements Component {
         onPick: (colour) => this.emit("group-colour", { group, colour }),
       },
       { kind: "separator" },
-      { kind: "action", label: "Show only this group", action: () => this.emit("group-solo", group) },
+      { kind: "action", label: "Open this workspace", action: () => this.emit("group-solo", group) },
     ];
     // Offer the folder above each of the group's projects: "everything under
     // here belongs to this group" is the rule people mean.
@@ -470,6 +519,11 @@ export class TabBar implements Component {
     const group = this.tabs.find((t) => t.id === tabId)?.group;
     const chip = group ? this.findChip(group) : null;
     if (chip && group) this.paintChip(chip, group, this.groups.collapsed.has(group));
+    if (!group) {
+      // The ungrouped chip is small enough to rebuild, and holds no state.
+      const loose = this.container.querySelector(".tab-group-chip--ungrouped");
+      loose?.replaceWith(this.createUngroupedChip());
+    }
   }
 
   private findTab(tabId: string): HTMLElement | null {

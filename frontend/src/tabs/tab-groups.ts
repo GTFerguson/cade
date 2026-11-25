@@ -112,9 +112,15 @@ export function tabRuns<T extends Grouped>(tabs: T[]): TabRun<T>[] {
   return runs;
 }
 
+/**
+ * How the ungrouped tabs are named in a set of collapsed groups. No group
+ * can have this name: a group's name is never empty.
+ */
+export const UNGROUPED = "";
+
 /** Tabs that are on show: those not inside a collapsed group. */
 export function visibleTabs<T extends Grouped>(tabs: T[], collapsed: ReadonlySet<string>): T[] {
-  return tabs.filter((t) => !t.group || !collapsed.has(t.group));
+  return tabs.filter((t) => !collapsed.has(t.group ?? UNGROUPED));
 }
 
 /**
