@@ -12,6 +12,7 @@ import { Terminal, type CustomKeyHandler } from "./terminal";
 import type { ChatStreamMessage, Component, OutputMessage, SessionRestoredMessage } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
 import type { AgentManager } from "../agents";
+import { indicatorText } from "./indicator-text";
 
 export type TerminalMode = "terminal" | "chat";
 
@@ -535,6 +536,10 @@ export class TerminalManager implements Component {
         this.statusIndicator.classList.add("shell");
       }
     }
+    this.statusIndicator.textContent = indicatorText(
+      this.statusIndicator.textContent ?? "",
+      this.cliAgentLabel,
+    );
   }
 
   /**
