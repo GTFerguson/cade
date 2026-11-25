@@ -1,7 +1,7 @@
 ---
 title: Remote Sessions
 created: 2026-10-14
-updated: 2026-11-04
+updated: 2026-11-25
 status: active
 tags: [technical, backend, frontend, sessions, mobile, transport, attention, push]
 ---
@@ -49,6 +49,19 @@ The phone's on-screen keyboard never resizes the PTY either: the input bar repor
 `GET /api/sessions` and the `list-sessions` message describe every live session (`backend/terminal/session_listing.py`): id, label, project, agent adapter, attached client count, attention, and per-terminal size, controller and last `seq`. Tabs send their name as `label` in `set-project`. `TabManager.adoptSession` opens a tab whose id *is* the session id, so connecting attaches to the existing PTY instead of spawning one. The start splash polls `GET /api/sessions` while it is up and offers each live session as an ATTACH entry (a browser with no saved tabs has no other way in); the mobile menu lists the same sessions under "on server".
 
 The registry is not persisted to disk: PTYs do not survive the backend process ending, so a file would only list sessions that no longer exist. An in-place upgrade is different: the process execs the new build and carries the registry across in a handoff manifest, so sessions survive it (see [[../../architecture/components#In-place Upgrade]]).
+
+## When a session ends
+
+A session outlives a dropped connection on purpose: a page reload, an in-place upgrade or a sleeping laptop must not kill the agent. Closing a tab is different. It is the user saying they are done, and a session left up would keep an agent running where nothing shows it.
+
+| What happens | The session |
+|---|---|
+| Connection drops, page reloads, backend upgrades in place | Keeps running |
+| The user closes the tab (`close-session` message) | Ends, unless another client is still attached |
+| The phone's `[detach]` | Keeps running; leaving a session up to return to it is what detach is for |
+| `DELETE /api/sessions/{id}` | Ends a session nothing is attached to; refused with 409 for one that is attached |
+
+`ConnectionHandler._handle_close_session` (`backend/websocket.py`) removes the session from the registry only when the closing client is the last one attached. The `DELETE` route is for sessions already running with no tab, which the project picker lists (see [[project-picker]]).
 
 ## Liveness
 
@@ -100,5 +113,7 @@ The frontend registers `sw.js` in production builds under the base path (`fronte
 ## See Also
 
 - [[frontend-architecture]]
+- [[tab-groups]]
+- [[project-picker]]
 - [[../reference/websocket-protocol]]
 - [[../../user/mobile-guide|Mobile Guide]]

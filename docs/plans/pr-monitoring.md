@@ -62,11 +62,12 @@ so CADE stores no GitHub credentials of its own.
 
 ## Key challenges
 
-- **Two GitHub accounts.** Work and personal repositories may belong to
-  different accounts. On this machine `gh` is signed in to one account and 24
-  of the 25 repositories under `~/projects` belong to it, so the first step can
-  ignore the problem; `gh` does support several accounts with one active at a
-  time, and the poller would need to pick per repository. See open questions.
+- **Two GitHub accounts.** The work (AirPLAi) repositories belong to a
+  separate work account; personal ones to `GTFerguson`. On this machine `gh`
+  is signed in to `GTFerguson` only, which owns 24 of the 25 repositories under
+  `~/projects`. `gh` holds several accounts with one active at a time, so the
+  poller must name the account per repository instead of switching the active
+  one under the agents that also use `gh`.
 - **A branch is not a pull request.** A tab's branch can change under it, a
   pull request can come from a fork, and several tabs can share a repository on
   different branches (worktrees). Matching is by repository and head branch,
@@ -90,9 +91,9 @@ so CADE stores no GitHub credentials of its own.
 
 ## Open questions
 
-- Which GitHub account holds the work repositories, and is `gh` signed in to it
-  on this machine? If it is a second account, should CADE switch accounts per
-  repository or should the work repositories be left out at first?
+- The work account needs `gh auth login` on this machine before its
+  repositories can be polled. How is a repository mapped to an account: by the
+  owner in its remote URL, or by tab group?
 - Is polling enough, or are webhooks through a relay worth their setup for
   faster notifications?
 - Should the badge show on a tab whose branch has a pull request that is not
