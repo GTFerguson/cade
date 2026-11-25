@@ -414,7 +414,16 @@ export class WebSocketClient extends BaseWSClient {
     if (typed.type === MessageType.CONNECTED) {
       this.livenessArmed = true;
       const connected = message as ConnectedMessage;
+      const known = WebSocketClient.knownBuild;
       WebSocketClient.noteBuild(connected.buildVersion, connected.frontendVersion);
+      if (known !== null && known !== WebSocketClient.knownBuild) {
+        // Logged by the backend, which is the only record of what a desktop
+        // window's page was told and made of it.
+        this.sendDiagnostic(
+          "build-notice",
+          `page was on ${known}, backend now reports build ${connected.buildVersion} interface ${connected.frontendVersion}`,
+        );
+      }
       this.fireBridged("connected", message as ConnectedMessage);
       return true;
     }

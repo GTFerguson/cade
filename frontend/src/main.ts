@@ -348,7 +348,21 @@ class App {
     // reload it needs redraws every terminal.
     this.tabBar.on("update-reload", () => WebSocketClient.reloadForUpdate());
     this.tabBar.setUpdateReady(WebSocketClient.isUpdateReady());
-    WebSocketClient.onUpdateReady(() => this.tabBar?.setUpdateReady(true));
+    WebSocketClient.onUpdateReady(() => {
+      this.tabBar?.setUpdateReady(true);
+      // The desktop window cannot be inspected, so the page reports what it
+      // drew: whether the marker is in the bar and where it ended up.
+      requestAnimationFrame(() => {
+        const marker = document.querySelector(".tab-update-marker")?.getBoundingClientRect();
+        const where = marker
+          ? `marker at x=${Math.round(marker.x)} y=${Math.round(marker.y)} w=${Math.round(marker.width)} h=${Math.round(marker.height)}`
+          : "no marker in the tab bar";
+        this.tabManager.getActiveTab()?.ws.sendDiagnostic(
+          "update-ready",
+          `${where}; window ${window.innerWidth}x${window.innerHeight}`,
+        );
+      });
+    });
 
     this.tabManager.on("tab-created", (tab) => {
       this.initializeTabContext(tab);
