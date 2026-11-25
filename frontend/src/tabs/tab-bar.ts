@@ -15,9 +15,13 @@ import {
   parentFolder,
   tabRuns,
   UNGROUPED,
+  type GroupRollup,
   type TabGroupDef,
 } from "./tab-groups";
 import { openTabMenu, type MenuEntry } from "./tab-menu";
+
+/** How long a workspace takes to slide open or shut. */
+export const ACCORDION_MS = 150;
 
 /** Two clicks on a tab's name within this window start a rename. */
 const RENAME_DOUBLE_CLICK_MS = 400;
@@ -31,6 +35,10 @@ interface TabStatus {
 export interface TabBarGroups {
   collapsed: ReadonlySet<string>;
   defs: TabGroupDef[];
+}
+
+function sameSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  return a.size === b.size && [...a].every((x) => b.has(x));
 }
 
 const NO_GROUPS: TabBarGroups = { collapsed: new Set(), defs: [] };
@@ -63,6 +71,11 @@ export class TabBar implements Component {
   private activeTabId: string | null = null;
   private groups: TabBarGroups = NO_GROUPS;
   private updateReady = false;
+  // Which workspaces were closed at the last render, to tell what has just
+  // opened or closed. A bar that had no tabs has nothing to slide from.
+  private drawnCollapsed: Set<string> | null = null;
+  private slide: { from: Set<string>; startedAt: number } | null = null;
+  private slideElapsed = 0;
   // A name being typed, of a tab or of a group. Holds back re-renders.
   private renaming = false;
   // The first click of a double-click selects the tab, which re-renders the
@@ -93,6 +106,7 @@ export class TabBar implements Component {
       return;
     }
     this.pendingRender = null;
+    const hadTabs = this.tabs.length > 0;
     this.tabs = tabs;
     this.activeTabId = activeTabId;
     this.groups = groups;
@@ -125,15 +139,35 @@ export class TabBar implements Component {
     tabList.className = "tab-list";
 
     this.drags = [];
+    // A workspace that has just opened or closed slides, so the eye can
+    // follow which tabs went where. Any other render is drawn as it stands.
+    // One switch redraws the bar more than once, so a slide is tied to when
+    // it began, not to the render that began it: a redraw while it runs
+    // picks it up where it had got to.
+    const now = Date.now();
+    const last = this.drawnCollapsed;
+    this.drawnCollapsed = new Set(groups.collapsed);
+    if (hadTabs && last !== null && !sameSet(last, groups.collapsed)) {
+      this.slide = { from: last, startedAt: now };
+    } else if (this.slide && now - this.slide.startedAt >= ACCORDION_MS) {
+      this.slide = null;
+    }
+    const before = this.slide?.from ?? null;
+    this.slideElapsed = this.slide ? now - this.slide.startedAt : 0;
     let looseChipDrawn = false;
     for (const run of tabRuns(tabs)) {
-      const collapsed = groups.collapsed.has(run.group ?? UNGROUPED);
-      const runEl = collapsed ? null : this.createRunElement(run.tabs, activeTabId);
+      const key = run.group ?? UNGROUPED;
+      const collapsed = groups.collapsed.has(key);
+      const changed = before !== null && before.has(key) !== collapsed;
+      const built = collapsed
+        ? changed ? this.createClosingRun(run.tabs) : null
+        : this.createRunElement(run.tabs, activeTabId);
+      const runEl = built && changed && !collapsed ? this.slideOpen(built) : built;
       if (run.group === null) {
         // Ungrouped tabs can sit either side of a group; closed, they are
         // one chip however many stretches they are in.
+        if (collapsed && !looseChipDrawn) tabList.appendChild(this.createUngroupedChip());
         if (runEl) tabList.appendChild(runEl);
-        else if (!looseChipDrawn) tabList.appendChild(this.createUngroupedChip());
         looseChipDrawn = true;
         continue;
       }
@@ -226,6 +260,60 @@ export class TabBar implements Component {
     return this.drags.some((d) => d.isDragging());
   }
 
+  /** Wrap a run that has just come on show so that it grows out of its chip. */
+  private slideOpen(runEl: HTMLElement): HTMLElement {
+    const slide = this.createSlide("opening");
+    slide.appendChild(runEl);
+    // Once open the wrapper would only clip things drawn past a tab's edge.
+    setTimeout(() => slide.replaceWith(runEl), ACCORDION_MS - this.slideElapsed);
+    return slide;
+  }
+
+  /**
+   * The tabs of a workspace that has just closed, drawn once more so they can
+   * shrink into its chip. They are a picture: no ids, no handlers, and gone
+   * when the slide ends.
+   */
+  private createClosingRun(tabs: TabState[]): HTMLElement {
+    const slide = this.createSlide("closing");
+    slide.setAttribute("aria-hidden", "true");
+    const runEl = document.createElement("div");
+    runEl.className = "tab-run";
+    for (const tab of tabs) {
+      const ghost = this.createTabElement(tab, false).cloneNode(true) as HTMLElement;
+      delete ghost.dataset["tabId"];
+      runEl.appendChild(ghost);
+    }
+    slide.appendChild(runEl);
+    setTimeout(() => slide.remove(), ACCORDION_MS - this.slideElapsed);
+    return slide;
+  }
+
+  private createSlide(direction: "opening" | "closing"): HTMLElement {
+    const slide = document.createElement("div");
+    slide.className = `tab-slide tab-slide--${direction}`;
+    slide.style.setProperty("--tab-slide-ms", `${ACCORDION_MS}ms`);
+    slide.style.animationDelay = `-${this.slideElapsed}ms`;
+    return slide;
+  }
+
+  /**
+   * What a closed workspace's tabs need, in the slot and glyphs a tab uses
+   * for its own status. One mark, the most pressing; when several tabs are
+   * waiting it becomes their number.
+   */
+  private paintRollup(chip: HTMLElement, statusEl: HTMLElement | null, rollup: GroupRollup, closed: boolean): void {
+    chip.dataset["status"] = rollup.state;
+    if (!statusEl) return;
+    const several = closed && rollup.waiting > 1;
+    statusEl.classList.toggle("tab-group-status--count", several);
+    statusEl.textContent = !closed
+      ? ""
+      : several
+        ? String(rollup.waiting)
+        : STATUS_DISPLAY[rollup.state].glyph;
+  }
+
   private groupDef(group: string): TabGroupDef | undefined {
     return this.groups.defs.find((d) => d.name === group);
   }
@@ -308,17 +396,14 @@ export class TabBar implements Component {
     chip.className = "tab-group-chip tab-group-chip--ungrouped";
     chip.setAttribute("role", "button");
     chip.tabIndex = 0;
-    chip.dataset["status"] = rollup.state;
+    chip.dataset["collapsed"] = "true";
     chip.title = `Tabs in no workspace: ${members.map((t) => tabDisplayName(t)).join(", ")}`;
     chip.style.setProperty("--group-colour", groupColourVar(undefined));
 
     const statusEl = document.createElement("span");
     statusEl.className = "tab-group-status";
-    statusEl.textContent =
-      rollup.state === "none"
-        ? ""
-        : STATUS_DISPLAY[rollup.state].glyph + (rollup.waiting > 1 ? String(rollup.waiting) : "");
     chip.appendChild(statusEl);
+    this.paintRollup(chip, statusEl, rollup, true);
 
     const countEl = document.createElement("span");
     countEl.className = "tab-group-count";
@@ -341,23 +426,17 @@ export class TabBar implements Component {
     const rollup = collapsed
       ? groupRollup(members.map((t) => this.status.get(t.id)?.state ?? null))
       : { state: "none" as const, waiting: 0 };
-    const statusEl = chip.querySelector<HTMLElement>(".tab-group-status");
-    chip.dataset["status"] = rollup.state;
+    chip.dataset["collapsed"] = String(collapsed);
+    this.paintRollup(chip, chip.querySelector<HTMLElement>(".tab-group-status"), rollup, collapsed);
     const names = members.map((t) => tabDisplayName(t)).join(", ");
-    const action = collapsed ? "Click to expand" : "Click to collapse";
-    if (statusEl) {
-      statusEl.textContent =
-        rollup.state === "none"
-          ? ""
-          : STATUS_DISPLAY[rollup.state].glyph + (rollup.waiting > 1 ? String(rollup.waiting) : "");
-    }
+    const action = collapsed ? "Click to open, right-click" : "Right-click";
     const needs =
       rollup.state === "input"
         ? `${rollup.waiting} waiting on you. `
         : rollup.state === "none"
           ? ""
           : `${STATUS_DISPLAY[rollup.state].title}. `;
-    chip.title = `${group}: ${names}\n${needs}${action}, right-click for more`;
+    chip.title = `${group}: ${names}\n${needs}${action} for more`;
   }
 
   private findChip(group: string): HTMLElement | null {

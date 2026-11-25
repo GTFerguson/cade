@@ -332,8 +332,8 @@
   padding: 8px 10px;
   border-bottom: 1px solid var(--border-color);
   border-right: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--group-colour) 14%, transparent);
-  box-shadow: inset 0 -2px 0 var(--group-colour);
+  background: transparent;
+  box-shadow: inset 2px 0 0 var(--group-colour);
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: normal;
@@ -344,7 +344,24 @@
 }
 
 .tab-group-chip:hover {
-  background: color-mix(in srgb, var(--group-colour) 24%, transparent);
+  background: var(--bg-hover);
+}
+
+/* A closed workspace is one of several to choose from; the open one is the
+   heading of the tabs beside it. */
+.tab-group-chip[data-collapsed="true"] .tab-group-name {
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+/* A closed workspace with a tab waiting or finished is tinted as that tab
+   would be, so it can be picked out across the bar. */
+.tab-group-chip[data-collapsed="true"][data-status="input"] {
+  background: color-mix(in srgb, var(--accent-orange) 12%, transparent);
+}
+
+.tab-group-chip[data-collapsed="true"][data-status="idle"] {
+  background: color-mix(in srgb, var(--accent-cyan) 6%, transparent);
 }
 
 .tab-group-chip:focus-visible {
@@ -370,11 +387,47 @@
 }
 
 .tab-group .tab {
-  box-shadow: inset 0 -2px 0 var(--group-colour);
+  box-shadow: inset 0 -1px 0 var(--group-colour);
 }
 
 .tab-group .tab.active {
-  box-shadow: inset 0 2px 0 var(--text-primary), inset 0 -2px 0 var(--group-colour);
+  box-shadow: inset 0 2px 0 var(--text-primary), inset 0 -1px 0 var(--group-colour);
+}
+
+/* A workspace opening or closing: its tabs grow out of, or shrink into, its
+   chip. The grid track is what animates, since a width of auto cannot. */
+.tab-slide {
+  display: grid;
+  grid-template-columns: 1fr;
+  min-width: 0;
+  animation: tab-slide-open var(--tab-slide-ms, 150ms) ease-out;
+}
+
+.tab-slide > .tab-run {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tab-slide--closing {
+  grid-template-columns: 0fr;
+  animation-name: tab-slide-shut;
+  pointer-events: none;
+}
+
+@keyframes tab-slide-open {
+  from { grid-template-columns: 0fr; }
+  to { grid-template-columns: 1fr; }
+}
+
+@keyframes tab-slide-shut {
+  from { grid-template-columns: 1fr; }
+  to { grid-template-columns: 0fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-slide {
+    animation: none;
+  }
 }
 
 .tab-group .tab.tab-dragging {
@@ -384,12 +437,34 @@
 /* What a collapsed group's tabs need, in the same glyphs and colours as a
    tab's own status. Empty when no tab inside reports anything. */
 .tab-group-status {
+  flex-shrink: 0;
+  min-width: 10px;
+  text-align: center;
   font-weight: 700;
   line-height: 1;
+  color: var(--text-muted);
 }
 
 .tab-group-status:empty {
   display: none;
+}
+
+.tab-group-chip[data-status="none"] .tab-group-status {
+  opacity: 0.6;
+}
+
+/* Several tabs waiting: a disc in the waiting colour with their number cut
+   out of it, in place of the single mark. */
+.tab-group-chip[data-status="input"] .tab-group-status.tab-group-status--count {
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: var(--accent-orange);
+  color: var(--bg-secondary);
+  font-size: 10px;
+  line-height: 15px;
 }
 
 .tab-group-chip[data-status="input"] .tab-group-status {

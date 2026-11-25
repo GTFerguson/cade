@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { TabBar, STATUS_DISPLAY, type TabBarGroups } from "./tab-bar";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { ACCORDION_MS, TabBar, STATUS_DISPLAY, type TabBarGroups } from "./tab-bar";
 import type { TabState } from "./types";
 
 function tab(id: string, group?: string): TabState {
@@ -18,7 +18,7 @@ const groupEl = (name: string) => container.querySelector<HTMLElement>(`.tab-gro
 const chip = (name: string) => groupEl(name).querySelector<HTMLElement>(".tab-group-chip")!;
 const chipStatus = (name: string) => chip(name).querySelector<HTMLElement>(".tab-group-status")!;
 const shownTabs = () =>
-  [...container.querySelectorAll<HTMLElement>(".tab")].map((el) => el.dataset["tabId"]).join(" ");
+  [...container.querySelectorAll<HTMLElement>(".tab[data-tab-id]")].map((el) => el.dataset["tabId"]).join(" ");
 const menuLabels = () =>
   [...document.querySelectorAll<HTMLElement>(".tab-menu-item, .tab-menu-heading")].map((el) => el.textContent);
 const menuItem = (label: string) =>
@@ -102,12 +102,63 @@ describe("ungrouped tabs while a workspace is open", () => {
   });
 });
 
+describe("a workspace sliding open or shut", () => {
+  const slides = (direction: string) => container.querySelectorAll(`.tab-slide--${direction}`);
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("does not slide on a render that opens or closes nothing", () => {
+    bar.render(TABS, "b", groups());
+    expect(container.querySelectorAll(".tab-slide")).toHaveLength(0);
+  });
+
+  it("does not slide when the bar is first filled", () => {
+    const fresh = new TabBar(container);
+    fresh.initialize();
+    fresh.render(TABS, "w1", groups(["", "Home"]));
+    expect(container.querySelectorAll(".tab-slide")).toHaveLength(0);
+  });
+
+  it("slides the closing workspace's tabs away as a picture, then drops them", () => {
+    bar.render(TABS, "a", groups(["Work"]));
+    expect(slides("closing")).toHaveLength(1);
+    expect(shownTabs()).toBe("a h1 b");
+    expect(slides("closing")[0]!.querySelectorAll(".tab")).toHaveLength(2);
+    vi.advanceTimersByTime(ACCORDION_MS);
+    expect(slides("closing")).toHaveLength(0);
+  });
+
+  it("keeps sliding through a redraw that lands part-way", () => {
+    bar.render(TABS, "a", groups(["Work"]));
+    vi.advanceTimersByTime(ACCORDION_MS / 3);
+    bar.render(TABS, "a", groups(["Work"]));
+    expect(slides("closing")).toHaveLength(1);
+    expect((slides("closing")[0] as HTMLElement).style.animationDelay).toBe(`-${ACCORDION_MS / 3}ms`);
+    vi.advanceTimersByTime((ACCORDION_MS * 2) / 3);
+    expect(slides("closing")).toHaveLength(0);
+    bar.render(TABS, "a", groups(["Work"]));
+    expect(slides("closing")).toHaveLength(0);
+  });
+
+  it("slides the opening workspace's tabs in, and leaves them as ordinary tabs", () => {
+    bar.render(TABS, "a", groups(["Work"]));
+    vi.advanceTimersByTime(ACCORDION_MS);
+    bar.render(TABS, "w1", groups());
+    expect(slides("opening")).toHaveLength(1);
+    expect(shownTabs()).toBe("a w1 w2 h1 b");
+    vi.advanceTimersByTime(ACCORDION_MS);
+    expect(container.querySelectorAll(".tab-slide")).toHaveLength(0);
+    expect(groupEl("Work").querySelector(":scope > .tab-run")).not.toBeNull();
+  });
+});
+
 describe("what a collapsed group needs", () => {
   beforeEach(() => bar.render(TABS, "a", groups(["Work"])));
 
   it("is quiet until a tab inside reports something", () => {
     expect(chip("Work").dataset["status"]).toBe("none");
-    expect(chipStatus("Work").textContent).toBe("");
+    expect(chipStatus("Work").textContent).toBe(STATUS_DISPLAY.none.glyph);
   });
 
   it("shows a waiting tab, and the number when more than one waits", () => {
@@ -115,7 +166,11 @@ describe("what a collapsed group needs", () => {
     expect(chip("Work").dataset["status"]).toBe("input");
     expect(chipStatus("Work").textContent).toBe(STATUS_DISPLAY.input.glyph);
     bar.setAttention("w2", "input");
-    expect(chipStatus("Work").textContent).toBe(`${STATUS_DISPLAY.input.glyph}2`);
+    expect(chipStatus("Work").textContent).toBe("2");
+    expect(chipStatus("Work").classList.contains("tab-group-status--count")).toBe(true);
+    bar.setAttention("w2", "working");
+    expect(chipStatus("Work").textContent).toBe(STATUS_DISPLAY.input.glyph);
+    expect(chipStatus("Work").classList.contains("tab-group-status--count")).toBe(false);
   });
 
   it("lets waiting outrank working, and working outrank finished", () => {
