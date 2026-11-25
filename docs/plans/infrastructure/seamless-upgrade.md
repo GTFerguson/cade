@@ -152,6 +152,18 @@ Verified in a headless browser with two servers standing in for the built-in cop
 
 The earlier "live run" verification used a dev backend with a browser tab, which is exactly the case that works. A desktop-shell run should be part of verifying any change to this path.
 
+### The upgraded backend ran from the old build's files (25 Nov 2026)
+
+Until this fix an in-place upgrade of the installed app never loaded the new frontend. PyInstaller's bootloader leaves `_PYI_ARCHIVE_FILE` and `_PYI_APPLICATION_HOME_DIR` in the environment; a one-file binary exec'd with them set takes itself for a worker of the launching build and runs from the directory unpacked at launch. Python code came from the new binary, while the frontend, data files and native libraries stayed those of the build the app was started with. Confirmed on the installed binary with `strace`: no new `/tmp/_MEI*` directory was created unless `PYINSTALLER_RESET_ENVIRONMENT=1` was set.
+
+- **The exec sets that switch** (`exec_environment` in `backend/upgrade.py`), so the new image unpacks its own files and the old directory is removed on resume, as the design assumed.
+- **The pid no longer holds the backend.** Unpacking makes the exec'd process a launcher and runs the backend as its child, so the shells are the backend's siblings and it cannot `waitpid` them. `InheritedPTY.is_alive` reads the process state from `/proc` instead; an exited shell stays a zombie until the app closes, because the launcher does not reap.
+- **Each upgrade adds one idle launcher process** to the chain under the desktop app. Versioned install directories with a one-directory build (phase 4) remove both this and the zombie caveat.
+- **The first upgrade after installing this fix still runs the old exec path**, since the running backend performs it; a second `cade-backend upgrade` then unpacks properly. The build id does not change between the two, so windows need one manual reload.
+
+Verified on a throwaway frozen backend with its own home directory and one shell session: the new image unpacked a fresh directory and removed the old one, the session stayed alive, the build's frontend was served, a killed shell was reported as exited, and a second upgrade repeated all of it. Then on the installed app: nine sessions resumed and the served entry script matched the build.
+
+
 ## Remaining phases
 
 3b. **UX.** "Upgrade pending" and "upgrading" toasts, and on the desktop a notice that the interface updates at the next restart; a "now" button; cancel from the UI. Reconnect after the exec is the ordinary backoff path today (1s, 2s, 4s), which covers the measured 1.6s gap.
