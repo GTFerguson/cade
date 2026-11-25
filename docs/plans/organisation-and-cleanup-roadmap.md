@@ -48,13 +48,14 @@ Built 25 Nov 2026: `frontend/src/local/project-picker.ts` (view),
 (projects and handoffs), `backend/terminal/session_agents.py` (per-tab agent).
 
 One keyboard-driven picker on desktop, browser and phone in place of the native
-folder dialog. It opens on the folders under the main working folder
-(`CADE_PROJECTS_ROOT`, default `~/projects`), most recently worked on first.
-Going into a project offers a new session, then its handoffs newest first;
-choosing a handoff opens a tab whose agent starts by reading it. `a` switches
-the tab's agent between Claude Code and Codex, `g` its tab group, `/` filters or
-takes a typed path. Folders outside the projects folder are reached by going up
-or typing a path, and the system folder dialog is the last entry.
+folder dialog. The first screen lists the projects already open and recently
+opened, then every folder under the main working folder (`CADE_PROJECTS_ROOT`,
+default `~/projects`), most recently worked on first. `h` and `l` walk up and
+down folders anywhere on disk. Enter chooses a folder as the project, which
+shows a new session and its handoffs newest first; choosing a handoff opens a
+tab whose agent starts by reading it. The agent (Claude Code or Codex) and the
+tab group are shown at the top and switched with `a` and `g`. `/` filters or
+takes a typed path. The system explorer is the last entry.
 
 **Left.**
 

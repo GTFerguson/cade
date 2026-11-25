@@ -71,6 +71,24 @@ const getWsUrl = (): string => {
   return `${wsScheme()}://${window.location.host}${basePath}/ws`;
 };
 
+/**
+ * Where the backend's HTTP API is, to put in front of an `/api/...` path.
+ *
+ * In a browser the page is served by the backend, so a path relative to the
+ * page reaches it. The desktop window's page belongs to the app shell: there
+ * a relative path goes to the shell, which has no API, and every request
+ * quietly comes back empty. The shell tells the page where its backend is,
+ * and that address has to be used instead.
+ */
+export function apiBase(): string {
+  const envBackendUrl = import.meta.env.VITE_BACKEND_URL;
+  if (envBackendUrl) return envBackendUrl.replace(/\/$/, "");
+  syncShellGlobals();
+  const backendUrl = (window as any).__BACKEND_URL__;
+  if (typeof backendUrl === "string" && backendUrl) return backendUrl.replace(/\/$/, "");
+  return basePath;
+}
+
 // Detect Tauri production environment where the backend URL
 // must be injected via eval() before WebSocket can connect.
 const needsInjectedUrl = (): boolean => {

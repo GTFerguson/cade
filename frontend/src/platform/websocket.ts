@@ -7,7 +7,7 @@
 import { BaseWSClient, type WSAuthFailedEvent } from "@core/platform/ws-client";
 import { appendTokenToUrl } from "../auth/tokenManager";
 import { getStoredIdToken } from "../auth/googleAuth";
-import { basePath, config, isRemoteBrowserAccess, isTauri } from "../config/config";
+import { apiBase, basePath, config, isRemoteBrowserAccess, isTauri } from "../config/config";
 import type { TabGroupDef } from "../tabs/tab-groups";
 import { ErrorCode, MessageType, type AnySessionKey } from "@core/platform/protocol";
 import type {
@@ -932,7 +932,7 @@ export class WebSocketClient extends BaseWSClient {
 
   /** Fetch the live sessions on this backend over HTTP, for callers without a socket. */
   static async fetchSessionList(): Promise<LiveSessionInfo[]> {
-    const res = await fetch(`${basePath}/api/sessions`, { credentials: "include" });
+    const res = await fetch(`${apiBase()}/api/sessions`, { credentials: "include" });
     if (!res.ok) return [];
     const body = (await res.json()) as { sessions?: LiveSessionInfo[] };
     return body.sessions ?? [];
@@ -940,7 +940,7 @@ export class WebSocketClient extends BaseWSClient {
 
   /** Tab group definitions held by the backend this page is served from. */
   static async fetchTabGroups(): Promise<TabGroupDef[]> {
-    const res = await fetch(`${basePath}/api/tab-groups`, { credentials: "include" });
+    const res = await fetch(`${apiBase()}/api/tab-groups`, { credentials: "include" });
     if (!res.ok) return [];
     const body = (await res.json()) as { groups?: TabGroupDef[] };
     return body.groups ?? [];
@@ -948,7 +948,7 @@ export class WebSocketClient extends BaseWSClient {
 
   /** Replace the backend's tab group definitions. Returns false when it refused. */
   static async saveTabGroups(groups: TabGroupDef[]): Promise<boolean> {
-    const res = await fetch(`${basePath}/api/tab-groups`, {
+    const res = await fetch(`${apiBase()}/api/tab-groups`, {
       method: "PUT",
       credentials: "include",
       headers: { "Content-Type": "application/json" },

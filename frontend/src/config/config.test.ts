@@ -74,3 +74,23 @@ describe("desktop shell globals", () => {
     expect(config.wsUrl).toContain(window.location.host);
   });
 });
+
+describe("apiBase", () => {
+  it("is the page's own path in a browser, where the backend serves the page", async () => {
+    const { apiBase, basePath } = await import("./config");
+    expect(apiBase()).toBe(basePath);
+  });
+
+  it("is the backend's address in the desktop window, whose page the shell serves", async () => {
+    shellInjects();
+    const { apiBase } = await import("./config");
+    expect(apiBase()).toBe("http://127.0.0.1:38535");
+  });
+
+  it("still reaches the backend after a reload has wiped the shell's globals", async () => {
+    shellInjects();
+    (await import("./config")).apiBase();
+    const { apiBase } = await reloadPage();
+    expect(apiBase()).toBe("http://127.0.0.1:38535");
+  });
+});

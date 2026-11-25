@@ -2,21 +2,24 @@
  * Keyboard-driven picker for what a new tab opens on. The same screen on
  * desktop, in the browser and on the phone.
  *
- * It opens on the projects under the main working folder, most recently
- * worked on first. Going into a project offers a new session and then the
- * project's handoffs, newest first; choosing a handoff opens a tab whose agent
- * starts by reading it. `a` switches the agent the tab will run. Folders
- * outside the projects folder are reached by going up or typing a path; the
- * system folder dialog is the last resort.
+ * The first screen lists the projects already open and recently opened, for
+ * a quick second tab, then every project under the main working folder, most
+ * recently worked on first. `h` and `l` walk up and down folders from there,
+ * anywhere on disk. Enter chooses a folder as the project, which shows a new
+ * session and the project's handoffs, newest first; choosing a handoff opens
+ * a tab whose agent starts by reading it. The agent the tab will run and its
+ * tab group are shown at the top and switched with `a` and `g`. The system
+ * folder dialog is the last resort.
  *
  * In dev/demo mode, set window.__MOCK_BROWSE__ to stub the folder listing.
  */
 
-import { basePath } from "../config/config";
+import { apiBase } from "../config/config";
 import type { FileNode, LiveSessionInfo } from "../types";
 import {
   ago,
   browseSections,
+  entryPath,
   filterSections,
   folderName,
   initialAgent,
@@ -28,6 +31,7 @@ import {
   type AgentInfo,
   type BrowseDir,
   type HandoffInfo,
+  type OpenTab,
   type PickerEntry,
   type PickerSection,
   type ProjectInfo,
@@ -69,11 +73,11 @@ async function getJson<T>(url: string): Promise<T | null> {
 }
 
 export const backendPickerApi: PickerApi = {
-  projects: () => getJson<ProjectsListing>(`${basePath}/api/projects`),
+  projects: () => getJson<ProjectsListing>(`${apiBase()}/api/projects`),
 
   async handoffs(path) {
     const body = await getJson<{ handoffs?: HandoffInfo[] }>(
-      `${basePath}/api/projects/handoffs?path=${encodeURIComponent(path)}`,
+      `${apiBase()}/api/projects/handoffs?path=${encodeURIComponent(path)}`,
     );
     return body?.handoffs ?? [];
   },
@@ -82,7 +86,7 @@ export const backendPickerApi: PickerApi = {
     const mock = (window as any).__MOCK_BROWSE__;
     const body: { path: string; children: FileNode[] } | null = mock
       ? await mock(path)
-      : await getJson(`${basePath}/api/browse?path=${encodeURIComponent(path)}`);
+      : await getJson(`${apiBase()}/api/browse?path=${encodeURIComponent(path)}`);
     return {
       path: body?.path ?? path,
       dirs: (body?.children ?? [])
@@ -93,8 +97,10 @@ export const backendPickerApi: PickerApi = {
 };
 
 export interface ProjectPickerOptions {
-  /** Paths that already have a tab here; their projects are marked open. */
-  openPaths: string[];
+  /** Projects that already have a tab here, offered first for a second tab. */
+  openTabs: OpenTab[];
+  /** Projects opened lately on this device, most recent first. */
+  recents: string[];
   /** Names of the tab groups a new tab can be put in. */
   groups: string[];
   /** Whether the system folder dialog is available (the desktop app). */
@@ -138,7 +144,6 @@ export class ProjectPicker {
 
   private api: PickerApi;
   private now: () => number;
-  private openPaths: ReadonlySet<string>;
 
   private resolve: ((result: PickerResult | null) => void) | null = null;
   private focusBefore: HTMLElement | null = null;
@@ -157,6 +162,9 @@ export class ProjectPicker {
   private filtering = false;
   private entries: PickerEntry[] = [];
   private selected = 0;
+  // Where the list was left when a project was opened, to come back to.
+  private browseSelection = 0;
+  private selectListing = false;
   private group: string | null = null;
   private agent: string | null = null;
 
@@ -165,7 +173,6 @@ export class ProjectPicker {
   constructor(container: HTMLElement, private options: ProjectPickerOptions) {
     this.api = options.api ?? backendPickerApi;
     this.now = options.now ?? (() => Date.now() / 1000);
-    this.openPaths = new Set(options.openPaths);
 
     this.root = el("div", "project-picker");
     this.root.tabIndex = -1;
@@ -185,11 +192,12 @@ export class ProjectPicker {
     this.filterRow.appendChild(this.filterInput);
     body.appendChild(this.filterRow);
 
-    this.listEl = el("div", "picker-list");
-    body.appendChild(this.listEl);
-
+    // Above the list, where they are seen before a project is chosen.
     this.settingsEl = el("div", "picker-settings");
     body.appendChild(this.settingsEl);
+
+    this.listEl = el("div", "picker-list");
+    body.appendChild(this.listEl);
 
     this.helpEl = el("div", "picker-help");
     this.root.appendChild(body);
@@ -262,15 +270,16 @@ export class ProjectPicker {
     this.browsePath = listed.path;
     this.dirs = listed.dirs;
     this.loading = false;
+    // Having walked to a folder, start in its listing, below the quick choices.
+    this.selectListing = true;
     this.render();
   }
 
   /**
-   * A folder was chosen as the project. With handoffs to pick from (or when
-   * asked to), show the project; with none, a new session is the only thing
-   * it could mean, so open it.
+   * A folder was chosen as the project: show what can be started in it, a
+   * new session first and then its handoffs.
    */
-  private async openProject(path: string, alwaysShow: boolean): Promise<void> {
+  private async openProject(path: string): Promise<void> {
     const request = ++this.request;
     this.loading = true;
     this.render();
@@ -282,10 +291,7 @@ export class ProjectPicker {
     }
     if (request !== this.request) return;
     this.loading = false;
-    if (handoffs.length === 0 && !alwaysShow) {
-      this.finishProject(path, null);
-      return;
-    }
+    this.browseSelection = this.selected;
     this.screen = { kind: "project", path, handoffs };
     this.selected = 0;
     if (this.filtering) this.filterInput.value = "";
@@ -298,11 +304,12 @@ export class ProjectPicker {
       this.screen.kind === "project"
         ? projectSections(this.screen.path, this.screen.handoffs)
         : browseSections({
+            openTabs: this.options.openTabs,
+            recents: this.options.recents,
             sessions: this.sessions,
             projects: this.browsePath === this.projectsRoot ? this.projects : null,
             dirs: this.dirs,
             browsePath: this.browsePath,
-            openPaths: this.openPaths,
             native: this.options.native,
           });
     if (!this.filtering) return all;
@@ -328,6 +335,12 @@ export class ProjectPicker {
   private render(): void {
     const sections = this.currentSections();
     this.entries = sections.flatMap((s) => s.entries);
+    if (this.selectListing && !this.loading) {
+      this.selectListing = false;
+      if (this.screen.kind === "browse" && sections.length > 1) {
+        this.selected = this.entries.length - sections[sections.length - 1]!.entries.length;
+      }
+    }
     this.selected = Math.max(0, Math.min(this.selected, this.entries.length - 1));
 
     this.headerEl.textContent =
@@ -356,24 +369,59 @@ export class ProjectPicker {
 
   private renderSettings(): void {
     const rows: HTMLElement[] = [];
-    const agent = this.agents.find((a) => a.id === this.agent);
-    if (agent) {
-      const row = el("div", "picker-setting");
-      row.dataset["setting"] = "agent";
-      row.append(el("span", "picker-setting-label", "agent "), el("span", "picker-setting-value", agent.name));
-      rows.push(row);
+    const usable = this.agents.filter((a) => a.available);
+    if (usable.length > 0) {
+      rows.push(
+        this.settingRow(
+          "agent",
+          "a",
+          usable.map((a) => ({ label: a.name, selected: a.id === this.agent, pick: () => this.setAgent(a.id) })),
+        ),
+      );
     }
     if (this.options.groups.length > 0) {
-      const row = el("div", "picker-setting");
-      row.dataset["setting"] = "group";
-      row.append(
-        el("span", "picker-setting-label", "tab group "),
-        el("span", "picker-setting-value", this.group ?? "by folder"),
+      const choices: (string | null)[] = [null, ...this.options.groups];
+      rows.push(
+        this.settingRow(
+          "group",
+          "g",
+          choices.map((g) => ({
+            label: g ?? "by folder",
+            selected: g === this.group,
+            pick: () => {
+              this.group = g;
+              this.render();
+            },
+          })),
+        ),
       );
-      rows.push(row);
     }
     this.settingsEl.replaceChildren(...rows);
     this.settingsEl.hidden = rows.length === 0;
+  }
+
+  /**
+   * One choice the new tab is opened with: every option on show with the
+   * current one marked, and the key that steps through them.
+   */
+  private settingRow(
+    name: string,
+    key: string,
+    choices: { label: string; selected: boolean; pick: () => void }[],
+  ): HTMLElement {
+    const row = el("div", "picker-setting");
+    row.dataset["setting"] = name;
+    row.appendChild(el("span", "picker-setting-label", name === "group" ? "tab group" : name));
+    for (const choice of choices) {
+      const option = el("button", "picker-choice", choice.label);
+      option.type = "button";
+      option.tabIndex = -1;
+      option.classList.toggle("selected", choice.selected);
+      option.addEventListener("click", choice.pick);
+      row.appendChild(option);
+    }
+    if (choices.length > 1) row.appendChild(el("span", "picker-setting-key", key));
+    return row;
   }
 
   private entryElement(entry: PickerEntry, index: number): HTMLElement {
@@ -381,9 +429,17 @@ export class ProjectPicker {
     option.classList.toggle("selected", index === this.selected);
     option.dataset["kind"] = entry.kind;
 
-    let label: string;
+    let label = "";
     let meta = "";
     switch (entry.kind) {
+      case "open":
+        label = `[${entry.name}]`;
+        meta = entry.isActive ? `${entry.path} · this tab` : entry.path;
+        break;
+      case "recent":
+        label = `[${entry.name}]`;
+        meta = entry.path;
+        break;
       case "project": {
         const p = entry.project;
         label = `[${p.name}]`;
@@ -406,7 +462,7 @@ export class ProjectPicker {
         meta = entry.path;
         break;
       case "system":
-        label = "[system folder dialog…]";
+        label = "[open system explorer…]";
         break;
       case "new":
         label = "[new session]";
@@ -417,17 +473,14 @@ export class ProjectPicker {
           .filter(Boolean)
           .join(" · ");
         break;
-      case "folders":
-        label = "[browse folders/]";
-        break;
     }
 
     option.appendChild(el("span", "picker-option-label", label));
     if (meta) option.appendChild(el("span", "picker-option-meta", meta));
     option.addEventListener("click", () => {
       this.selected = index;
-      // A click on a plain folder goes into it; "use this folder" then makes
-      // it the project. Everything else is chosen outright.
+      // A click on a plain folder goes into it, as in any file browser;
+      // "use this folder" then makes it the project. Everything else is chosen.
       if (entry.kind === "dir") void this.browse(entry.path);
       else this.confirm();
     });
@@ -438,18 +491,18 @@ export class ProjectPicker {
     const keys: [string, string][] = this.filtering
       ? [
           ["↑/↓", "move"],
-          ["tab", "go into"],
-          ["enter", "open"],
+          ["tab", "into folder"],
+          ["enter", "choose"],
           ["esc", "stop filtering"],
         ]
       : [
           ["j/k", "move"],
-          ["l", "go into"],
-          ["h", this.screen.kind === "project" ? "back" : "up"],
+          ["l", "into folder"],
+          ["h", this.screen.kind === "project" ? "back" : "up a folder"],
           ["/", "filter or type a path"],
           ...(this.canSwitchAgent() ? ([["a", "agent"]] as [string, string][]) : []),
           ...(this.options.groups.length > 0 ? ([["g", "tab group"]] as [string, string][]) : []),
-          ["enter", "open"],
+          ["enter", this.screen.kind === "project" ? "open" : "choose"],
           ["esc", "cancel"],
         ];
     this.helpEl.replaceChildren(
@@ -525,10 +578,13 @@ export class ProjectPicker {
   }
 
   private switchAgent(): void {
-    if (!this.canSwitchAgent()) return;
-    this.agent = nextAgent(this.agents, this.agent);
+    if (this.canSwitchAgent()) this.setAgent(nextAgent(this.agents, this.agent));
+  }
+
+  private setAgent(agent: string | null): void {
+    this.agent = agent;
     try {
-      if (this.agent) localStorage.setItem(AGENT_STORAGE_KEY, this.agent);
+      if (agent) localStorage.setItem(AGENT_STORAGE_KEY, agent);
     } catch {
       // Not remembered for next time; the choice still applies to this tab.
     }
@@ -554,25 +610,26 @@ export class ProjectPicker {
   }
 
   /**
-   * Go into the selected entry: a project shows its sessions and handoffs, a
-   * folder its subfolders. Anything else has no inside, so it is chosen.
+   * Go down into the selected folder and list what is in it. This is plain
+   * folder navigation and never opens anything: choosing is Enter's job.
    */
   private goInto(): void {
     const entry = this.entries[this.selected];
-    if (!entry) return;
-    if (entry.kind === "project") void this.openProject(entry.project.path, true);
-    else if (entry.kind === "dir") {
-      // While typing a path, the text follows into the folder so typing can go on.
-      if (this.filtering) {
-        this.filterInput.value = parseQuery(this.filterInput.value).browse !== null ? `${entry.path}/` : "";
-      }
-      void this.browse(entry.path);
-    } else this.confirm();
+    const path = entry ? entryPath(entry) : null;
+    if (path === null) return;
+    // While typing a path, the text follows into the folder so typing can go on.
+    if (this.filtering) {
+      this.filterInput.value = parseQuery(this.filterInput.value).browse !== null ? `${path}/` : "";
+    }
+    void this.browse(path);
   }
 
+  /** Leave a project for the list it was chosen from, or go up a folder. */
   private back(): void {
     if (this.screen.kind === "project") {
-      void this.browse(parentPath(this.screen.path));
+      this.screen = { kind: "browse" };
+      this.selected = this.browseSelection;
+      this.render();
       return;
     }
     const parent = parentPath(this.browsePath);
@@ -588,16 +645,16 @@ export class ProjectPicker {
       case "system":
         return this.finish({ kind: "system", group: this.group, agent: this.agent });
       case "project":
-        return void this.openProject(entry.project.path, false);
+        return void this.openProject(entry.project.path);
+      case "open":
+      case "recent":
       case "dir":
       case "here":
-        return void this.openProject(entry.path, false);
+        return void this.openProject(entry.path);
       case "new":
         return this.finishProject(entry.path, null);
       case "handoff":
         return this.finishProject(entry.path, entry.handoff.relPath);
-      case "folders":
-        return void this.browse(entry.path);
     }
   }
 

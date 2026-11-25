@@ -5,6 +5,8 @@
 import { describe, it, expect } from "vitest";
 import type { LiveSessionInfo } from "../types";
 import {
+  RECENTS_LIMIT,
+  RECENTS_SHOWN,
   ago,
   browseSections,
   filterSections,
@@ -16,6 +18,7 @@ import {
   parentPath,
   parseQuery,
   projectSections,
+  withRecent,
   type AgentInfo,
   type BrowseInput,
   type PickerEntry,
@@ -40,11 +43,12 @@ const handoff = (name: string, title: string, modified = 1000) => ({
 });
 
 const input = (over: Partial<BrowseInput> = {}): BrowseInput => ({
+  openTabs: [],
+  recents: [],
   sessions: [],
   projects: null,
   dirs: [],
   browsePath: "/home/me/projects",
-  openPaths: new Set(),
   native: false,
   ...over,
 });
@@ -57,6 +61,10 @@ const name = (e: PickerEntry): string => {
       return `session:${e.session.id}`;
     case "dir":
       return `dir:${e.name}`;
+    case "open":
+      return `open:${e.name}${e.isActive ? "!" : ""}`;
+    case "recent":
+      return `recent:${e.name}`;
     case "handoff":
       return `handoff:${e.handoff.name}`;
     default:
@@ -66,12 +74,42 @@ const name = (e: PickerEntry): string => {
 const summary = (sections: PickerSection[]) => sections.map((s) => [s.title, s.entries.map(name)]);
 
 describe("browseSections", () => {
-  it("lists projects in the order given, marking the ones with a tab", () => {
+  it("offers open projects first, once each, the active tab's leading", () => {
     const i = input({
-      projects: [project("cade"), project("nkrdn")],
-      openPaths: new Set(["/home/me/projects/nkrdn"]),
+      openTabs: [
+        { path: "/p/a", isActive: false },
+        { path: "/p/b", isActive: true },
+        { path: "/p/a", isActive: false },
+      ],
+      projects: [],
     });
-    expect(summary(browseSections(i))).toEqual([["/home/me/projects", ["project:cade", "project:nkrdn*"]]]);
+    expect(summary(browseSections(i))[0]).toEqual(["open", ["open:b!", "open:a"]]);
+  });
+
+  it("offers recent projects next, leaving out the ones already open", () => {
+    const i = input({
+      openTabs: [{ path: "/p/a", isActive: true }],
+      recents: ["/p/a", "/p/z"],
+      projects: [],
+    });
+    expect(summary(browseSections(i))[1]).toEqual(["recent", ["recent:z"]]);
+  });
+
+  it("shows only the most recent few", () => {
+    const recents = Array.from({ length: 12 }, (_, n) => `/p/r${n}`);
+    const shown = browseSections(input({ recents })).find((s) => s.title === "recent")!.entries;
+    expect(shown.length).toBe(RECENTS_SHOWN);
+  });
+
+  it("lists every project in the order given, marking the ones with a tab", () => {
+    const i = input({
+      openTabs: [{ path: "/home/me/projects/nkrdn", isActive: true }],
+      projects: [project("cade"), project("nkrdn")],
+    });
+    expect(summary(browseSections(i))).toEqual([
+      ["open", ["open:nkrdn!"]],
+      ["/home/me/projects", ["project:cade", "project:nkrdn*"]],
+    ]);
   });
 
   it("does not offer the projects folder itself as a project", () => {
@@ -83,10 +121,18 @@ describe("browseSections", () => {
     expect(summary(browseSections(i))).toEqual([["/srv", ["dir:site", "here"]]]);
   });
 
-  it("puts sessions to attach to first and the system dialog last", () => {
-    const i = input({ sessions: [session("s1", "/p/x")], projects: [project("cade")], native: true });
+  it("orders sections: open, running elsewhere, recent, the folder, then the system explorer", () => {
+    const i = input({
+      openTabs: [{ path: "/p/a", isActive: true }],
+      sessions: [session("s1", "/p/x")],
+      recents: ["/p/z"],
+      projects: [project("cade")],
+      native: true,
+    });
     expect(summary(browseSections(i))).toEqual([
+      ["open", ["open:a!"]],
       ["running, no tab here", ["session:s1"]],
+      ["recent", ["recent:z"]],
       ["/home/me/projects", ["project:cade", "system"]],
     ]);
   });
@@ -98,15 +144,11 @@ describe("projectSections", () => {
     expect(summary(sections)).toEqual([
       ["/p/cade", ["new"]],
       ["handoffs", ["handoff:b.md", "handoff:a.md"]],
-      [null, ["folders"]],
     ]);
   });
 
   it("has no handoffs heading for a project without any", () => {
-    expect(summary(projectSections("/p/cade", []))).toEqual([
-      ["/p/cade", ["new"]],
-      [null, ["folders"]],
-    ]);
+    expect(summary(projectSections("/p/cade", []))).toEqual([["/p/cade", ["new"]]]);
   });
 });
 
@@ -137,6 +179,16 @@ describe("filterSections", () => {
   it("returns nothing when nothing matches", () => {
     expect(filterSections(browse, "zzzz")).toEqual([]);
   });
+
+  it("matches a project once when it is both open and in the folder", () => {
+    const sections = browseSections(
+      input({
+        openTabs: [{ path: "/home/me/projects/cade", isActive: true }],
+        projects: [project("cade")],
+      }),
+    );
+    expect(filterSections(sections, "cade").map(name)).toEqual(["open:cade!"]);
+  });
 });
 
 describe("parseQuery", () => {
@@ -152,6 +204,20 @@ describe("parseQuery", () => {
 
   it("waits for a slash before browsing from the home folder", () => {
     expect(parseQuery("~")).toEqual({ browse: null, filter: "" });
+  });
+});
+
+describe("recents", () => {
+  it("moves a reopened project to the front without repeating it", () => {
+    expect(withRecent(["/a", "/b", "/c"], "/b")).toEqual(["/b", "/a", "/c"]);
+  });
+
+  it("forgets the oldest past the limit", () => {
+    const full = Array.from({ length: RECENTS_LIMIT }, (_, n) => `/p/${n}`);
+    const next = withRecent(full, "/new");
+    expect(next.length).toBe(RECENTS_LIMIT);
+    expect(next[0]).toBe("/new");
+    expect(next).not.toContain(`/p/${RECENTS_LIMIT - 1}`);
   });
 });
 

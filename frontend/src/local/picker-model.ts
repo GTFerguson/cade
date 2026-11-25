@@ -40,7 +40,25 @@ export interface BrowseDir {
   path: string;
 }
 
+export interface OpenTab {
+  path: string;
+  isActive: boolean;
+}
+
+export const RECENTS_LIMIT = 15;
+/** Recent projects shown when nothing is typed; the rest are reachable by filtering. */
+export const RECENTS_SHOWN = 6;
+
+/** The list with a project moved to the front, without repeats, capped. */
+export function withRecent(recents: string[], path: string, limit = RECENTS_LIMIT): string[] {
+  return [path, ...recents.filter((p) => p !== path)].slice(0, limit);
+}
+
 export type PickerEntry =
+  /** A project some tab already has open: the quick way to a second tab on it. */
+  | { kind: "open"; name: string; path: string; isActive: boolean }
+  /** A project opened lately on this device. */
+  | { kind: "recent"; name: string; path: string }
   /** A session running on the backend with no tab here: attaches to it. */
   | { kind: "session"; session: LiveSessionInfo }
   /** A project under the main working folder. */
@@ -54,9 +72,7 @@ export type PickerEntry =
   /** A fresh session in the project, with nothing loaded. */
   | { kind: "new"; path: string }
   /** A session that starts by reading this handoff. */
-  | { kind: "handoff"; path: string; handoff: HandoffInfo }
-  /** The project's own subfolders, for a project that lives deeper. */
-  | { kind: "folders"; path: string };
+  | { kind: "handoff"; path: string; handoff: HandoffInfo };
 
 export interface PickerSection {
   title: string | null;
@@ -64,13 +80,13 @@ export interface PickerSection {
 }
 
 export interface BrowseInput {
+  openTabs: OpenTab[];
+  recents: string[];
   sessions: LiveSessionInfo[];
   /** Projects, when the folder being browsed is the main working folder. */
   projects: ProjectInfo[] | null;
   dirs: BrowseDir[];
   browsePath: string;
-  /** Paths that already have a tab, to mark their projects. */
-  openPaths: ReadonlySet<string>;
   /** Whether the system folder dialog exists (the desktop app). */
   native: boolean;
 }
@@ -80,9 +96,27 @@ export function folderName(path: string): string {
   return clean.slice(clean.lastIndexOf("/") + 1) || path;
 }
 
-/** The first screen: sessions to attach to, then projects or folders. */
-export function browseSections(input: BrowseInput): PickerSection[] {
+/**
+ * The first screen: open projects, sessions to attach to, recent projects,
+ * then the projects (or folders) of the folder being browsed. The quick
+ * choices come first so the common case is at the top; a project also
+ * appears in the listing below, where the whole folder is in one order.
+ */
+export function browseSections(
+  input: BrowseInput,
+  recentsShown = RECENTS_SHOWN,
+): PickerSection[] {
   const sections: PickerSection[] = [];
+
+  const open: PickerEntry[] = [];
+  const openPaths = new Set<string>();
+  // The active tab's project leads, so it is the first thing Enter reaches.
+  for (const tab of [...input.openTabs].sort((a, b) => Number(b.isActive) - Number(a.isActive))) {
+    if (openPaths.has(tab.path)) continue;
+    openPaths.add(tab.path);
+    open.push({ kind: "open", name: folderName(tab.path), path: tab.path, isActive: tab.isActive });
+  }
+  if (open.length > 0) sections.push({ title: "open", entries: open });
 
   if (input.sessions.length > 0) {
     sections.push({
@@ -91,12 +125,18 @@ export function browseSections(input: BrowseInput): PickerSection[] {
     });
   }
 
+  const recent: PickerEntry[] = input.recents
+    .filter((path) => !openPaths.has(path))
+    .slice(0, recentsShown)
+    .map((path) => ({ kind: "recent", name: folderName(path), path }));
+  if (recent.length > 0) sections.push({ title: "recent", entries: recent });
+
   const listing: PickerEntry[] =
     input.projects !== null
       ? input.projects.map((project) => ({
           kind: "project",
           project,
-          open: input.openPaths.has(project.path),
+          open: openPaths.has(project.path),
         }))
       : input.dirs.map((d) => ({ kind: "dir", name: d.name, path: d.path }));
   // The projects folder is a container, not a project, so it is not offered
@@ -117,8 +157,25 @@ export function projectSections(path: string, handoffs: HandoffInfo[]): PickerSe
       entries: handoffs.map((handoff) => ({ kind: "handoff", path, handoff })),
     });
   }
-  sections.push({ title: null, entries: [{ kind: "folders", path }] });
   return sections;
+}
+
+/** The folder an entry stands for, or null for one that is not a folder. */
+export function entryPath(entry: PickerEntry): string | null {
+  switch (entry.kind) {
+    case "project":
+      return entry.project.path;
+    case "open":
+    case "recent":
+    case "dir":
+    case "here":
+    case "new":
+    case "handoff":
+      return entry.path;
+    case "session":
+    case "system":
+      return null;
+  }
 }
 
 /** The text an entry is matched against when filtering; empty for actions. */
@@ -126,6 +183,9 @@ export function entryText(entry: PickerEntry): string {
   switch (entry.kind) {
     case "project":
       return entry.project.name;
+    case "open":
+    case "recent":
+      return entry.name;
     case "dir":
       return entry.name;
     case "session":
@@ -135,22 +195,28 @@ export function entryText(entry: PickerEntry): string {
     case "here":
     case "system":
     case "new":
-    case "folders":
       return "";
   }
 }
 
 /**
  * The entries matching what was typed, best first. Actions have nothing to
- * match and drop out.
+ * match and drop out, and a project listed twice (open, and in the folder)
+ * is matched once.
  */
 export function filterSections(sections: PickerSection[], query: string): PickerEntry[] {
+  const seen = new Set<string>();
   const scored: { entry: PickerEntry; score: number; order: number }[] = [];
   sections
     .flatMap((s) => s.entries)
     .forEach((entry, order) => {
       const text = entryText(entry);
       if (!text) return;
+      const path = entryPath(entry);
+      if (path !== null && entry.kind !== "handoff") {
+        if (seen.has(path)) return;
+        seen.add(path);
+      }
       const match = fuzzyScore(query, text);
       if (match) scored.push({ entry, score: match.score, order });
     });

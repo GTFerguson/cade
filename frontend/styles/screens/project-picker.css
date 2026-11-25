@@ -131,21 +131,57 @@
   color: var(--text-muted);
 }
 
+/* What the new tab is opened with. Every option is on show with the current
+   one marked, above the list so it is seen before a project is chosen. */
 .picker-settings {
   display: flex;
-  gap: 28px;
-  margin-top: 16px;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
   padding: 0 16px;
   font-size: 12px;
-  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .picker-settings[hidden] {
   display: none;
 }
 
-.picker-setting-value {
+.picker-setting {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.picker-setting-label {
+  width: 80px;
+  color: var(--text-muted);
+}
+
+.picker-choice {
+  padding: 2px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.picker-choice:hover {
   color: var(--text-primary);
+}
+
+.picker-choice.selected {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+  font-weight: 700;
+}
+
+.picker-setting-key {
+  margin-left: 4px;
+  color: var(--accent-green);
 }
 
 .picker-help {
