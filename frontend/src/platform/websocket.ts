@@ -578,12 +578,13 @@ export class WebSocketClient extends BaseWSClient {
       this.lastTreeStormReport = now;
       const stack = new Error("get-tree storm").stack ?? "(no stack)";
       console.warn("[file-tree] get-tree storm", stack);
-      this.send({
-        type: MessageType.CLIENT_DIAGNOSTIC,
-        kind: "get-tree-storm",
-        detail: `${this.treeRequestCount} requests in <1s\n${stack}`,
-      } as unknown as ClientMessage);
+      this.sendDiagnostic("get-tree-storm", `${this.treeRequestCount} requests in <1s\n${stack}`);
     }
+  }
+
+  /** Put a frontend anomaly in the backend log, where it can be read later. */
+  sendDiagnostic(kind: string, detail: string): void {
+    this.send({ type: MessageType.CLIENT_DIAGNOSTIC, kind, detail } as unknown as ClientMessage);
   }
 
   requestPlansList(root?: string): void {

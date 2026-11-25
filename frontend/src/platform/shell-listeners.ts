@@ -35,9 +35,11 @@ function readSavedZoom(): number {
   return DEFAULT_ZOOM;
 }
 
+type Report = (detail: string) => void;
+
 let zoomQueue: Promise<unknown> = Promise.resolve();
 
-function applyZoom(factor: number): void {
+function applyZoom(factor: number, report: Report): void {
   try {
     localStorage.setItem(ZOOM_STORAGE_KEY, String(factor));
   } catch {
@@ -47,25 +49,38 @@ function applyZoom(factor: number): void {
   zoomQueue = zoomQueue
     .then(() => import("@tauri-apps/api/webview"))
     .then(({ getCurrentWebview }) => getCurrentWebview().setZoom(factor))
-    .catch((e) => console.error("[shell-listeners] Failed to set zoom:", e));
+    .then(() => report(`zoom set to ${factor}`))
+    .catch((e) => {
+      console.error("[shell-listeners] Failed to set zoom:", e);
+      report(`zoom to ${factor} failed: ${e instanceof Error ? e.message : String(e)}`);
+    });
 }
 
 let dispose: (() => void) | null = null;
 
-export function installShellListeners(): void {
+/**
+ * `report` receives what happened to each zoom request. The desktop window
+ * has no console to read, so the caller sends it to the backend log.
+ */
+export function installShellListeners(report: Report = () => {}): void {
   if (dispose) return;
   const w = window as any;
-  if (w.__TAURI__ !== true || w.__LIVE_FRONTEND__ !== true) return;
+  if (w.__TAURI__ !== true) return;
 
   let zoom = readSavedZoom();
+  const live = (): boolean => w.__LIVE_FRONTEND__ === true;
   // Carry the chosen level over a page load, such as the one after an upgrade.
-  if (zoom !== DEFAULT_ZOOM) applyZoom(zoom);
+  if (live() && zoom !== DEFAULT_ZOOM) applyZoom(zoom, report);
 
   const onKeyDown = (e: KeyboardEvent): void => {
     if (!isZoomHotkey(e)) return;
+    if (!live()) {
+      report(`zoom key ${e.key} left to the shell: page was not loaded from the backend`);
+      return;
+    }
     e.preventDefault();
     zoom = nextZoom(zoom, e.key);
-    applyZoom(zoom);
+    applyZoom(zoom, report);
   };
 
   window.addEventListener("keydown", onKeyDown);

@@ -1219,6 +1219,11 @@ class App {
    * Initialize MobileUI on first available tab.
    * Deferred because the start splash may show before any tab exists.
    */
+  /** Send an anomaly to the backend log through whichever tab is connected. */
+  reportDiagnostic(kind: string, detail: string): void {
+    this.tabManager.getActiveTab()?.ws.sendDiagnostic(kind, detail);
+  }
+
   private initMobileUIIfNeeded(): void {
     if (this.mobileUI) return;
 
@@ -1350,7 +1355,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Installed before any terminal exists so a stray drop during startup can
   // never navigate the page away.
   installFileDropHandling();
-  installShellListeners();
+  installShellListeners((detail) => app.reportDiagnostic("app-zoom", detail));
 
   // Block app init until every registered font face is loaded. Chrome returns
   // FontFace.family with quotes for multi-word families ("JetBrains Mono"),

@@ -95,6 +95,20 @@ describe("installShellListeners", () => {
     expect(setZoom).not.toHaveBeenCalled();
   });
 
+  it("reports the outcome of each zoom request", async () => {
+    setShell(true, true);
+    const report = vi.fn();
+    installShellListeners(report);
+    press("=");
+    await vi.waitFor(() => expect(report).toHaveBeenCalledTimes(1));
+    expect(report.mock.calls[0]![0]).toContain("zoom set to");
+
+    setZoom.mockRejectedValueOnce(new Error("not allowed"));
+    press("=");
+    await vi.waitFor(() => expect(report).toHaveBeenCalledTimes(2));
+    expect(report.mock.calls[1]![0]).toContain("not allowed");
+  });
+
   it("does nothing in a browser tab", async () => {
     setShell(false, false);
     installShellListeners();
@@ -107,9 +121,12 @@ describe("installShellListeners", () => {
     // Without the live load the shell's listeners are intact; a second set
     // would zoom two steps per key press.
     setShell(true, false);
-    installShellListeners();
-    press("=");
+    const report = vi.fn();
+    installShellListeners(report);
+    const e = press("=");
     await Promise.resolve();
     expect(setZoom).not.toHaveBeenCalled();
+    expect(e.defaultPrevented).toBe(false);
+    expect(report.mock.calls[0]![0]).toContain("left to the shell");
   });
 });
