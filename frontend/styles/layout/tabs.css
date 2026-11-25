@@ -90,9 +90,12 @@
   background: var(--bg-hover);
 }
 
+/* The active tab is marked by a line in the text colour: it has no hue, so
+   it cannot be read as any of the agent status colours below. */
 .tab.active {
   background: var(--bg-primary);
   border-bottom-color: var(--bg-primary);
+  box-shadow: inset 0 2px 0 var(--text-primary);
 }
 
 .tab-name {
@@ -107,6 +110,7 @@
 
 .tab.active .tab-name {
   color: var(--text-primary);
+  font-weight: 700;
 }
 
 .tab-close {
@@ -214,11 +218,28 @@
   opacity: 1;
 }
 
-/* Waiting on the user is the one state that should pull the eye from across
-   the bar, so it marks the whole tab, not only the glyph. */
+/* Waiting and finished are both the user's to deal with, so both tint the
+   whole tab and can be picked out across the bar; finished more faintly,
+   since nothing is blocked on it. The tint sits over the tab's own background so an active
+   tab keeps its line and shows its status as well. */
 .tab[data-status="input"] {
-  box-shadow: inset 0 2px 0 var(--accent-orange);
-  background: color-mix(in srgb, var(--accent-orange) 10%, transparent);
+  background: color-mix(in srgb, var(--accent-orange) 12%, transparent);
+}
+
+.tab.active[data-status="input"] {
+  background: color-mix(in srgb, var(--accent-orange) 12%, var(--bg-primary));
+}
+
+.tab[data-status="idle"] {
+  background: color-mix(in srgb, var(--accent-cyan) 6%, transparent);
+}
+
+.tab.active[data-status="idle"] {
+  background: color-mix(in srgb, var(--accent-cyan) 6%, var(--bg-primary));
+}
+
+.tab[data-status="idle"] .tab-name {
+  color: color-mix(in srgb, var(--accent-cyan) 55%, var(--text-primary));
 }
 
 .tab[data-status="input"] .tab-status {
