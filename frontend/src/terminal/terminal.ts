@@ -15,7 +15,7 @@ import {
 } from "./file-drop";
 import type { Component } from "../types";
 import type { WebSocketClient } from "../platform/websocket";
-import { buildXtermTheme } from "../config/themes";
+import { buildXtermTheme, terminalMinimumContrast } from "../config/themes";
 import { WebglRenderer } from "./webgl-renderer";
 import { isZoomHotkey } from "./zoom-keys";
 import {
@@ -104,6 +104,7 @@ export class Terminal implements Component {
     this.terminal = new XTerm({
       cursorBlink: !this.hideCursor,
       cursorStyle: "block",
+      minimumContrastRatio: terminalMinimumContrast(),
       fontSize: this.fontSizeOverride ?? getTerminalFontSize(),
       fontFamily: '"JetBrains Mono", "Fira Code", Consolas, monospace',
       fontWeight: "400",
@@ -341,6 +342,7 @@ export class Terminal implements Component {
     this.terminal.options.theme = this.hideCursor
       ? { ...xtermTheme, cursor: "transparent", cursorAccent: "transparent" }
       : xtermTheme;
+    this.terminal.options.minimumContrastRatio = terminalMinimumContrast();
     // The WebGL atlas bakes theme colors into rasterised glyphs; rebuild it
     // so updated colors take effect instead of serving stale cached cells.
     this.webglRenderer?.refresh();

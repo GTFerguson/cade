@@ -184,6 +184,19 @@ The foundational layer — `base/variables.css` (`:root` tokens) and `base/reset
 
 Import order = cascade order. Add new component styles to the appropriate file; add new files to the index in the correct layer.
 
+#### Light themes: dim by colour, never by opacity
+
+On a dark page, lowering an element's opacity fades it towards black and it stays readable. On a light page it fades towards the page, and a colour that measured five to one against cream ends up at two or three. In the daylight theme this made closed workspace names, the quiet status dot and draft pull request badges close to invisible (measured 2.3 to 3.4 to one) while every colour in the theme itself passed.
+
+- To quieten something, give it a quieter colour (`--text-muted`) or a lighter weight. If opacity is used for the dark themes, undo it for light ones in `styles/themes/light.css` under `:root[data-theme-mode="light"]`.
+- Anything new should be looked at in a light theme and its text measured against what is behind it, tints included. The aim is 4.5 to one, the figure accessibility guidance gives for body text.
+
+#### Light themes: the terminal enforces contrast
+
+Programs running in the terminal pick their own colours, and most pick them for a dark terminal. On a light theme the terminal is told to keep text at `LIGHT_MIN_CONTRAST` against its background (`terminalMinimumContrast` in `themes.ts`, xterm's `minimumContrastRatio`): a foreground that falls short is darkened with its hue kept, so it stays the colour it was meant to be and becomes readable. Dark themes enforce nothing.
+
+This reaches text only. A block a program paints as a pale background, such as a cursor it draws for itself, is not text and stays as the program chose; the cure for that is the program's own light theme.
+
 ### Typography
 
 **Monospace everywhere:**

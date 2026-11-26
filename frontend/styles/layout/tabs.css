@@ -398,6 +398,21 @@
   user-select: none;
 }
 
+/* A closed workspace keeps its chip's width however crowded the bar gets.
+   Left to shrink, closed chips slid over one another and could not be read
+   or clicked; the open workspace's tabs are what give way. */
+.tab-group[data-collapsed="true"] {
+  flex-shrink: 0;
+}
+
+/* The open workspace gives way instead: when its tabs cannot all fit, the
+   ones past the end are cut off at its edge. Left to spill, they were drawn
+   over the chips beside them. */
+.tab-group[data-collapsed="false"],
+.tab-group[data-collapsed="false"] > .tab-run {
+  overflow: hidden;
+}
+
 .tab-group-chip:hover {
   background: var(--bg-hover);
 }

@@ -274,6 +274,22 @@ export function getActiveTheme(): Theme {
  * Build an xterm.js theme from the active CADE theme, so terminals switch
  * palette (including ANSI colors) along with the rest of the UI.
  */
+/**
+ * The least contrast terminal text is drawn with, as a ratio against its
+ * background. Programs choose their own colours, and most choose them for a
+ * dark terminal: on a light theme those arrive as pale text on a pale page.
+ * The terminal darkens any foreground that falls short, keeping its hue, so
+ * such text stays the colour it was meant to be and becomes readable. The
+ * figure is the one accessibility guidance gives for body text.
+ */
+export const LIGHT_MIN_CONTRAST = 4.5;
+
+/** What the terminal should enforce under the active theme; 1 enforces nothing. */
+export function terminalMinimumContrast(): number {
+  // Dark themes are what programs' colours are chosen for; leave them be.
+  return getActiveTheme().mode === "light" ? LIGHT_MIN_CONTRAST : 1;
+}
+
 export function buildXtermTheme(): Record<string, string> {
   const theme = getActiveTheme();
   return {

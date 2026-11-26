@@ -89,3 +89,36 @@
 :root[data-theme-mode="light"] .hljs-deletion {
   background-color: color-mix(in srgb, var(--accent-red) 14%, transparent);
 }
+
+/* ==========================================================================
+   Dimming on a light page
+   ==========================================================================
+   Several things are made quieter by lowering their opacity. On a dark page
+   that fades them towards black and they stay readable. On a light page it
+   fades them towards the page, and a colour that was readable ends up at
+   two or three to one against it. Here those things are quietened another
+   way, or not at all. Measured in the daylight theme: every rule below
+   takes text that was under 3.5:1 to 4.5:1 or better. */
+
+/* A closed workspace's name: its lighter weight already sets it apart from
+   the open one. */
+:root[data-theme-mode="light"] .tab-group-chip[data-collapsed="true"] .tab-group-name {
+  opacity: 1;
+}
+
+/* The dot of a tab or workspace with nothing to report. */
+:root[data-theme-mode="light"] .tab-status,
+:root[data-theme-mode="light"] .tab-group-chip[data-status="none"] .tab-group-status {
+  opacity: 1;
+}
+
+/* A draft pull request: slanted, where the dark themes fade it. */
+:root[data-theme-mode="light"] .tab-pr[data-draft="true"] {
+  opacity: 1;
+  font-style: italic;
+}
+
+/* A tab held over another workspace's chip. */
+:root[data-theme-mode="light"] .tab.tab-dropping {
+  opacity: 0.8;
+}
