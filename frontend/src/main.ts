@@ -900,19 +900,20 @@ class App {
 
     if (!isDemoTab) {
       const matches = this.overridesMatchTab(tab);
-      tab.ws.sendSetProject(
-        tab.projectPath,
-        tab.id,
-        matches ? (this.dashboardOverride ?? undefined) : undefined,
-        matches ? (this.providerOverride ?? undefined) : undefined,
-        tab.initialPrompt,
-        tab.chatHandoff,
-        tabDisplayName(tab),
-        tab.group,
-        tab.agent,
-        tab.startAgent,
-        tab.handoff,
-      );
+      // Only what the tab has is sent: an absent field leaves the backend's
+      // own choice alone, where an empty one would overwrite it.
+      tab.ws.sendSetProject(tab.projectPath, {
+        sessionId: tab.id,
+        label: tabDisplayName(tab),
+        ...(matches && this.dashboardOverride && { dashboardFile: this.dashboardOverride }),
+        ...(matches && this.providerOverride && { providerOverride: this.providerOverride }),
+        ...(tab.initialPrompt && { initialPrompt: tab.initialPrompt }),
+        ...(tab.chatHandoff && { chatHandoff: tab.chatHandoff }),
+        ...(tab.group && { group: tab.group }),
+        ...(tab.agent && { agent: tab.agent }),
+        ...(tab.startAgent && { startAgent: true }),
+        ...(tab.handoff && { handoff: tab.handoff }),
+      });
 
       // Auth is project-driven now: connect first; if the project's launch.yml
       // declares Google auth, the server sends an `auth-required` frame with

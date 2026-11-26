@@ -13,14 +13,12 @@
 
 import { apiBase } from "../config/config";
 import { ago } from "../local/picker-model";
-import { PR_DISPLAY, pullRequestState, type PullRequestSummary } from "../tabs/pull-request";
+import { pullRequestWords, ticketTone, type Tone } from "../tabs/work-words";
 import {
   VERDICT_SAYS,
   boardSections,
   filterSections,
   finishedCount,
-  isDone,
-  isQueued,
   leadPullRequest,
   openTarget,
   openTickets,
@@ -56,7 +54,6 @@ export interface BoardScreenOptions {
   now?: () => number;
 }
 
-type Tone = "plain" | "muted" | "good" | "bad" | "warn" | "review" | "busy";
 type Part = { text: string; tone?: Tone };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
@@ -72,21 +69,8 @@ function folderName(path: string): string {
 
 /** A pull request in a few words, and how it should be coloured. */
 export function pullRequestText(pr: BoardPullRequest): { text: string; tone: Tone } {
-  if (pr.state === "merged") return { text: `#${pr.number} merged`, tone: "good" };
-  if (pr.state === "closed") return { text: `#${pr.number} closed`, tone: "muted" };
-  const state = pullRequestState(pr as unknown as PullRequestSummary);
-  const tone: Tone =
-    state === "conflicts" || state === "failing"
-      ? "bad"
-      : state === "changes"
-        ? "review"
-        : state === "running"
-          ? "busy"
-          : state === "open"
-            ? "plain"
-            : "good";
-  const mark = PR_DISPLAY[state].mark;
-  return { text: `#${pr.number}${mark ? ` ${mark}` : ""} ${PR_DISPLAY[state].says}`, tone };
+  const { text, tone } = pullRequestWords(pr);
+  return { text, tone };
 }
 
 /** Ticket ids in little room: the shared prefix once, then the numbers. */
@@ -121,12 +105,6 @@ const VERDICT_TONE: Record<BoardWorktree["verdict"], Tone> = {
   closed: "muted",
   local: "muted",
 };
-
-function statusTone(ticket: BoardStream): Tone {
-  if (isDone(ticket)) return "good";
-  if (isQueued(ticket)) return "muted";
-  return ticket.status === "In Review" ? "review" : "busy";
-}
 
 const VIEW_SAYS: Record<BoardView, string> = { need: "by what it needs", parent: "by parent ticket" };
 
@@ -387,7 +365,7 @@ export class BoardScreen {
     } else if (row.kind === "ticket") {
       label = row.stream.ticket;
       meta = row.stream.title;
-      aside = { text: row.stream.status || "no status", tone: statusTone(row.stream) };
+      aside = { text: row.stream.status || "no status", tone: ticketTone(row.stream) };
       rowEl.style.paddingLeft = `${16 + row.depth * 18}px`;
       if (row.depth > 0) rowEl.dataset["nested"] = "true";
     } else if (row.kind === "handoff") {
@@ -463,7 +441,7 @@ export class BoardScreen {
     const line = el("div", "board-ticket");
     line.appendChild(el("span", "board-ticket-id", ticket.ticket));
     const status = el("span", "board-ticket-status", ticket.status || "no status");
-    status.dataset["tone"] = statusTone(ticket);
+    status.dataset["tone"] = ticketTone(ticket);
     line.appendChild(status);
     const title = el("span", "board-ticket-title", ticket.title);
     line.appendChild(title);
@@ -508,7 +486,7 @@ export class BoardScreen {
       add(el("div", "board-title", s.title));
       add(
         this.fact("status", [
-          { text: s.status || "none recorded", tone: statusTone(s) },
+          { text: s.status || "none recorded", tone: ticketTone(s) },
           ...(s.statusDetail ? [{ text: ` · ${s.statusDetail}`, tone: "muted" as const }] : []),
         ]),
       );

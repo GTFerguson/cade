@@ -47,7 +47,7 @@ class FakeWebSocket {
 
 function connectedClient(sessionId = "tab-1"): { client: WebSocketClient; socket: FakeWebSocket } {
   const client = new WebSocketClient("ws://test/ws");
-  client.sendSetProject("/proj", sessionId, undefined, undefined, undefined, undefined, "my tab");
+  client.sendSetProject("/proj", { sessionId, label: "my tab" });
   client.connect();
   const socket = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!;
   socket.simulateOpen();
@@ -101,7 +101,7 @@ describe("set-project handshake", () => {
   it("forgets positions when pointed at a different session", () => {
     const { client, socket } = connectedClient();
     socket.simulateMessage({ type: MessageType.OUTPUT, data: "a", sessionKey: "claude", seq: 7 });
-    client.sendSetProject("/other", "tab-2");
+    client.sendSetProject("/other", { sessionId: "tab-2" });
     expect(client.getLastSeq()).toEqual({});
   });
 });
@@ -120,7 +120,7 @@ describe("renaming a session", () => {
 describe("asking for the agent to be started", () => {
   const handshakeFor = (startAgent?: boolean) => {
     const client = new WebSocketClient("ws://test/ws");
-    client.sendSetProject("/proj", "tab-1", undefined, undefined, undefined, undefined, undefined, undefined, "codex", startAgent);
+    client.sendSetProject("/proj", { sessionId: "tab-1", agent: "codex", ...(startAgent !== undefined && { startAgent }) });
     client.connect();
     const socket = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!;
     socket.simulateOpen();
@@ -140,14 +140,14 @@ describe("asking for the agent to be started", () => {
 describe("telling the backend which handoff a tab is on", () => {
   it("sends it with every handshake, and nothing when the tab is on none", () => {
     const first = new WebSocketClient("ws://test/ws");
-    first.sendSetProject("/proj", "tab-1", undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, "docs/plans/handoff/x.md");
+    first.sendSetProject("/proj", { sessionId: "tab-1", handoff: "docs/plans/handoff/x.md" });
     first.connect();
     const socket = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!;
     socket.simulateOpen();
     expect(JSON.parse(socket.sent[0]!).handoff).toBe("docs/plans/handoff/x.md");
 
     const second = new WebSocketClient("ws://test/ws");
-    second.sendSetProject("/proj", "tab-2");
+    second.sendSetProject("/proj", { sessionId: "tab-2" });
     second.connect();
     const other = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!;
     other.simulateOpen();
@@ -269,14 +269,14 @@ describe("build identity", () => {
     WebSocketClient.onBuildChanged = (from, to) => changes.push([from, to]);
 
     const client = new WebSocketClient("ws://test/ws");
-    client.sendSetProject("/proj", "tab-1");
+    client.sendSetProject("/proj", { sessionId: "tab-1" });
     client.connect();
     const first = FakeWebSocket.instances[0]!;
     first.simulateOpen();
     first.simulateMessage({ type: MessageType.CONNECTED, workingDir: "/proj", buildVersion: "aaa" });
     // Another tab on the same page, same build: nothing happens.
     const other = new WebSocketClient("ws://test/ws");
-    other.sendSetProject("/proj", "tab-2");
+    other.sendSetProject("/proj", { sessionId: "tab-2" });
     other.connect();
     const second = FakeWebSocket.instances[1]!;
     second.simulateOpen();

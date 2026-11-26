@@ -113,6 +113,54 @@ async def _run(args: list[str], cwd: Path) -> str | None:
     return out.decode("utf-8", "replace") if proc.returncode == 0 else None
 
 
+def git_common_dir(folder: Path) -> Path | None:
+    """The repository a folder is the top of, read from disk.
+
+    A clone has a `.git` directory; a worktree has a `.git` file pointing
+    into its repository's `worktrees/` folder. None for a folder that is not
+    the top of either. This answers what `git rev-parse --git-common-dir`
+    does for such folders without starting a process, which matters when a
+    project keeps dozens of worktrees side by side.
+    """
+    dotgit = folder / ".git"
+    try:
+        if dotgit.is_dir():
+            return dotgit.resolve()
+        if not dotgit.is_file():
+            return None
+        first = dotgit.read_text(errors="replace").splitlines()[0]
+    except (OSError, IndexError):
+        return None
+    if not first.startswith("gitdir:"):
+        return None
+    pointed = (folder / first[len("gitdir:"):].strip()).resolve()
+    # <repository>/.git/worktrees/<name> for a worktree.
+    return pointed.parent.parent if pointed.parent.name == "worktrees" else pointed
+
+
+def default_branch(common_dir: Path) -> str | None:
+    """The branch a repository's remote treats as its main one, read from
+    disk, or None when it has not been recorded."""
+    try:
+        ref = (common_dir / "refs" / "remotes" / "origin" / "HEAD").read_text().strip()
+    except OSError:
+        return None
+    prefix = "ref: refs/remotes/origin/"
+    return ref[len(prefix):] or None if ref.startswith(prefix) else None
+
+
+# Branches nobody opens a pull request from, used when a repository has not
+# recorded which branch is its main one.
+USUAL_MAIN_BRANCHES = frozenset({"main", "master"})
+
+
+def is_main_branch(branch: str, common_dir: Path | None) -> bool:
+    """Whether a branch is the repository's main one, which has no pull
+    request of its own, so GitHub need not be asked about it."""
+    known = default_branch(common_dir) if common_dir else None
+    return branch == known if known else branch in USUAL_MAIN_BRANCHES
+
+
 async def repo_and_branch(path: Path) -> tuple[Path, str] | None:
     """The repository a folder is in and the branch checked out there.
 
@@ -171,8 +219,12 @@ class PullRequestMonitor:
         locate: Lookup = repo_and_branch,
         fetch: Lookup = open_pull_requests,
         announce: Callable[[Any], Awaitable[None]] = broadcast_pr,
+        is_main: Callable[[str, Path], bool] = lambda branch, repo: is_main_branch(
+            branch, git_common_dir(repo)
+        ),
     ) -> None:
         self._sessions = sessions
+        self._is_main = is_main
         self._locate = locate
         self._fetch = fetch
         self._announce = announce
@@ -218,6 +270,12 @@ class PullRequestMonitor:
 
         prs_by_repo: dict[Path, dict[str, dict[str, Any]] | None] = {}
         for repo in {repo for repo, _ in located.values()}:
+            branches = {branch for r, branch in located.values() if r == repo}
+            # A repository whose sessions all sit on its main branch has no
+            # pull request to find; GitHub is not asked.
+            if all(self._is_main(branch, repo) for branch in branches):
+                prs_by_repo[repo] = {}
+                continue
             prs_by_repo[repo] = await self._fetch(repo)
 
         running = False

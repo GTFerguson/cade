@@ -111,12 +111,15 @@
   font-size: 11px;
 }
 
-.board-screen [data-tone="muted"] { color: var(--text-muted); }
-.board-screen [data-tone="good"] { color: var(--accent-green); }
-.board-screen [data-tone="bad"] { color: var(--accent-red); }
-.board-screen [data-tone="warn"] { color: var(--accent-orange); }
-.board-screen [data-tone="review"] { color: var(--accent-yellow); }
-.board-screen [data-tone="busy"] { color: var(--accent-blue); }
+/* Tones: what a state means, as a colour. One set for the board and for the
+   strip above a terminal (tabs/work-words.ts decides which tone a state
+   gets), so the two cannot drift apart. */
+:is(.board-screen, .context-strip) [data-tone="muted"] { color: var(--text-muted); }
+:is(.board-screen, .context-strip) [data-tone="good"] { color: var(--accent-green); }
+:is(.board-screen, .context-strip) [data-tone="bad"] { color: var(--accent-red); }
+:is(.board-screen, .context-strip) [data-tone="warn"] { color: var(--accent-orange); }
+:is(.board-screen, .context-strip) [data-tone="review"] { color: var(--accent-yellow); }
+:is(.board-screen, .context-strip) [data-tone="busy"] { color: var(--accent-blue); }
 
 /* The selected row is filled, so everything on it takes the fill's ink. */
 .board-row.selected,

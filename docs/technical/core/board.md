@@ -72,7 +72,9 @@ Each worktree gets a verdict, worked out one way (`verdict`):
 
 `assemble` attaches to each ticket row the handoff it names and every worktree it names by folder, by branch or by pull request number. A handoff named on the board but missing from disk is reported as such. Handoffs and worktrees that no row names are returned as their own lists: they are the gaps the board exists to show.
 
-Gathering runs git in every worktree and asks GitHub, which takes a few seconds on a large project (under four for one with 81 worktrees across eleven repositories). A gathered board is cached for `CACHE_SECONDS`, and two requests for one project share one gathering.
+Gathering runs git in every worktree and asks GitHub, which takes a few seconds on a large project (under three for one with 81 worktrees across eleven repositories, in about 110 processes).
+
+What it costs was measured and cut, because the first version spawned 199 processes a read. Which repository a folder belongs to is read from its `.git` entry (`git_common_dir` in `backend/pull_requests.py`) where it used to be asked of git, once per folder. A repository's main branch has no pull request of its own, so GitHub is not asked about it (`is_main_branch`), which leaves a clone kept only on `main` costing no request. And a caller that only needs to know which tickets, worktrees and pull requests go together asks for `streams()` in place of `board()`: it skips the `git status` in every worktree, gives no verdicts, and costs 14 processes on that project. The strip above a terminal uses that and reads its one worktree itself. A gathered board is cached for `CACHE_SECONDS`, and two requests for one project share one gathering.
 
 So that the screen never opens empty, it asks twice. `GET /api/board?quick=true` answers at once with the last full board if there is one, however old, and otherwise with the tickets and handoffs alone, marked `partial`; the screen draws that, then asks for the full board and swaps it in, keeping the selection on the row it was on. A partial board says "reading" where its worktrees would be, since not yet read is not the same as none.
 

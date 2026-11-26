@@ -145,21 +145,36 @@ const EVENT_ALIAS: Partial<Record<string, keyof WebSocketEvents>> = {
   [MessageType.BROWSE_CHILDREN]: "browse-children",
 };
 
+/** What a tab asks for along with its project. Everything is optional. */
+export interface ProjectHandshake {
+  /** The session to attach to; a new one is made under this id if none exists. */
+  sessionId?: string;
+  /** Tab name, shown to other devices listing this backend's sessions. */
+  label?: string;
+  /** The workspace the tab was last in; null once it has been taken out of one. */
+  group?: string | null;
+  /** Adapter id of the agent the tab runs. */
+  agent?: string;
+  /** Start the agent even where the user has asked for idle shells. */
+  startAgent?: boolean;
+  /** The handoff brief the tab was opened on, as a path inside its project. */
+  handoff?: string;
+  dashboardFile?: string;
+  providerOverride?: string;
+  /** What a new session's agent is started with. */
+  initialPrompt?: string;
+  /** A brief the API chat is primed with. */
+  chatHandoff?: string;
+}
+
 export class WebSocketClient extends BaseWSClient {
   private remoteAuthToken: string | null;
   private googleIdToken: string | null = null;
   private pendingGoogleAuth: { client_id: string } | null = null;
-  private pendingProjectPath: string | null = null;
-  private pendingSessionId: string | null = null;
-  private pendingDashboardFile: string | null = null;
-  private pendingProviderOverride: string | null = null;
-  private pendingInitialPrompt: string | null = null;
-  private pendingChatHandoff: string | null = null;
-  private pendingLabel: string | null = null;
-  private pendingGroup: string | null = null;
-  private pendingAgent: string | null = null;
-  private pendingStartAgent = false;
-  private pendingHandoff: string | null = null;
+  // What this tab asks the backend for when it connects: its project and
+  // everything about the session it wants there. Kept so that a reconnect
+  // asks again for the same thing.
+  private project: ({ path: string } & ProjectHandshake) | null = null;
 
   // Last output sequence seen per terminal, handed back on reconnect so the
   // server replays only the gap. Cleared when the session id changes.
@@ -328,51 +343,35 @@ export class WebSocketClient extends BaseWSClient {
   protected override onOpen(): void {
     console.log("WebSocket connected");
 
-    if (this.pendingProjectPath !== null) {
-      const message: SetProjectMessage = {
-        type: MessageType.SET_PROJECT,
-        path: this.pendingProjectPath,
-      };
-      if (WebSocketClient.pageComesFromBackend()) {
-        message.reloadOnUpgrade = true;
-      }
-      if (this.pendingSessionId !== null) {
-        message.sessionId = this.pendingSessionId;
-      }
-      if (this.pendingLabel !== null) {
-        message.label = this.pendingLabel;
-      }
-      if (this.pendingGroup !== null) {
-        message.group = this.pendingGroup;
-      }
-      if (this.pendingStartAgent) {
-        message.startAgent = true;
-      }
-      if (this.pendingHandoff !== null) {
-        message.handoff = this.pendingHandoff;
-      }
-      if (this.pendingAgent !== null) {
-        message.agent = this.pendingAgent;
-      }
-      if (Object.keys(this.lastSeq).length > 0) {
-        message.lastSeq = { ...this.lastSeq };
-      }
-      if (this.pendingDashboardFile !== null) {
-        message.dashboardFile = this.pendingDashboardFile;
-      }
-      if (this.pendingProviderOverride !== null) {
-        message.providerOverride = this.pendingProviderOverride;
-      }
-      // One-shot seeds for Plans-pane-spawned tabs (read by the backend on
-      // SET_PROJECT). Cast-set so SetProjectMessage needn't carry them.
-      if (this.pendingInitialPrompt !== null) {
-        (message as unknown as Record<string, unknown>)["initialPrompt"] = this.pendingInitialPrompt;
-      }
-      if (this.pendingChatHandoff !== null) {
-        (message as unknown as Record<string, unknown>)["chatHandoff"] = this.pendingChatHandoff;
-      }
-      this.send(message);
+    const message = this.setProjectMessage(true);
+    if (message) this.send(message);
+  }
+
+  /**
+   * The handshake for this tab's project, or null when it has none yet.
+   * On connecting it also carries where each terminal's output had got to,
+   * so only the gap is replayed, and the seeds a new session starts from
+   * (the backend ignores them for a session that already exists).
+   */
+  private setProjectMessage(connecting: boolean): SetProjectMessage | null {
+    const project = this.project;
+    if (!project) return null;
+    const message: SetProjectMessage = { type: MessageType.SET_PROJECT, path: project.path };
+    if (WebSocketClient.pageComesFromBackend()) message.reloadOnUpgrade = true;
+    if (project.sessionId !== undefined) message.sessionId = project.sessionId;
+    if (project.label !== undefined) message.label = project.label;
+    if (project.group != null) message.group = project.group;
+    if (project.agent !== undefined) message.agent = project.agent;
+    if (project.startAgent) message.startAgent = true;
+    if (project.handoff !== undefined) message.handoff = project.handoff;
+    if (project.dashboardFile !== undefined) message.dashboardFile = project.dashboardFile;
+    if (project.providerOverride !== undefined) message.providerOverride = project.providerOverride;
+    if (connecting) {
+      if (Object.keys(this.lastSeq).length > 0) message.lastSeq = { ...this.lastSeq };
+      if (project.initialPrompt !== undefined) message.initialPrompt = project.initialPrompt;
+      if (project.chatHandoff !== undefined) message.chatHandoff = project.chatHandoff;
     }
+    return message;
   }
 
   protected override onClose(event: CloseEvent): void {
@@ -872,66 +871,15 @@ export class WebSocketClient extends BaseWSClient {
    * Set project directory for this connection. If not connected yet, the
    * path is stored and sent on connect.
    */
-  sendSetProject(
-    path: string,
-    sessionId?: string,
-    dashboardFile?: string,
-    providerOverride?: string,
-    initialPrompt?: string,
-    chatHandoff?: string,
-    label?: string,
-    group?: string,
-    agent?: string,
-    startAgent?: boolean,
-    handoff?: string,
-  ): void {
-    this.pendingProjectPath = path;
-    this.pendingStartAgent = startAgent === true;
-    this.pendingHandoff = handoff ?? null;
-    if ((sessionId ?? null) !== this.pendingSessionId) {
+  sendSetProject(path: string, handshake: ProjectHandshake = {}): void {
+    // Another session's output positions mean nothing for this one.
+    if ((handshake.sessionId ?? null) !== (this.project?.sessionId ?? null)) {
       this.lastSeq = {};
     }
-    this.pendingSessionId = sessionId ?? null;
-    this.pendingLabel = label ?? null;
-    this.pendingGroup = group ?? null;
-    this.pendingAgent = agent ?? null;
-    this.pendingDashboardFile = dashboardFile ?? null;
-    this.pendingProviderOverride = providerOverride ?? null;
-    this.pendingInitialPrompt = initialPrompt ?? null;
-    this.pendingChatHandoff = chatHandoff ?? null;
+    this.project = { path, ...handshake };
     if (this.isConnected()) {
-      const message: SetProjectMessage = {
-        type: MessageType.SET_PROJECT,
-        path,
-      };
-      if (WebSocketClient.pageComesFromBackend()) {
-        message.reloadOnUpgrade = true;
-      }
-      if (sessionId !== undefined) {
-        message.sessionId = sessionId;
-      }
-      if (label !== undefined) {
-        message.label = label;
-      }
-      if (group !== undefined) {
-        message.group = group;
-      }
-      if (agent !== undefined) {
-        message.agent = agent;
-      }
-      if (startAgent) {
-        message.startAgent = true;
-      }
-      if (handoff !== undefined) {
-        message.handoff = handoff;
-      }
-      if (dashboardFile !== undefined) {
-        message.dashboardFile = dashboardFile;
-      }
-      if (providerOverride !== undefined) {
-        message.providerOverride = providerOverride;
-      }
-      this.send(message);
+      const message = this.setProjectMessage(false);
+      if (message) this.send(message);
     }
   }
 
@@ -946,7 +894,7 @@ export class WebSocketClient extends BaseWSClient {
    * notifications. Remembered so a reconnect re-sends it with set-project.
    */
   sendSetLabel(label: string): void {
-    this.pendingLabel = label;
+    if (this.project) this.project.label = label;
     this.send({ type: MessageType.SET_LABEL, label } as unknown as ClientMessage);
   }
 
@@ -955,7 +903,7 @@ export class WebSocketClient extends BaseWSClient {
    * Remembered so a reconnect to a restarted backend restores it.
    */
   sendSetGroup(group: string | null): void {
-    this.pendingGroup = group;
+    if (this.project) this.project.group = group;
     this.send({ type: MessageType.SET_GROUP, group: group ?? "" } as unknown as ClientMessage);
   }
 
@@ -971,7 +919,7 @@ export class WebSocketClient extends BaseWSClient {
 
   /** Record a group the backend reported, so a reconnect asks for the same one. */
   noteGroup(group: string | null): void {
-    this.pendingGroup = group;
+    if (this.project) this.project.group = group;
   }
 
   sendRepaint(sessionKey?: AnySessionKey): void {

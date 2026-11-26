@@ -154,6 +154,10 @@ export interface SetProjectMessage extends BaseMessage {
   startAgent?: boolean;
   /** The handoff brief the tab was opened on, as a path inside its project. */
   handoff?: string;
+  /** What a new session's agent is started with; read once, by the session being created. */
+  initialPrompt?: string;
+  /** A brief the API chat is primed with; read once, likewise. */
+  chatHandoff?: string;
   /** Tab name, shown to other devices listing this backend's sessions. */
   label?: string;
   /** Tab group the tab was last in. Only a session being created takes it. */

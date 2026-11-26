@@ -12,24 +12,17 @@
  */
 
 import { ago } from "../local/picker-model";
-import { PR_DISPLAY, pullRequestState, type PullRequestSummary } from "./pull-request";
+import type { PullRequestSummary } from "./pull-request";
+import { pullRequestWords, ticketTone, type AnyPullRequest, type Statused, type Tone } from "./work-words";
 
-export interface ContextTicket {
+export interface ContextTicket extends Statused {
   ticket: string;
   title: string;
   url: string | null;
-  status: string;
-  /** The tracker's kind of state; empty when the status is only the board file's. */
-  statusType?: string;
 }
 
 /** A stream's pull request, which unlike a tab's badge may be merged or closed. */
-export interface StreamPullRequest extends Partial<Omit<PullRequestSummary, "number" | "title" | "url">> {
-  number: number;
-  title: string;
-  url: string;
-  state: "open" | "merged" | "closed";
-}
+export type StreamPullRequest = AnyPullRequest & { state: "open" | "merged" | "closed" };
 
 export interface SessionContext {
   /** The folder the tab was opened on: its branch and what is pending there. */
@@ -47,32 +40,13 @@ export interface SessionContext {
   pr?: StreamPullRequest | null;
 }
 
-export type CellTone = "plain" | "muted" | "good" | "bad" | "warn" | "review" | "busy";
+export type CellTone = Tone;
 
 export interface StripCell {
   kind: "ticket" | "pr" | "branch" | "handoff";
   parts: { text: string; tone: CellTone }[];
   title?: string;
   open?: { url: string } | { file: string };
-}
-
-const PR_TONE: Record<ReturnType<typeof pullRequestState>, CellTone> = {
-  conflicts: "bad",
-  failing: "bad",
-  changes: "review",
-  running: "busy",
-  approved: "good",
-  passing: "good",
-  open: "plain",
-};
-
-const FINISHED = new Set(["completed", "canceled"]);
-const NOT_STARTED = new Set(["backlog", "unstarted", "triage"]);
-
-function ticketTone(ticket: ContextTicket): CellTone {
-  if (FINISHED.has(ticket.statusType ?? "") || ticket.status === "Done") return "good";
-  if (NOT_STARTED.has(ticket.statusType ?? "") || ticket.status === "Backlog" || ticket.status === "Todo") return "muted";
-  return ticket.status === "In Review" ? "review" : "busy";
 }
 
 /**
@@ -107,32 +81,11 @@ function ticketCell(tickets: ContextTicket[]): StripCell | null {
 }
 
 function prCell(pr: PullRequestSummary | StreamPullRequest): StripCell {
-  const done = "state" in pr && pr.state !== "open" ? pr.state : null;
-  if (done) {
-    return {
-      kind: "pr",
-      parts: [{ text: `#${pr.number} ${done}`, tone: done === "merged" ? "good" : "muted" }],
-      title: `${pr.title}\nClick to open on GitHub`,
-      open: { url: pr.url },
-    };
-  }
-  const summary = pr as PullRequestSummary;
-  const state = pullRequestState(summary);
-  const mark = PR_DISPLAY[state].mark;
-  const lead = `#${pr.number}${mark ? ` ${mark}` : ""} ${PR_DISPLAY[state].says}`;
-  // What the leading state does not already say.
-  const rest = [
-    summary.draft ? "draft" : null,
-    state !== "failing" && summary.checks === "failing" ? "checks failing" : null,
-    state !== "running" && summary.checks === "running" ? "checks running" : null,
-    state !== "changes" && summary.review === "changes" ? "changes requested" : null,
-    summary.review === "required" ? "review required" : null,
-    state !== "approved" && summary.review === "approved" ? "approved" : null,
-  ].filter((x): x is string => x !== null);
+  const { text, tone, rest } = pullRequestWords(pr);
   return {
     kind: "pr",
     parts: [
-      { text: lead, tone: PR_TONE[state] },
+      { text, tone },
       ...(rest.length > 0 ? [{ text: ` \u00b7 ${rest.join(" \u00b7 ")}`, tone: "muted" as const }] : []),
     ],
     title: `${pr.title}\nClick to open on GitHub`,

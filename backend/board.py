@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.projects import list_handoffs
-from backend.pull_requests import _run
+from backend.pull_requests import _run, git_common_dir, is_main_branch
 from backend.session_context import parse_status
 
 logger = logging.getLogger(__name__)
@@ -146,21 +146,34 @@ def parse_board(text: str) -> list[dict[str, Any]]:
     return rows
 
 
-async def _repositories(project: Path) -> list[Path]:
-    """The repositories a project works on: itself, and the clones it keeps."""
-    found: list[Path] = []
-    candidates = [project]
+async def _repositories(project: Path) -> list[tuple[Path, Path]]:
+    """The repositories a project works on: itself, and the clones it keeps.
+
+    Each as a folder to run git in and its common directory. A worktree
+    shares its repository's common directory, so a repository is listed once
+    however many worktrees sit beside it. Which repository a folder belongs
+    to is read from its `.git` entry, not asked of git: a project can keep
+    eighty folders here, and a process for each was most of the processes a
+    board cost.
+    """
+    found: list[tuple[Path, Path]] = []
+    seen: set[Path] = set()
+
+    def add(folder: Path, common: Path | None) -> None:
+        if common is not None and common not in seen:
+            seen.add(common)
+            found.append((folder, common))
+
+    own = git_common_dir(project)
+    if own is None:
+        # The project may sit inside a repository without being its top.
+        out = (await _run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], project) or "").strip()
+        own = Path(out) if out else None
+    add(project, own)
     repos = project / REPOS_DIR
     if repos.is_dir():
-        candidates.extend(sorted(p for p in repos.iterdir() if p.is_dir()))
-    seen: set[str] = set()
-    for folder in candidates:
-        # A worktree shares its repository's common directory, so each
-        # repository is listed once however many worktrees sit beside it.
-        common = (await _run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], folder) or "").strip()
-        if common and common not in seen:
-            seen.add(common)
-            found.append(folder)
+        for folder in sorted(p for p in repos.iterdir() if p.is_dir()):
+            add(folder, git_common_dir(folder))
     return found
 
 
@@ -301,7 +314,15 @@ async def _contained(path: Path, head: str | None, pr: dict[str, Any] | None) ->
     return await _run(["git", "merge-base", "--is-ancestor", head, merged_head], path) is not None
 
 
-async def _describe_worktrees(project: Path) -> list[dict[str, Any]]:
+async def _describe_worktrees(project: Path, *, pending: bool = True) -> list[dict[str, Any]]:
+    """Every worktree of the project's repositories, with its pull request.
+
+    With `pending`, each one's uncommitted and unpushed work is read as
+    well, which is what a verdict needs and costs a `git status` apiece.
+    Without it those are left as None and no verdict is given: enough for a
+    caller that wants to know which pull request goes with which branch and
+    will look at one worktree itself.
+    """
     gate = asyncio.Semaphore(STATUS_CONCURRENCY)
 
     async def status(path: str) -> dict[str, Any] | None:
@@ -309,25 +330,34 @@ async def _describe_worktrees(project: Path) -> list[dict[str, Any]]:
             out = await _run(["git", "status", "--porcelain=v2", "--branch"], Path(path))
         return parse_status(out) if out is not None else None
 
-    async def describe(repo: Path) -> list[dict[str, Any]]:
+    async def nothing(_path: str) -> None:
+        return None
+
+    async def describe(repo: Path, common: Path) -> list[dict[str, Any]]:
         trees = await _worktrees(repo)
-        branches = sorted({t["branch"] for t in trees if t["branch"]})
+        # A repository's main branch has no pull request of its own, so
+        # GitHub is not asked about it; a clone kept only on main costs no
+        # request at all.
+        branches = sorted({
+            t["branch"] for t in trees if t["branch"] and not is_main_branch(t["branch"], common)
+        })
         # GitHub and the working trees are asked at the same time: neither
         # needs the other, and GitHub is the slow one.
         prs, states = await asyncio.gather(
-            _pull_requests(repo, branches),
-            asyncio.gather(*(status(t["path"]) for t in trees)),
+            _pull_requests(repo, branches) if branches else _no_pull_requests(),
+            asyncio.gather(*((status if pending else nothing)(t["path"]) for t in trees)),
         )
         contained = await asyncio.gather(*(
             _contained(Path(t["path"]), t["head"], prs.get(t["branch"]) if t["branch"] else None)
+            if pending else _false()
             for t in trees
         ))
         out: list[dict[str, Any]] = []
         for tree, state, held in zip(trees, states, contained):
             branch = tree["branch"]
             pr = prs.get(branch) if branch else None
-            uncommitted = state["uncommitted"] if state else 0
             path = Path(tree["path"])
+            uncommitted = state["uncommitted"] if state else (0 if pending else None)
             out.append({
                 "name": path.name,
                 "path": str(path),
@@ -336,14 +366,22 @@ async def _describe_worktrees(project: Path) -> list[dict[str, Any]]:
                 "uncommitted": uncommitted,
                 "unpushed": state["unpushed"] if state else None,
                 "pr": pr,
-                "verdict": verdict(pr, tree["head"], uncommitted, contained=held),
+                "verdict": verdict(pr, tree["head"], uncommitted or 0, contained=held) if pending else None,
             })
         return out
 
     # Every repository at once: one slow answer from GitHub should not hold
     # up the rest.
-    per_repo = await asyncio.gather(*(describe(r) for r in await _repositories(project)))
+    per_repo = await asyncio.gather(*(describe(r, c) for r, c in await _repositories(project)))
     return [tree for trees in per_repo for tree in trees]
+
+
+async def _no_pull_requests() -> dict[str, dict[str, Any]]:
+    return {}
+
+
+async def _false() -> bool:
+    return False
 
 
 def assemble(
@@ -510,8 +548,12 @@ def parent_titles(rows: list[dict[str, Any]], known: dict[str, dict[str, Any]] |
     }
 
 
-async def gather(project: Path) -> dict[str, Any]:
-    """Read everything the board shows for a project."""
+async def gather(project: Path, *, pending: bool = True) -> dict[str, Any]:
+    """Read everything the board shows for a project.
+
+    Without `pending` the worktrees' uncommitted work and verdicts are left
+    out (see `_describe_worktrees`), which is most of the cost.
+    """
     from backend import linear
 
     text = await asyncio.to_thread(_read_board_file, project)
@@ -519,7 +561,7 @@ async def gather(project: Path) -> dict[str, Any]:
     wanted = {r["ticket"] for r in rows} | {r["parent"] for r in rows if r["parent"]}
     handoffs, worktrees, known = await asyncio.gather(
         asyncio.to_thread(list_handoffs, project),
-        _describe_worktrees(project),
+        _describe_worktrees(project, pending=pending),
         linear.tickets(wanted),
     )
     has_file = bool(rows)
@@ -529,6 +571,7 @@ async def gather(project: Path) -> dict[str, Any]:
     result["hasBoardFile"] = has_file
     result["tracker"] = {"live": known is not None, "tickets": len(known or {})}
     result["parents"] = parent_titles(rows, known)
+    result["pending"] = pending
     return result
 
 
@@ -558,16 +601,16 @@ async def quick(project: Path) -> dict[str, Any]:
 
 _cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _gathering: dict[str, asyncio.Task] = {}
+# Boards read without the worktrees' pending work, for callers that do not
+# need it. Kept apart: one must never be served where a full one is wanted.
+_light_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_light_gathering: dict[str, asyncio.Task] = {}
 
 
 async def board(
     project: Path, *, fresh: bool = False, max_age: float = CACHE_SECONDS
 ) -> dict[str, Any]:
-    """The project's board, gathered at most once a minute unless asked.
-
-    `max_age` lets a caller that needs it less fresh (the line above a
-    terminal) take an older one instead of causing another gathering.
-    """
+    """The project's board, gathered at most once a minute unless asked."""
     key = str(project)
     cached = _cache.get(key)
     if cached and not fresh and time.time() - cached[0] < max_age:
@@ -581,4 +624,31 @@ async def board(
         task.add_done_callback(lambda _t: _gathering.pop(key, None))
     result = await task
     _cache[key] = (time.time(), result)
+    return result
+
+
+async def streams(project: Path, *, max_age: float) -> dict[str, Any]:
+    """Which tickets, worktrees and pull requests go together, without what
+    is pending in each worktree.
+
+    For the line above a terminal, which wants one stream's row and reads
+    its one worktree itself. A full board read recently enough is used when
+    there is one; otherwise a lighter one is gathered, which runs no
+    `git status` at all.
+    """
+    key = str(project)
+    now = time.time()
+    full = _cache.get(key)
+    if full and now - full[0] < max_age:
+        return full[1]
+    light = _light_cache.get(key)
+    if light and now - light[0] < max_age:
+        return light[1]
+    task = _light_gathering.get(key)
+    if task is None:
+        task = asyncio.create_task(gather(project, pending=False))
+        _light_gathering[key] = task
+        task.add_done_callback(lambda _t: _light_gathering.pop(key, None))
+    result = await task
+    _light_cache[key] = (time.time(), result)
     return result

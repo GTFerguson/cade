@@ -112,6 +112,42 @@ class TestLocating:
         assert await prs._run(["cade-no-such-command"], tmp_path) is None
 
 
+class TestReadingARepositoryFromDisk:
+    def test_a_clone_is_its_own_repository(self, tmp_path: Path):
+        subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+        assert prs.git_common_dir(tmp_path) == (tmp_path / ".git").resolve()
+
+    def test_a_worktree_belongs_to_the_repository_it_was_made_from(self, tmp_path: Path):
+        main = tmp_path / "main"
+        main.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main", str(main)], check=True)
+        (main / "a.txt").write_text("x")
+        env = {**__import__("os").environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.test",
+               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.test"}
+        subprocess.run(["git", "-C", str(main), "add", "a.txt"], check=True, env=env)
+        subprocess.run(["git", "-C", str(main), "commit", "-q", "-m", "first"], check=True, env=env)
+        subprocess.run(["git", "-C", str(main), "worktree", "add", "-q", "-b", "feature", str(tmp_path / "wt")], check=True, env=env)
+        assert prs.git_common_dir(tmp_path / "wt") == (main / ".git").resolve()
+
+    def test_a_plain_folder_is_no_repository(self, tmp_path: Path):
+        assert prs.git_common_dir(tmp_path) is None
+
+    def test_reads_the_branch_the_remote_treats_as_main(self, tmp_path: Path):
+        head = tmp_path / "refs" / "remotes" / "origin"
+        head.mkdir(parents=True)
+        (head / "HEAD").write_text("ref: refs/remotes/origin/trunk\n")
+        assert prs.default_branch(tmp_path) == "trunk"
+        assert prs.is_main_branch("trunk", tmp_path) is True
+        # Where it is recorded, a branch merely called main is not assumed to be it.
+        assert prs.is_main_branch("main", tmp_path) is False
+
+    def test_falls_back_on_the_usual_names_when_none_is_recorded(self, tmp_path: Path):
+        assert prs.default_branch(tmp_path) is None
+        assert prs.is_main_branch("main", tmp_path) is True
+        assert prs.is_main_branch("master", None) is True
+        assert prs.is_main_branch("feature", tmp_path) is False
+
+
 def session(sid: str, path: str, *, alive: bool = True, pr=None):
     return SimpleNamespace(
         id=sid, project_path=Path(path), pull_request=pr, is_alive=lambda: alive
@@ -170,6 +206,16 @@ class TestMonitor:
         await hub.monitor(sessions).poll_once()
         assert hub.fetched == ["/r/one"]
         assert [s.pull_request["number"] for s in sessions] == [7, 7]
+
+    async def test_does_not_ask_about_a_repository_whose_sessions_are_all_on_its_main_branch(self):
+        a, b = session("a", "/r/one"), session("b", "/r/two")
+        hub = FakeGitHub(
+            {"/r/one": ("/r/one", "main"), "/r/two": ("/r/two", "feature")},
+            {"/r/one": [pr(1, "main")], "/r/two": [pr(7, "feature")]},
+        )
+        await hub.monitor([a, b]).poll_once()
+        assert hub.fetched == ["/r/two"]
+        assert a.pull_request is None and b.pull_request["number"] == 7
 
     async def test_announces_only_a_change(self):
         a = session("a", "/r/one")

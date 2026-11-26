@@ -187,7 +187,7 @@ def stream_for(board: dict[str, Any], handoff_name: str) -> dict[str, Any] | Non
         ],
         "worktree": (
             {
-                "name": lead["name"], "branch": lead["branch"],
+                "name": lead["name"], "path": lead["path"], "branch": lead["branch"],
                 "uncommitted": lead["uncommitted"], "unpushed": lead["unpushed"],
             }
             if lead else None
@@ -200,28 +200,62 @@ async def _board(project: Path) -> dict[str, Any] | None:
     from backend import board
 
     try:
-        return await board.board(project, max_age=BOARD_MAX_AGE_SECONDS)
+        # Which tickets and pull requests go with which handoff; the one
+        # worktree this tab cares about is read here, not all of them there.
+        return await board.streams(project, max_age=BOARD_MAX_AGE_SECONDS)
     except Exception:  # noqa: BLE001 — the strip can do without a board
         logger.exception("Could not read the board for %s", project)
         return None
+
+
+class Shared:
+    """What several sessions read in one poll, read once.
+
+    Tabs opened on one project folder ask for the same folder's state, the
+    same list of handoffs and the same board. Each is fetched the first time
+    it is asked for and handed to the rest.
+    """
+
+    def __init__(self) -> None:
+        self._pending: dict[tuple[str, str], asyncio.Future] = {}
+
+    async def once(self, kind: str, key: Path, read: Callable[[], Awaitable[Any]]) -> Any:
+        slot = (kind, str(key))
+        if slot not in self._pending:
+            self._pending[slot] = asyncio.ensure_future(read())
+        return await self._pending[slot]
 
 
 async def session_context(
     session,
     *,
     read_board: Callable[[Path], Awaitable[dict[str, Any] | None]] = _board,
+    shared: Shared | None = None,
 ) -> dict[str, Any] | None:
-    """Everything a tab shows about its work, None when that is nothing."""
+    """Everything a tab shows about its work, None when that is nothing.
+
+    `shared` lets the sessions of one poll reuse each other's reads.
+    """
+    shared = shared or Shared()
     project = session.project_path
     tree, handoffs = await asyncio.gather(
-        working_tree(project),
-        asyncio.to_thread(list_handoffs, project),
+        shared.once("tree", project, lambda: working_tree(project)),
+        shared.once("handoffs", project, lambda: asyncio.to_thread(list_handoffs, project)),
     )
     found = session_handoff(session, handoffs)
     stream = None
     if found:
-        board = await read_board(project)
+        board = await shared.once("board", project, lambda: read_board(project))
         stream = stream_for(board, Path(found[0]["name"]).stem) if board else None
+    if stream and stream["worktree"]:
+        # The board says which worktree stands for the stream; what is
+        # pending in it is read here, for this one worktree.
+        where = Path(stream["worktree"].pop("path"))
+        state = await shared.once("tree", where, lambda: working_tree(where))
+        if state:
+            stream["worktree"].update(uncommitted=state["uncommitted"], unpushed=state["unpushed"])
+        else:
+            stream["worktree"].update(uncommitted=stream["worktree"]["uncommitted"] or 0)
     if tree is None and found is None:
         return None
     handoff, source = found if found else (None, None)
@@ -262,7 +296,9 @@ class SessionContextMonitor:
         self,
         sessions: Callable[[], list],
         *,
-        read: Callable[[Any], Awaitable[dict[str, Any] | None]] = session_context,
+        read: Callable[[Any, Shared | None], Awaitable[dict[str, Any] | None]] = lambda s, shared: session_context(
+            s, shared=shared
+        ),
         announce: Callable[[Any], Awaitable[None]] = broadcast_context,
     ) -> None:
         self._sessions = sessions
@@ -312,13 +348,14 @@ class SessionContextMonitor:
         A session with no client attached is skipped: nobody would see the
         answer, and it is read afresh when a client attaches.
         """
+        shared = Shared()
         for session in self._sessions():
             if not session.is_alive() or not session.connected_clients:
                 continue
-            await self.refresh(session)
+            await self.refresh(session, shared)
 
-    async def refresh(self, session) -> None:
-        context = await self._read(session)
+    async def refresh(self, session, shared: Shared | None = None) -> None:
+        context = await self._read(session, shared)
         if session.context != context:
             session.context = context
             await self._announce(session)

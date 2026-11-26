@@ -9,6 +9,10 @@
  * what needs nothing is folded away behind a count.
  */
 
+import { isDone, isQueued } from "../tabs/work-words";
+
+export { isDone, isQueued };
+
 export type Verdict = "finished" | "merged-dirty" | "in-review" | "closed" | "local";
 
 export interface BoardPullRequest {
@@ -127,20 +131,6 @@ export interface BoardSection {
 /** By what each stream needs, or by which ticket each sits under. */
 export type BoardView = "need" | "parent";
 
-const DONE_NAMES = new Set(["Done", "Completed", "Canceled", "Cancelled"]);
-const QUEUED_NAMES = new Set(["Todo", "Backlog", "Triage", ""]);
-const DONE_TYPES = new Set(["completed", "canceled"]);
-const QUEUED_TYPES = new Set(["backlog", "unstarted", "triage"]);
-
-/** Finished in the tracker: by its kind of state when known, else by name. */
-export function isDone(ticket: BoardStream): boolean {
-  return ticket.statusType ? DONE_TYPES.has(ticket.statusType) : DONE_NAMES.has(ticket.status);
-}
-
-/** Not started: by the tracker's kind of state when known, else by name. */
-export function isQueued(ticket: BoardStream): boolean {
-  return ticket.statusType ? QUEUED_TYPES.has(ticket.statusType) : QUEUED_NAMES.has(ticket.status);
-}
 const VERDICT_ORDER: Verdict[] = ["finished", "merged-dirty", "in-review", "closed", "local"];
 
 export const VERDICT_SAYS: Record<Verdict, string> = {

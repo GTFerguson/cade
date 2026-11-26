@@ -403,12 +403,8 @@ button.context-strip-cell:hover {
   background: var(--bg-hover);
 }
 
-.context-strip-cell [data-tone="muted"] { color: var(--text-muted); }
-.context-strip-cell [data-tone="good"] { color: var(--accent-green); }
-.context-strip-cell [data-tone="bad"] { color: var(--accent-red); }
-.context-strip-cell [data-tone="warn"] { color: var(--accent-orange); }
-.context-strip-cell [data-tone="review"] { color: var(--accent-yellow); }
-.context-strip-cell [data-tone="busy"] { color: var(--accent-blue); }
+/* The colour of each cell's parts is set with the board's, in board.css:
+   the same tones mean the same thing on both. */
 
 /* The phone's screen is one session already named by its own strip. */
 @media (max-width: 768px) {

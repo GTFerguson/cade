@@ -169,7 +169,9 @@ class TestTheStreamAHandoffCarries:
         b["streams"].append({**b["streams"][0], "ticket": "WRK-2", "status": "Done", "statusType": "completed"})
         stream = ctx.stream_for(b, "model-metrics")
         assert [t["ticket"] for t in stream["tickets"]] == ["WRK-1", "WRK-2"]
-        assert stream["worktree"] == {"name": "live", "branch": "gary/live", "uncommitted": 3, "unpushed": 0}
+        assert stream["worktree"] == {
+            "name": "live", "path": "/w/live", "branch": "gary/live", "uncommitted": 3, "unpushed": 0,
+        }
         assert stream["pr"]["state"] == "open"
 
     def test_a_merged_pull_request_stands_for_it_when_none_is_open(self):
@@ -218,7 +220,51 @@ class TestReadingASession:
         assert found["handoff"]["source"] == ctx.CHOSEN
         assert [t["ticket"] for t in found["tickets"]] == ["WRK-1"]
         assert found["worktree"]["branch"] == "gary/metrics"
+        assert "path" not in found["worktree"]
         assert found["pr"]["number"] == 7
+
+    async def test_reads_what_is_pending_in_the_streams_own_worktree(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setattr(ctx.Path, "home", classmethod(lambda cls: tmp_path / "home"))
+        project = tmp_path / "p"
+        make_handoffs(project, "model-metrics")
+        (project / ".git").write_text("gitdir: /nonexistent\n")
+        worktree = tmp_path / "wt"
+        subprocess.run(["git", "init", "-q", "-b", "gary/metrics", str(worktree)], check=True)
+        (worktree / "a.txt").write_text("x")
+        (worktree / "b.txt").write_text("y")
+
+        async def read_board(_p: Path):
+            # As a light board gives it: which worktree, nothing about its state.
+            tree = {**wt("metrics", "open"), "path": str(worktree), "uncommitted": None, "unpushed": None}
+            return board_with("model-metrics", worktrees=[tree])
+
+        s = tab(project, handoff="docs/plans/handoff/model-metrics.md")
+        found = await ctx.session_context(s, read_board=read_board)
+        assert found["worktree"] == {"name": "metrics", "branch": "gary/metrics", "uncommitted": 2, "unpushed": None}
+
+    async def test_tabs_on_one_folder_share_its_reads_within_a_poll(self, tmp_path: Path, monkeypatch):
+        monkeypatch.setattr(ctx.Path, "home", classmethod(lambda cls: tmp_path / "home"))
+        project = tmp_path / "p"
+        make_handoffs(project, "model-metrics")
+        (project / ".git").write_text("gitdir: /nonexistent\n")
+        counts = {"board": 0, "tree": 0}
+
+        async def read_board(_p: Path):
+            counts["board"] += 1
+            return board_with("model-metrics")
+
+        real_tree = ctx.working_tree
+
+        async def counting_tree(path: Path):
+            counts["tree"] += 1
+            return await real_tree(path)
+
+        monkeypatch.setattr(ctx, "working_tree", counting_tree)
+        shared = ctx.Shared()
+        tabs = [tab(project, sid=f"s{i}", handoff="docs/plans/handoff/model-metrics.md") for i in range(5)]
+        for t in tabs:
+            await ctx.session_context(t, read_board=read_board, shared=shared)
+        assert counts == {"board": 1, "tree": 1}
 
     async def test_the_board_is_not_read_for_a_tab_with_no_handoff(self, tmp_path: Path, monkeypatch):
         monkeypatch.setattr(ctx.Path, "home", classmethod(lambda cls: tmp_path / "home"))
@@ -257,7 +303,7 @@ class TestMonitor:
         self.read: list[str] = []
         self.announced: list[str] = []
 
-        async def read(s):
+        async def read(s, _shared=None):
             self.read.append(str(s.project_path))
             return answers.get(str(s.project_path))
 

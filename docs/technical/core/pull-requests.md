@@ -80,7 +80,7 @@ So the backend first works out which handoff a session is on (`session_handoff` 
 | Written | The handoff the session's agent last wrote, which the edit hook records per session under `~/.cache/cade-resume/` (`record_handoff_owner` in `backend/hooks/commands.py`). |
 | Titled | The handoff the tab's title names. An agent titles its tab after what it is doing ("Review model metrics handoff"), and `handoff_named_in` looks for a handoff's name in those words: the whole name, or its first three or more words, together and in order, the longest match winning and a tie counting as no match. |
 
-With the handoff known, the rest comes from the board's rows for it (`stream_for`, see [[board]]): the tickets it carries, the worktree and pull request that stand for it (one with an open pull request, then a merged one), read from a board no older than `BOARD_MAX_AGE_SECONDS`. The strip's branch and pull request cells then show the stream's worktree in place of the tab's folder, and the tab's badge shows the stream's open pull request.
+With the handoff known, the rest comes from the board's rows for it (`stream_for`, see [[board]]): the tickets it carries, and the worktree and pull request that stand for it (one with an open pull request, then a merged one). The board is asked for its light form (`board.streams`), no older than `BOARD_MAX_AGE_SECONDS`, and what is pending in the stream's one worktree is read here. Tabs opened on one folder ask for the same things, so within a poll each folder's state, handoff list and board are read once and shared (`Shared`). The strip's branch and pull request cells then show the stream's worktree in place of the tab's folder, and the tab's badge shows the stream's open pull request.
 
 A tab whose handoff cannot be worked out falls back on its folder's branch and shows no handoff at all: the project's newest handoff, shown on every such tab, said something untrue about most of them. The title rule is a guess, and the handoff cell's tooltip says which source was used.
 
@@ -91,6 +91,7 @@ The monitor owns every read it starts. A read begun on attach and left to run wi
 ## Design decisions
 
 - **`gh`, not the GitHub API.** The user is already signed in to `gh`, so CADE stores no GitHub credentials of its own.
+- **Not asked about a main branch.** A repository whose sessions all sit on its main branch has no pull request to find, and `gh` is not run for it.
 - **One call per repository.** Several tabs on one repository, or on worktrees of it, cost one request between them. A worktree is its own repository root to git, so each worktree is asked separately; that is correct, since each has its own branch.
 - **Matched by branch on every poll.** A tab's branch can change under it, so nothing is remembered about which pull request a session "has".
 - **A failed lookup changes nothing.** When `gh` cannot answer for a repository (signed out, no network, no GitHub remote), sessions there keep what they showed. A dropped connection is not a closed pull request.
