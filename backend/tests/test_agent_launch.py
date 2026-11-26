@@ -143,10 +143,6 @@ CADE_SERVERS = {
         "args": ["mcp-server", "--type", "orchestrator"],
         "env": {"CADE_CONNECTION_ID": "abc"},
     },
-    "cade-permissions": {
-        "command": "/usr/bin/cade-backend",
-        "args": ["mcp-server", "--type", "permissions"],
-    },
 }
 
 
@@ -590,3 +586,26 @@ class TestCodexNotify:
         cfg.write_text('notify = ["my-notifier"]\n')
         _merge_codex_notify(cfg, ["python3", "x.py"])
         assert cfg.read_text() == 'notify = ["my-notifier"]\n'
+
+
+@bash_required
+def test_patch_mcp_config_drops_the_removed_permission_server(tmp_path: Path):
+    """A config an older build wrote still names cade-permissions, whose
+    server no longer exists; the patch removes it and keeps the rest."""
+    script = tmp_path / "cade-resume.sh"
+    script.write_text(render_resume_script(CliAgent(command="true"), window=1800))
+    cfg = tmp_path / "mcp.json"
+    cfg.write_text(json.dumps({"mcpServers": {
+        "cade-orchestrator": {"command": "/usr/bin/cade-backend", "args": ["mcp-server"]},
+        "cade-permissions": {"command": "/usr/bin/cade-backend", "args": ["mcp-server"]},
+    }}))
+    home = tmp_path / "home"
+    home.mkdir()
+
+    subprocess.run(
+        ["bash", "-c", f'. "{script}"; __cade_patch_mcp_config'],
+        check=True,
+        env={"HOME": str(home), "PATH": "/usr/bin:/bin", "CADE_CLI_MCP_CONFIG": str(cfg)},
+    )
+
+    assert set(json.loads(cfg.read_text())["mcpServers"]) == {"cade-orchestrator"}

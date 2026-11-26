@@ -107,7 +107,7 @@ All providers are LiteLLM-backed (Mistral, Cerebras, Groq, Minimax, etc.).
 | Tool definitions | `ToolRegistry` → passed explicitly to LiteLLM |
 | Tool execution | `tool_executor.py` + `registry.py` |
 | Mode-aware tool filtering | `APIProvider.set_mode()` filters defs before each LiteLLM call |
-| Permission enforcement | `PermissionManager` (checked in file tools + `prompt-and-wait` endpoint) |
+| Permission enforcement | `PermissionManager` (checked in the file and bash tools) |
 | Orchestrator tools | `_create_tool_registry()` wires the orchestrator MCP adapter; hidden from non-orchestrator sessions via `_ORCHESTRATOR_ONLY_TOOLS` filter |
 
 Orchestrator subagents are spawned through `_make_worker_provider()`, which

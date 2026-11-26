@@ -12,6 +12,7 @@ import litellm
 
 from core.backend.providers.base import BaseProvider
 from core.backend.providers.config import ProviderConfig
+from core.backend.providers.errors import error_code
 from core.backend.providers.tool_executor import ToolRegistry
 from core.backend.providers.types import (
     ChatDone,
@@ -79,16 +80,6 @@ def _tool_def_to_litellm(defn: ToolDefinition) -> dict:
             "parameters": defn.parameters_schema,
         },
     }
-
-
-def _extract_usage(last_chunk) -> dict:
-    """Extract token usage from the final chunk."""
-    if last_chunk and hasattr(last_chunk, "usage") and last_chunk.usage:
-        return {
-            "prompt_tokens": getattr(last_chunk.usage, "prompt_tokens", 0),
-            "completion_tokens": getattr(last_chunk.usage, "completion_tokens", 0),
-        }
-    return {}
 
 
 def _compute_cost(model: str, usage: dict) -> float:
@@ -243,7 +234,7 @@ class APIProvider(BaseProvider):
                         await asyncio.sleep(delay)
                     else:
                         logger.exception("[%s] LiteLLM acompletion error: %s", self._config.name, e)
-                        yield ChatError(message=str(e), code=str(getattr(e, "status_code", "unknown")))
+                        yield ChatError(message=str(e), code=error_code(e))
                         return
             logger.info(
                 "[%s] turn %d: acompletion returned, awaiting first chunk (%.2fs since request, %.2fs since start)",
@@ -253,7 +244,6 @@ class APIProvider(BaseProvider):
 
             finish_reason = None
             pending_tool_calls: dict[int, dict] = {}
-            last_chunk = None
             accumulated_prompt_tokens = 0
             accumulated_completion_tokens = 0
             first_chunk_logged = False
@@ -266,10 +256,11 @@ class APIProvider(BaseProvider):
                         time.monotonic() - t_request,
                     )
                     first_chunk_logged = True
-                last_chunk = chunk
 
-                # Accumulate usage across all chunks — Anthropic-format providers
-                # emit prompt_tokens in the first chunk (message_start), not the last.
+                # Keep the last non-zero figure from any chunk. Anthropic-format
+                # providers report prompt tokens in the first chunk
+                # (message_start) and completion tokens later; OpenAI-format
+                # providers report both on the last chunk.
                 if hasattr(chunk, "usage") and chunk.usage:
                     pt = getattr(chunk.usage, "prompt_tokens", 0) or 0
                     ct = getattr(chunk.usage, "completion_tokens", 0) or 0
@@ -306,10 +297,12 @@ class APIProvider(BaseProvider):
                         if tc.function and tc.function.arguments:
                             pending_tool_calls[idx]["arguments"] += tc.function.arguments
 
-            # Roll this turn's token usage into the running totals before
-            # handling the tool call or finish branch.
+            # Roll this call's usage into the reply's totals, which is what is
+            # billed, and keep this call's own size, which is how full the
+            # context window is once the reply ends.
             total_prompt_tokens += accumulated_prompt_tokens
             total_completion_tokens += accumulated_completion_tokens
+            last_call_tokens = accumulated_prompt_tokens + accumulated_completion_tokens
 
             # Handle tool calls or finish
             if finish_reason == "tool_calls" and self._tool_registry and pending_tool_calls:
@@ -397,13 +390,6 @@ class APIProvider(BaseProvider):
                 continue
 
             else:
-                # Non-tool finish — fall back to last_chunk if no usage was
-                # streamed mid-turn (some providers only emit usage there).
-                if not accumulated_prompt_tokens and not accumulated_completion_tokens:
-                    fallback = _extract_usage(last_chunk)
-                    total_prompt_tokens += fallback.get("prompt_tokens", 0) or 0
-                    total_completion_tokens += fallback.get("completion_tokens", 0) or 0
-
                 if total_prompt_tokens or total_completion_tokens:
                     usage = {
                         "prompt_tokens": total_prompt_tokens,
@@ -417,7 +403,7 @@ class APIProvider(BaseProvider):
                     self._config.name, finish_reason,
                     time.monotonic() - t_start, usage, cost,
                 )
-                yield ChatDone(usage=usage, cost=cost)
+                yield ChatDone(usage=usage, cost=cost, context_tokens=last_call_tokens or None)
                 return
 
     def get_capabilities(self) -> ProviderCapabilities:

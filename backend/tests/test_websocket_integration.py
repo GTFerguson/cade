@@ -723,3 +723,66 @@ class TestWebsocketProviderIntegration:
         ]
         assert len(error_frames) == 1
         assert "unreachable" in error_frames[0]["message"].lower()
+
+
+# ---------------------------------------------------------------------------
+# The done event carries the reply's context size
+# ---------------------------------------------------------------------------
+
+
+class _DoneOnlyProvider:
+    name = "stub"
+    model = "stub-model"
+
+    def __init__(self, done):
+        self._done = done
+
+    async def stream_chat(self, messages, system_prompt=None):
+        yield self._done
+
+    async def cancel(self) -> None:
+        return
+
+
+class TestDoneEventContextTokens:
+    def _make_handler(self, working_dir: Path):
+        from core.backend.chat.session import ChatSession
+        from backend.websocket import ConnectionHandler
+
+        handler = ConnectionHandler.__new__(ConnectionHandler)
+        handler._closed = False
+        handler._chat_session = ChatSession(provider_name="stub")
+        handler._chat_session.add_user_message("hi")
+        handler._current_mode = "code"
+        handler._working_dir = working_dir
+        handler._orchestrator_on = False
+        handler._compact_pending = False
+        sent: list[dict] = []
+
+        async def _send(msg: dict) -> None:
+            sent.append(msg)
+
+        handler._send = _send  # type: ignore[attr-defined]
+        return handler, sent
+
+    async def test_context_tokens_forwarded_beside_summed_usage(self, temp_dir: Path):
+        from core.backend.providers.types import ChatDone
+
+        handler, sent = self._make_handler(temp_dir)
+        done = ChatDone(usage={"prompt_tokens": 3300, "completion_tokens": 60}, cost=0.0, context_tokens=1230)
+
+        await handler._stream_chat_response(_DoneOnlyProvider(done))
+
+        frame = next(m for m in sent if m.get("event") == "done")
+        assert frame["usage"] == {"prompt_tokens": 3300, "completion_tokens": 60}
+        assert frame["contextTokens"] == 1230
+
+    async def test_context_tokens_omitted_when_unknown(self, temp_dir: Path):
+        from core.backend.providers.types import ChatDone
+
+        handler, sent = self._make_handler(temp_dir)
+
+        await handler._stream_chat_response(_DoneOnlyProvider(ChatDone(usage={})))
+
+        frame = next(m for m in sent if m.get("event") == "done")
+        assert "contextTokens" not in frame

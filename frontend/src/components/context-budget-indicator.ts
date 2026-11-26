@@ -1,10 +1,6 @@
 /**
  * Context budget indicator — segmented progress bar showing how full
  * the model's context window is. Displayed in the chat statusline.
- *
- * Uses prompt_tokens from ChatDone events (the current context usage,
- * not a cumulative sum — each response's prompt_tokens already includes
- * the full conversation history).
  */
 
 const NUM_SEGMENTS = 8;
@@ -25,6 +21,22 @@ export interface ContextBudgetConfig {
   warn?: number;   // 0..1 fraction (e.g. 0.75)
   danger?: number; // 0..1 fraction
   window?: number; // tokens
+}
+
+/**
+ * How full the context window is after a reply, from its `done` event.
+ *
+ * `usage.prompt_tokens` sums every model call in the reply, so a reply that
+ * ran tools counts the conversation once per call. `contextTokens` is the
+ * last call alone. Older backends do not send it, and for a reply with no
+ * tool calls the two agree, so prompt_tokens is the fallback.
+ */
+export function contextTokensOf(done: {
+  contextTokens?: number;
+  usage?: Record<string, number>;
+}): number {
+  if (typeof done.contextTokens === "number") return done.contextTokens;
+  return done.usage?.["prompt_tokens"] ?? 0;
 }
 
 export class ContextBudgetIndicator {
@@ -87,10 +99,10 @@ export class ContextBudgetIndicator {
     return "var(--accent-blue)";
   }
 
-  update(promptTokens: number): void {
-    if (promptTokens <= 0 || this.contextWindow <= 0) return;
+  update(contextTokens: number): void {
+    if (contextTokens <= 0 || this.contextWindow <= 0) return;
 
-    const pct = Math.min(100, (promptTokens / this.contextWindow) * 100);
+    const pct = Math.min(100, (contextTokens / this.contextWindow) * 100);
     const filledCount = Math.ceil((pct / 100) * NUM_SEGMENTS);
     const color = this.getSegmentColor(pct);
 

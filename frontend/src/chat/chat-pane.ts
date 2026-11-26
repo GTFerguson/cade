@@ -23,7 +23,7 @@ import type {
 import type { WebSocketClient } from "../platform/websocket";
 import { ChatInput } from "@core/chat/chat-input";
 import { DiagramViewer } from "@core/chat/diagram-viewer";
-import { ContextBudgetIndicator } from "../components/context-budget-indicator";
+import { ContextBudgetIndicator, contextTokensOf } from "../components/context-budget-indicator";
 import { PermissionsButton } from "./permissions-button";
 import { MCPStatusIcon, type MCPEntry } from "./mcp-status-icon";
 import { apiBase } from "../config/config";
@@ -1223,8 +1223,8 @@ export class ChatPane implements Component, PaneKeyHandler {
     if (!msg.cancelled) {
       this.updateTokenCount(msg.usage);
       this.updateCost(msg.cost);
-      const promptTokens = msg.usage?.["prompt_tokens"] ?? 0;
-      if (promptTokens > 0) this.contextBudget?.update(promptTokens);
+      const contextTokens = contextTokensOf(msg);
+      if (contextTokens > 0) this.contextBudget?.update(contextTokens);
     }
 
     this.flushQueuedMessage();

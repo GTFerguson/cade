@@ -128,3 +128,15 @@ def test_a_codex_tab_gets_its_notify_and_no_servers(
     written = codex_config.read_text()
     assert "attention.py" in written
     assert "mcp_servers" not in written
+
+
+def test_write_mcp_config_offers_only_the_orchestrator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Nothing starts Claude Code with --permission-prompt-tool, so the
+    permission server would be a process nobody calls."""
+    monkeypatch.setattr("backend.orchestrator.mcp_config.mcp_config_dir", lambda: tmp_path)
+
+    path = write_mcp_config("conn-abc", backend_port=3000, session_id="tab-1")
+
+    assert set(json.loads(path.read_text())["mcpServers"]) == {"cade-orchestrator"}

@@ -647,7 +647,10 @@ export interface ChatStreamMessage extends BaseMessage {
   type: "chat-stream";
   event: "text-delta" | "done" | "error" | "tool-use-start" | "tool-result" | "thinking-delta" | "system-info" | "user-message" | "agent-approval-request" | "agent-approval-resolved" | "report-review-request" | "permission-request" | "permission-resolved";
   content?: string;
+  // done: usage sums every model call in the reply (cost); contextTokens is
+  // the last call's prompt plus completion (how full the context window is).
   usage?: Record<string, number>;
+  contextTokens?: number;
   message?: string;
   toolId?: string;
   toolName?: string;

@@ -15,9 +15,8 @@ logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _VENV_PYTHON = _PROJECT_ROOT / ".venv" / "bin" / "python"
 
-# Source script paths — only valid in dev (not in a PyInstaller package).
+# Source script path. Only valid in dev, not in a PyInstaller package.
 _MCP_SERVER_SCRIPT = Path(__file__).parent / "mcp_server.py"
-_PERMISSION_SERVER_SCRIPT = Path(__file__).parent.parent / "permissions" / "mcp_server.py"
 
 
 def _is_frozen() -> bool:
@@ -31,17 +30,17 @@ def _get_python() -> str:
     return sys.executable
 
 
-def _server_command(server_type: str) -> tuple[str, list[str]]:
+def server_command(server_type: str) -> tuple[str, list[str]]:
     """Return (command, args) to launch the given MCP server.
 
     In the packaged binary we can't run .py scripts from the extraction dir,
     so we delegate to the binary's own ``mcp-server`` subcommand instead.
     """
+    if server_type != "orchestrator":
+        raise ValueError(f"Unknown CADE MCP server type: {server_type!r}")
     if _is_frozen():
         return sys.executable, ["mcp-server", "--type", server_type]
-    python = _get_python()
-    script = _MCP_SERVER_SCRIPT if server_type == "orchestrator" else _PERMISSION_SERVER_SCRIPT
-    return python, [str(script)]
+    return _get_python(), [str(_MCP_SERVER_SCRIPT)]
 
 
 def mcp_config_dir() -> Path:
@@ -78,19 +77,13 @@ def write_mcp_config(
     if auth_token:
         env["CADE_AUTH_TOKEN"] = auth_token
 
-    orch_cmd, orch_args = _server_command("orchestrator")
-    perm_cmd, perm_args = _server_command("permissions")
+    orch_cmd, orch_args = server_command("orchestrator")
 
     config = {
         "mcpServers": {
             "cade-orchestrator": {
                 "command": orch_cmd,
                 "args": orch_args,
-                "env": dict(env),
-            },
-            "cade-permissions": {
-                "command": perm_cmd,
-                "args": perm_args,
                 "env": dict(env),
             },
         }

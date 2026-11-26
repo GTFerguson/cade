@@ -31,7 +31,9 @@ from typing import Protocol
 
 logger = logging.getLogger(__name__)
 
-# Standard CADE MCP server names injected by write_mcp_config().
+# Every server name CADE has written into an agent's own config. Cleanup
+# strips all of them, so the list keeps "cade-permissions": older builds
+# wrote it and it can still be sitting in a Codex or Cursor config.
 CADE_MCP_SERVER_NAMES = frozenset({"cade-orchestrator", "cade-permissions"})
 
 # ── Capabilities ────────────────────────────────────────────────────────────

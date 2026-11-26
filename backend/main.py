@@ -413,12 +413,6 @@ class MemoryRetargetRequest(BaseModel):
     target_name: str   # symbol name to retarget to (e.g. "AuthServiceV2")
 
 
-class PermissionPromptRequest(BaseModel):
-    tool_name: str
-    description: str
-    tool_input: dict = {}
-
-
 class AcceptEditsRequest(BaseModel):
     enabled: bool
 
@@ -1176,50 +1170,6 @@ def create_app(config: Config | None = None) -> FastAPI:
             return JSONResponse({"error": "Agent not running or not available"}, status_code=400)
         return JSONResponse({"status": "ok"})
 
-    # --- Permission Prompt API ---
-
-    # Tool name sets for auto-classification at the MCP permission boundary
-    _READ_TOOLS = frozenset({"Read", "Glob", "Grep", "LS", "list_directory", "View", "Cat"})
-    _WRITE_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "Create", "Delete", "Move", "Rename"})
-
-    @app.post("/api/permissions/prompt-and-wait")
-    async def permission_prompt_and_wait(request: Request, body: PermissionPromptRequest) -> JSONResponse:
-        """Request user permission for a tool use.
-
-        - Category ON  → auto-approve (no prompt)
-        - Category OFF → interactive prompt so the user can allow/deny per-request
-        - allow_tools OFF → interactive prompt for all tool calls
-        """
-        from backend.permissions.manager import get_permission_manager
-        manager = get_permission_manager()
-
-        tool = body.tool_name
-
-        if tool in _READ_TOOLS:
-            if manager.allow_read:
-                return JSONResponse({"decision": "allow"})
-            # Read is off — fall through to interactive prompt below
-
-        elif tool in _WRITE_TOOLS:
-            if manager.allow_write:
-                return JSONResponse({"decision": "allow"})
-            # Write is off — fall through to interactive prompt below
-
-        elif manager.allow_tools:
-            # Unclassified tool and tools are enabled — auto-approve
-            return JSONResponse({"decision": "allow"})
-        # else: tools off — fall through to interactive prompt below
-
-        connection_id = request.headers.get("X-Connection-Id", "")
-        # Interactive prompt: blocks until the user approves or denies in the UI
-        result = await manager.request_permission(
-            tool_name=body.tool_name,
-            description=body.description,
-            tool_input=body.tool_input,
-            connection_id=connection_id,
-        )
-        return JSONResponse(result)
-
     @app.post("/api/permissions/approve/{request_id}")
     async def permission_approve(request_id: str) -> JSONResponse:
         """Approve a pending permission request."""
@@ -1856,7 +1806,7 @@ def parse_args() -> argparse.Namespace:
     )
     mcp_server_parser.add_argument(
         "--type",
-        choices=["orchestrator", "permissions"],
+        choices=["orchestrator"],
         default="orchestrator",
         help="Which MCP server to run",
     )
@@ -2117,10 +2067,7 @@ def run_setup_hook(args: argparse.Namespace) -> None:
 
 def run_mcp_server(args: argparse.Namespace) -> None:
     """Run a CADE MCP server over stdio."""
-    if args.type == "permissions":
-        from backend.permissions.mcp_server import mcp
-    else:
-        from backend.orchestrator.mcp_server import mcp
+    from backend.orchestrator.mcp_server import mcp
     mcp.run(transport="stdio")
 
 
@@ -2131,11 +2078,11 @@ def main() -> None:
     # path suffix tells us which server to run.
     import sys as _sys
     if len(_sys.argv) == 2 and _sys.argv[1].endswith("mcp_server.py"):
-        _script = _sys.argv[1]
-        if "permissions" in _script:
-            from backend.permissions.mcp_server import mcp as _mcp
-        else:
-            from backend.orchestrator.mcp_server import mcp as _mcp
+        if "permissions" in _sys.argv[1]:
+            # The permission server was removed. Exit rather than serve the
+            # orchestrator's tools under the permission server's name.
+            _sys.exit("cade-backend: the permission MCP server no longer exists")
+        from backend.orchestrator.mcp_server import mcp as _mcp
         _mcp.run(transport="stdio")
         return
 

@@ -855,3 +855,80 @@ async def test_stream_chat_minimax_1000_exhausts_retries(provider: APIProvider):
     errors = [e for e in events if isinstance(e, ChatError)]
     assert len(errors) == 1
     assert "1000" in errors[0].message
+
+
+# --- Context size of the reply ---
+#
+# Every call in a tool loop resends the whole conversation, so summing
+# prompt_tokens across calls is right for cost and wrong for how full the
+# context window is. The context figure is the last call's prompt plus its
+# completion, since that completion is in the context for the next message.
+
+
+class _EchoExecutor:
+    def tool_definitions(self):
+        return [
+            ToolDefinition(
+                name="echo",
+                description="Echo tool",
+                parameters_schema={"type": "object", "properties": {}},
+            )
+        ]
+
+    def execute(self, name: str, arguments: dict) -> str:
+        return "echoed"
+
+
+def _tool_turn(call_id: str, prompt_tokens: int, completion_tokens: int) -> MockStreamResponse:
+    chunk = MockToolChunk(index=0, tool_id=call_id, name="echo", arguments="{}", finish_reason="tool_calls")
+    chunk.usage = MockUsage(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
+    return MockStreamResponse([chunk])
+
+
+@pytest.mark.asyncio
+async def test_context_tokens_are_the_last_calls_size_not_the_sum():
+    registry = ToolRegistry()
+    registry.register(_EchoExecutor(), "echo")
+    provider = APIProvider(
+        ProviderConfig(name="test", type="api", model="gpt-4o-mini", api_key="sk-test"),
+        tool_registry=registry,
+    )
+    final = MockStreamResponse(
+        [MockChunk("Done", finish_reason="stop", usage=MockUsage(prompt_tokens=1200, completion_tokens=30))]
+    )
+
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm:
+        mock_litellm.acompletion = AsyncMock(
+            side_effect=[_tool_turn("c1", 1000, 10), _tool_turn("c2", 1100, 20), final]
+        )
+        events = [e async for e in provider.stream_chat([ChatMessage(role="user", content="Go")])]
+
+    done = next(e for e in events if isinstance(e, ChatDone))
+    assert done.usage == {"prompt_tokens": 3300, "completion_tokens": 60}
+    assert done.context_tokens == 1230
+
+
+@pytest.mark.asyncio
+async def test_context_tokens_from_usage_only_final_chunk(provider: APIProvider):
+    """Providers that only report usage on a choice-less final chunk still give a figure."""
+    usage_chunk = MockChunk(None, usage=MockUsage(prompt_tokens=80, completion_tokens=10))
+    usage_chunk.choices = []
+
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm:
+        mock_litellm.acompletion = AsyncMock(
+            return_value=MockStreamResponse([MockChunk("Hi"), usage_chunk])
+        )
+        events = [e async for e in provider.stream_chat([ChatMessage(role="user", content="Hi")])]
+
+    done = next(e for e in events if isinstance(e, ChatDone))
+    assert done.context_tokens == 90
+
+
+@pytest.mark.asyncio
+async def test_context_tokens_absent_without_usage(provider: APIProvider):
+    with patch("core.backend.providers.api_provider.litellm") as mock_litellm:
+        mock_litellm.acompletion = AsyncMock(return_value=MockStreamResponse([MockChunk("Hi")]))
+        events = [e async for e in provider.stream_chat([ChatMessage(role="user", content="Hi")])]
+
+    done = next(e for e in events if isinstance(e, ChatDone))
+    assert done.context_tokens is None

@@ -20,9 +20,9 @@ How the shipped parts work is in [[../../technical/core/provider-stack]].
 | 2f | MCP servers read from the provider block in `providers.toml` | `b8eb45c9` | [[../../technical/core/provider-stack#Tool registry]] |
 | 2g | Async tool discovery, orchestrator tools wired into every API provider | `6e5d7d0a` | [[../../technical/core/provider-stack#Tool registry]] |
 
-Phases 1 and 2a-d also added `NkrdnExecutor`, `AgentSpawnerTool` and `HandoffCompactor`. None of the three is wired into chat. See [[../quick-fixes/dead-provider-code]].
+Phases 1 and 2a-d also added `NkrdnExecutor`, `AgentSpawnerTool` and `HandoffCompactor`. None of the three was wired into chat, and all three have been removed.
 
-Failover is built but does not trigger with `APIProvider` sub-providers. See [[../quick-fixes/failover-never-triggers]].
+Failover now triggers with `APIProvider` sub-providers and fails over only on errors another provider could plausibly not have. See [[../../technical/core/provider-stack#Failover]].
 
 ## Remaining Work
 
@@ -37,8 +37,7 @@ What exists to build on:
 
 What has to be built:
 
-- A per-reply figure for the current context size. The usage that `APIProvider` reports today is summed across tool turns, so it cannot be compared to the window ([[../quick-fixes/context-gauge-over-reads]]). This comes first.
-- A check after each reply that compares that figure to the thresholds and starts the compact flow.
+- A check after each reply that compares the reply's context size to the thresholds and starts the compact flow. The figure exists: `ChatDone.context_tokens`, the last model call's prompt plus completion ([[../../technical/core/provider-stack#Context budget gauge]]).
 - A decision for orchestrator workers. They stream through `OrchestratorManager`, not through the chat handler that owns the compact flow, so the check does not cover them for free.
 
 Open questions:

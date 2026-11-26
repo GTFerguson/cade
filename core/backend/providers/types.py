@@ -49,10 +49,18 @@ class TextDelta(ChatEvent):
 
 @dataclass
 class ChatDone(ChatEvent):
-    """Stream completed successfully."""
+    """Stream completed successfully.
+
+    `usage` sums every model call in the reply, which is what was billed.
+    `context_tokens` is the size of the last call alone (its prompt plus its
+    completion), which is how full the context window is now. The two differ
+    whenever the reply ran tools, because each call resends the conversation.
+    It is None when the provider reported no usage.
+    """
 
     usage: dict = field(default_factory=dict)
     cost: float = 0
+    context_tokens: int | None = None
 
 
 @dataclass

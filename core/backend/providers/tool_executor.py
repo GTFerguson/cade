@@ -1,11 +1,9 @@
-"""Tool executor protocol, registry, and nkrdn implementation."""
+"""Tool executor protocol and the registry that dispatches calls by name."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import shutil
-import subprocess
 from typing import Protocol, runtime_checkable
 
 from core.backend.providers.http_mcp_tools import MCP_HANDSHAKE_TIMEOUT_S
@@ -102,73 +100,3 @@ class ToolRegistry:
             return executor.execute(name, arguments)
         except Exception as e:
             return f"Error: {e}"
-
-
-_NKRDN_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "operation": {
-            "type": "string",
-            "enum": ["search", "lookup", "details", "context", "usages"],
-            "description": "The nkrdn operation to run",
-        },
-        "arg": {
-            "type": "string",
-            "description": "Argument: query string, symbol name, URI, or file path",
-        },
-    },
-    "required": ["operation", "arg"],
-}
-
-
-class NkrdnExecutor:
-    """Runs nkrdn CLI commands as subprocesses."""
-
-    _TIMEOUT = 15  # seconds
-
-    def tool_definitions(self) -> list[ToolDefinition]:
-        return [
-            ToolDefinition(
-                name="nkrdn",
-                description=(
-                    "Query the nkrdn code knowledge graph. "
-                    "operations: search (text query), lookup (symbol name), "
-                    "details (URI), context (file path), usages (URI)"
-                ),
-                parameters_schema=_NKRDN_SCHEMA,
-            )
-        ]
-
-    def execute(self, name: str, arguments: dict) -> str:
-        operation = arguments.get("operation", "")
-        arg = arguments.get("arg", "")
-        if not operation or not arg:
-            return "Error: 'operation' and 'arg' are required"
-
-        bin_path = shutil.which("nkrdn")
-        if bin_path is None:
-            return "Error: nkrdn not found on PATH"
-
-        try:
-            result = subprocess.run(
-                [bin_path, operation, arg],
-                capture_output=True,
-                text=True,
-                timeout=self._TIMEOUT,
-            )
-            if result.returncode != 0:
-                return f"Error (exit {result.returncode}): {result.stderr.strip()}"
-            return result.stdout.strip() or "(no output)"
-        except subprocess.TimeoutExpired:
-            return f"Error: nkrdn timed out after {self._TIMEOUT}s"
-        except Exception as e:
-            return f"Error: {e}"
-
-
-def make_nkrdn_registry() -> ToolRegistry:
-    """Return a pre-configured ToolRegistry with NkrdnExecutor."""
-    registry = ToolRegistry()
-    executor = NkrdnExecutor()
-    for defn in executor.tool_definitions():
-        registry.register(executor, defn.name)
-    return registry

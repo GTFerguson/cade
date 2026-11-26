@@ -126,6 +126,24 @@ def _resolve_context_budget(provider, model: str) -> dict:
     }
 
 
+def _done_frame(event: ChatDone) -> dict:
+    """Build the `done` chat event.
+
+    `usage` is the reply's billed total. `contextTokens` is how full the
+    context window is, and is left out when the provider did not report it
+    so the client can fall back to `usage.prompt_tokens`.
+    """
+    frame: dict = {
+        "type": MessageType.CHAT_STREAM,
+        "event": "done",
+        "usage": event.usage,
+        "cost": event.cost,
+    }
+    if event.context_tokens is not None:
+        frame["contextTokens"] = event.context_tokens
+    return frame
+
+
 class ConnectionHandler:
     """Handles a single WebSocket connection."""
 
@@ -1158,12 +1176,7 @@ class ConnectionHandler:
                         "content": event.content,
                     })
                 elif isinstance(event, ChatDone):
-                    await self._send({
-                        "type": MessageType.CHAT_STREAM,
-                        "event": "done",
-                        "usage": event.usage,
-                        "cost": event.cost,
-                    })
+                    await self._send(_done_frame(event))
                 elif isinstance(event, ChatError):
                     await self._send({
                         "type": MessageType.CHAT_STREAM,
@@ -2069,12 +2082,7 @@ class ConnectionHandler:
                         "content": event.content[:2000] if event.content else "",
                     })
                 elif isinstance(event, ChatDone):
-                    await self._send({
-                        "type": MessageType.CHAT_STREAM,
-                        "event": "done",
-                        "usage": event.usage,
-                        "cost": event.cost,
-                    })
+                    await self._send(_done_frame(event))
                 elif isinstance(event, ChatError):
                     await self._send({
                         "type": MessageType.CHAT_STREAM,

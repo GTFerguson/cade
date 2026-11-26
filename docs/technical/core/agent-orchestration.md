@@ -159,9 +159,13 @@ A project commonly holds several `docs/plans/handoff/*.md` briefs at once — pa
 `backend/orchestrator/mcp_config.py` writes the per-session JSON. The command/args depend on context:
 
 - **Dev mode** (`sys.frozen` is False): venv Python + source `mcp_server.py` scripts
-- **Packaged binary** (`sys.frozen` is True): `cade-backend mcp-server --type orchestrator|permissions` subcommand
+- **Packaged binary** (`sys.frozen` is True): `cade-backend mcp-server --type orchestrator` subcommand
+
+`server_command("orchestrator")` makes that choice, and the chat pane's orchestrator adapter uses the same function (see [[provider-stack#Orchestrator tools]]), so both paths start the server the same way in either build.
 
 The `mcp-server` subcommand was added to `main.py` specifically for this. Older packaged binaries that called `cade-backend /path/to/mcp_server.py` are handled by a legacy path in `main.py`'s entry point, and by `__cade_patch_mcp_config` in `cade-resume.sh` which fixes the config in place before Claude Code starts.
+
+Older builds also wrote a `cade-permissions` server, for Claude Code's `--permission-prompt-tool`. CADE never passed that flag, so nothing called it, and it has been removed. Leftovers are cleaned up where they can appear: `__cade_patch_mcp_config` drops the entry from a session config, `CADE_MCP_SERVER_NAMES` still lists the name so adapter cleanup strips it from Codex and Cursor configs, and the legacy entry point exits instead of serving under that name.
 
 ## CLI coding agents and their adapters
 
@@ -174,7 +178,7 @@ The terms, as used in the code and these docs:
 | API provider | A LiteLLM-backed provider: `APIProvider`, the tool loop, the chat pane |
 | CLI coding agent | Claude Code, Codex or Cursor running in a terminal tab |
 | Adapter | The per-CLI class holding launch syntax and vendor config handling |
-| MCP bridge | CADE's servers (`cade-orchestrator`, `cade-permissions`) offered to a CLI agent |
+| MCP bridge | CADE's `cade-orchestrator` server offered to a CLI agent |
 
 What the adapter layer does not do:
 
@@ -219,14 +223,12 @@ Only `hooks` changes what the backend does. The rest describe the agent and are 
 | `backend/orchestrator/manager.py` | `OrchestratorManager`, slug/name helpers, worker provider factory |
 | `backend/orchestrator/models.py` | `AgentSpec`, `AgentRecord`, `AgentState` |
 | `backend/orchestrator/mcp_server.py` | stdio MCP server exposing `spawn_agent` / `list_agents` |
-| `backend/orchestrator/mcp_config.py` | Writes per-session MCP config files for CLI tabs |
+| `backend/orchestrator/mcp_config.py` | Writes per-session MCP config files for CLI tabs; `server_command()` picks the launch command for source and packaged builds |
 | `backend/terminal/agent_launch.py` | Generates `cade-resume.sh`; includes `__cade_patch_mcp_config` |
 | `backend/terminal/cli_agent_adapters.py` | Per-CLI adapters (Claude Code / Codex / Cursor): launch syntax, MCP wiring, capabilities |
-| `core/backend/providers/agent_spawner.py` | `AgentSpawnerTool` — a placeholder that nothing registers; chat agents reach `spawn_agent` through the orchestrator's MCP adapter (see [[provider-stack]]) |
 | `backend/main.py` (`/api/orchestrator/*`) | HTTP routes + `mcp-server` subcommand |
 | `backend/prompts/modules/orchestrator.md` | Mode-specific system prompt for orchestrator sessions |
 | `backend/tests/test_orchestrator_manager.py` | Manager + naming + multi-turn coverage |
-| `backend/tests/test_agent_spawner.py` | `AgentSpawnerTool` interface tests |
 
 ## See Also
 

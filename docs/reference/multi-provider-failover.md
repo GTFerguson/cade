@@ -1,6 +1,7 @@
 ---
 title: Multi-Provider LLM Failover and Load Balancing Strategies
 created: 2026-04-28
+updated: 2026-11-26
 tags: [research, providers, failover]
 ---
 
@@ -129,14 +130,7 @@ Production systems should monitor:
 
 ### When to Fail Over
 
-`FailoverProvider` triggers failover on:
-
-1. **Pre-output `ChatError`**: provider yields an error before yielding any other event of any type, not only `TextDelta`
-2. **Exception during stream**: any unhandled exception during `stream_chat`
-
-Errors after the first event are propagated as-is — the stream cannot be recovered.
-
-With `APIProvider` sub-providers neither trigger fires today, because `APIProvider` yields `SystemInfo` first and turns its own exceptions into `ChatError`. See [[docs/technical/core/provider-stack#Failover|Provider Stack: Failover]].
+`FailoverProvider` fails over when a provider errors before producing content, as a `ChatError` or a raised exception, and the error is one another provider could plausibly not have. Leading `SystemInfo` events do not count as content. Errors after content are propagated as-is, because the stream cannot be recovered. How CADE classifies errors is in [[docs/technical/core/provider-stack#Failover|Provider Stack: Failover]].
 
 ### Error Classification
 
@@ -151,7 +145,7 @@ Not all errors should trigger failover. A taxonomy:
 | 401 Unauthorized | No | API key issue; permanent |
 | 429 with `Retry-After` | Configurable | May be worth short immediate retry |
 
-**Implementation note**: `FailoverProvider` currently treats all pre-output `ChatError` and exceptions as failover triggers. Distinguishing error codes (400 vs 429 vs 500) would allow smarter routing — e.g., skip cooldown on 400 but apply cooldown on 429.
+**Implementation note**: CADE follows this table. Rate limits, 5xx errors, timeouts and connection errors fail over and set a cooldown. 400, 401, 403, 404 and context-length errors reach the user straight away and leave the cooldown alone. `Retry-After` is not read.
 
 ### Timeout Thresholds
 
@@ -287,7 +281,7 @@ cooldown = min(base_cooldown * (backoff_factor ** failure_count) * random.unifor
 
 `FailoverProvider` (`core/backend/providers/failover_provider.py`) wraps an ordered list of `BaseProvider` instances and provides:
 
-- Sequential failover on pre-output errors
+- Sequential failover on pre-output errors that another provider could plausibly not have
 - Exponential-backoff cooldown per provider
 - Best-effort recovery when all providers in cooldown
 - Event stream passthrough (yields events from working provider)
@@ -296,7 +290,6 @@ cooldown = min(base_cooldown * (backoff_factor ** failure_count) * random.unifor
 
 | Enhancement | Where to Implement | Notes |
 |-------------|---------------------|-------|
-| Error code filtering | `_mark_failed()` | Distinguish 400 (no failover) from 429/500 (failover + cooldown) |
 | Active health checking | New `HealthCheckProvider` or background task | Probe providers periodically; update `_cooldowns` proactively |
 | Round-robin selection | New `RoundRobinFailoverProvider` subclass | Track index into provider list |
 | Cost-aware routing | New `CostAwareProvider` wrapping `FailoverProvider` | Complexity classifier → model selector |
@@ -305,7 +298,7 @@ cooldown = min(base_cooldown * (backoff_factor ** failure_count) * random.unifor
 
 ### Wiring with LiteLLM
 
-`APIProvider` delegates to LiteLLM, which handles transport-level retries for 429 and 503 errors. `FailoverProvider` operates one layer above — if LiteLLM exhausts its internal retries and raises an exception, `FailoverProvider` catches it and fails over.
+`APIProvider` delegates to LiteLLM and retries transient connection and server errors itself. When it gives up, it yields a `ChatError` whose code comes from the LiteLLM exception. `FailoverProvider` operates one layer above and decides from that code whether to fail over.
 
 ---
 

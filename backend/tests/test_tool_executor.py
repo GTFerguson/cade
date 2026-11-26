@@ -1,18 +1,15 @@
-"""Tests for tool executor registry and nkrdn implementation."""
+"""Tests for the tool executor registry."""
 
 from __future__ import annotations
 
 import asyncio
-import subprocess
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from core.backend.providers.tool_executor import (
-    NkrdnExecutor,
     ToolDefinition,
     ToolRegistry,
-    make_nkrdn_registry,
 )
 
 
@@ -108,112 +105,6 @@ class TestToolRegistry:
         # definitions() should include the tool only once despite multiple registrations
         defs = registry.definitions()
         assert len(defs) == 1
-
-
-class TestNkrdnExecutor:
-    """Tests for NkrdnExecutor."""
-
-    def test_nkrdn_tool_definitions(self):
-        """Test that NkrdnExecutor exposes one 'nkrdn' tool."""
-        executor = NkrdnExecutor()
-        defs = executor.tool_definitions()
-
-        assert len(defs) == 1
-        assert defs[0].name == "nkrdn"
-        assert "search" in defs[0].description
-        assert "operation" in defs[0].parameters_schema["properties"]
-
-    def test_nkrdn_missing_required_args(self):
-        """Test that missing 'operation' or 'arg' returns error."""
-        executor = NkrdnExecutor()
-
-        # Missing operation
-        result = executor.execute("nkrdn", {"arg": "foo"})
-        assert "Error:" in result
-        assert "required" in result.lower()
-
-        # Missing arg
-        result = executor.execute("nkrdn", {"operation": "search"})
-        assert "Error:" in result
-
-    def test_nkrdn_not_found(self):
-        """Test that missing nkrdn binary returns error."""
-        executor = NkrdnExecutor()
-
-        with patch("core.backend.providers.tool_executor.shutil.which") as mock_which:
-            mock_which.return_value = None
-            result = executor.execute("nkrdn", {"operation": "search", "arg": "foo"})
-            assert "not found" in result
-
-    def test_nkrdn_success(self):
-        """Test successful nkrdn execution."""
-        executor = NkrdnExecutor()
-
-        with patch("core.backend.providers.tool_executor.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0,
-                stdout="found symbol XYZ\n",
-                stderr="",
-            )
-
-            result = executor.execute("nkrdn", {"operation": "search", "arg": "foo"})
-            assert result == "found symbol XYZ"
-            mock_run.assert_called_once()
-
-    def test_nkrdn_timeout(self):
-        """Test that timeout is handled."""
-        executor = NkrdnExecutor()
-
-        with patch("core.backend.providers.tool_executor.subprocess.run") as mock_run:
-            mock_run.side_effect = subprocess.TimeoutExpired("nkrdn", 15)
-            result = executor.execute("nkrdn", {"operation": "search", "arg": "foo"})
-            assert "timed out" in result
-
-    def test_nkrdn_nonzero_exit(self):
-        """Test that nonzero exit code is handled."""
-        executor = NkrdnExecutor()
-
-        with patch("core.backend.providers.tool_executor.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=1,
-                stdout="",
-                stderr="Command not found\n",
-            )
-
-            result = executor.execute("nkrdn", {"operation": "search", "arg": "foo"})
-            assert "exit 1" in result
-            assert "Command not found" in result
-
-    def test_nkrdn_empty_output(self):
-        """Test handling of empty output."""
-        executor = NkrdnExecutor()
-
-        with patch("core.backend.providers.tool_executor.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0,
-                stdout="",
-                stderr="",
-            )
-
-            result = executor.execute("nkrdn", {"operation": "search", "arg": "foo"})
-            assert result == "(no output)"
-
-
-class TestMakeNkrdnRegistry:
-    """Tests for make_nkrdn_registry factory."""
-
-    def test_make_nkrdn_registry_returns_configured_registry(self):
-        """Test that factory returns a ready-to-use registry."""
-        registry = make_nkrdn_registry()
-
-        assert len(registry.definitions()) == 1
-        assert registry.definitions()[0].name == "nkrdn"
-
-        # Should be able to execute without setup
-        with patch("core.backend.providers.tool_executor.shutil.which") as mock_which:
-            mock_which.return_value = None
-            result = registry.execute("nkrdn", {"operation": "search", "arg": "test"})
-            assert "not found" in result
 
 
 class TestDefinitionsAsyncTimeout:

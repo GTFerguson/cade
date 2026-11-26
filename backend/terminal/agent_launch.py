@@ -181,7 +181,11 @@ path = sys.argv[1]
 try:
     cfg = json.load(open(path))
     changed = False
-    for name, srv in cfg.get('mcpServers', {{}}).items():
+    servers = cfg.get('mcpServers', {{}})
+    # Older builds also wrote a permission server, which no longer exists.
+    if servers.pop('cade-permissions', None) is not None:
+        changed = True
+    for name, srv in servers.items():
         args = srv.get('args', [])
         if not (args and args[0].endswith('mcp_server.py') and not os.path.exists(args[0])):
             continue
@@ -194,8 +198,7 @@ try:
         for candidate in candidates:
             if os.path.exists(candidate):
                 base = os.path.dirname(os.path.dirname(os.path.dirname(candidate)))
-                suffix = '/backend/permissions/mcp_server.py' if 'permissions' in name else '/backend/orchestrator/mcp_server.py'
-                script = base + suffix
+                script = base + '/backend/orchestrator/mcp_server.py'
                 if os.path.exists(script):
                     srv['command'] = candidate
                     srv['args'] = [script]

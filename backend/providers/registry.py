@@ -8,12 +8,10 @@ from core.backend.providers.api_provider import APIProvider
 from core.backend.providers.base import BaseProvider
 from core.backend.providers.failover_provider import FailoverProvider
 from core.backend.providers.tool_executor import ToolRegistry
-from backend.providers.handoff_compactor import HandoffCompactor
 from backend.prompts import compose_prompt
 from core.backend.providers.config import ProvidersConfig
 from core.backend.providers.mcp_tools import MCPToolAdapter
 from core.backend.providers.http_mcp_tools import HTTPMCPToolAdapter
-from core.backend.providers.agent_spawner import AgentSpawnerTool
 from core.backend.providers.subprocess_provider import SubprocessProvider
 from core.backend.providers.websocket_provider import WebsocketProvider
 
@@ -23,8 +21,9 @@ logger = logging.getLogger(__name__)
 def _create_tool_registry(provider_config, working_dir: "Path | None" = None, connection_id: str = "") -> ToolRegistry:
     """Create a ToolRegistry for an API provider based on its config.
 
-    Includes: nkrdn (always), file tools (if working_dir provided),
-    MCP tools (if configured), agent spawner (if enabled).
+    Includes: file, discovery, bash, memory and Specter tools (if working_dir
+    is provided), MCP servers from the provider block (if configured), and
+    the orchestrator MCP server (always). nkrdn is reached through bash.
     """
     from pathlib import Path as _Path
     registry = ToolRegistry()
@@ -95,7 +94,8 @@ def _create_tool_registry(provider_config, working_dir: "Path | None" = None, co
     # push to dashboard, etc. Tools are discovered lazily on first stream_chat call.
     try:
         from backend.config import get_config
-        from backend.orchestrator.mcp_config import MCP_SERVER_SCRIPT, _get_python
+        from backend.orchestrator import mcp_config
+        command, args = mcp_config.server_command("orchestrator")
         cfg = get_config()
         mcp_env: dict[str, str] = {
             "CADE_BACKEND_PORT": str(cfg.port),
@@ -106,14 +106,13 @@ def _create_tool_registry(provider_config, working_dir: "Path | None" = None, co
             mcp_env["CADE_AGENT_ID"] = connection_id
         if cfg.auth_token:
             mcp_env["CADE_AUTH_TOKEN"] = cfg.auth_token
-        orchestrator_adapter = MCPToolAdapter(
-            command=_get_python(),
-            args=[str(MCP_SERVER_SCRIPT)],
-            env=mcp_env,
-        )
+        orchestrator_adapter = MCPToolAdapter(command=command, args=args, env=mcp_env)
         registry.register(orchestrator_adapter, "__orchestrator__")
     except Exception as e:
-        logger.debug("Could not wire orchestrator MCP server: %s", e)
+        # Warning, not debug: without this adapter the chat agent silently
+        # loses every orchestrator tool, and this line is the only place
+        # that shows why.
+        logger.warning("Could not wire orchestrator MCP server: %s", e)
 
     return registry
 

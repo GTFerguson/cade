@@ -10,8 +10,6 @@ tags: [providers, litellm, tools, mcp, failover, context-budget]
 
 How a chat message becomes a model call. Chat providers of `type = "api"` in `~/.cade/providers.toml` run through LiteLLM. `APIProvider` streams the completion, runs any tools the model asks for, and loops until the model stops asking. This doc covers that loop, the tool registry behind it, MCP adapters, failover, and the context budget gauge.
 
-Three parts of this stack do not work as their names suggest. They are stated where they apply and collected under [[#Known gaps]].
-
 ## Building providers
 
 `ProviderRegistry.from_config()` (`backend/providers/registry.py`) builds one registry per WebSocket connection. It makes two passes over the provider blocks:
@@ -31,10 +29,10 @@ Orchestrator workers do not come from this registry. `_make_worker_provider()` (
 
 1. Yield `SystemInfo`. This happens before any network call.
 2. Resolve tool definitions with `ToolRegistry.definitions_async()` and apply the orchestrator filter (below).
-3. Call `litellm.acompletion` with `stream=True`. A transient error is retried up to `_MAX_ACOMPLETION_RETRIES` times with a doubling delay. `_is_retryable_acompletion_error()` decides what counts as transient. Any other error becomes a `ChatError` and the stream ends.
+3. Call `litellm.acompletion` with `stream=True`. A transient error is retried up to `_MAX_ACOMPLETION_RETRIES` times with a doubling delay. `_is_retryable_acompletion_error()` decides what counts as transient. Any other error becomes a `ChatError` and the stream ends. Its code comes from `error_code()` (`core/backend/providers/errors.py`): the HTTP status LiteLLM attaches, or `context-window-exceeded`, `timeout`, `connection` or `unknown`. [[#Failover]] reads that code.
 4. Collect text and tool-call fragments from the chunks.
 5. If the model finished with `tool_calls`: append the assistant turn, announce every call with `ToolUseStart`, run all calls at once with `asyncio.gather`, yield a `ToolResult` for each, append the results as `tool` messages, and go back to step 3.
-6. Otherwise yield `ChatDone` with usage and cost, and stop.
+6. Otherwise yield `ChatDone` with usage, cost and the reply's context size (see [[#Context budget gauge]]), and stop.
 
 The loop stops with a `ChatError` (code `tool-loop-max-turns`) once the number of tool turns passes the cap. The cap is `_DEFAULT_MAX_TOOL_TURNS`, or `max_tool_turns` in the provider block.
 
@@ -60,9 +58,15 @@ The system prompt is recomposed on every chat message (`_stream_chat_response` i
 | MCP servers in the provider block (`mcp_servers`) | Whatever each server lists | Per provider |
 | Orchestrator MCP server | `spawn_agent`, `list_agents`, `view_file`, `show_html` | Always |
 
+nkrdn has no tool of its own. Chat agents run it through `bash`.
+
 ### Orchestrator tools
 
-The orchestrator server (`backend/orchestrator/mcp_server.py`) is wired into every API provider as a stdio adapter under the name `__orchestrator__`. `APIProvider` removes the tools in `_ORCHESTRATOR_ONLY_TOOLS` from the definitions unless the provider's mode is `orchestrator` or the orchestrator overlay is on (`set_orchestrator()`, driven by `/orch`). `view_file` and `show_html` are always offered.
+The orchestrator server (`backend/orchestrator/mcp_server.py`) reaches every chat agent. `_create_tool_registry()` registers it as a stdio adapter under the name `__orchestrator__`, so every API provider and every orchestrator worker (which builds its registry with the same function) gets it. `APIProvider` removes the tools in `_ORCHESTRATOR_ONLY_TOOLS` (`spawn_agent`, `list_agents`) from the definitions unless the provider's mode is `orchestrator` or the orchestrator overlay is on (`set_orchestrator()`, driven by `/orch`). `view_file` and `show_html` are always offered.
+
+The adapter's command comes from `server_command("orchestrator")` in `backend/orchestrator/mcp_config.py`, the same function that writes the server into a CLI agent's MCP config. From source it runs the venv Python on `mcp_server.py`. In the packaged binary there is no `.py` file to run, so it runs `cade-backend mcp-server --type orchestrator`. Sharing the function keeps the chat path and the CLI path from drifting apart; an earlier copy of this wiring imported a name that no longer existed and the adapter was silently never registered.
+
+If the adapter cannot be built, the registry is returned without it and the reason is logged at warning level. Nothing else shows that the orchestrator tools are missing, so the log line is the place to look when a chat agent says it has no `view_file`.
 
 The filter hides definitions only. `ToolRegistry.execute_async()` does not check it.
 
@@ -100,15 +104,36 @@ The HTTP client runs inside an anyio task group. When the server returns 401, an
 `FailoverProvider` (`core/backend/providers/failover_provider.py`) wraps an ordered list of providers.
 
 - It tries each provider that is not in cooldown, in order. If all are in cooldown it tries the primary anyway.
-- It moves to the next provider when the current one raises, or yields a `ChatError` before any other event.
-- Once any event has been passed on, a later error is passed on too. Output already sent cannot be withdrawn.
+- It moves to the next provider when the current one fails before producing content, and the error is one another provider could plausibly not have (below). The error may arrive as a `ChatError` or as a raised exception.
+- Once content has been passed on, a later error is passed on too. Output already sent cannot be withdrawn.
 - A failed provider gets a cooldown starting at `_INITIAL_COOLDOWN`, multiplied by `_BACKOFF_FACTOR` on each repeat, capped at `_MAX_COOLDOWN`. A successful stream clears it.
-- If every candidate fails, it yields a `ChatError` with code `failover-exhausted`.
+- If every candidate fails, it yields a `ChatError` with code `failover-exhausted`. Its message names the last provider tried and its error.
 
-> [!WARNING]
-> With `APIProvider` sub-providers, failover does not trigger. `APIProvider` always yields `SystemInfo` first, so its errors never arrive before any event. It also converts its own exceptions into `ChatError`, so the exception path does not help. The error is passed to the user, no fallback is tried, and the provider is recorded as healthy. This was checked with a stub provider that yields `SystemInfo` then `ChatError`, not against a real `APIProvider`. See [[../../plans/quick-fixes/failover-never-triggers]].
+### Holding back `SystemInfo`
 
-`FailoverProvider` has no `set_mode()` or `set_orchestrator()`. The WebSocket handler calls those only when the provider has them, so a mode or `/orch` change does not reach the sub-providers. This is read from the code and has not been run. Its `model` is the primary's model.
+`APIProvider` yields `SystemInfo` before it calls the model, so a failed call arrives as `SystemInfo` followed by `ChatError`. If any event counted as output, that error could never trigger failover. `SystemInfo` carries only the model name and is safe to hold back, so `FailoverProvider` holds leading `SystemInfo` events and releases them with the first other event (`TextDelta`, `ThinkingDelta`, `ToolUseStart` or anything else). When an error comes first, they are dropped and the next provider's `SystemInfo` is the one sent. The chat header takes the model name from `SystemInfo`, so after a failover it names the model that actually answered.
+
+### Which errors fail over
+
+`is_failover_code()` (`core/backend/providers/errors.py`) decides from the `ChatError` code, or from `error_code()` of a raised exception:
+
+| Error | Code | Fails over |
+|---|---|---|
+| Rate limit | `429` | Yes |
+| Server error | any `5xx`; LiteLLM gives connection errors `500` | Yes |
+| Timeout | `408`, `timeout` | Yes |
+| Connection error | `connection` | Yes |
+| Bad request, bad key, forbidden, unknown model | `400`, `401`, `403`, `404` | No |
+| Prompt too long | `context-window-exceeded` | No |
+| Anything else | e.g. `unknown` | No |
+
+The errors that fail over belong to one provider: its quota, its servers, its network path. The ones that do not would fail the same way on every provider in the chain, so trying them all only delays the message the user needs. A provider with such an error keeps whatever cooldown state it had.
+
+A rate limit or server error that arrives after content still sets a cooldown, so the next message goes to a provider that is not rate limited or down.
+
+### Per-provider settings
+
+The WebSocket handler calls `set_mode()` and `set_orchestrator()` on the default provider only when it has them. `FailoverProvider` has both and passes each call to every sub-provider that takes it, because any of them may answer the next message. Its `mode` and `model` are the primary's.
 
 Background on failover strategies is in [[../../reference/multi-provider-failover]].
 
@@ -126,12 +151,19 @@ The gauge in the chat input row shows how full the model's context window is.
 
 `resolve_context_window()` takes `max_input_tokens` from LiteLLM's model catalog and falls back to `DEFAULT_CONTEXT_WINDOW` when the model is not listed. Fractions are clamped to the range 0 to 1. A provider with no config of its own, such as `FailoverProvider`, gets the defaults and a catalog lookup (`_resolve_context_budget()` in `backend/websocket.py`).
 
-**Wire.** The result is sent on the `system-info` chat event as `contextBudget: { warn, danger, window }`. Token usage arrives later on the `done` event, from `ChatDone.usage`.
+**Reply size.** One reply can take several model calls: the model asks for tools, the results are appended, and the model is called again. Each call resends the whole conversation. `APIProvider` therefore reports two figures on `ChatDone`:
 
-**Frontend.** `ContextBudgetIndicator` (`frontend/src/components/context-budget-indicator.ts`) takes the budget on `system-info` and updates from `usage.prompt_tokens` on `done`. It draws `NUM_SEGMENTS` blocks and a percentage. The colour is blue, then green from `HEALTHY_PCT`, orange from the warn level, red from the danger level. It is cleared on every `system-info`, so it is hidden while a reply streams and reappears on `done`. It is also cleared when the session is reset.
+- `usage` sums `prompt_tokens` and `completion_tokens` over every call. That is what was billed, and it feeds the cost and the token counter.
+- `context_tokens` is the last call's prompt tokens plus its completion tokens. The completion is included because it is part of the context for the next message. This is the figure the gauge needs. Summed usage would count the conversation once per tool turn.
 
-> [!WARNING]
-> The gauge over-reads on replies that use tools. `APIProvider` adds up `prompt_tokens` across every tool turn of a reply and reports the total in `ChatDone.usage`. The indicator treats that figure as the current context size. A reply with several tool turns counts the conversation several times. This is read from the code, not measured. See [[../../plans/quick-fixes/context-gauge-over-reads]].
+Usage is read from whichever chunk carries it, keeping the last non-zero prompt and completion counts of each call. OpenAI-format providers report both on the last chunk. On the `anthropic/` route LiteLLM reports prompt tokens on the first chunk (`message_start`) and completion tokens later. When LiteLLM converts Anthropic usage, `AnthropicConfig.calculate_usage()` adds `cache_creation_input_tokens` and `cache_read_input_tokens` to `prompt_tokens` (checked in LiteLLM 1.83.8), so cached tokens are counted in the context figure, as they should be: they occupy the window like any other.
+
+> [!NOTE]
+> LiteLLM's stream wrapper has code paths that strip `usage` from chunks when `stream_options.include_usage` is not set, and CADE does not set it. Which chunks still carry usage on each route has not been measured in the running app. A provider that reports none gets no `context_tokens` and an empty `usage`, and the gauge is not updated.
+
+**Wire.** The budget is sent on the `system-info` chat event as `contextBudget: { warn, danger, window }`. The `done` event carries `usage` and, when known, `contextTokens` (see [[../reference/websocket-protocol#Chat]]).
+
+**Frontend.** `ContextBudgetIndicator` (`frontend/src/components/context-budget-indicator.ts`) takes the budget on `system-info` and updates on `done` from `contextTokensOf()`, which reads `contextTokens` and falls back to `usage.prompt_tokens` for a backend that does not send it. It draws `NUM_SEGMENTS` blocks and a percentage. The colour is blue, then green from `HEALTHY_PCT`, orange from the warn level, red from the danger level. It is cleared on every `system-info`, so it is hidden while a reply streams and reappears on `done`. It is also cleared when the session is reset.
 
 Nothing on the backend acts on the thresholds. They only colour the gauge.
 
@@ -154,15 +186,6 @@ Keys in a `[provider.<name>]` block that this stack reads:
 
 Every key that is not a `ProviderConfig` field lands in `extra`, and `_build_kwargs()` passes all of `extra` to `litellm.acompletion`. That is how `api_base` and `extra_headers` reach LiteLLM. It also means the CADE-only keys above are passed along. How LiteLLM treats them has not been checked.
 
-## Known gaps
-
-- Failover does not trigger with `APIProvider` sub-providers (see [[#Failover]]).
-- The gauge over-reads on tool-using replies (see [[#Context budget gauge]]).
-- Three classes exist but are not wired into chat. See [[../../plans/quick-fixes/dead-provider-code]].
-  - `AgentSpawnerTool` (`core/backend/providers/agent_spawner.py`) is never registered. `spawn_agent` comes from the orchestrator MCP server.
-  - `NkrdnExecutor` (`tool_executor.py`) is never registered. Chat agents reach nkrdn through `bash`.
-  - `HandoffCompactor` (`backend/providers/handoff_compactor.py`) is used only by its tests. `/compact` does not call it.
-
 ## Key files
 
 | File | Role |
@@ -172,9 +195,11 @@ Every key that is not a `ProviderConfig` field lands in `extra`, and `_build_kwa
 | `core/backend/providers/mcp_tools.py` | stdio MCP adapter |
 | `core/backend/providers/http_mcp_tools.py` | HTTP MCP adapter, OAuth token, cancel isolation |
 | `core/backend/providers/failover_provider.py` | `FailoverProvider` |
+| `core/backend/providers/errors.py` | `error_code()`, `is_failover_code()` |
 | `core/backend/providers/config.py` | `ProviderConfig`, `get_context_budget()` |
 | `backend/providers/registry.py` | `_create_tool_registry()`, `ProviderRegistry.from_config()` |
-| `backend/websocket.py` | Chat streaming, `system-info` payload |
+| `backend/orchestrator/mcp_config.py` | `server_command()`, the orchestrator server's launch command |
+| `backend/websocket.py` | Chat streaming, `system-info` and `done` payloads |
 | `frontend/src/components/context-budget-indicator.ts` | Gauge |
 
 Tests live in `backend/tests/`. `asyncio_mode = "auto"` is set in `pyproject.toml`, so async tests need no marker.

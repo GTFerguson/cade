@@ -1,1 +1,1 @@
-"""Permission prompt system for Claude Code tool approvals."""
+"""Permission modes and approval prompts for the chat agents' tools."""

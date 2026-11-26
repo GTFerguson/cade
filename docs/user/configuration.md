@@ -225,7 +225,7 @@ The `claude-compatible` adapter is for a different program that accepts the same
 
 ### MCP Tool Integration
 
-CADE attaches its orchestrator and permissions tools to the selected agent where that can be done for one session:
+CADE attaches its orchestrator tools to the selected agent where that can be done for one session:
 
 - **Claude Code** — passes `--mcp-config <path>` on the command line.
 - **Codex** — none. Codex has a single config file for every Codex session on the machine, so tools written there would be started by all of them, not only those in CADE. CADE sets only its notify command in `~/.codex/config.toml`, which is how a Codex tab says it has finished.
@@ -238,11 +238,10 @@ CADE attaches its orchestrator and permissions tools to the selected agent where
 | Prompt seeding | yes | yes | yes |
 | MCP tools | yes | no | yes |
 | Hooks (file events) | yes | no | no |
-| Permission delegation | yes | no | no |
 | Session resolution | yes | no | no |
 | Handoff resume | yes | yes | yes |
 
-When a capability is unavailable, CADE degrades gracefully — file watchers replace hooks, and the agent's native permission UI is used.
+Where hooks are unavailable, file watchers take their place. Every agent asks for permission in its own interface; CADE does not take over those prompts.
 
 ## Environment Variables
 
