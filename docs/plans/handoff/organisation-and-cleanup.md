@@ -1,11 +1,11 @@
 ---
-title: Organisation roadmap: workspaces, picker, per-tab strip, the board and Linear are shipped; next is an install carrying the handshake fix, then the cleanup skill
+title: Organisation roadmap: workspaces, picker, per-tab strip, the board, Linear and the handshake fix are shipped; next is checking the strip in the real app, then the cleanup skill
 created: 2026-11-25
 updated: 2026-11-26
 status: in-flight
 ---
 
-# Resume: install the handshake fix when Gary says, check the per-tab strip in the real app, then the cleanup skill
+# Resume: check the per-tab strip in the real app, get Gary's verdict on the board and daylight, then the cleanup skill
 
 ## Active plans
 
@@ -27,9 +27,9 @@ This file is persistent working memory for one in-flight task. Procedure:
 
 ## Where we are
 
-Everything through `7c079e1a` is committed, pushed and installed (26 Nov 17:03): the rebuilt board, live Linear data, the workspace list that slides in at the right, the strip that follows each tab's own stream, and the efficiency pass. No errors in `~/.cade/logs/cade.log` since that install. What that install was meant to be followed by, and was not: looking at what each tab's strip reports in the real app, and the installed backend's process counts.
+Everything through `19e8508f` is committed, pushed and installed (26 Nov 17:40): the rebuilt board, live Linear data, the workspace list that slides in at the right, the strip that follows each tab's own stream, the efficiency pass, and the handshake fix. No errors in `~/.cade/logs/cade.log` since the 17:03 install. Still not looked at since the strip went in: what each tab's strip reports in the real app, and the installed backend's process counts.
 
-Committed and pushed after it, **not installed**: the handshake fix (`docs/technical/core/remote-sessions.md`, "Handshake"). After an upgrade the backend gave up on slow tabs after two seconds, attached them to a fresh shell in the home folder and told them "no group", which is what kept emptying the AirPLAi workspace and making sessions look killed.
+The handshake fix (`docs/technical/core/remote-sessions.md`, "Handshake") was seen working on its own install: four tabs sent their handshake 4 to 7 s late, were closed and were back on their own sessions and workspaces 12 s after the upgrade. Gary's window is on the page from before the fix until he clicks the update marker; from then on a late tab is waited for instead of bounced.
 
 In use and liked: workspaces (`Alt+w` / `Alt+Shift+w`, hold `Alt` for the list, `Ctrl+Alt+w` or a drag onto a chip to move a tab, `Alt+x` closes a tab), the strip above the terminal, quiet upgrades. Built and waiting for Gary's opinion: the rebuilt board (`Alt+b`) and the daylight theme fixes.
 
@@ -48,15 +48,14 @@ Nothing. Untracked files from other sessions, leave alone and never stage: `AGEN
 
 ## Next actions (ordered)
 
-1. Install when Gary says (`make install-desktop`); it carries only the handshake fix. Afterwards check the log: every session in `GET /api/sessions` should have a client again within seconds, and a tab that was late shows as "SET_PROJECT arrived after setup" followed by a reattach, never as a tab left on the home folder. `[confirm]`
-2. Look at what each tab's strip reports in the installed app, and the backend's process counts, which the 17:03 install was never followed by. `[safe]`, without attaching anything to a live session.
-3. Ask how the rebuilt board reads (streams grouped as needs you / in review / close out / in progress, `v` for a view by parent ticket, `]` `[` by section), and whether daylight is readable now. His Claude Code theme was `dark-daltonized`, which is why agent output and the agent-drawn cursor were pale. `[safe]`
-4. The cleanup skill (`docs/plans/worktree-cleanup.md`): takes the board's "finished" worktrees, shows what it will remove, waits for a yes, uses only `git worktree remove` and `git branch -d`. `[safe]` to write; running it is Gary's.
-5. Keep the board warm in the background for projects with open tabs, if the full read still drags. `[safe]`
-6. Pull request monitoring steps 2 to 4 (`pr-monitoring.md`). `[safe]`
-7. Offered, not accepted yet: after an in-place upgrade every terminal has no controller, so any client that connects can resize it (this is how a diagnostic garbled Gary's tab). The window in control before the upgrade should keep control across it. `[safe]`
-8. Tabs past the end of a crowded workspace are cut off (still reachable by key). Wants a real answer if Gary keeps many tabs in one workspace. `[safe]`
-9. A connection that names no session still gets a shell, a file watcher and a knowledge graph build on the backend's working directory, which for the desktop app is the home folder. Nothing in the app needs that any more; worth removing if it shows up as load. `[safe]` to investigate.
+1. Look at what each tab's strip reports in the installed app, and the backend's process counts, which the 17:03 install was never followed by. `[safe]`, without attaching anything to a live session.
+2. Ask how the rebuilt board reads (streams grouped as needs you / in review / close out / in progress, `v` for a view by parent ticket, `]` `[` by section), and whether daylight is readable now. His Claude Code theme was `dark-daltonized`, which is why agent output and the agent-drawn cursor were pale. `[safe]`
+3. The cleanup skill (`docs/plans/worktree-cleanup.md`): takes the board's "finished" worktrees, shows what it will remove, waits for a yes, uses only `git worktree remove` and `git branch -d`. `[safe]` to write; running it is Gary's.
+4. Keep the board warm in the background for projects with open tabs, if the full read still drags. `[safe]`
+5. Pull request monitoring steps 2 to 4 (`pr-monitoring.md`). `[safe]`
+6. Offered, not accepted yet: after an in-place upgrade every terminal has no controller, so any client that connects can resize it (this is how a diagnostic garbled Gary's tab). The window in control before the upgrade should keep control across it. `[safe]`
+7. Tabs past the end of a crowded workspace are cut off (still reachable by key). Wants a real answer if Gary keeps many tabs in one workspace. `[safe]`
+8. A connection that names no session still gets a shell, a file watcher and a knowledge graph build on the backend's working directory, which for the desktop app is the home folder. Nothing in the app needs that any more; worth removing if it shows up as load. `[safe]` to investigate.
 
 ## Key design decisions
 
