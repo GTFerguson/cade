@@ -35,36 +35,13 @@ what is waiting.
 | 5 | Mobile experience | Follows the desktop model once it has settled |
 | 6 | Cleanup and modernisation | Runs alongside; each item is independent |
 
-## 1. Tab groups (was "workspaces above tabs")
+## 1. Workspaces (was "tab groups")
 
-Shipped 25 Nov 2026: see [[../technical/core/tab-groups]]. Left for later: key
-chords for collapsing a group and for showing only one, and dragging a tab
-onto a chip to change its group.
+Shipped 25 and 26 Nov 2026: one workspace open at a time, keys to move between them and to carry a tab along, dragging a tab onto a chip. See [[../technical/core/tab-groups]].
 
 ## 2. One project picker
 
-Built 25 Nov 2026: `frontend/src/local/project-picker.ts` (view),
-`picker-model.ts` (what is listed and how it is filtered), `backend/projects.py`
-(projects and handoffs), `backend/terminal/session_agents.py` (per-tab agent).
-
-One keyboard-driven picker on desktop, browser and phone in place of the native
-folder dialog. The first screen lists the projects already open and recently
-opened, then every folder under the main working folder (`CADE_PROJECTS_ROOT`,
-default `~/projects`), most recently worked on first. `h` and `l` walk up and
-down folders anywhere on disk. Enter chooses a folder as the project, which
-shows a new session and its handoffs newest first; choosing a handoff opens a
-tab whose agent starts by reading it. The agent (Claude Code or Codex) and the
-tab group are shown at the top and switched with `a` and `g`. `/` filters or
-takes a typed path. The system explorer is the last entry.
-
-**Left.**
-
-- The projects folder is set by an environment variable only; there is no
-  setting for it in the interface or the user config file.
-- "Last worked on" is read from the project folder, its visible top-level
-  entries, git's index and reflog, and its handoffs. An edit deep in the tree
-  that is never staged does not count.
-- The design is not yet written into `docs/technical/` (needs approval).
+Shipped 25 Nov 2026: one keyboard-driven picker on desktop, browser and phone, with handoffs, the workspace and the agent chosen there. See [[../technical/core/project-picker]].
 
 ## 3. Pull request monitoring
 
