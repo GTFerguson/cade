@@ -65,6 +65,13 @@ class TestParsingTheBoardFile:
         assert row["prs"] == [1559]
         assert row["next"] == "Repair the release; see handoff"
 
+    def test_reads_the_parent_a_row_names_either_way_round(self):
+        text = BOARD.replace("| WRK-150 | Todo |", "| WRK-150 | Todo (read back 23 Nov; child of WRK-90) |")
+        parents = {r["ticket"]: r["parent"] for r in parse_board(text)}
+        assert parents["WRK-214"] == "WRK-100"
+        assert parents["WRK-150"] == "WRK-90"
+        assert parents["WRK-230"] is None
+
     def test_a_handoff_link_to_a_heading_still_names_the_handoff(self):
         assert parse_board(BOARD)[1]["handoff"] == "shooter-assist"
 

@@ -64,26 +64,40 @@ So that the screen never opens empty, it asks twice. `GET /api/board?quick=true`
 
 ### The screen
 
-`BoardScreen` (`frontend/src/board/board-screen.ts`) is a full-pane screen in the picker's language and uses the picker's styles; `board-model.ts` decides what is listed and is tested without a DOM. `Alt+b` opens it for the project of the tab in front.
+`BoardScreen` (`frontend/src/board/board-screen.ts`) is a full-pane screen in the picker's language; `board-model.ts` decides what is listed and is tested without a DOM. `Alt+b` opens it for the project of the tab in front.
 
-The left column lists, in order:
+**Streams, not tickets.** The row is a stream: one handoff and every ticket it carries (`groupStreams`), or a ticket with no handoff on its own. A handoff is what a session is opened on, and one often carries several tickets; on one real project 42 tickets in play are carried by 19 handoffs, and listed one ticket per row the same line appeared up to four times.
 
-1. Tickets under an "active" heading of the board file, regrouped by status: In Review, In Progress, Todo, Backlog, anything else, Done.
-2. The board file's other headings (deferred, coming, and so on), kept as the author grouped them.
-3. Handoffs with no ticket.
-4. Worktrees not on the board, removable ones first.
+**Grouped by what each needs.** `stageOf` puts a stream at one stage, the most pressing that applies:
 
-The right column is everything known about the selected row: status and its detail, handoff and age, each worktree with its branch, pending work and verdict, each pull request, and the next step.
+| Stage | When | Opens |
+|---|---|---|
+| Needs you | An open pull request conflicts, fails, has changes asked for, or is approved with nothing left to wait for | unfolded |
+| In review | A pull request is open and waiting on checks or a reviewer | unfolded |
+| Close out | No open pull request, one has merged, and a ticket is still open in the tracker | unfolded |
+| In progress | Work is under way and there is no pull request yet | unfolded |
+| Queued | Nothing in it has started | folded |
+| Done | Every ticket is finished | folded |
+
+After these come the board file's other headings (deferred, coming, and so on), handoffs with no ticket, and worktrees not on the board, all folded. A folded section is one row with its name and count; Enter unfolds it and `h` folds the section the selection is in. The screen therefore opens on what is to be acted on: seventeen rows for that project, where the first version opened on about a hundred and fifty.
+
+**By parent.** `v` switches to a second arrangement: each ticket that others sit under heads a section, with those beneath it and theirs beneath them, indented. A parent that is not itself on the board still heads its section, by id. The parent comes from the board file ("parent ABC-1" or "child of ABC-1" in a row's tracker column), which records it for few tickets; tickets with none are gathered in one folded section.
+
+**Search.** The search line is always on show. It matches ticket ids, titles, statuses, parents, handoff names and titles, worktrees, branches and `#numbers`, needs every word, looks inside folded sections and shows what it finds there unfolded. The first Escape gives the whole board back; the second closes it.
+
+The line at the top counts the streams at each stage and the worktrees that are finished. The right column is everything known about the selected row: for a stream, each of its tickets with status and parent, the handoff and its age, each worktree with its branch, pending work and verdict, each pull request, and the next step recorded for each open ticket.
 
 | Key | Does |
 |---|---|
 | `j` / `k`, `g` / `G` | Move |
-| `Enter` | Open a tab: on the project with the ticket's handoff, or on a worktree's own folder |
-| `t` | Open the ticket in the browser |
-| `p` | Open the pull request in the browser |
-| `/` | Filter by ticket, title, status, handoff, worktree, branch or `#number` |
+| `]` / `[` | Next / previous section |
+| `Enter` | Open a tab on the stream's handoff or a worktree's folder; unfold a folded section |
+| `h` | Fold the section the selection is in |
+| `v` | By need / by parent |
+| `/` | Search |
+| `t` / `p` | Open the ticket / the pull request in the browser |
 | `r` | Read again, past the cache |
-| `Esc` | Close |
+| `Esc` | Clear the search, then close |
 
 A tab opened from the board joins the open workspace, runs the agent of the tab in front, and is handed the handoff's path, as from the picker.
 
@@ -91,7 +105,9 @@ A tab opened from the board joins the open workspace, runs the agent of the tab 
 
 - **The hand-kept table is the source of the mapping, not something to replace yet.** Nothing else records which ticket goes with which handoff and worktree: few handoffs name a ticket and few branches carry an id. Reading the table gives a useful board today, without CADE needing access to the tracker, and leaves the table's upkeep to shrink to the columns only a person can fill.
 - **Ticket status is the table's, with its date.** It is shown as recorded, including the "read back on" note the table carries, because CADE cannot yet ask the tracker. Reading tickets live is planned.
-- **The picker's look, not a table.** A first mock drew the board as an eight-column table and was rejected as cluttered. The built screen reuses the picker's rows and section bars, with the detail beside the list instead of in more columns.
+- **The picker's look, not a table.** A first mock drew the board as an eight-column table and was rejected as cluttered. The built screen reuses the picker's rows, with the detail beside the list instead of in more columns.
+- **By need, not by tracker status, and folded.** The first built version listed every ticket under its tracker status, then every unassigned handoff and worktree. It was one long list that answered nothing: "in progress" covered a failing pull request, one merged days before and one not yet opened, and sixty worktrees nobody needed sat at the bottom. Grouping by what a stream needs answers "what should I be doing", and folding the rest keeps that answer on one screen.
+- **Quiet section headings.** The picker's filled red bars, repeated for eight sections, were the loudest thing on the screen. The board's headings are text with a rule, and red is kept for the selected row and the detail's title.
 - **Ask GitHub about our branches, not for its pull requests.** The first version listed each repository's open, merged and closed pull requests and looked for ours among them. That took twenty seconds on a real project, nearly all of it GitHub: hundreds of pull requests per repository, one repository a fork carrying its upstream's, each repository in turn. It also missed anything older than the list's limit. Asking by branch costs the same however many pull requests a repository has, and finds one that merged long ago.
 - **Verdicts live in the backend** so that the board, a count elsewhere and a future cleanup skill all agree on what "finished" means.
 
@@ -107,7 +123,7 @@ A tab opened from the board joins the open workspace, runs the agent of the tab 
 
 ## Boundaries
 
-- No live tracker data. Titles and statuses are what the board file says.
+- No live tracker data. Titles, statuses and parents are what the board file says, and it records a parent for few tickets; the full tree needs the tracker itself.
 - No cleanup. The board says which worktrees are finished; removing them is planned as a skill ([[../../plans/worktree-cleanup]]).
 - A running session is not shown against its stream. Tabs are often opened on the project root, so a tab's folder does not say which stream it serves.
 - One project at a time: the board is for the project of the tab in front, not for a whole workspace.

@@ -44,6 +44,8 @@ _LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 _WIKI_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]")
 _CODE_RE = re.compile(r"`([^`]+)`")
 _PR_RE = re.compile(r"#(\d+)\b")
+# How a row records the ticket it sits under: "parent ABC-1" or "child of ABC-1".
+_PARENT_RE = re.compile(r"\b(?:parent|child of)\s+([A-Z][A-Z0-9]+-\d+)\b")
 
 # A worktree's standing, worked out the same way wherever it is shown.
 FINISHED = "finished"          # merged, nothing newer than the merge, clean
@@ -120,6 +122,7 @@ def parse_board(text: str) -> list[dict[str, Any]]:
             "title": _plain(col("title", "stream")),
             "status": status.strip(),
             "statusDetail": detail.rstrip(")").strip(),
+            "parent": (_PARENT_RE.search(linear) or [None, None])[1],
             "section": section,
             "handoff": handoff.group(1).rsplit("/", 1)[-1] if handoff else None,
             "names": _CODE_RE.findall(carries),
@@ -367,6 +370,7 @@ def assemble(
             "title": row["title"],
             "status": row["status"],
             "statusDetail": row["statusDetail"],
+            "parent": row["parent"],
             "section": row["section"],
             "next": row["next"],
             "handoff": _handoff_view(handoff) if handoff else None,

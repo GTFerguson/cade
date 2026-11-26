@@ -1,16 +1,34 @@
-/* CADE — Board: a project's tickets, handoffs, worktrees and pull requests.
-   Drawn with the project picker's own pieces (project-picker.css): the same
-   header, section rows, option rows and key help. Only what the board adds
-   is here: the summary line, a narrower first column for ticket ids, and the
-   detail column. */
+/* CADE — Board: a project's streams of work, by what each needs.
+   Drawn with the project picker's pieces (project-picker.css): the same
+   header, option rows, selection and key help. What the board adds is here:
+   the summary line, the search line, quiet section headings, folded
+   sections, and the detail column. */
 
 /* One line of counts where the picker has its toggles. */
 .board-summary {
   justify-content: flex-start;
   align-items: center;
-  font-size: 11px;
-  color: var(--text-muted);
+  gap: 8px;
+  font-size: 12px;
   white-space: nowrap;
+}
+
+.board-summary-gap {
+  color: var(--text-muted);
+}
+
+/* The search line is always there: searching is something the screen
+   offers, not something to be known about. Quiet until it has the focus. */
+.board-filter {
+  border-color: var(--border-color);
+}
+
+.board-filter:focus-within {
+  border-color: var(--border-focus);
+}
+
+.board-filter .picker-filter-input::placeholder {
+  color: var(--text-muted);
 }
 
 /* The list is the wider column: titles need the room, the detail wraps. */
@@ -19,18 +37,78 @@
   flex: 1;
 }
 
-/* A ticket id is short and the title is the point of the row. */
-.board-row[data-kind="stream"] {
+/* Section headings are text, not the picker's filled bars: with several
+   sections on show the bars were the loudest thing on the screen, and the
+   red is wanted for the one row that is selected. */
+.board-section {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 0 16px 6px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.board-section:first-child {
+  margin-top: 0;
+}
+
+.board-section-title {
+  color: var(--text-primary);
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.board-section-count {
+  color: var(--text-secondary);
+}
+
+.board-section-hint {
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A stream: its handoff's name, the tickets it carries, what it needs. */
+/* The name is how a stream is known, so it keeps its room; the list of
+   tickets beside it is what gives way. */
+.board-row[data-kind="group"] {
+  grid-template-columns: minmax(12ch, max-content) minmax(0, 1fr) auto;
+}
+
+.board-row[data-kind="group"] .picker-option-label {
+  max-width: 34ch;
+}
+
+.board-row[data-kind="ticket"] {
   grid-template-columns: 88px minmax(0, 1fr) auto;
 }
 
-.board-row[data-kind="stream"] .picker-option-meta {
+.board-row[data-kind="ticket"] .picker-option-meta {
   font-size: 13px;
   color: var(--text-secondary);
 }
 
 .board-row[data-kind="worktree"] {
   grid-template-columns: minmax(0, 5fr) minmax(0, 4fr) auto;
+}
+
+/* A folded section: one quiet row holding its name and how much is in it. */
+.board-fold {
+  margin-top: 6px;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 6fr) auto;
+  color: var(--text-muted);
+}
+
+.board-fold .picker-option-label {
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-size: 11px;
 }
 
 .board-screen [data-tone="muted"] { color: var(--text-muted); }
@@ -41,9 +119,10 @@
 .board-screen [data-tone="busy"] { color: var(--accent-blue); }
 
 /* The selected row is filled, so everything on it takes the fill's ink. */
+.board-row.selected,
 .board-row.selected .picker-option-meta,
 .board-row.selected [data-tone] {
-  color: var(--bg-secondary);
+  color: var(--bg-primary);
 }
 
 .board-title {
@@ -53,11 +132,44 @@
   overflow-wrap: anywhere;
 }
 
+.board-detail-heading {
+  margin-top: 12px;
+  padding: 0 16px 4px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* One of a stream's tickets: id, status, title, and its parent if it has one. */
+.board-ticket {
+  display: grid;
+  grid-template-columns: 82px 86px minmax(0, 1fr);
+  column-gap: 10px;
+  padding: 3px 16px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.board-ticket-id {
+  color: var(--text-primary);
+}
+
+.board-ticket-title {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.board-ticket-parent {
+  grid-column: 3;
+  font-size: 11px;
+}
+
 .board-fact {
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr);
   column-gap: 12px;
-  padding: 4px 16px;
+  padding: 3px 16px;
   font-size: 12px;
   line-height: 1.5;
 }
@@ -72,9 +184,13 @@
 }
 
 .board-next {
-  padding: 2px 16px 12px;
+  padding: 2px 16px 8px;
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
+}
+
+.board-next-ticket {
+  color: var(--text-primary);
 }
