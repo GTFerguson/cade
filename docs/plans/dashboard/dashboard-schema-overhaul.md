@@ -1,15 +1,31 @@
 ---
 title: "Dashboard Schema Overhaul"
 created: 2026-01-20
+updated: 2026-11-26
 status: deferred
 tags: [dashboard, schema, UI, agent-tooling]
 ---
 
 # Dashboard Schema Overhaul
 
-## Status (2026-05-05)
+## Status
 
-Deferred. The current schema (as implemented in `core/backend/dashboard/config.py`) covers ~40% of what this plan proposes: named data sources, per-source refresh intervals, and basic interactions (on_click/on_move/on_check) are shipped. The layout system (grid/stack/tabs/split), visibility expressions, eval/shell sources, chart/form/iframe/metric/log/custom components, and nkrdn source type are not implemented. Pick this up when the agent-ui-system Phase 1 gaps are resolved and a second consumer drives the need.
+Deferred. Nothing in this proposal has been started. The schema below is not the one in use: the current schema is in `core/backend/dashboard/config.py` and is described in [[../../technical/design/dashboard-system]].
+
+Some of what this plan wanted already exists in the current schema, under different names:
+
+| Wanted here | Exists today as |
+|-------------|-----------------|
+| Named, shared sources | `data_sources:` map |
+| Per-source refresh | `refresh_interval` on a source |
+| Live output panel (`log`) | A `stream` source shown in a `timeline` |
+| Single large number (`metric`) | The top-level `stats:` strip and `key_value` |
+| Hot reload on config edit | Built |
+| Basic interactions | `on_click`, `on_check`, kanban moves, table inline edit |
+
+Not built: layout objects (grid areas, stack, tabs, split), `actions:` with `spawn` and `navigate`, visibility expressions, the `shell`, `eval`, `constant` and `nkrdn` source types, `csv` parsing, and the `chart`, `form`, `iframe`, `metric`, `log` and `custom` components.
+
+The earlier condition for picking this up, a second consumer, has been met: at least nine projects under `~/projects` have a dashboard config on the current schema. Whether any of them is held back by the current schema was not checked. Resume when a dashboard needs something the current schema cannot express.
 
 ## Context
 
@@ -19,7 +35,14 @@ The goal is a **declarative, agent-authored, project-specific UI layer** — one
 
 ## What This Replaces
 
-The current `dashboard.yml` schema is replaced entirely. The directory `.cade/` remains the storage location.
+As drafted, this schema replaces the current one outright: `data_sources:` becomes `sources:`, the string `layout` becomes an object, and panel options move under `props:`. That is no longer free. At least nine project configs and the agent prompt module (`backend/prompts/modules/dashboard.md`) depend on the current schema.
+
+Before this is built, choose one of:
+
+- Extend the current schema in place, adding layout objects, actions and visibility without renaming existing keys.
+- Replace it, with a loader that still accepts the current schema, or a one-off migration of every existing config and the prompt module.
+
+The directory `.cade/` remains the storage location either way.
 
 ---
 
@@ -240,7 +263,6 @@ The `spawn` action for `behavior` means "trigger an agent task." This is the pri
 
 ## Open Questions
 
-- **File-based vs live config**: `.yml` is static. Should sources also support a live mode where the agent updates the config file and the dashboard hot-reloads? Or is the file the source of truth and agents always edit it?
 - **Dashboard isolation**: if multiple agents edit the dashboard simultaneously (multi-agent sessions), what happens? Last-write-wins? Locking?
 - **History/undo**: agents will get the YAML wrong. Should the dashboard maintain a `.cade/dashboard.history.yml` with diffs?
 - **Built-in component expansion**: chart support is minimal. Do we want proper charting ( Vega-Lite, Chart.js) or is that scope creep?
@@ -252,18 +274,19 @@ The `spawn` action for `behavior` means "trigger an agent task." This is the pri
 ## What This Adds
 
 1. Rich layout system (grid, split, tabs, custom areas)
-2. Named, composable data sources
+2. New source types (`shell`, `eval`, `constant`, `nkrdn`)
 3. More built-in components (chart, form, metric, iframe, log, custom HTML)
 4. Action system — panels can trigger agent tasks or navigation
 5. Visibility expressions — conditional panel rendering
-6. Per-source refresh intervals for live data
+
+Named sources and per-source refresh intervals, listed here in the original draft, already exist in the current schema.
 
 ## Key Challenges
 
 1. **Eval sandboxing** — we need a safe execution context that can't escape to the filesystem or network
-2. **Hot reload UX** — agents editing YAML while the dashboard is open; need clear error feedback if the YAML is malformed
-3. **Component API stability** — once agents start building dashboards, changing component props is a breaking change
-4. **Schema validation** — agents writing invalid YAML is the most common failure mode; a JSON Schema or Zod schema for the dashboard file would catch errors early
+2. **Error feedback on a bad config**: agents edit YAML while the dashboard is open. The backend already sends a `dashboard-config-error` message when a config fails to load. No frontend code handles that code specifically, and how the generic error is shown was not checked. A bad config needs to be obvious in the dashboard itself
+3. **Component API stability**: agents already build dashboards on the current components, so changing component props is a breaking change now
+4. **Schema validation**: agents writing invalid YAML is the most common failure mode. Validation today is hand-written and checks structure only: it does not reject unknown components or unknown keys. A declared schema (JSON Schema or Zod) for the dashboard file would catch those early
 
 ## Integration Points
 
@@ -276,4 +299,4 @@ The `spawn` action for `behavior` means "trigger an agent task." This is the pri
 
 ## Graduated Artifact
 
-Once shipped, this becomes `docs/architecture/dashboard-system.md`. The plan doc is deleted.
+Once shipped, the design moves into [[../../technical/design/dashboard-system]] and the config reference into [[../../user/dashboard]]. The plan doc is deleted.

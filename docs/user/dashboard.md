@@ -1,7 +1,7 @@
 ---
 title: Dashboard Guide
 created: 2026-04-22
-updated: 2026-05-06
+updated: 2026-11-26
 status: active
 tags: [dashboard, yaml, configuration, hot-reload]
 ---
@@ -44,7 +44,7 @@ Open CADE and click the **Dashboard** button (or press `Ctrl-a d`) to open the d
 A dashboard config has six top-level keys:
 
 ```yaml
-dashboard:      # Required. Metadata (title, subtitle, theme).
+dashboard:      # Required. Metadata (title, subtitle).
 data_sources:   # Required. Where data comes from.
 views:          # Required. How data is displayed.
 stats:          # Optional. Top-strip KPIs computed from data sources.
@@ -58,8 +58,9 @@ watches:        # Optional. File watchers that trigger shell commands.
 dashboard:
   title: "My Dashboard"     # shown in the dashboard header
   subtitle: "optional"      # shown below the title
-  theme: terminal-dark       # built-in theme name
 ```
+
+A `theme:` key is also accepted here, and nothing reads it. Dashboards use CADE's own theme, and setting `theme` has no effect.
 
 ---
 
@@ -780,5 +781,6 @@ views:
 ## See Also
 
 - [[README|User Guide]] — CADE overview
+- [[../technical/design/dashboard-system|Dashboard System Design]]: why the dashboard is built this way, and its known limits
 - [[../technical/reference/dashboard-interactive-primitives|Dashboard Interactive Primitives]] — technical reference for component actions and the `provider_message` action type
 - [[../technical/reference/websocket-protocol|WebSocket Protocol]] — how config and data are pushed to the client

@@ -1,28 +1,25 @@
 ---
 title: Dashboard System
 created: 2026-03-24
-updated: 2026-04-24
-status: in-flight
+updated: 2026-11-26
+status: active
 tags: [index, plans, dashboard]
 ---
 
 # Dashboard System
 
-Feature designs for the config-driven dashboard framework where agents create and modify interactive interfaces by writing configuration.
+Plans for the config-driven dashboard, where agents create and change interactive screens by writing configuration. What is built is described in [[../../user/dashboard]] and [[../../technical/design/dashboard-system]].
 
 ## Active
 
-| Plan | Status | Description |
-|------|--------|-------------|
-| [[dashboard-schema-overhaul]] | draft | Declarative schema for agent-authored project-specific dashboards |
-| [[agent-ui-system]] | draft | Core framework: config schema, component library, data adapters, interaction tiers |
+| Plan | Status | Remaining work |
+|------|--------|----------------|
+| [[agent-ui-system]] | partially-shipped | Score-radar component; rendering for fields the schema accepts and the screen ignores; agent callbacks and workflows started from a dashboard; config-generation helpers |
 
-## Mockups
+## Deferred
 
-HTML visual explorations.
+| Plan | Notes |
+|------|-------|
+| [[dashboard-schema-overhaul]] | Not started: layout objects, actions, visibility expressions, new source and component types |
 
-| File | Description |
-|------|-------------|
-| [[chat-pane-mocks.html]] | Chat pane UI mockups |
-| [[chat-tool-blocks-mockup.html]] | Tool block rendering mockups |
-| [[dashboard-demo.html]] | Dashboard component demos |
+Mockups are in [[../design/README|design]].

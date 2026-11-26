@@ -1,7 +1,7 @@
 ---
 title: Integrated Scout Browser
 created: 2026-11-14
-updated: 2026-11-14
+updated: 2026-11-26
 status: planning
 tags: [plan, browser, scout-browse, right-pane, agents, remote]
 ---
@@ -37,15 +37,20 @@ and `scout/scraping/`.
   pid, tab tracking, `last_used`) lives in a fixed global file,
   `~/.scout/browse/state.json`, deliberately not in the working directory, so
   that `open` and `close` from different directories agree. A second `open`
-  while one is live fails with "already running". Output files still go to the
-  caller's `.scout-browse/`.
+  while one is live fails with "already running", but only if the session was
+  used in the last ten minutes. Past that, `open` kills the running browser and
+  starts a new one. Output files still go to the caller's `.scout-browse/`.
 - **Chrome is launched directly with a debugging port**, and every later command
   reconnects over the Chrome DevTools Protocol (CDP) using the endpoint in
   `state.json`. So anything that can read that file can attach to the session.
 - **The profile is exclusive.** `~/.scout/profiles/google` is guarded by a
   `flock`-based `ProfileLock`; only one browser can hold it.
 - **Headless sessions die when idle.** A watchdog kills a headless browser once
-  `last_used` is more than ten minutes old. Headed sessions have no such limit.
+  `last_used` is more than ten minutes old. Headed sessions have no watchdog.
+- **Any idle session can be replaced.** `last_used` is refreshed only by
+  scout-browse commands. A session with no command for ten minutes, headed or
+  headless, is killed by the next `open` from any agent. A user reading or
+  typing in the page does not count as use.
 - **Headed is the default**, and opens a real window on the desktop.
 
 ## What it adds
@@ -105,16 +110,22 @@ model in reverse, not a second browser.
   CADE but is killed after ten idle minutes, including while the user is
   reading it. The watchdog must count viewing as activity, or CADE-attached
   sessions need a different lifetime.
+- **Take-over looks idle.** While the user has control no scout-browse command
+  runs, so after ten minutes any agent's `open` replaces the browser under
+  them, headed or headless. Viewing and user input must refresh `last_used`,
+  or `open` must respect the control lock.
 - **Input fidelity.** Text entry, IME, modifier keys, scrolling, focus,
   drag, and file pickers each need mapping. Coordinates must survive pane
   resizes and device-pixel ratio. Native dialogs (print, file chooser, HTTP
   auth) do not appear in the screencast at all.
 - **Stream cost.** Frames compete with terminal output on the same websocket.
   Quality and frame rate must adapt, and a remote link sets a hard ceiling.
-- **Remote deployments.** On a hosted CADE (glann) the browser runs on the
-  server: its profile, logins and cookies are the server's, not the user's,
-  and a headed session has no display. Headless is the only option there, with
-  its own profile, and logging into it happens through the stream.
+- **Remote deployments.** There is no hosted CADE today, so this case is
+  hypothetical. On a hosted CADE the browser would run on the server: its
+  profile, logins and cookies would be the server's, not the user's, and a
+  headed session would have no display. Headless would be the only option
+  there, with its own profile, and logging into it would happen through the
+  stream.
 - **Attaching without interfering.** CADE's CDP connection sits beside
   scout-browse's own reconnects. It must not change the active tab, steal
   focus, or keep the browser alive after `close`.
@@ -146,7 +157,8 @@ model in reverse, not a second browser.
 2. Take-over and hand-back (section 3), with the watchdog and control-lock
    changes in scout-engine.
 3. Agent tools (section 4), centred on the hand-off request.
-4. User-started sessions and remote deployments (section 5 and the hosted case).
+4. User-started sessions (section 5). The hosted case waits until a hosted
+   CADE exists.
 
 Estimated effort for steps 1 and 2: one to two weeks. Not prototyped; the CDP
 attach is confirmed possible from how scout-browse stores its endpoint, but the
@@ -161,8 +173,8 @@ screencast's quality and latency over the websocket are untested.
   sessions (separate profiles or contexts) so two projects can browse at once?
 - How does the agent learn the user has taken over: a tool error, a message in
   its next tool result, or nothing (it just waits)?
-- On a hosted CADE, whose profile is it, and is a server-side Google login
-  acceptable at all?
+- If a hosted CADE returns, whose profile is it, and is a server-side Google
+  login acceptable at all?
 - Does the screencast need replacing (with a video encoder) for remote links,
   or is adaptive JPEG quality enough?
 

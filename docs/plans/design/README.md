@@ -1,17 +1,12 @@
 ---
 title: Design Mockups
 created: 2026-03-24
+updated: 2026-11-26
 status: active
 tags: [index, plans, mockups]
 ---
 
 # Design
-
-## Active Plans
-
-| Plan | Description |
-|------|-------------|
-| [[dashboard-schema-overhaul]] | Schema for agent-authored, project-specific dashboards |
 
 ## Mockups
 

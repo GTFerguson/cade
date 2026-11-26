@@ -39,6 +39,7 @@ API documentation and specifications.
 Design rationale and decision records.
 
 - [[design/visual-design-philosophy|Visual Design Philosophy]] - UI/UX principles, terminal aesthetics, keyboard-first design
+- [[design/dashboard-system|Dashboard System Design]] - Why dashboards are driven by a config file, the decisions behind it, and where the built system stops short
 
 ## Adding Documentation
 

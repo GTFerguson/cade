@@ -1,7 +1,7 @@
 ---
 title: Right-Pane Browser
 created: 2026-11-14
-updated: 2026-11-14
+updated: 2026-11-26
 status: planning
 tags: [plan, viewer, right-pane, browser, scout-browse, agents]
 ---
@@ -63,10 +63,11 @@ integration points and is one to two weeks of work on its own.
   origin to work at all (cookies, storage, same-site requests), unlike the
   opaque-origin sandbox used for handed-over HTML. The two cases need different
   frame settings, and the looser one must never apply to a CADE-origin URL.
-- **Remote deployments (phase 1).** In a hosted CADE, `localhost` in a frame
-  means the viewer's machine, not the server, and an `http:` page inside an
-  `https:` CADE is blocked as mixed content. Phase 1 is mostly a desktop and
-  local-dev feature.
+- **Remote access (phase 1).** There is no hosted CADE today. The same limits
+  apply whenever CADE is opened from another machine, such as a phone reaching
+  the desktop backend: `localhost` in a frame means the viewer's machine, not
+  the one running CADE, and an `http:` page inside an `https:` CADE is blocked
+  as mixed content. Phase 1 is mostly a desktop and local-dev feature.
 
 ## Integration points
 
@@ -75,8 +76,9 @@ integration points and is one to two weeks of work on its own.
 - **Agent tools.** `backend/orchestrator/mcp_server.py` holds `view_file` and
   `show_html`. A URL tool belongs beside them and should use the same
   caller-tab routing, so a page opens only in the tab that asked.
-- **Viewer lock.** The existing lock stops hooks changing the viewer. It should
-  equally stop an agent navigating the pane away.
+- **Viewer lock.** The existing lock makes the viewer ignore every incoming
+  `view-file` message, so it already stops `view_file` and `show_html` as well
+  as hooks. The URL tool must be held back by the same lock.
 
 ## Rejected: a native child webview
 

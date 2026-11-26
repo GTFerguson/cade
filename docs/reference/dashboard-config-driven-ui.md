@@ -1,7 +1,7 @@
 ---
 title: "Config-Driven UI: Live Rendering from Declarative Configuration"
 created: 2026-04-28
-updated: 2026-05-06
+updated: 2026-11-26
 status: active
 tags: [research, dashboard, ui, configuration, hot-reload]
 ---
@@ -97,8 +97,8 @@ Source: (Rossi et al., 2024, *Towards Model-Driven Dashboard Generation*, arXiv:
 CADE's dashboard follows the layered architecture:
 
 - **Config:** `.cade/dashboard.yml` (YAML)
-- **Model:** `DashboardConfig` TypeScript interface — defines `dashboard`, `data_sources`, `views`, `panels`, `component`, `props`
-- **Renderer:** React components in `frontend/src/dashboard/components/` — each component reads `props.data` and `props.options`
+- **Model:** `DashboardConfig`, defined as Python dataclasses in `core/backend/dashboard/config.py` and mirrored by TypeScript interfaces in `frontend/src/dashboard/types.ts`. It holds `dashboard`, `data_sources`, `views` and their `panels`, and `stats`
+- **Renderer:** plain TypeScript classes in `frontend/src/dashboard/components/`, looked up by name in `frontend/src/dashboard/registry.ts`. There is no UI framework. Each component receives `{ panel, data, allData, config, onAction }` and reads its settings from `panel`
 
 The config-to-model translation happens in the backend (`DashboardHandler` in Python), which parses YAML, validates structure, and pushes the config tree to the frontend via WebSocket. Data fetching is handled by adapters (frontmatter parser, REST client, file watcher) that return row arrays consumed by components.
 
@@ -192,7 +192,7 @@ CADE's mechanism (based on the WebSocket protocol):
 2. Adapter re-parses the source, returns updated rows
 3. Backend pushes `dashboard_data` message via WebSocket
 4. Frontend `DashboardPane` receives update, merges into component data props
-5. React reconciliation updates only affected components
+5. `DashboardPane` calls `update()` on each component mounted in the active view, which re-renders itself from the new rows. There is no UI framework doing the diffing
 
 This is a **push-based reactive model** — the server drives updates, client responds. No polling, no full-page refresh.
 
