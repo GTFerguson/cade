@@ -80,6 +80,23 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# How long a connection that has not announced a handshake is given to name
+# its project before it is set up on the default folder.
+HANDSHAKE_DEFAULT_WAIT = 2.0
+# A page that announced its handshake is waited for instead: when every tab
+# reconnects at once, as after an upgrade, it can take seconds to send them.
+HANDSHAKE_ANNOUNCED_WAIT = 30.0
+# Tells the client its handshake was missed. Any close but an auth failure
+# makes it reconnect, and a reconnect sends the handshake first.
+HANDSHAKE_MISSED_CLOSE_CODE = 4002
+HANDSHAKE_QUERY_FLAG = "handshake=1"
+
+
+def _announces_handshake(query_string: str) -> bool:
+    """Whether the client said, in its URL, that SET_PROJECT will follow."""
+    return HANDSHAKE_QUERY_FLAG in query_string.split("&")
+
+
 def _extract_google_token(query_string: str) -> str | None:
     """Extract the google_token parameter from a WebSocket query string."""
     if not query_string:
@@ -159,6 +176,8 @@ class ConnectionHandler:
         self._suppress_buffer: list[str] = []
         self._suppress_timeout_task: asyncio.Task | None = None
         self._project_set = asyncio.Event()
+        # The client's URL promised a SET_PROJECT (see _announces_handshake).
+        self._handshake_announced = False
         self._is_new_session = True
         self._output_tasks: dict[str, asyncio.Task] = {}
         self._terminal_sizes: dict[str, TerminalSize] = {}
@@ -205,6 +224,7 @@ class ConnectionHandler:
         query_string = self._ws.scope.get("query_string", b"").decode("utf-8")
         token = extract_token_from_query(query_string)
         self._google_token = _extract_google_token(query_string)
+        self._handshake_announced = _announces_handshake(query_string)
 
         if not validate_token(token, cfg=self._config):
             logger.warning("WebSocket connection rejected: invalid or missing auth token")
@@ -312,10 +332,12 @@ class ConnectionHandler:
             await self._cleanup()
 
     async def _wait_for_project(self) -> None:
-        """Wait for SET_PROJECT message or timeout to default.
+        """Wait for the client to name its project and session.
 
-        Waits up to 2 seconds for the client to send a SET_PROJECT message.
-        If no message is received, falls back to the configured working directory.
+        A client that announced the handshake is waited for, and dropped if it
+        never sends one: setting it up without a session would leave its tab
+        showing a terminal attached to nothing. Any other client gets the
+        configured working directory once the default wait runs out.
         """
         async def wait_for_set_project():
             while not self._project_set.is_set():
@@ -390,11 +412,18 @@ class ConnectionHandler:
                     self._project_set.set()
                     raise
 
+        wait = HANDSHAKE_ANNOUNCED_WAIT if self._handshake_announced else HANDSHAKE_DEFAULT_WAIT
         try:
-            await asyncio.wait_for(wait_for_set_project(), timeout=2.0)
+            await asyncio.wait_for(wait_for_set_project(), timeout=wait)
         except asyncio.TimeoutError:
-            logger.debug("No SET_PROJECT received, using default working directory")
             self._project_set.set()
+            if self._handshake_announced:
+                logger.warning("Announced handshake never arrived; closing so the client retries")
+                await self._ws.close(
+                    code=HANDSHAKE_MISSED_CLOSE_CODE, reason="handshake not received"
+                )
+                raise WebSocketDisconnect(code=HANDSHAKE_MISSED_CLOSE_CODE)
+            logger.info("No SET_PROJECT received, using default working directory")
 
     async def _setup(self) -> None:
         """Initialize PTY session, file watcher, and provider registry."""
@@ -821,7 +850,6 @@ class ConnectionHandler:
             "idleSeconds": idle_seconds,
             "wslHealthy": wsl_healthy,
             "connectionId": self._connection_id,
-            "group": self._session.group if self._session is not None else None,
             "cliAgent": {
                 "id": adapter.id,
                 "displayName": adapter.display_name,
@@ -834,6 +862,13 @@ class ConnectionHandler:
                 },
             },
         }
+
+        # The page moves its tab to the group named here. A connection that
+        # named no session is on a shell of its own, which has no group to
+        # report; that is not "no group", and sending null would pull the tab
+        # out of its workspace.
+        if self._session is not None and self._session_id:
+            message["group"] = self._session.group
 
         # A change in these between connects tells a tab the backend
         # upgraded itself and may now serve a newer page than the tab runs.
@@ -1181,6 +1216,8 @@ class ConnectionHandler:
                 await self._handle_set_group(data)
             elif msg_type == MessageType.CLOSE_SESSION:
                 await self._handle_close_session()
+            elif msg_type == MessageType.SET_PROJECT:
+                await self._handle_late_set_project()
             elif msg_type == MessageType.PING:
                 await self._send({"type": MessageType.PONG, "t": data.get("t")})
             elif msg_type == MessageType.REPAINT:
@@ -1341,6 +1378,21 @@ class ConnectionHandler:
             return
         logger.info("Tab closed; ending session %s", session.id)
         await get_registry().remove(session.id)
+
+    async def _handle_late_set_project(self) -> None:
+        """The project was named after this connection had been set up.
+
+        The handshake is read once, before setup, and cannot be applied to a
+        connection already wired to another folder and to no session. Left
+        alone the page would believe its tab is attached. Closing makes the
+        client reconnect, and a reconnect sends the handshake first.
+        """
+        logger.warning(
+            "SET_PROJECT arrived after setup on %s; closing so the client handshakes again",
+            self._working_dir,
+        )
+        self._closed = True
+        await self._ws.close(code=HANDSHAKE_MISSED_CLOSE_CODE, reason="handshake arrived late")
 
     def _assign_initial_group(self) -> None:
         """Put a new session in the group the tab asked for, else by folder.

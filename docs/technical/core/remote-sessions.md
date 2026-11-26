@@ -1,7 +1,7 @@
 ---
 title: Remote Sessions
 created: 2026-10-14
-updated: 2026-11-25
+updated: 2026-11-26
 status: active
 tags: [technical, backend, frontend, sessions, mobile, transport, attention, push]
 ---
@@ -21,6 +21,24 @@ A tab's PTY session lives on the backend, but until October 2026 only the browse
 The reader outlives connections. Output produced while nobody is attached lands in the buffer, which is what makes "start on the desktop, check from the phone" work.
 
 A connection's `_drain_output` coalesces everything already queued into one `output` frame. A TUI redraw arrives as a burst of small PTY reads; sending them as one JSON message with one `seq` halves the frame count and the xterm writes.
+
+## Handshake: the client names its session first
+
+A connection is set up once, on the first thing the client says. `set-project` carries the folder and the `sessionId`; the handler reads it in `ConnectionHandler._wait_for_project` (`backend/websocket.py`) and only then wires the PTY, the file watcher and the rest.
+
+A client that never sends one is given the backend's own working directory and a shell of its own, after `HANDSHAKE_DEFAULT_WAIT`. That default is right for a client with no session in mind and wrong for a tab: when every tab reconnects at once after an in-place upgrade, the page can take longer than the wait to send its handshakes. On 26 November 2026 four of ten tabs were set up this way after an upgrade. Each showed a fresh shell in the home folder where its agent had been, while the agent ran on unattached, and each left its workspace, because the `connected` reply said `group: null` (see [[tab-groups#The session owns its group]]).
+
+Three rules keep a tab from being set up without its session:
+
+| Rule | Where |
+|---|---|
+| A client with a project to name says so in the socket URL (`handshake=1`). The backend then waits `HANDSHAKE_ANNOUNCED_WAIT` and, if nothing comes, closes instead of falling back | `WebSocketClient.buildAuthedUrl`, `_announces_handshake` |
+| A `set-project` that arrives after setup closes the socket with `HANDSHAKE_MISSED_CLOSE_CODE`. The client reconnects as it does after any drop, and a reconnect sends the handshake first. This covers a page loaded before the first rule existed, which is the page in the window during the upgrade that introduces it | `_handle_late_set_project` |
+| `connected` carries `group` only for a connection that named a session | `_send_connected` |
+
+Closing was chosen over re-running setup in place: by then the connection has a watcher, a provider registry and a shell on the wrong folder, and tearing those down is what closing already does.
+
+The log shows that the backend gave up on those four handshakes, not why they were late. The page being busy redrawing ten terminals is the likely reason and was not measured.
 
 ## Reconnect: delta or cold
 

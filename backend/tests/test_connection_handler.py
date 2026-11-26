@@ -396,6 +396,94 @@ class TestSetProject:
         assert handler._session_id is None
 
     @pytest.mark.asyncio
+    async def test_announced_handshake_is_waited_for_past_the_default_wait(
+        self, temp_dir: Path
+    ):
+        """A page that said a handshake is coming is not set up without it.
+
+        Every tab reconnects at once after an upgrade and the page can be too
+        busy to send its handshakes for seconds; a tab set up on the default
+        folder in the meantime is attached to no session at all.
+        """
+        config = make_mock_config(working_dir=Path("/default"))
+        ws = make_mock_websocket()
+
+        async def late_receive():
+            await asyncio.sleep(0.05)
+            return {
+                "type": MessageType.SET_PROJECT,
+                "path": str(temp_dir),
+                "sessionId": "late-session",
+            }
+
+        ws.receive_json.side_effect = late_receive
+
+        handler = ConnectionHandler(ws, config)
+        handler._handshake_announced = True
+        with patch("backend.websocket.HANDSHAKE_DEFAULT_WAIT", 0.01):
+            await handler._wait_for_project()
+
+        assert handler._session_id == "late-session"
+        assert handler._working_dir == temp_dir.resolve()
+        ws.close.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_announced_handshake_that_never_comes_closes_the_connection(
+        self, temp_dir: Path
+    ):
+        """With no handshake there is nothing to attach to, so the client retries."""
+        from starlette.websockets import WebSocketDisconnect
+
+        from backend.websocket import HANDSHAKE_MISSED_CLOSE_CODE
+
+        config = make_mock_config(working_dir=temp_dir)
+        ws = make_mock_websocket()
+
+        async def silent_receive():
+            await asyncio.sleep(10)
+
+        ws.receive_json.side_effect = silent_receive
+
+        handler = ConnectionHandler(ws, config)
+        handler._handshake_announced = True
+        with patch("backend.websocket.HANDSHAKE_ANNOUNCED_WAIT", 0.05):
+            with pytest.raises(WebSocketDisconnect):
+                await handler._wait_for_project()
+
+        assert ws.close.await_args.kwargs["code"] == HANDSHAKE_MISSED_CLOSE_CODE
+        assert handler._session_id is None
+
+    @pytest.mark.asyncio
+    async def test_set_project_after_setup_closes_so_the_client_handshakes_again(
+        self, temp_dir: Path
+    ):
+        """A handshake that arrives after the wait gave up is not dropped.
+
+        The connection is already set up on the default folder with no
+        session, and the page believes it is attached. Closing makes the
+        client reconnect, which sends the handshake first.
+        """
+        from backend.websocket import HANDSHAKE_MISSED_CLOSE_CODE
+
+        config = make_mock_config(working_dir=temp_dir)
+        ws = make_mock_websocket()
+        handler = ConnectionHandler(ws, config)
+
+        await handler._handle_message({
+            "type": MessageType.SET_PROJECT,
+            "path": str(temp_dir),
+            "sessionId": "late-session",
+        })
+
+        assert ws.close.await_args.kwargs["code"] == HANDSHAKE_MISSED_CLOSE_CODE
+        assert handler._closed is True
+        error_frames = [
+            c.args[0] for c in ws.send_json.call_args_list
+            if c.args[0].get("type") == MessageType.ERROR
+        ]
+        assert error_frames == []
+
+    @pytest.mark.asyncio
     async def test_wait_for_project_invalid_path(self, temp_dir: Path):
         """If SET_PROJECT has invalid path, working dir stays at default."""
         config = make_mock_config(working_dir=temp_dir)
@@ -575,6 +663,53 @@ class TestConnectedMessage:
         sent = ws.send_json.call_args[0][0]
         assert sent["type"] == MessageType.CONNECTED
         assert sent["sessionRestored"] is False
+
+    @pytest.mark.asyncio
+    async def test_connection_that_named_no_session_reports_no_group(self, temp_dir: Path):
+        """A shell of the connection's own is not a session in no group.
+
+        A page takes the group in this message as its session's word and
+        moves the tab; a null here pulls the tab out of its workspace.
+        """
+        config = make_mock_config(working_dir=temp_dir)
+        ws = make_mock_websocket()
+        handler = ConnectionHandler(ws, config)
+        handler._is_new_session = True
+        handler._session_id = None
+        handler._session = PTYSession(id="", project_path=temp_dir)
+        handler._session.add_terminal(SessionKey.CLAUDE, make_mock_pty())
+        handler._user_config = MagicMock()
+        handler._user_config.to_dict.return_value = {}
+        handler._user_config.behavior.splash.health_check_timeout = 5
+
+        with patch("backend.websocket.load_session", return_value=None):
+            await handler._send_connected()
+
+        sent = ws.send_json.call_args[0][0]
+        assert sent["type"] == MessageType.CONNECTED
+        assert "group" not in sent
+
+    @pytest.mark.asyncio
+    async def test_connected_carries_the_sessions_group(self, temp_dir: Path):
+        config = make_mock_config(working_dir=temp_dir)
+        ws = make_mock_websocket()
+        handler = ConnectionHandler(ws, config)
+        handler._is_new_session = True
+        handler._session_id = "test"
+        handler._session = PTYSession(id="test", project_path=temp_dir)
+        handler._session.add_terminal(SessionKey.CLAUDE, make_mock_pty())
+        handler._user_config = MagicMock()
+        handler._user_config.to_dict.return_value = {}
+        handler._user_config.behavior.splash.health_check_timeout = 5
+
+        with patch("backend.websocket.load_session", return_value=None):
+            await handler._send_connected()
+        assert ws.send_json.call_args[0][0]["group"] is None
+
+        handler._session.group = "AirPLAi"
+        with patch("backend.websocket.load_session", return_value=None):
+            await handler._send_connected()
+        assert ws.send_json.call_args[0][0]["group"] == "AirPLAi"
 
     @pytest.mark.asyncio
     async def test_restored_session_sends_scrollback(self, temp_dir: Path):

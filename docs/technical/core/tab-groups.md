@@ -1,7 +1,7 @@
 ---
 title: Tab Groups
 created: 2026-11-25
-updated: 2026-11-25
+updated: 2026-11-26
 status: active
 tags: [technical, frontend, backend, tabs, groups, attention]
 ---
@@ -32,7 +32,7 @@ The backend is the authority so that every device attached to a session agrees. 
 
 The third rule is the important one. A tab keeps a copy of its group in browser storage, and that copy can be stale: another device may have moved the session since. If an existing session accepted the client's copy, opening an old browser tab would undo the move. The saved copy is used only when the session is being created, which is what brings tabs back in their groups after the backend restarts and has forgotten them.
 
-The `connected` reply carries the session's group and the tab adopts it. `set-group` moves a session, and every other client attached to it receives `group-changed`. Message shapes are in [[../reference/websocket-protocol]].
+The `connected` reply carries the session's group and the tab adopts it. A connection that named no session gets no `group` field at all, and the tab keeps the group it has: a null there would be read as the session's word and pull the tab out of its workspace (see [[remote-sessions#Handshake: the client names its session first]]). `set-group` moves a session, and every other client attached to it receives `group-changed`. Message shapes are in [[../reference/websocket-protocol]].
 
 ## Definitions: colour and folders
 

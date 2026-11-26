@@ -98,6 +98,20 @@ describe("set-project handshake", () => {
     expect(client.getLastSeq()).toEqual({ claude: 42 });
   });
 
+  it("announces the handshake in the URL, so the backend waits for it", () => {
+    // A page reconnecting every tab at once can take seconds to send the
+    // handshakes; a backend that gave up would attach the tab to nothing.
+    const { socket } = connectedClient();
+    expect(new URL(socket.url).searchParams.get("handshake")).toBe("1");
+  });
+
+  it("announces nothing when it has no project to name", () => {
+    const client = new WebSocketClient("ws://test/ws");
+    client.connect();
+    const socket = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!;
+    expect(new URL(socket.url).searchParams.has("handshake")).toBe(false);
+  });
+
   it("forgets positions when pointed at a different session", () => {
     const { client, socket } = connectedClient();
     socket.simulateMessage({ type: MessageType.OUTPUT, data: "a", sessionKey: "claude", seq: 7 });

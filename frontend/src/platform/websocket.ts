@@ -56,6 +56,9 @@ import type {
   ViewFileMessage,
 } from "../types";
 
+// Must match HANDSHAKE_QUERY_FLAG in backend/websocket.py.
+const HANDSHAKE_QUERY_FLAG = "handshake=1";
+
 interface WebSocketEvents {
   connected: ConnectedMessage;
   disconnected: void;
@@ -492,6 +495,13 @@ export class WebSocketClient extends BaseWSClient {
     if (googleToken) {
       const sep = urlWithAuth.includes("?") ? "&" : "?";
       urlWithAuth = `${urlWithAuth}${sep}google_token=${encodeURIComponent(googleToken)}`;
+    }
+
+    // Tells the backend a set-project follows, so it waits for it instead of
+    // setting the connection up on its default folder with no session.
+    if (this.project) {
+      const sep = urlWithAuth.includes("?") ? "&" : "?";
+      urlWithAuth = `${urlWithAuth}${sep}${HANDSHAKE_QUERY_FLAG}`;
     }
 
     return urlWithAuth;
