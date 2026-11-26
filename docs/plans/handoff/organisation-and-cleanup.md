@@ -5,7 +5,7 @@ updated: 2026-11-26
 status: in-flight
 ---
 
-# Resume: check the per-tab strip in the real app, get Gary's verdict on the board and daylight, then the cleanup skill
+# Resume: find why upgrades leave their unpacked copy in /tmp, get Gary's verdict on the strip, board and daylight, then the cleanup skill
 
 ## Active plans
 
@@ -27,7 +27,7 @@ This file is persistent working memory for one in-flight task. Procedure:
 
 ## Where we are
 
-Everything through `19e8508f` is committed, pushed and installed (26 Nov 17:40): the rebuilt board, live Linear data, the workspace list that slides in at the right, the strip that follows each tab's own stream, the efficiency pass, and the handshake fix. No errors in `~/.cade/logs/cade.log` since the 17:03 install. Still not looked at since the strip went in: what each tab's strip reports in the real app, and the installed backend's process counts.
+Everything through `19e8508f` is committed, pushed and installed (26 Nov 17:40): the rebuilt board, live Linear data, the workspace list that slides in at the right, the strip that follows each tab's own stream, the efficiency pass, and the handshake fix. No errors in `~/.cade/logs/cade.log` since the 17:03 install. The installed backend was sampled for 65 s with ten tabs attached and started 26 processes (21 `git`, 5 `gh`). What each tab's strip should say was worked out from source against the live sessions and given to Gary to compare with his screen, since nothing can read a tab's strip from outside without attaching to it; his answer is still open.
 
 The handshake fix (`docs/technical/core/remote-sessions.md`, "Handshake") was seen working on its own install: four tabs sent their handshake 4 to 7 s late, were closed and were back on their own sessions and workspaces 12 s after the upgrade. Gary's window is on the page from before the fix until he clicks the update marker; from then on a late tab is waited for instead of bounced.
 
@@ -48,7 +48,7 @@ Nothing. Untracked files from other sessions, leave alone and never stage: `AGEN
 
 ## Next actions (ordered)
 
-1. Look at what each tab's strip reports in the installed app, and the backend's process counts, which the 17:03 install was never followed by. `[safe]`, without attaching anything to a live session.
+1. **Upgrades leave their unpacked copy behind.** On 26 Nov 18:35 `/tmp` held 31 `_MEI*` directories from `cade-backend` (6.8 GB, one in use) on a disk with 20 GB free, and the backend was a chain of 26 waiting launcher processes, one per upgrade since it started. `remove_old_extraction` (`backend/upgrade.py`, called from `backend/main.py`) is meant to delete the previous copy and is not doing it; it swallows its errors, so start by making it say why. Deleting the dead directories by hand is Gary's call: check first that no process maps files in them. `[safe]` to diagnose, `[confirm]` to delete.
 2. Ask how the rebuilt board reads (streams grouped as needs you / in review / close out / in progress, `v` for a view by parent ticket, `]` `[` by section), and whether daylight is readable now. His Claude Code theme was `dark-daltonized`, which is why agent output and the agent-drawn cursor were pale. `[safe]`
 3. The cleanup skill (`docs/plans/worktree-cleanup.md`): takes the board's "finished" worktrees, shows what it will remove, waits for a yes, uses only `git worktree remove` and `git branch -d`. `[safe]` to write; running it is Gary's.
 4. Keep the board warm in the background for projects with open tabs, if the full read still drags. `[safe]`
