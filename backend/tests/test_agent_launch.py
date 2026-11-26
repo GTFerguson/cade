@@ -105,7 +105,7 @@ def test_codex_adapter_capabilities():
     adapter = CodexAdapter()
     assert adapter.id == "codex"
     assert adapter.display_name == "Codex"
-    assert adapter.capabilities.mcp is True
+    assert adapter.capabilities.mcp is False
     assert adapter.capabilities.hooks is False
     assert adapter.capabilities.session_resolution is False
     assert adapter.capabilities.handoff_resume is True
@@ -137,44 +137,71 @@ def test_codex_from_descriptor():
     assert adapter.command == "codex"
 
 
-def test_codex_install_mcp_config_creates_toml(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        "backend.terminal.cli_agent_adapters._codex_config_path",
-        lambda: tmp_path / "config.toml",
-    )
-    servers = {
-        "cade-orchestrator": {
-            "command": "/usr/bin/python3",
-            "args": ["mcp_server.py"],
-            "env": {"CADE_PORT": "3000"},
-        },
-    }
-    adapter = CodexAdapter()
-    adapter.install_mcp_config(servers)
-    content = (tmp_path / "config.toml").read_text()
-    assert "[mcp_servers." in content
-    assert "cade-orchestrator" in content
-    assert "enabled = true" in content
+CADE_SERVERS = {
+    "cade-orchestrator": {
+        "command": "/usr/bin/cade-backend",
+        "args": ["mcp-server", "--type", "orchestrator"],
+        "env": {"CADE_CONNECTION_ID": "abc"},
+    },
+    "cade-permissions": {
+        "command": "/usr/bin/cade-backend",
+        "args": ["mcp-server", "--type", "permissions"],
+    },
+}
 
 
-def test_codex_install_mcp_config_preserves_existing(tmp_path, monkeypatch):
+def test_codex_install_adds_no_mcp_servers(tmp_path, monkeypatch):
+    """Codex has one config for every thread on the machine.
+
+    Servers written there were started by every Codex thread, in a CADE tab
+    or not, each unpacking the backend and all carrying one tab's connection.
+    """
     config_path = tmp_path / "config.toml"
     config_path.write_text('[model]\ndefault = "gpt-4"\n')
     monkeypatch.setattr(
         "backend.terminal.cli_agent_adapters._codex_config_path",
         lambda: config_path,
     )
-    servers = {
-        "cade-orchestrator": {
-            "command": "python3",
-            "args": ["server.py"],
-        },
-    }
-    adapter = CodexAdapter()
-    adapter.install_mcp_config(servers)
+    CodexAdapter().install_mcp_config(CADE_SERVERS)
     content = config_path.read_text()
+    assert "mcp_servers" not in content
+    assert "cade-backend" not in content
     assert 'default = "gpt-4"' in content
-    assert "cade-orchestrator" in content
+
+
+def test_codex_install_clears_servers_an_older_build_wrote(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        '[model]\ndefault = "gpt-4"\n\n'
+        '[mcp_servers.linear]\nurl = "https://example.invalid/mcp"\n\n'
+        '[mcp_servers."cade-orchestrator"]\ncommand = "/usr/bin/cade-backend"\n'
+        'args = ["mcp-server", "--type", "orchestrator"]\nenabled = true\n# __cade_managed\n\n'
+        '[mcp_servers."cade-permissions"]\ncommand = "/usr/bin/cade-backend"\n'
+        'args = ["mcp-server", "--type", "permissions"]\nenabled = true\n# __cade_managed\n'
+    )
+    monkeypatch.setattr(
+        "backend.terminal.cli_agent_adapters._codex_config_path",
+        lambda: config_path,
+    )
+    CodexAdapter().install_mcp_config(CADE_SERVERS)
+    content = config_path.read_text()
+    assert "cade-orchestrator" not in content
+    assert "cade-permissions" not in content
+    assert "[mcp_servers.linear]" in content
+    assert 'default = "gpt-4"' in content
+
+
+def test_codex_install_still_sets_the_turn_complete_notify(tmp_path, monkeypatch):
+    """The notify command is how a Codex tab says it has finished."""
+    config_path = tmp_path / "config.toml"
+    monkeypatch.setattr(
+        "backend.terminal.cli_agent_adapters._codex_config_path",
+        lambda: config_path,
+    )
+    CodexAdapter().install_mcp_config(CADE_SERVERS)
+    content = config_path.read_text()
+    assert "notify = " in content
+    assert "attention.py" in content
 
 
 def test_codex_remove_mcp_config(tmp_path, monkeypatch):

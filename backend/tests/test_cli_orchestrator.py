@@ -100,3 +100,31 @@ def test_prepare_cli_orchestrator_env(tmp_path: Path, monkeypatch: pytest.Monkey
     )
     assert "CADE_CLI_MCP_CONFIG" in env
     assert env["CADE_CLI_MCP_CONFIG"] == str(mcp_config_path("sess-1", "conn-xyz"))
+
+
+def test_a_codex_tab_gets_its_notify_and_no_servers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Codex takes no servers, and still needs its turn-complete notify.
+
+    The notify is written by the same adapter call that used to write the
+    servers, so that call must be made for an agent without MCP too.
+    """
+    from backend.config import CliAgent
+
+    codex_config = tmp_path / "codex" / "config.toml"
+    monkeypatch.setattr("backend.orchestrator.mcp_config.mcp_config_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        "backend.terminal.cli_agent_adapters._codex_config_path", lambda: codex_config
+    )
+
+    prepare_cli_orchestrator_env(
+        "conn-xyz",
+        backend_port=3000,
+        session_id="sess-1",
+        agent=CliAgent(command="codex", adapter_id="codex"),
+    )
+
+    written = codex_config.read_text()
+    assert "attention.py" in written
+    assert "mcp_servers" not in written

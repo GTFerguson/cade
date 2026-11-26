@@ -170,17 +170,19 @@ def prepare_cli_orchestrator_env(
     from backend.config import get_config
     from backend.terminal.cli_agent_adapters import adapter_from_descriptor
 
+    # Called for every agent, not only those that take servers: an adapter
+    # also uses this to set what else it keeps in the agent's own config, and
+    # to clear servers an earlier build wrote there.
     adapter = adapter_from_descriptor(agent or get_config().cli_agent)
-    if adapter.capabilities.mcp:
-        servers = json.loads(path.read_text(encoding="utf-8")).get("mcpServers", {})
-        try:
-            adapter.install_mcp_config(servers, project_dir)
-        except Exception as exc:
-            logger.warning(
-                "Failed to install MCP config for %s: %s",
-                adapter.display_name,
-                exc,
-            )
+    servers = json.loads(path.read_text(encoding="utf-8")).get("mcpServers", {})
+    try:
+        adapter.install_mcp_config(servers, project_dir)
+    except Exception as exc:
+        logger.warning(
+            "Failed to install MCP config for %s: %s",
+            adapter.display_name,
+            exc,
+        )
 
     env = {"CADE_CLI_MCP_CONFIG": str(path)}
     if session_id:

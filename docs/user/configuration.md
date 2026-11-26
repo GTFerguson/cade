@@ -222,10 +222,10 @@ export CADE_CLI_AGENT_ADAPTER=codex
 
 ### MCP Tool Integration
 
-CADE attaches its orchestrator and permissions tools to whichever agent is selected:
+CADE attaches its orchestrator and permissions tools to the selected agent where that can be done for one session:
 
 - **Claude Code** — passes `--mcp-config <path>` on the command line.
-- **Codex** — merges CADE servers into `~/.codex/config.toml` (removed on session teardown).
+- **Codex** — none. Codex has a single config file for every Codex session on the machine, so tools written there would be started by all of them, not only those in CADE. CADE sets only its notify command in `~/.codex/config.toml`, which is how a Codex tab says it has finished.
 - **Cursor** — merges CADE servers into `.cursor/mcp.json` in the project directory (removed on session teardown).
 
 ### Capabilities by Agent
@@ -233,7 +233,7 @@ CADE attaches its orchestrator and permissions tools to whichever agent is selec
 | Capability | Claude Code | Codex | Cursor |
 |------------|:-----------:|:-----:|:------:|
 | Prompt seeding | yes | yes | yes |
-| MCP tools | yes | yes | yes |
+| MCP tools | yes | no | yes |
 | Hooks (file events) | yes | no | no |
 | Permission delegation | yes | no | no |
 | Session resolution | yes | no | no |

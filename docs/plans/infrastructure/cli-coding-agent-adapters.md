@@ -138,7 +138,7 @@ Status: **shipped**. Each adapter implements `install_mcp_config()` and
 writing the canonical JSON. Session teardown calls `remove_adapter_mcp_config()`.
 
 - Claude Code: no-op — reads the generated JSON via `--mcp-config` CLI arg.
-- Codex: merges `[mcp_servers.*]` entries into `~/.codex/config.toml`.
+- Codex: writes no servers, and clears any an earlier build wrote; only the notify command goes into `~/.codex/config.toml`. The file is shared by every Codex thread on the machine.
 - Cursor: merges `mcpServers` entries into `.cursor/mcp.json` (project-level).
 
 ## Phase 3 - Codex Adapter
@@ -202,7 +202,7 @@ Status: **shipped**.
 
 ## Open Questions
 
-- ~~Does Codex CLI currently support MCP config injection?~~ **Answered**: No `--mcp-config` flag. Uses `~/.codex/config.toml`. CADE merges entries directly.
+- ~~Does Codex CLI currently support MCP config injection?~~ **Answered**: No `--mcp-config` flag. Uses `~/.codex/config.toml`, shared by every Codex thread on the machine, so CADE writes no servers there (it did until 26 November 2026, and every thread started both).
 - ~~Does Cursor CLI currently support MCP config injection?~~ **Answered**: No `--mcp-config` flag. Uses `.cursor/mcp.json` with auto-discovery. `--approve-mcps` handles approval.
 - ~~Do either expose hook/event callbacks?~~ **Answered**: Neither Codex nor Cursor has hooks. File watcher fallback applies.
 - Should per-project `.cade/launch.yml` be allowed to select the CLI coding agent, or should it remain user/global configuration only?

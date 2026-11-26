@@ -9,9 +9,9 @@ MCP integration strategy differs by agent:
 
 - **Claude Code** passes ``--mcp-config <path>`` on every invocation, pointing
   at a CADE-generated JSON file under ``~/.cade/mcp/``.
-- **Codex** reads ``~/.codex/config.toml`` (or project-level
-  ``.codex/config.toml``).  CADE merges its server entries into the user-level
-  file and removes them on teardown.
+- **Codex** reads ``~/.codex/config.toml``, which every Codex thread on the
+  machine shares, so CADE gives it no servers (see ``CodexAdapter``) and
+  writes only its notify command there.
 - **Cursor** reads ``.cursor/mcp.json`` (project or global).  CADE merges its
   server entries into the project-level file and removes them on teardown.
 
@@ -30,8 +30,6 @@ from collections.abc import Callable
 from typing import Protocol
 
 logger = logging.getLogger(__name__)
-
-_CADE_MCP_MARKER = "__cade_managed"
 
 # Standard CADE MCP server names injected by write_mcp_config().
 CADE_MCP_SERVER_NAMES = frozenset({"cade-orchestrator", "cade-permissions"})
@@ -172,62 +170,6 @@ def _codex_config_path() -> Path:
     return Path.home() / ".codex" / "config.toml"
 
 
-def _merge_codex_mcp_servers(config_path: Path, servers: dict) -> None:
-    """Merge CADE MCP servers into an existing Codex TOML config.
-
-    Writes only the ``[mcp_servers.*]`` sections for CADE-managed servers,
-    preserving everything else in the file.  Uses a simple line-based approach
-    to avoid requiring a TOML *writer* dependency.
-    """
-    cade_keys = set(servers.keys())
-
-    # Read existing content, stripping any previous CADE-managed blocks.
-    existing_lines: list[str] = []
-    if config_path.exists():
-        in_cade_block = False
-        for line in config_path.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if stripped.startswith("[mcp_servers."):
-                name = stripped.split(".", 1)[1].rstrip("]").strip().strip('"')
-                if name in cade_keys:
-                    in_cade_block = True
-                    continue
-                in_cade_block = False
-            elif stripped.startswith("[") and in_cade_block:
-                in_cade_block = False
-            if in_cade_block:
-                continue
-            existing_lines.append(line)
-
-    # Build new CADE blocks.
-    blocks: list[str] = []
-    for name, srv in servers.items():
-        lines = [f'[mcp_servers."{name}"]']
-        lines.append(f"command = {json.dumps(srv['command'])}")
-        if srv.get("args"):
-            args_toml = ", ".join(json.dumps(a) for a in srv["args"])
-            lines.append(f"args = [{args_toml}]")
-        if srv.get("env"):
-            env_pairs = ", ".join(
-                f"{json.dumps(k)} = {json.dumps(v)}"
-                for k, v in srv["env"].items()
-            )
-            lines.append(f"env = {{ {env_pairs} }}")
-        lines.append("enabled = true")
-        lines.append(f"# {_CADE_MCP_MARKER}")
-        blocks.append("\n".join(lines))
-
-    # Combine and write.
-    content = "\n".join(existing_lines).rstrip("\n")
-    if content:
-        content += "\n\n"
-    content += "\n\n".join(blocks) + "\n"
-
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(content, encoding="utf-8")
-    logger.info("Merged CADE MCP servers into %s", config_path)
-
-
 _CADE_NOTIFY_MARKER = "cade-managed notify"
 
 
@@ -289,6 +231,9 @@ def _remove_codex_mcp_servers(config_path: Path, server_names: set[str]) -> None
         if in_cade_block:
             continue
         out.append(line)
+    if len(out) == len(lines):
+        # Nothing of CADE's in the file; leave the user's config untouched.
+        return
     cleaned = "\n".join(out).strip()
     if cleaned:
         config_path.write_text(cleaned + "\n", encoding="utf-8")
@@ -302,9 +247,12 @@ class CodexAdapter:
     """OpenAI Codex CLI adapter.
 
     Codex reads MCP servers from ``~/.codex/config.toml`` (user-level) or
-    ``.codex/config.toml`` (project-level).  There is no ``--mcp-config``
-    flag, so CADE merges its servers into the user-level file and removes
-    them on session teardown.
+    ``.codex/config.toml`` (project-level) and has no ``--mcp-config`` flag,
+    so it cannot be given servers for one session. CADE therefore gives it
+    none: the user-level file belongs to every Codex thread on the machine,
+    and servers written there are started by all of them, in a CADE tab or
+    not, each as its own copy of the backend and all carrying the connection
+    of whichever tab wrote the file last. Only the notify command is set.
     """
 
     command: str = "codex"
@@ -315,7 +263,7 @@ class CodexAdapter:
     display_name: str = "Codex"
     capabilities: CliAgentCapabilities = CliAgentCapabilities(
         prompt_seed=True,
-        mcp=True,
+        mcp=False,
         hooks=False,
         permissions=False,
         session_resolution=False,
@@ -338,7 +286,8 @@ class CodexAdapter:
     def install_mcp_config(
         self, servers: dict, project_dir: Path | None = None
     ) -> None:
-        _merge_codex_mcp_servers(_codex_config_path(), servers)
+        # Clears what a build that did write servers here left behind.
+        _remove_codex_mcp_servers(_codex_config_path(), CADE_MCP_SERVER_NAMES)
         # Codex has no hooks, but its notify command fires on turn
         # completion, which is enough for "done, come back".
         _merge_codex_notify(
