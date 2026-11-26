@@ -28,9 +28,9 @@ what is waiting.
 
 | # | Phase | Why this order |
 |---|-------|----------------|
-| 1 | Tab groups | Felt daily, and it settles where tab state lives |
-| 2 | One project picker | Small, and the picker is where a tab group is chosen |
-| 3 | Pull request monitoring | Builds on the tab and group badges from phase 1 |
+| 1 | Workspaces | Felt daily, and it settles where tab state lives |
+| 2 | One project picker | Small, and the picker is where a workspace is chosen |
+| 3 | Pull request monitoring | Builds on the tab and workspace marks from phase 1 |
 | 4 | Organisational surfaces | Needs phases 1–3 to know what it is organising |
 | 5 | Mobile experience | Follows the desktop model once it has settled |
 | 6 | Cleanup and modernisation | Runs alongside; each item is independent |
@@ -45,16 +45,15 @@ Shipped 25 Nov 2026: one keyboard-driven picker on desktop, browser and phone, w
 
 ## 3. Pull request monitoring
 
-Step 1 shipped 25 Nov 2026: a badge on each tab for its branch's pull request, and the pull request in the strip above the terminal. See [[../technical/core/pull-requests]]. The list per workspace, notifications, and opening an agent on a pull request are in [[pr-monitoring]].
+Step 1 shipped 25 and 26 Nov 2026: a badge on each tab for its pull request, and a strip above the terminal with the tab's ticket, pull request, branch and handoff. See [[../technical/core/pull-requests]]. The list per workspace, notifications, and opening an agent on a pull request are in [[pr-monitoring]].
 
 ## 4. Organisational surfaces
 
-Begun 26 Nov 2026 as the board (`Alt+b`): one screen per project with each ticket and the handoff, worktree, branch and pull request that carry it, plus the handoffs and worktrees no ticket claims. See [[../technical/core/board]]. The strip above each tab's terminal ([[../technical/core/pull-requests]]) is the same information for the tab in front.
+Begun 26 Nov 2026 as the board (`Alt+b`): one screen per project listing its streams of work, each a handoff with the tickets, worktrees, branches and pull requests it carries, grouped by what each needs, plus the handoffs and worktrees no ticket claims. Ticket titles, statuses and parents are read from Linear when a key is set up. See [[../technical/core/board]]. The strip above each tab's terminal ([[../technical/core/pull-requests]]) shows the same for that tab's own stream.
 
 **Still to do.**
 
-- Ticket titles and statuses read live from the tracker; today they come from the project's hand-kept `docs/plans/work-board.md`. Needs credentials CADE does not have.
-- A link from a running tab to its stream, for tabs opened on a project root instead of a worktree.
+- The board does not show which stream has a session running. A tab's stream is already worked out for its strip; the board does not use it.
 - Tickets and pull requests on the project picker's rows (mocked in `design/workspace-board-mock.html`).
 - Removing finished worktrees: [[worktree-cleanup]].
 
@@ -71,7 +70,7 @@ answering it.
 
 - **Quick-draw mode.** A queue of the sessions that are blocked, permission
   prompts first, then agents waiting on a question, then finished turns. The
-  screen shows one at a time: the tab name and group across the top, what
+  screen shows one at a time: the tab name and workspace across the top, what
   the agent is asking, and the answer controls. Answering moves straight to
   the next one. Empty queue, empty screen.
 - **One-tap permission answers.** A permission prompt becomes a card naming
@@ -82,8 +81,8 @@ answering it.
   recent tool calls as wrapped text and collapsed blocks, built from the
   agent's own session transcript rather than from terminal output. The raw
   terminal stays one tap away for anything the reading view does not cover.
-- The phone follows the desktop model for the rest: tab groups in the session
-  strip, pull request state, the same picker.
+- **Pull request state.** The phone shows neither the tab's badge nor the
+  strip above the terminal.
 
 **Key challenges.**
 
@@ -117,16 +116,16 @@ stay in that plan.
 
 Found by a size and dependency survey on 2026-11-25, not a line-by-line audit.
 
-**Oversized files to split by feature.**
+**Oversized files to split by feature.** The largest in the survey, biggest first; each was over a thousand lines.
 
-| File | Lines | Note |
-|------|-------|------|
-| `frontend/styles/workspace/dashboard.css` | 2,892 | |
-| `backend/websocket.py` | 2,511 | 30 message handlers in one class |
-| `backend/main.py` | 2,060 | 46 routes in one function |
-| `frontend/src/chat/chat-pane.ts` | 1,879 | |
-| `frontend/src/main.ts` | 1,370 | |
-| `frontend/src/tabs/project-context.ts` | 1,105 | |
+| File | Note |
+|------|------|
+| `frontend/styles/workspace/dashboard.css` | |
+| `backend/websocket.py` | Every message handler in one class |
+| `backend/main.py` | Every route in one function |
+| `frontend/src/chat/chat-pane.ts` | |
+| `frontend/src/main.ts` | |
+| `frontend/src/tabs/project-context.ts` | |
 
 **Other items.**
 
@@ -138,12 +137,6 @@ Found by a size and dependency survey on 2026-11-25, not a line-by-line audit.
   happy-dom installed, plus puppeteer.
 - Python dependencies are listed in both `requirements.txt` and
   `pyproject.toml`.
-- Six backend tests fail on `main` (chat-handler compact ×2, config loading,
-  memory graph ×2, nkrdn paths) and one MCP adapter test fails only in a full
-  run.
-- `docs/plans/` has a stale `readme.md` beside `README.md`, describing
-  subdirectories that no longer exist; mockups are split between `mockups/`
-  and `docs/plans/`.
 - The desktop loader replaces the document, which drops listeners the shell
   installed. Zoom and window dragging are restored in
   `frontend/src/platform/shell-listeners.ts`; anything else the shell injects

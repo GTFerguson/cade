@@ -1,7 +1,7 @@
 ---
 title: Pull Request and Work State on Tabs
 created: 2026-11-25
-updated: 2026-11-25
+updated: 2026-11-26
 status: active
 tags: [technical, backend, frontend, github, git, tabs, handoff]
 ---
@@ -11,7 +11,7 @@ tags: [technical, backend, frontend, github, git, tabs, handoff]
 How a tab shows where its work stands: the pull request for its branch as a badge on the tab, and a strip above its terminal with the pull request, the branch and what is pending on it, and the latest handoff. What is still planned is in [[../../plans/pr-monitoring]].
 
 > [!NOTE]
-> Built and tested, and checked against real `gh` output from a public repository. It had not yet run inside the installed app when this was written.
+> Built and tested, and checked against real `gh` output from a public repository. The per-tab strip was installed on 26 November 2026. What each tab's strip shows in the installed app has not been checked against what it should show.
 
 ## Purpose
 
@@ -91,6 +91,7 @@ The monitor owns every read it starts. A read begun on attach and left to run wi
 ## Design decisions
 
 - **`gh`, not the GitHub API.** The user is already signed in to `gh`, so CADE stores no GitHub credentials of its own.
+- **One `gh` account, never switched.** Checked on 25 Nov 2026: the one account `gh` is signed in to on this machine reads the work organisation's repositories as well as the personal ones, so nothing chooses between accounts. If a repository ever needs a second account, that account must be named per repository. Switching `gh`'s active account would change it under the agents running in the tabs, which use `gh` too.
 - **Not asked about a main branch.** A repository whose sessions all sit on its main branch has no pull request to find, and `gh` is not run for it.
 - **One call per repository.** Several tabs on one repository, or on worktrees of it, cost one request between them. A worktree is its own repository root to git, so each worktree is asked separately; that is correct, since each has its own branch.
 - **Matched by branch on every poll.** A tab's branch can change under it, so nothing is remembered about which pull request a session "has".
@@ -113,6 +114,7 @@ These are constants, not settings.
 ## Boundaries
 
 - One GitHub account: whichever `gh` has active. Repositories that account cannot read show nothing.
+- A pull request is matched on its head branch name alone. One opened from a fork can carry the same head branch name as a branch checked out here, and would then be shown for that branch.
 - No notifications, no list of pull requests, no roll-up on a closed workspace chip, and no rate-limit check. Those are in the plan.
 - A remote backend uses its own machine's `gh`, or shows nothing.
 - The phone shows neither the badge nor the strip.

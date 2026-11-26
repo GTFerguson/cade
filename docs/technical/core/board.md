@@ -144,7 +144,7 @@ A tab opened from the board joins the open workspace, runs the agent of the tab 
 - Linear only, and read only. Nothing is written to the tracker, and other trackers are not supported.
 - Without a key the titles, statuses and parents are what the board file says, and it records a parent for few tickets.
 - No cleanup. The board says which worktrees are finished; removing them is planned as a skill ([[../../plans/worktree-cleanup]]).
-- A running session is not shown against its stream. Tabs are often opened on the project root, so a tab's folder does not say which stream it serves.
+- A running session is not shown against its stream. Which stream a tab is on is worked out for the strip above its terminal (`backend/session_context.py`, see [[pull-requests]]); the board does not use it.
 - One project at a time: the board is for the project of the tab in front, not for a whole workspace.
 - Not on the phone.
 
