@@ -986,7 +986,7 @@ class App {
       ...(choice.agent && { agent: choice.agent }),
       // Choosing here is asking for the agent, whatever the idle-shell setting says.
       startAgent: true,
-      // The agent starts by reading the handoff, so the tab opens already at work.
+      // The agent is handed the brief's path; what to do with it is the user's to say.
       ...(choice.kind === "project" &&
         choice.handoff && { initialPrompt: handoffPrompt(choice.handoff) }),
     });
