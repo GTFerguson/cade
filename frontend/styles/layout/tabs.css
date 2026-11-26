@@ -236,6 +236,12 @@
   pointer-events: auto;
 }
 
+/* Beside the window buttons there is nothing to be pushed away from. */
+.tab-bar-window-controls .tab-update-marker {
+  margin-left: 0;
+  margin-right: 6px;
+}
+
 .tab-update-marker::before {
   content: "\2191";
   margin-right: 6px;

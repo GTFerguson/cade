@@ -93,6 +93,24 @@ describe("update marker", () => {
     expect(marker()).not.toBeNull();
   });
 
+  it("sits beside the window buttons in the desktop window, which would cover it anywhere else", () => {
+    (window as any).__TAURI__ = true;
+    try {
+      bar.setUpdateReady(true);
+      const controls = container.querySelector(".tab-bar-window-controls")!;
+      expect(controls.querySelector(".tab-update-marker")).not.toBeNull();
+      expect(controls.firstElementChild!.classList.contains("tab-update-marker")).toBe(true);
+      expect(container.querySelector(".tab-area .tab-update-marker")).toBeNull();
+    } finally {
+      delete (window as any).__TAURI__;
+    }
+  });
+
+  it("sits at the end of the tab area in a browser", () => {
+    bar.setUpdateReady(true);
+    expect(container.querySelector(".tab-area .tab-update-marker")).not.toBeNull();
+  });
+
   it("asks for the reload only when clicked", () => {
     const reload = vi.fn();
     bar.on("update-reload", reload);

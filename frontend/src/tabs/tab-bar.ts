@@ -220,7 +220,8 @@ export class TabBar implements Component {
     });
 
     tabArea.appendChild(addButton);
-    if (this.updateReady) tabArea.appendChild(this.createUpdateMarker());
+    // In the desktop window the marker goes beside the window buttons (below).
+    if (this.updateReady && !isTauri) tabArea.appendChild(this.createUpdateMarker());
     this.container.appendChild(tabArea);
 
     if (isTauri) {
@@ -230,6 +231,10 @@ export class TabBar implements Component {
       this.container.appendChild(spacerRight);
 
       const windowControls = this.createWindowControls();
+      // The window buttons sit over the right end of the bar and cover
+      // anything at the end of the tab area, which is where the marker went
+      // unseen. Inside their box it is always on top and where the eye goes.
+      if (this.updateReady) windowControls.prepend(this.createUpdateMarker());
       this.container.appendChild(windowControls);
     }
   }

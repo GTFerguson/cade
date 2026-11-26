@@ -172,6 +172,8 @@ Every install reloaded the window, which redraws every terminal, even when only 
 
 The install that first carries this still reloads the window once, because the page running at that moment is the old code.
 
+**The marker was invisible in the desktop window (found 26 Nov 2026).** It was placed at the end of the tab area. The desktop window's minimise, maximise and close buttons are positioned over the right end of the bar with their own background, so whenever the tab area reached the window's edge they covered it: the page had the notice, drew the marker, and nobody could see it, across four installs. It could not be found from a browser run, which has no window buttons, nor from the backend, which sent the right versions; it was found by loading the installed `shell.html` in a headless browser with the shell's globals set and asking which element was topmost at the marker's position. In the desktop window the marker now goes inside the window buttons' box, to their left (`TabBar.render`). The page also reports what it was told and what it drew as `build-notice` and `update-ready` client diagnostics in the backend log.
+
 ## Remaining phases
 
 3b. **UX.** "Upgrade pending" and "upgrading" toasts, and on the desktop a notice that the interface updates at the next restart; a "now" button; cancel from the UI. Reconnect after the exec is the ordinary backoff path today (1s, 2s, 4s), which covers the measured 1.6s gap.
