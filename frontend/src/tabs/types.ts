@@ -45,6 +45,13 @@ export interface TabInfo {
   // connect and never persisted to localStorage.
   initialPrompt?: string;
   chatHandoff?: string;
+  /**
+   * The tab was opened from the project picker, so its agent should start
+   * even where the user has asked for idle shells. Like the seeds above, it
+   * applies to the tab's first session and is never persisted: a tab brought
+   * back after a restart must not launch an agent nobody asked for.
+   */
+  startAgent?: boolean;
 }
 
 /**

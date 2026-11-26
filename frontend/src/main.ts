@@ -893,6 +893,7 @@ class App {
         tabDisplayName(tab),
         tab.group,
         tab.agent,
+        tab.startAgent,
       );
 
       // Auth is project-driven now: connect first; if the project's launch.yml
@@ -983,6 +984,8 @@ class App {
     const tab = this.tabManager.createTab(path, {
       ...(choice.group && { group: choice.group }),
       ...(choice.agent && { agent: choice.agent }),
+      // Choosing here is asking for the agent, whatever the idle-shell setting says.
+      startAgent: true,
       // The agent starts by reading the handoff, so the tab opens already at work.
       ...(choice.kind === "project" &&
         choice.handoff && { initialPrompt: handoffPrompt(choice.handoff) }),

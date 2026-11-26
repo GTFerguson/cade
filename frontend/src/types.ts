@@ -150,6 +150,8 @@ export interface SetProjectMessage extends BaseMessage {
    * between connects reloads the page.
    */
   reloadOnUpgrade?: boolean;
+  /** Start the tab's agent even where the user has asked for idle shells. */
+  startAgent?: boolean;
   /** Tab name, shown to other devices listing this backend's sessions. */
   label?: string;
   /** Tab group the tab was last in. Only a session being created takes it. */

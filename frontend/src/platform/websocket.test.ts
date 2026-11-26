@@ -117,6 +117,26 @@ describe("renaming a session", () => {
   });
 });
 
+describe("asking for the agent to be started", () => {
+  const handshakeFor = (startAgent?: boolean) => {
+    const client = new WebSocketClient("ws://test/ws");
+    client.sendSetProject("/proj", "tab-1", undefined, undefined, undefined, undefined, undefined, undefined, "codex", startAgent);
+    client.connect();
+    const socket = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!;
+    socket.simulateOpen();
+    return JSON.parse(socket.sent[0]!);
+  };
+
+  it("is sent with the handshake for a tab opened from the picker", () => {
+    expect(handshakeFor(true)).toMatchObject({ agent: "codex", startAgent: true });
+  });
+
+  it("is left out for any other tab", () => {
+    expect(handshakeFor()).not.toHaveProperty("startAgent");
+    expect(handshakeFor(false)).not.toHaveProperty("startAgent");
+  });
+});
+
 describe("closing a tab", () => {
   it("tells the backend, so the session ends with the tab", () => {
     const { client, socket } = connectedClient();

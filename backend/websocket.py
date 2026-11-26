@@ -140,6 +140,9 @@ class ConnectionHandler:
         # in SET_PROJECT when a tab is primed from the Plans/Handoffs pane
         # (resumable handoff launch). None for an ordinary connection.
         self._initial_prompt: str | None = None
+        # The tab was opened from the project picker, which is a request to
+        # start the agent chosen there. Sent once, in SET_PROJECT.
+        self._start_agent_requested = False
         # Watching and indexing are shared with other connections on the same
         # directory; this connection only queues what it must forward.
         self._project: ProjectServices | None = None
@@ -350,6 +353,7 @@ class ConnectionHandler:
                             self._session_label = label.strip()
                         self._requested_group = clean_group_name(data.get("group"))
                         self._requested_agent = clean_agent_id(data.get("agent"))
+                        self._start_agent_requested = data.get("startAgent") is True
                         last_seq = data.get("lastSeq")
                         if isinstance(last_seq, dict):
                             self._client_seqs = {
@@ -601,15 +605,20 @@ class ConnectionHandler:
     def _auto_start_agent(self) -> bool:
         """Whether to launch the CLI agent in a new terminal.
 
-        Either source can switch it off: the server config (``--no-claude`` /
-        ``CADE_AUTO_START_CLAUDE``) or ``behavior.toml``'s ``auto-start-claude``.
+        The server config (``--no-claude`` / ``CADE_AUTO_START_CLAUDE``) can
+        switch it off for everything. ``behavior.toml``'s ``auto-start-claude``
+        asks for idle shells, but only for tabs that did not say what they
+        want: a tab opened from the project picker named its agent, and one
+        opened on a handoff has a prompt to start from, so both start it.
         """
+        if not self._config.auto_start_claude:
+            return False
+        if self._start_agent_requested or self._initial_prompt:
+            return True
         session_behavior = (
             self._user_config.behavior.session if self._user_config else None
         )
-        return self._config.auto_start_claude and (
-            session_behavior is None or session_behavior.auto_start_claude
-        )
+        return session_behavior is None or session_behavior.auto_start_claude
 
     @property
     def _auto_resume_handoff(self) -> bool:

@@ -122,6 +122,16 @@ describe("collapsing", () => {
   });
 });
 
+describe("a tab opened from the picker", () => {
+  it("asks for its agent once, and does not carry the request into saved state", () => {
+    const tab = manager.createTab("/p/e", { agent: "codex", startAgent: true });
+    expect(tab.startAgent).toBe(true);
+    const kept = saved().tabs.find((t) => t.id === tab.id)!;
+    expect(kept.agent).toBe("codex");
+    expect(kept).not.toHaveProperty("startAgent");
+  });
+});
+
 describe("moving between workspaces", () => {
   beforeEach(() => {
     manager.setTabGroup(b.id, "Work");

@@ -58,6 +58,12 @@ The backend has one configured agent (`CADE_CLI_AGENT_ADAPTER`, Claude Code by d
 
 The picker remembers the last agent chosen on the device.
 
+### A picker choice starts the agent
+
+`behavior.toml` can ask for idle shells (`auto-start-claude = false`), so that any agent can be started by hand. That setting predates the picker's agent choice, and obeying it made every tab opened from the picker land in a shell with the chosen agent and handoff ignored. A tab opened from the picker therefore sends `startAgent` in `set-project`, and `ConnectionHandler._auto_start_agent` starts the agent for it, as it does for any tab with an `initialPrompt`. The idle-shell setting still applies to tabs that did not say what they want.
+
+`startAgent` is a one-off, like `initialPrompt`: it is not saved with the tab, so a tab brought back after the backend has lost its session opens a shell and does not launch an agent nobody asked for. A server run with the agent switched off (`--no-claude` / `CADE_AUTO_START_CLAUDE=false`) never starts one.
+
 ## Desktop window
 
 The desktop window's page is served by the app shell, not the backend, so a request to a path relative to the page reaches the shell and comes back empty with no error. Every request the picker makes goes through `apiBase()` (`frontend/src/config/config.ts`), which returns the backend's address there and the page's own base path in a browser.
