@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { HOLD_MS, UNGROUPED_LABEL, WorkspaceSwitcher, type WorkspaceRow } from "./workspace-switcher";
+import {
+  HOLD_MS,
+  LINGER_MS,
+  UNGROUPED_LABEL,
+  WorkspaceSwitcher,
+  type WorkspaceRow,
+} from "./workspace-switcher";
 
 let host: HTMLElement;
 let rows: WorkspaceRow[];
@@ -85,6 +91,51 @@ describe("the list of workspaces", () => {
     vi.advanceTimersByTime(HOLD_MS);
     window.dispatchEvent(new MouseEvent("pointerdown"));
     expect(list()).toBeNull();
+  });
+
+  it("goes away when the pointer moves without Alt, since a moving mouse says so too", () => {
+    switcher.noteSwitch();
+    vi.advanceTimersByTime(HOLD_MS);
+    window.dispatchEvent(new MouseEvent("pointermove", { altKey: true }));
+    expect(list()).not.toBeNull();
+    window.dispatchEvent(new MouseEvent("pointermove", { altKey: false }));
+    expect(list()).toBeNull();
+  });
+
+  it("goes away by itself when nothing ever says Alt was let go", () => {
+    // In the desktop window the key-up sometimes never reaches the page.
+    switcher.noteSwitch();
+    vi.advanceTimersByTime(HOLD_MS + LINGER_MS - 1);
+    expect(list()).not.toBeNull();
+    vi.advanceTimersByTime(1);
+    expect(list()).toBeNull();
+  });
+
+  it("waits afresh after each further press", () => {
+    switcher.noteSwitch();
+    vi.advanceTimersByTime(HOLD_MS + LINGER_MS - 1);
+    switcher.noteSwitch();
+    vi.advanceTimersByTime(LINGER_MS - 1);
+    expect(list()).not.toBeNull();
+    vi.advanceTimersByTime(1);
+    expect(list()).toBeNull();
+  });
+
+  it("says what it last saw when it had to go away by itself", () => {
+    const seen: string[] = [];
+    switcher.dispose();
+    switcher = new WorkspaceSwitcher(host, () => rows, (detail) => seen.push(detail));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "w", altKey: true }));
+    switcher.noteSwitch();
+    vi.advanceTimersByTime(HOLD_MS + LINGER_MS);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toContain("keydown w alt=true");
+
+    // Let go in the ordinary way: nothing to report.
+    switcher.noteSwitch();
+    vi.advanceTimersByTime(HOLD_MS);
+    letGo();
+    expect(seen).toHaveLength(1);
   });
 
   it("stays while Alt is held and other keys come and go", () => {

@@ -1310,15 +1310,23 @@ class App {
     if (stops.length < 2) return;
     const at = Math.max(0, stops.indexOf(tab.group ?? null));
     this.moveTabToGroup(tab.id, stops[(at + step + stops.length) % stops.length] ?? null);
-    this.workspaceSwitcher ??= new WorkspaceSwitcher(document.body, () => this.workspaceRows());
-    this.workspaceSwitcher.noteSwitch();
+    this.showWorkspaceList();
   }
 
   /** Move to the next or previous workspace; holding the key lists them. */
   private stepWorkspace(step: number): void {
     if (this.tabManager.getWorkspaces().length < 2) return;
     this.tabManager.switchWorkspace(this.tabManager.workspaceAt(step));
-    this.workspaceSwitcher ??= new WorkspaceSwitcher(document.body, () => this.workspaceRows());
+    this.showWorkspaceList();
+  }
+
+  /** A workspace key was pressed: list the workspaces if Alt stays down. */
+  private showWorkspaceList(): void {
+    this.workspaceSwitcher ??= new WorkspaceSwitcher(
+      document.body,
+      () => this.workspaceRows(),
+      (detail) => this.tabManager.getActiveTab()?.ws.sendDiagnostic("workspace-list-stuck", detail),
+    );
     this.workspaceSwitcher.noteSwitch();
   }
 

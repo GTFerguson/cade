@@ -25,6 +25,13 @@ export interface WorkspaceRow {
 /** How long Alt is held after a switch before the list appears. */
 export const HOLD_MS = 250;
 
+/**
+ * How long the list stays after the last press when nothing has said Alt was
+ * let go. The list is a view, not a choice in progress, so putting it away
+ * loses nothing, and the next press brings it back.
+ */
+export const LINGER_MS = 4000;
+
 export const UNGROUPED_LABEL = "no workspace";
 
 /** The same marks a tab and a closed chip use for these states. */
@@ -38,13 +45,22 @@ const MARKS: Record<GroupRollup["state"], string> = {
 export class WorkspaceSwitcher {
   private el: HTMLElement | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private lingerTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastKey = "no key event";
 
+  /**
+   * `onMissedRelease` is told when the list had to be put away without a
+   * key event saying Alt was up, with what was last seen. The desktop window
+   * cannot be inspected, so this is the only account of why that happened.
+   */
   constructor(
     private host: HTMLElement,
     private rows: () => WorkspaceRow[],
+    private onMissedRelease: (detail: string) => void = () => {},
   ) {
     window.addEventListener("keyup", this.onKey, true);
     window.addEventListener("keydown", this.onKey, true);
+    window.addEventListener("pointermove", this.onPointerMove, true);
     window.addEventListener("pointerdown", this.release, true);
     window.addEventListener("blur", this.release);
     document.addEventListener("visibilitychange", this.release);
@@ -54,6 +70,7 @@ export class WorkspaceSwitcher {
   noteSwitch(): void {
     if (this.el) {
       this.draw();
+      this.linger();
       return;
     }
     if (this.timer === null) {
@@ -63,8 +80,24 @@ export class WorkspaceSwitcher {
         this.el.className = "workspace-switcher";
         this.host.appendChild(this.el);
         this.draw();
+        this.linger();
       }, HOLD_MS);
     }
+  }
+
+  /** Start, or start again, the wait after which the list goes by itself. */
+  private linger(): void {
+    if (this.lingerTimer !== null) clearTimeout(this.lingerTimer);
+    this.lingerTimer = setTimeout(() => this.missedRelease("timed out"), LINGER_MS);
+  }
+
+  private missedRelease(how: string): void {
+    const at = document.activeElement;
+    const focus = at ? `${at.tagName.toLowerCase()}.${at.className}` : "nothing";
+    this.onMissedRelease(
+      `${how}; last key event: ${this.lastKey}; focus on ${focus}; window focused: ${document.hasFocus()}`,
+    );
+    this.release();
   }
 
   isShown(): boolean {
@@ -75,6 +108,7 @@ export class WorkspaceSwitcher {
     this.release();
     window.removeEventListener("keyup", this.onKey, true);
     window.removeEventListener("keydown", this.onKey, true);
+    window.removeEventListener("pointermove", this.onPointerMove, true);
     window.removeEventListener("pointerdown", this.release, true);
     window.removeEventListener("blur", this.release);
     document.removeEventListener("visibilitychange", this.release);
@@ -88,12 +122,23 @@ export class WorkspaceSwitcher {
    * every key event also clears a list whose key-up was never delivered.
    */
   private onKey = (e: KeyboardEvent): void => {
+    this.lastKey = `${e.type} ${e.key} alt=${e.altKey}`;
     if (!e.altKey) this.release();
+  };
+
+  /**
+   * A moving pointer carries the modifiers too. If it says Alt is up while
+   * the list is still showing, the key-up never reached the page.
+   */
+  private onPointerMove = (e: PointerEvent): void => {
+    if (this.el !== null && !e.altKey) this.missedRelease("pointer moved without Alt");
   };
 
   private release = (): void => {
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
+    if (this.lingerTimer !== null) clearTimeout(this.lingerTimer);
+    this.lingerTimer = null;
     this.el?.remove();
     this.el = null;
   };
