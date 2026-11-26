@@ -337,7 +337,18 @@ export function ago(seconds: number, now: number): string {
   return `${Math.floor(elapsed / (86400 * 30))}mo ago`;
 }
 
-/** The prompt that starts an agent on a handoff brief. */
+/**
+ * The prompt that starts an agent on a handoff brief.
+ *
+ * It asks the agent to read and report, not to start: opening a handoff is
+ * often the start of a discussion, and an agent told to resume would be
+ * changing things before the user had said what this session is for. A brief
+ * may itself say to proceed, so the prompt says plainly that it waits.
+ */
 export function handoffPrompt(relPath: string): string {
-  return `Read \`${relPath}\` and resume the work it describes, following its Contract section.`;
+  return (
+    `Read \`${relPath}\` to pick up the context. Then tell me briefly where things stand ` +
+    `and what you would do next, and wait for my go-ahead before changing anything, ` +
+    `even if the brief says to proceed.`
+  );
 }

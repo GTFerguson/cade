@@ -340,4 +340,10 @@ describe("handoffPrompt", () => {
   it("tells the agent which brief to read", () => {
     expect(handoffPrompt("docs/plans/handoff/x.md")).toContain("`docs/plans/handoff/x.md`");
   });
+
+  it("asks the agent to report and wait, not to start work", () => {
+    const prompt = handoffPrompt("docs/plans/handoff/x.md");
+    expect(prompt).toContain("wait for my go-ahead");
+    expect(prompt).not.toMatch(/resume the work|continue the work/);
+  });
 });
