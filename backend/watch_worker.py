@@ -24,6 +24,8 @@ from pathlib import Path
 from core.backend.models import FileChangeEvent
 from core.backend.watcher import FileWatcher
 
+from backend.files.tree import gitignore_matcher
+
 
 def _stop_when_stdin_closes(loop: asyncio.AbstractEventLoop, watcher: FileWatcher) -> None:
     def wait_for_eof() -> None:
@@ -47,7 +49,10 @@ def _is_dir(root: Path, event: FileChangeEvent) -> bool | None:
 
 
 async def _run(root: Path) -> None:
-    watcher = FileWatcher(root)
+    # Gitignored folders are left unwatched as well as the usual ones: a
+    # project's clones, worktrees and build output can be most of its
+    # directories, and a watch on each would use up the machine's budget.
+    watcher = FileWatcher(root, prune=gitignore_matcher(root))
     _stop_when_stdin_closes(asyncio.get_running_loop(), watcher)
     out = sys.stdout.buffer
     async for batch in watcher.watch_batches():
