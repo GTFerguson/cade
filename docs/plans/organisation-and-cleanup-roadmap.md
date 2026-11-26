@@ -1,8 +1,8 @@
 ---
 title: Organisation and Cleanup Roadmap
 created: 2026-11-25
-updated: 2026-11-25
-status: planning
+updated: 2026-11-26
+status: partially-shipped
 tags: [plan, roadmap, tabs, workspaces, github, mobile, cleanup]
 ---
 
@@ -68,43 +68,20 @@ takes a typed path. The system explorer is the last entry.
 
 ## 3. Pull request monitoring
 
-Plan: [[pr-monitoring]].
-
-**What it adds.**
-
-- On each tab, the state of the pull request for that tab's branch: checks,
-  review state, conflicts with base.
-- Per tab group, a panel of open pull requests: mine, and those waiting on my
-  review.
-- Notifications through the existing attention and push path when checks fail,
-  a review is requested, or a pull request is approved.
-- A key to open an agent tab on a pull request (checked out, with the review
-  comments or failing check as the opening prompt).
-
-**Key challenges.**
-
-- No GitHub integration exists today. The cheapest source is the `gh` CLI the
-  user is already signed in to; polling has to stay inside rate limits across
-  many repos.
-- Work and personal repos may sit under different GitHub accounts.
-- A remote backend has its own credentials, or none.
-
-**Integration points.** A new backend poller; a dashboard data source so the
-panel reuses the existing cards and table components
-(`core/backend/dashboard/`, `frontend/src/dashboard/`); tab badges from phase 1.
-
-**Open questions.** Poll, or receive webhooks through a relay? Is read-only
-enough to start, with actions (re-run checks, request review) later?
+Step 1 shipped 25 Nov 2026: a badge on each tab for its branch's pull request, and the pull request in the strip above the terminal. See [[../technical/core/pull-requests]]. The list per workspace, notifications, and opening an agent on a pull request are in [[pr-monitoring]].
 
 ## 4. Organisational surfaces
 
-**What it adds.** One coherent top level in place of today's separate pieces:
-the start splash with its attach options, the local and remote project
-selectors, the dashboard, and the plans pane.
+Begun 26 Nov 2026 as the board (`Alt+b`): one screen per project with each ticket and the handoff, worktree, branch and pull request that carry it, plus the handoffs and worktrees no ticket claims. See [[../technical/core/board]]. The strip above each tab's terminal ([[../technical/core/pull-requests]]) is the same information for the tab in front.
 
-**Open questions.** Which of these are the ones that feel broken, and what
-should the top level answer first: "what needs me", "what is running", or
-"what changed"? This phase is not scoped until that is answered.
+**Still to do.**
+
+- Ticket titles and statuses read live from the tracker; today they come from the project's hand-kept `docs/plans/work-board.md`. Needs credentials CADE does not have.
+- A link from a running tab to its stream, for tabs opened on a project root instead of a worktree.
+- Tickets and pull requests on the project picker's rows (mocked in `design/workspace-board-mock.html`).
+- Removing finished worktrees: [[worktree-cleanup]].
+
+**Open question.** The start splash, the remote project selector, the dashboard and the plans pane are still separate surfaces. Whether the board should absorb any of them is not decided.
 
 ## 5. Mobile experience
 
