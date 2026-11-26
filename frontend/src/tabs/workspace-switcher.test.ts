@@ -19,9 +19,9 @@ beforeEach(() => {
   host = document.createElement("div");
   document.body.appendChild(host);
   rows = [
-    { name: null, colour: undefined, tabs: 1, waiting: 0, open: false },
-    { name: "Work", colour: "purple", tabs: 3, waiting: 2, open: true },
-    { name: "Home", colour: "green", tabs: 2, waiting: 0, open: false },
+    { name: null, colour: undefined, tabs: 1, rollup: { state: "none", waiting: 0 }, open: false },
+    { name: "Work", colour: "purple", tabs: 3, rollup: { state: "input", waiting: 2 }, open: true },
+    { name: "Home", colour: "green", tabs: 2, rollup: { state: "working", waiting: 0 }, open: false },
   ];
   switcher = new WorkspaceSwitcher(host, () => rows);
 });
@@ -66,19 +66,67 @@ describe("the list of workspaces", () => {
     expect(list()).toBeNull();
   });
 
-  it("ignores other keys being let go", () => {
+  it("goes away when Alt is let go while Shift is still down, which is reported as another key", () => {
+    // Going back is Alt+Shift+w. Letting go of Alt first, with Shift held,
+    // arrives on Linux as a key-up of "Meta", not "Alt".
     switcher.noteSwitch();
     vi.advanceTimersByTime(HOLD_MS);
-    letGo("j");
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: "Meta", altKey: false, shiftKey: true }));
+    expect(list()).toBeNull();
+  });
+
+  it("goes away at the next key or click made without Alt, in case its release was never seen", () => {
+    switcher.noteSwitch();
+    vi.advanceTimersByTime(HOLD_MS);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "a", altKey: false }));
+    expect(list()).toBeNull();
+
+    switcher.noteSwitch();
+    vi.advanceTimersByTime(HOLD_MS);
+    window.dispatchEvent(new MouseEvent("pointerdown"));
+    expect(list()).toBeNull();
+  });
+
+  it("stays while Alt is held and other keys come and go", () => {
+    switcher.noteSwitch();
+    vi.advanceTimersByTime(HOLD_MS);
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: "w", altKey: true }));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "w", altKey: true }));
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", altKey: true }));
     expect(list()).not.toBeNull();
   });
 
-  it("shows how many tabs are waiting, only where some are", () => {
+  it("never shows if Alt was let go, by whatever name, before the hold ran out", () => {
+    switcher.noteSwitch();
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: "Meta", altKey: false }));
+    vi.advanceTimersByTime(HOLD_MS * 2);
+    expect(list()).toBeNull();
+  });
+
+  it("ignores other keys being let go", () => {
     switcher.noteSwitch();
     vi.advanceTimersByTime(HOLD_MS);
-    const waiting = [...host.querySelectorAll(".workspace-switcher-row")].map(
-      (r) => r.querySelector(".workspace-switcher-waiting")?.textContent ?? null,
-    );
-    expect(waiting).toEqual([null, "! 2", null]);
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: "j", altKey: true }));
+    expect(list()).not.toBeNull();
+  });
+
+  it("shows what each workspace's tabs need, in the marks a tab uses", () => {
+    switcher.noteSwitch();
+    vi.advanceTimersByTime(HOLD_MS);
+    const marks = [...host.querySelectorAll(".workspace-switcher-row")].map((r) => [
+      (r as HTMLElement).dataset["status"],
+      r.querySelector(".workspace-switcher-mark")!.textContent,
+    ]);
+    // Several waiting becomes their number; one state gets its mark; quiet gets none.
+    expect(marks).toEqual([["none", ""], ["input", "2"], ["working", "\u25cf"]]);
+    expect(host.querySelector(".workspace-switcher-mark--count")!.textContent).toBe("2");
+  });
+
+  it("shows a single waiting tab as the waiting mark, not a count", () => {
+    rows = [{ name: "Work", colour: "purple", tabs: 3, rollup: { state: "input", waiting: 1 }, open: true }];
+    switcher.noteSwitch();
+    vi.advanceTimersByTime(HOLD_MS);
+    expect(host.querySelector(".workspace-switcher-mark")!.textContent).toBe("!");
+    expect(host.querySelector(".workspace-switcher-mark--count")).toBeNull();
   });
 });

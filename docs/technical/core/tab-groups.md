@@ -59,7 +59,9 @@ The rules for laying out grouped tabs are pure functions in `frontend/src/tabs/t
 
 ### Moving between workspaces
 
-`Alt+w` and `Alt+Shift+w` go to the next and previous workspace in tab bar order, wrapping (`TabManager.workspaceAt`). The switch happens on each press. Holding `Alt` for longer than `HOLD_MS` after a press brings up the list of workspaces (`frontend/src/tabs/workspace-switcher.ts`) with the open one marked, each with its tab count and the number waiting; letting go puts it away. The list is a view of what has already happened, never a pending choice, so a tap behaves the same whether or not the list had time to appear.
+`Alt+w` and `Alt+Shift+w` go to the next and previous workspace in tab bar order, wrapping (`TabManager.workspaceAt`). The switch happens on each press. Holding `Alt` for longer than `HOLD_MS` after a press brings up the list of workspaces (`frontend/src/tabs/workspace-switcher.ts`): it slides in at the right, under the tab bar, out of the way of the terminal being switched, with the open workspace marked and each one's state mark and tab count. Letting go puts it away. The list is a view of what has already happened, never a pending choice, so a tap behaves the same whether or not the list had time to appear.
+
+The list goes when a key event arrives with Alt no longer down, judged by the event's modifier and not by the key it names. Going back is `Alt+Shift+w`, and letting go of Alt while Shift is still held is reported on Linux as a key-up of "Meta"; waiting for a key-up named "Alt" left the list on screen. Any key or pointer press without Alt, the window losing focus and the page being hidden also put it away, so a release that was never delivered cannot strand it.
 
 ### Taking a tab along
 

@@ -55,7 +55,7 @@ import { RemoteProjectSelector } from "./remote/RemoteProjectSelector";
 import { ProjectPicker } from "./local/project-picker";
 import { handoffPrompt } from "./local/picker-model";
 import { WorkspaceSwitcher, type WorkspaceRow } from "./tabs/workspace-switcher";
-import { carryStops } from "./tabs/tab-groups";
+import { carryStops, groupRollup } from "./tabs/tab-groups";
 import { BoardScreen } from "./board/board-screen";
 import { loadRecentProjects, rememberRecentProject } from "./local/recent-projects";
 import { Splash } from "./ui/splash";
@@ -1314,7 +1314,7 @@ class App {
         name,
         colour: this.groupDefs.find((d) => d.name === name)?.colour,
         tabs: members.length,
-        waiting: members.filter((t) => this.tabBar?.attentionOf(t.id) === "input").length,
+        rollup: groupRollup(members.map((t) => this.tabBar?.attentionOf(t.id) ?? null)),
         open: name === open,
       };
     });
