@@ -18,9 +18,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # States, in order of urgency.
-NEEDS_INPUT = "input"   # permission prompt, question, idle prompt
+NEEDS_INPUT = "input"   # permission prompt or question
 IDLE = "idle"           # turn finished; ready for the next prompt
 WORKING = "working"     # the agent is in the middle of a turn
+
+# Claude Code's notification that its prompt has sat unanswered. It follows
+# every finished turn, question or not, so it is not a sign the agent needs
+# anything: treated as a prompt it turned each finished tab into a waiting
+# one. Its one use is to end a turn whose Stop never arrived.
+IDLE_REMINDER = "idle_prompt"
 CLEAR = None            # nothing to report
 
 # A working agent redraws its spinner continuously. No hook fires when the
@@ -98,10 +104,11 @@ def attention_from_event(event: AttentionEvent) -> str | None | bool:
     """Map a hook event to a state. Returns False when the event means nothing."""
     name = event.event
     if name == "Notification":
-        # Claude Code: permission_prompt / idle_prompt (plus auth, etc.)
         kind = (event.notification_type or "").lower()
-        if kind in ("permission_prompt", "idle_prompt", "elicitation_dialog"):
+        if kind in ("permission_prompt", "elicitation_dialog"):
             return NEEDS_INPUT
+        if kind == IDLE_REMINDER:
+            return IDLE
         return False
     if name == "Stop":
         return IDLE
@@ -123,6 +130,8 @@ def next_attention(current: str | None, event: AttentionEvent) -> str | None | b
     """
     state = attention_from_event(event)
     if event.event == "PostToolUse" and current == NEEDS_INPUT:
+        return False
+    if (event.notification_type or "").lower() == IDLE_REMINDER and current != WORKING:
         return False
     return state
 

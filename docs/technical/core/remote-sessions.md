@@ -91,11 +91,14 @@ Server-side pings (`ws_ping_interval`) do not reach page JavaScript, and a backg
 
 | Source | Event | State |
 |---|---|---|
-| Claude Code `Notification` hook | `permission_prompt`, `idle_prompt`, `elicitation_dialog` | input |
+| Claude Code `Notification` hook | `permission_prompt`, `elicitation_dialog` | input |
+| Claude Code `Notification` hook | `idle_prompt` | idle if the session was still working, otherwise unchanged |
 | Claude Code `Stop` hook | | idle |
 | Claude Code `UserPromptSubmit` hook | | cleared |
 | Codex `notify` | `agent-turn-complete` | idle |
 | Any terminal input from a client | | cleared |
+
+`idle_prompt` is the reminder Claude Code sends when its prompt has sat unanswered for a minute. It follows every finished turn whether or not the agent asked anything: of 86 notifications that came straight after a `Stop` in one day's hook log (26 November 2026), 75 came 60 seconds later. Read as a prompt it turned every finished tab into one waiting on the user, so it now only ends a turn whose `Stop` was missed (`IDLE_REMINDER`, `next_attention`).
 
 `~/.cade/hooks/attention.py` is installed beside the view hook by `setup_cade_hooks` and registered for the three Claude Code events; the Codex adapter writes a marked `notify` line into `~/.codex/config.toml` unless the user already has one. The hook POSTs to `/api/sessions/attention`. CADE injects `CADE_SESSION_ID` into every agent's PTY environment so the hook names its session; a hook without it falls back to the unique live session in its `cwd`.
 

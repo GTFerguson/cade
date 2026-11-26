@@ -38,7 +38,8 @@ class TestMapping:
         "event,kind,expected",
         [
             ("Notification", "permission_prompt", NEEDS_INPUT),
-            ("Notification", "idle_prompt", NEEDS_INPUT),
+            ("Notification", "elicitation_dialog", NEEDS_INPUT),
+            ("Notification", "idle_prompt", IDLE),
             ("Notification", "auth_success", False),
             ("Stop", None, IDLE),
             ("UserPromptSubmit", None, WORKING),
@@ -64,6 +65,23 @@ class TestTransitions:
 
     def test_stop_ends_a_working_turn(self):
         assert next_attention(WORKING, self._event("Stop")) == IDLE
+
+    def _idle_reminder(self) -> AttentionEvent:
+        return AttentionEvent(
+            session_id="s", cwd=None, event="Notification", notification_type="idle_prompt"
+        )
+
+    @pytest.mark.parametrize("current", [IDLE, NEEDS_INPUT, None])
+    def test_idle_reminder_says_nothing_new(self, current):
+        """Claude Code sends it a minute after every turn that ends unanswered.
+
+        It is not a question: a finished tab stays finished, a real prompt
+        stays a prompt, and a tab the user has already looked at stays clear.
+        """
+        assert next_attention(current, self._idle_reminder()) is False
+
+    def test_idle_reminder_ends_a_turn_whose_stop_was_missed(self):
+        assert next_attention(WORKING, self._idle_reminder()) == IDLE
 
     @pytest.mark.parametrize(
         "current,expected",
