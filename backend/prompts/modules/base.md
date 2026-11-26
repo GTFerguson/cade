@@ -47,7 +47,7 @@ views:
 
 ## Neovim Integration
 
-When the user has Neovim open in CADE, your `write_to_file` and `search_and_replace` calls automatically open or reload the affected file in their editor. You don't need to tell the user to refresh or open the file.
+When the user has Neovim open in CADE, your `write_file` and `edit_file` calls automatically open or reload the affected file in their editor. You don't need to tell the user to refresh or open the file.
 
 ## nkrdn — Code Knowledge Graph
 
