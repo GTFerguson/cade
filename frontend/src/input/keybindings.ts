@@ -45,6 +45,7 @@ export interface KeybindingCallbacks {
   previousTab: () => void;
   nextWorkspace: () => void;
   previousWorkspace: () => void;
+  openBoard: () => void;
   goToTab: (index: number) => void;
   createTab: () => void;
   createRemoteTab: () => void;
@@ -104,6 +105,7 @@ export function altShortcut(key: string, cb: KeybindingCallbacks): (() => void) 
     case "d": return () => cb.previousTab();
     case "f": return () => cb.nextTab();
     case "t": return () => cb.createTab();
+    case "b": return () => cb.openBoard();
     case "x": return () => cb.closeTab();
     case "q": return () => cb.toggleDashboard();
     case "s": return () => cb.toggleTerminal();

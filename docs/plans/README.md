@@ -25,7 +25,7 @@ Intent before code exists. Plans are ephemeral — once the work ships and desig
 | [[infrastructure/seamless-upgrade]] | partially-shipped | Phases 1–3 shipped (exec-in-place, API, CLI, "update ready" marker in place of a reload); UX toasts, versioned install dirs, session host |
 | [[organisation-and-cleanup-roadmap]] | planning | Roadmap: workspaces above tabs, one project picker, PR monitoring, organisational surfaces, mobile, cleanup |
 | [[pr-monitoring]] | partially-shipped | Tab badge shipped; per-workspace list, notifications, open-agent-on-PR remain |
-| [[worktree-cleanup]] | planning | Track which worktrees and branches are finished; a skill does the removing |
+| [[worktree-cleanup]] | partially-shipped | Verdicts and listing shipped in the board; the cleanup skill and a visible count remain |
 | [[right-pane-browser]] | planning | Phase 1: URL in the viewer frame |
 | [[integrated-scout-browser]] | planning | Session awareness, live view, take-over, agent tools, remote |
 

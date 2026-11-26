@@ -31,6 +31,7 @@
 @import "./screens/overlays.css";
 @import "./screens/remote.css";
 @import "./screens/project-picker.css";
+@import "./screens/board.css";
 
 /* Mobile (overrides desktop) */
 @import "./mobile.css";

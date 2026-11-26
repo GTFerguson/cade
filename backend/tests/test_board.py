@@ -220,3 +220,41 @@ class TestGatheringFromDisk:
         first = await board.board(folder)
         assert await board.board(folder) is first
         assert (await board.board(folder, fresh=True))["n"] == 2
+
+
+class TestRoute:
+    def client(self, tmp_path: Path):
+        from unittest.mock import AsyncMock, patch
+
+        from fastapi.testclient import TestClient
+
+        from backend.config import Config, set_config
+        from backend.main import create_app
+
+        config = Config(
+            port=0, host="127.0.0.1", working_dir=tmp_path, shell_command="bash",
+            auto_start_claude=False, auto_open_browser=False, dummy_mode=True,
+        )
+        set_config(config)
+        with patch("backend.main.unify_sessions"), patch(
+            "backend.main._check_wsl_health_async", new_callable=AsyncMock
+        ):
+            return TestClient(create_app(config))
+
+    def test_serves_a_projects_board(self, tmp_path: Path):
+        project = tmp_path / "work"
+        (project / "docs" / "plans" / "handoff").mkdir(parents=True)
+        (project / "docs" / "plans" / "handoff" / "notes.md").write_text("# Notes\n")
+        (project / "docs" / "plans" / "work-board.md").write_text(BOARD)
+        (project / ".git").write_text("gitdir: /nonexistent\n")
+
+        res = self.client(tmp_path).get("/api/board", params={"path": str(project)})
+        assert res.status_code == 200
+        body = res.json()
+        assert body["project"] == str(project)
+        assert [s["ticket"] for s in body["streams"]][:2] == ["WRK-214", "WRK-230"]
+        assert [h["name"] for h in body["handoffs"]] == ["notes"]
+
+    def test_a_folder_that_is_not_there_is_404(self, tmp_path: Path):
+        res = self.client(tmp_path).get("/api/board", params={"path": str(tmp_path / "nope")})
+        assert res.status_code == 404

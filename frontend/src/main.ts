@@ -55,6 +55,7 @@ import { RemoteProjectSelector } from "./remote/RemoteProjectSelector";
 import { ProjectPicker } from "./local/project-picker";
 import { handoffPrompt } from "./local/picker-model";
 import { WorkspaceSwitcher, type WorkspaceRow } from "./tabs/workspace-switcher";
+import { BoardScreen } from "./board/board-screen";
 import { loadRecentProjects, rememberRecentProject } from "./local/recent-projects";
 import { Splash } from "./ui/splash";
 import type { RemoteProfile } from "./remote/types";
@@ -442,6 +443,7 @@ class App {
       previousTab: () => {
         this.tabManager.previousTab();
       },
+      openBoard: () => void this.handleOpenBoard(),
       nextWorkspace: () => this.stepWorkspace(1),
       previousWorkspace: () => this.stepWorkspace(-1),
       goToTab: (index) => {
@@ -987,6 +989,35 @@ class App {
       // The agent is handed the brief's path; what to do with it is the user's to say.
       ...(choice.kind === "project" &&
         choice.handoff && { initialPrompt: handoffPrompt(choice.handoff) }),
+    });
+    this.tabManager.switchTab(tab.id);
+  }
+
+  /**
+   * Show the board for the project of the tab in front, and open a tab on
+   * whatever is chosen there.
+   */
+  private async handleOpenBoard(): Promise<void> {
+    const active = this.tabManager.getActiveTab();
+    // A remote tab's project is on another machine, which this backend cannot read.
+    if (!this.tabContentContainer || this.projectPickerOpen || !active || active.isRemote) return;
+    this.projectPickerOpen = true;
+    const board = new BoardScreen(this.tabContentContainer, {
+      project: active.projectPath,
+      openUrl: (url) => void openExternal(url),
+    });
+    const choice = await board.show().finally(() => {
+      this.projectPickerOpen = false;
+    });
+    if (!choice) return;
+
+    const group = this.tabManager.getOpenWorkspace();
+    const tab = this.tabManager.createTab(choice.path, {
+      ...(group && { group }),
+      // The board has no agent toggle of its own: the new tab runs what the tab in front runs.
+      ...(active.agent && { agent: active.agent }),
+      startAgent: true,
+      ...(choice.handoff && { initialPrompt: handoffPrompt(choice.handoff) }),
     });
     this.tabManager.switchTab(tab.id);
   }

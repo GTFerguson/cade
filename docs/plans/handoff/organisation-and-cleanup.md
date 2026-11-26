@@ -38,7 +38,9 @@ Tab groups became workspaces on 25 Nov: one open at a time, `Alt+j`/`Alt+k` to m
 
 **Built 25 Nov, in `docs/technical/core/pull-requests.md`**: pull request badge on tabs and the strip above the terminal (pull request, branch and pending work, latest handoff). Neither has run in the installed app.
 
-**In discussion**: a mock at `docs/plans/design/workspace-board-mock.html`. Gary: the standalone board looked "trashy" and is dropped; he likes the strip (now built) and wants the picker updated "with some of this" (ticket and pull request on picker rows, a "finished" section with a clean-up key); second pass was "not too bad". Plans: `docs/plans/worktree-cleanup.md`, `docs/plans/pr-monitoring.md`. Linear integration is wanted (AirPLAi uses it; `~/projects/airplai/docs/plans/work-board.md` is the hand-kept board it would replace) and waits on three answers: an API key for CADE, whether handoffs can carry `ticket:` in frontmatter, where it shows. Docs no longer need approval: document what is built, as part of the work.
+**The board, built 26 Nov** (`Alt+b`, doc at `docs/technical/core/board.md`): after dropping the mocked board as "trashy", Gary asked for it for real ("I want the board where I can see everything, the tickets I have"). It reads the project's `docs/plans/work-board.md` for tickets and joins handoffs, worktrees (with verdicts) and pull requests; drawn in the picker's style with the detail beside the list. Gathering the AirPLAi project takes about 20 s, then is cached for a minute. Not installed, and not yet seen by Gary. Not built: live Linear data (needs an API key Gary has not provided; do not go looking for credentials), the cleanup skill, a session-to-stream link.
+
+**Still mock only**: ticket and pull request on the picker's rows (`docs/plans/design/workspace-board-mock.html`).
 
 ## Worktree / branch
 

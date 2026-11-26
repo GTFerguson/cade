@@ -1,0 +1,80 @@
+/* CADE — Board: a project's tickets, handoffs, worktrees and pull requests.
+   Drawn with the project picker's own pieces (project-picker.css): the same
+   header, section rows, option rows and key help. Only what the board adds
+   is here: the summary line, a narrower first column for ticket ids, and the
+   detail column. */
+
+/* One line of counts where the picker has its toggles. */
+.board-summary {
+  justify-content: flex-start;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* The list is the wider column: titles need the room, the detail wraps. */
+.board-screen .picker-list {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 4fr);
+  flex: 1;
+}
+
+/* A ticket id is short and the title is the point of the row. */
+.board-row[data-kind="stream"] {
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+}
+
+.board-row[data-kind="stream"] .picker-option-meta {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.board-row[data-kind="worktree"] {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 4fr) auto;
+}
+
+.board-screen [data-tone="muted"] { color: var(--text-muted); }
+.board-screen [data-tone="good"] { color: var(--accent-green); }
+.board-screen [data-tone="bad"] { color: var(--accent-red); }
+.board-screen [data-tone="warn"] { color: var(--accent-orange); }
+.board-screen [data-tone="review"] { color: var(--accent-yellow); }
+.board-screen [data-tone="busy"] { color: var(--accent-blue); }
+
+/* The selected row is filled, so everything on it takes the fill's ink. */
+.board-row.selected .picker-option-meta,
+.board-row.selected [data-tone] {
+  color: var(--bg-secondary);
+}
+
+.board-title {
+  padding: 4px 16px 10px;
+  font-size: 14px;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.board-fact {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  column-gap: 12px;
+  padding: 4px 16px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.board-fact-key {
+  color: var(--text-muted);
+}
+
+.board-fact-value {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.board-next {
+  padding: 2px 16px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}

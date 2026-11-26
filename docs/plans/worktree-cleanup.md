@@ -8,7 +8,7 @@ tags: [plan, git, worktrees, github, skills]
 
 # Worktree and Branch Cleanup
 
-Part of [[organisation-and-cleanup-roadmap]]. Nothing is built yet. It shares the pull request poller described in [[../technical/core/pull-requests]].
+Part of [[organisation-and-cleanup-roadmap]]. The tracking half is built: the board lists every worktree with a verdict (see [[../technical/core/board]]). Still to build: a count where it will be seen, and the cleanup skill. It shares the pull request poller described in [[../technical/core/pull-requests]].
 
 ## Context
 
