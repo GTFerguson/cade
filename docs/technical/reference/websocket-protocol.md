@@ -82,6 +82,15 @@ See [[../core/remote-sessions]] for the broadcaster, replay and size policy behi
 | `neovim-rpc-response` | S->C | `{ requestId, result?, error? }` | RPC response |
 | `neovim-exited` | S->C | `{ exitCode }` | Neovim exited |
 
+## Chat
+
+A chat reply streams as `chat-stream` messages, each with an `event` field. The events are built in `_stream_chat_response` (`backend/websocket.py`) from the provider's events; see [[../core/provider-stack]].
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `system-info` | `{ model, sessionId, tools, slashCommands, version, modes, contextBudget }` | Sent before the reply. `contextBudget` is `{ warn, danger, window }` for the context gauge. |
+| `done` | `{ usage, cost, contextTokens? }` | The reply finished. `usage` is `{ prompt_tokens, completion_tokens }` summed over every model call in the reply, which is what was billed. `contextTokens` is the last call's prompt plus completion tokens, which is how full the context window is now. The two differ when the reply ran tools, because each call resends the conversation. `contextTokens` is left out when the provider reported no usage; a client then falls back to `usage.prompt_tokens`. |
+
 ## Dashboard
 
 See [[dashboard-interactive-primitives]] for the end-to-end design. Message shapes:
@@ -91,7 +100,7 @@ See [[dashboard-interactive-primitives]] for the end-to-end design. Message shap
 | `dashboard-get-config` | C->S | `{}` | Request dashboard config |
 | `dashboard-get-data` | C->S | `{ sourceId? }` | Request a fresh source snapshot |
 | `dashboard-action` | C->S | `{ action, source, entityId?, patch?, message? }` | User interaction. `action: "patch"` applies `patch` to the named source via `DashboardHandler._apply_patch`. `action: "provider_message"` forwards `message` through the active provider's `send_frame` to the engine. |
-| `dashboard-config` | S->C | `{ config }` | Config payload (views, panels, data sources) |
+| `dashboard-config` | S->C | `{ config }` | Config payload (views, panels, data sources). `config.warnings` lists problems that did not stop the config loading. |
 | `dashboard-data` | S->C | `{ sources }` | Data payload keyed by source name |
 | `dashboard-cleared` | S->C | `{}` | Config removed |
 | `dashboard-focus-view` | S->C | `{ view_id }` | Programmatic tab switch. Frontend switches if `view_id` is declared by the current config; silent no-op otherwise. Typically emitted when the provider's server pushes a `dashboard_focus` frame. |
@@ -102,7 +111,7 @@ See [[dashboard-interactive-primitives]] for the end-to-end design. Message shap
 |------|-----------|---------|-------------|
 | `error` | S->C | `{ code, message }` | Error response |
 
-Error codes: `pty-spawn-failed`, `pty-read-failed`, `pty-write-failed`, `file-not-found`, `file-read-failed`, `file-write-failed`, `file-create-failed`, `file-exists`, `invalid-path`, `invalid-message`, `pty-exited`, `internal-error`, `neovim-spawn-failed`, `neovim-not-found`, `neovim-rpc-failed`
+Error codes: `pty-spawn-failed`, `pty-read-failed`, `pty-write-failed`, `file-not-found`, `file-read-failed`, `file-write-failed`, `file-create-failed`, `file-exists`, `invalid-path`, `invalid-message`, `pty-exited`, `internal-error`, `neovim-spawn-failed`, `neovim-not-found`, `neovim-rpc-failed`, `dashboard-config-error` (the config failed validation), `dashboard-patch-error` (a dashboard `patch` was refused or failed; a `dashboard-data` frame with the source's current rows follows)
 
 ## See Also
 

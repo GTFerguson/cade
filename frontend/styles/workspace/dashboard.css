@@ -43,6 +43,53 @@
   text-transform: lowercase;
 }
 
+/* ═══ Notices ═══
+ * Config warnings and changes the server refused. Hidden when empty. */
+.dashboard-notices {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 16px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  max-height: 30%;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-notice {
+  padding: 2px 0;
+}
+
+.dashboard-notice--error {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  color: var(--accent-red);
+}
+
+.dashboard-notice-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  padding: 0 4px;
+}
+
+.dashboard-notice--warning {
+  color: var(--accent-orange);
+}
+
+.dashboard-notice--warning summary {
+  cursor: pointer;
+}
+
+.dashboard-notice--warning ul {
+  margin: 4px 0 2px;
+  padding-left: 16px;
+  color: var(--text-secondary);
+}
+
 /* ═══ Stats strip ═══
  * Top-level `stats:` config becomes a horizontal strip of label/value
  * cells above the view nav. Hidden when no stats are configured. */
@@ -1000,6 +1047,11 @@
 
 .dash-kanban-card.dragging {
   opacity: 0.3;
+}
+
+/* A drop the source's transitions refused. */
+.dash-kanban-card--refused {
+  border-left-color: var(--accent-red);
 }
 
 /* ═══════════════════════════════════════════════

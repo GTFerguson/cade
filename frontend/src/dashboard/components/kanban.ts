@@ -1,9 +1,47 @@
 /**
  * Kanban component — status columns with draggable cards.
+ *
+ * A move sends `panel.on_move.patch` with `$column` replaced by the target
+ * column's status, or `{status: <column>}` when no patch is given. Moves
+ * the source's `entity.transitions` do not allow are refused before
+ * anything is sent.
  */
 
 import { BaseDashboardComponent } from "./base-component";
+import { canTransition, entityConfigFor, entityIdOf } from "../entity";
 import type { DashboardAction } from "../types";
+
+const COLUMN_PLACEHOLDER = "$column";
+
+// How long a refused card stays marked, so the user sees which card the
+// drop was refused for.
+const REFUSED_MARK_MS = 1200;
+
+function substituteColumn(value: unknown, column: string): unknown {
+  if (typeof value === "string") return value.split(COLUMN_PLACEHOLDER).join(column);
+  if (Array.isArray(value)) return value.map((v) => substituteColumn(v, column));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [
+        k,
+        substituteColumn(v, column),
+      ]),
+    );
+  }
+  return value;
+}
+
+/** The patch a move into `column` sends, built from `on_move`. */
+export function movePatch(
+  onMove: Record<string, unknown> | undefined,
+  column: string,
+): Record<string, unknown> {
+  const template = onMove?.["patch"];
+  if (template && typeof template === "object" && !Array.isArray(template)) {
+    return substituteColumn(template, column) as Record<string, unknown>;
+  }
+  return { status: column };
+}
 
 export class KanbanComponent extends BaseDashboardComponent {
   private dragCard: HTMLElement | null = null;
@@ -63,7 +101,6 @@ export class KanbanComponent extends BaseDashboardComponent {
             cardsEl,
             this.dragCard,
             this.dragItem,
-            panel,
             onAction,
             wrapper,
           );
@@ -75,7 +112,6 @@ export class KanbanComponent extends BaseDashboardComponent {
           item,
           columns,
           col.status,
-          panel,
           onAction,
           wrapper,
         );
@@ -93,7 +129,6 @@ export class KanbanComponent extends BaseDashboardComponent {
     item: Record<string, unknown>,
     columns: { status: string; label: string }[],
     currentStatus: string,
-    panel: NonNullable<typeof this.props>["panel"],
     onAction: (action: DashboardAction) => void,
     wrapper: HTMLElement,
   ): HTMLElement {
@@ -188,7 +223,7 @@ export class KanbanComponent extends BaseDashboardComponent {
           ".dash-kanban-cards",
         ) as HTMLElement | null;
         if (target && this.dragItem) {
-          this.applyMove(target, card, this.dragItem, panel, onAction, wrapper);
+          this.applyMove(target, card, this.dragItem, onAction, wrapper);
         }
         this.dragCard = null;
         this.dragItem = null;
@@ -203,7 +238,7 @@ export class KanbanComponent extends BaseDashboardComponent {
     // Click fallback: context menu for move (also the primary tap path
     // on touch when the finger doesn't travel far enough to drag).
     card.addEventListener("click", () => {
-      this.showMoveMenu(card, item, columns, currentStatus, panel, onAction);
+      this.showMoveMenu(card, item, columns, currentStatus, onAction);
     });
 
     return card;
@@ -211,26 +246,57 @@ export class KanbanComponent extends BaseDashboardComponent {
 
   /**
    * Move a card into a column and fire the patch mutation. Shared by the
-   * desktop HTML5 drop handler and the touch-drag handler.
+   * desktop HTML5 drop handler and the touch-drag handler. A drop on the
+   * card's own column does nothing, and a drop the transitions refuse
+   * leaves the card where it was.
    */
   private applyMove(
     targetCardsEl: HTMLElement,
     card: HTMLElement,
     item: Record<string, unknown>,
-    panel: NonNullable<typeof this.props>["panel"],
     onAction: (action: DashboardAction) => void,
     wrapper: HTMLElement,
   ): void {
     const status = targetCardsEl.dataset["status"] ?? "";
+    const from = String(item["status"] ?? "");
+    if (status === from) return;
+    if (!this.allowsMove(from, status)) {
+      this.markRefused(card, from, status);
+      return;
+    }
     targetCardsEl.appendChild(card);
     this.updateCounts(wrapper);
-    const sourceName = typeof panel.source === "string" ? panel.source : "";
+    this.sendMove(item, status, onAction);
+  }
+
+  private allowsMove(from: string, to: string): boolean {
+    if (!this.props) return false;
+    const entity = entityConfigFor(this.props.panel, this.props.config);
+    return canTransition(entity, from, to);
+  }
+
+  private sendMove(
+    item: Record<string, unknown>,
+    column: string,
+    onAction: (action: DashboardAction) => void,
+  ): void {
+    if (!this.props) return;
+    const { panel, config } = this.props;
     onAction({
       action: "patch",
-      source: sourceName,
-      entityId: String(item["id"] ?? ""),
-      patch: { status },
+      source: panel.source ?? "",
+      entityId: entityIdOf(item, panel, config),
+      patch: movePatch(panel.on_move, column),
     });
+  }
+
+  private markRefused(card: HTMLElement, from: string, to: string): void {
+    card.classList.add("dash-kanban-card--refused");
+    card.title = `Moving from ${from || "(none)"} to ${to} is not allowed`;
+    setTimeout(() => {
+      card.classList.remove("dash-kanban-card--refused");
+      card.removeAttribute("title");
+    }, REFUSED_MARK_MS);
   }
 
   private updateCounts(wrapper: HTMLElement): void {
@@ -246,7 +312,6 @@ export class KanbanComponent extends BaseDashboardComponent {
     item: Record<string, unknown>,
     columns: { status: string; label: string }[],
     currentStatus: string,
-    panel: NonNullable<typeof this.props>["panel"],
     onAction: (action: DashboardAction) => void,
   ): void {
     document.querySelector(".dash-kanban-move-menu")?.remove();
@@ -260,6 +325,7 @@ export class KanbanComponent extends BaseDashboardComponent {
 
     for (const col of columns) {
       if (col.status === currentStatus) continue;
+      if (!this.allowsMove(currentStatus, col.status)) continue;
       const option = this.el("div", undefined, `\u2192 ${col.label}`);
       option.style.cssText = `
         padding: 4px 12px; cursor: pointer; font-family: var(--font-mono);
@@ -274,14 +340,7 @@ export class KanbanComponent extends BaseDashboardComponent {
       option.addEventListener("click", (e) => {
         e.stopPropagation();
         menu.remove();
-        const sourceName =
-          typeof panel.source === "string" ? panel.source : "";
-        onAction({
-          action: "patch",
-          source: sourceName,
-          entityId: String(item["id"] ?? ""),
-          patch: { status: col.status },
-        });
+        this.sendMove(item, col.status, onAction);
       });
       menu.appendChild(option);
     }

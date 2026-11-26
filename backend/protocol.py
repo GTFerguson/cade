@@ -146,3 +146,5 @@ class ErrorCode:
     NEOVIM_SPAWN_FAILED = "neovim-spawn-failed"
     NEOVIM_NOT_FOUND = "neovim-not-found"
     NEOVIM_RPC_FAILED = "neovim-rpc-failed"
+    DASHBOARD_CONFIG_ERROR = "dashboard-config-error"
+    DASHBOARD_PATCH_ERROR = "dashboard-patch-error"

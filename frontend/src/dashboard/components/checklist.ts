@@ -4,12 +4,13 @@
 
 import { marked } from "marked";
 import { BaseDashboardComponent } from "./base-component";
+import { entityIdOf } from "../entity";
 
 export class ChecklistComponent extends BaseDashboardComponent {
   protected build(): void {
     if (!this.container || !this.props) return;
 
-    const { panel, data, onAction } = this.props;
+    const { panel, data, config, onAction } = this.props;
     const list = this.el("ul", "dash-checklist");
 
     for (const item of data) {
@@ -34,11 +35,10 @@ export class ChecklistComponent extends BaseDashboardComponent {
       checkbox.checked = isDone;
       checkbox.addEventListener("change", () => {
         if (panel.on_check) {
-          const sourceName = typeof panel.source === "string" ? panel.source : "";
           onAction({
             action: "patch",
-            source: sourceName,
-            entityId: String(item["id"] ?? ""),
+            source: panel.source ?? "",
+            entityId: entityIdOf(item, panel, config),
             patch: panel.on_check["patch"] as Record<string, unknown> ?? { status: "done" },
           });
         }

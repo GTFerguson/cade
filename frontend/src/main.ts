@@ -64,6 +64,7 @@ import type { RemoteProfile } from "./remote/types";
 import { getAuthToken, setAuthToken } from "./auth/tokenManager";
 import { setStoredIdToken } from "./auth/googleAuth";
 import { registerParadraxViewers, registerParadraxSections } from "./padarax/register";
+import { setConfigWarningsShown } from "./dashboard/dashboard-pane";
 import { KnowledgeEntityResolver } from "./padarax/knowledge-refs";
 import { setEntityResolver } from "./platform/entity-resolver";
 
@@ -258,6 +259,7 @@ class App {
       tab.context?.getLayout()?.showFileTree();
     }
 
+    setConfigWarningsShown(merged.kiosk_mode !== true);
     if (merged.kiosk_mode === true) {
       // Kiosk locks down the raw shell on the backend (PTY input/resize
       // rejected in websocket.py); the middle pane in enhanced mode is

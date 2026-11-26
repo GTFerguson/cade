@@ -14,4 +14,4 @@ Larger unbuilt work belongs in a plan, listed in [[../README|Plans]].
 
 | File | Priority | What it covers |
 |------|----------|----------------|
-| [[dashboard-schema-loose-ends]] | medium | Dashboard config: component names not validated, fields parsed and never rendered, a prompt module that teaches a source type with no adapter, patches that cannot land |
+| [[dashboard-config-follow-ups]] | medium | Real project configs that do less than they ask for, and config errors and warnings that do not reach their author |

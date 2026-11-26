@@ -4,7 +4,8 @@
  */
 
 import { BaseDashboardComponent } from "./base-component";
-import type { EntityConfig, PanelConfig } from "../types";
+import { entityConfigFor, entityIdOf } from "../entity";
+import type { EntityConfig } from "../types";
 
 interface ExpandableConfig {
   fields?: string[];
@@ -129,7 +130,7 @@ export class TableComponent extends BaseDashboardComponent {
         const activate = () => {
           this.emitAction({
             action: "view_file",
-            entityId: String(item["id"] ?? ""),
+            entityId: this.entityIdOf(item),
             patch: { path: filePath },
           });
         };
@@ -270,7 +271,7 @@ export class TableComponent extends BaseDashboardComponent {
   ): void {
     this.emitAction({
       action: "patch",
-      entityId: String(item["id"] ?? ""),
+      entityId: this.entityIdOf(item),
       patch,
     });
   }
@@ -281,21 +282,20 @@ export class TableComponent extends BaseDashboardComponent {
     patch?: Record<string, unknown>;
   }): void {
     if (!this.props) return;
-    const sourceName =
-      typeof this.props.panel.source === "string" ? this.props.panel.source : "";
     this.props.onAction({
-      source: sourceName,
+      source: this.props.panel.source ?? "",
       ...partial,
     });
   }
 
   private entityForSource(): EntityConfig | undefined {
     if (!this.props) return undefined;
-    const panel = this.props.panel as PanelConfig;
-    const sourceName = typeof panel.source === "string" ? panel.source : "";
-    if (!sourceName) return undefined;
-    const src = this.props.config.data_sources[sourceName];
-    return src?.entity;
+    return entityConfigFor(this.props.panel, this.props.config);
+  }
+
+  private entityIdOf(item: Record<string, unknown>): string {
+    if (!this.props) return "";
+    return entityIdOf(item, this.props.panel, this.props.config);
   }
 
   private rebuildTable(wrapper: HTMLElement, columns: string[]): void {

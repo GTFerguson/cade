@@ -41,7 +41,7 @@ Open CADE and click the **Dashboard** button (or press `Ctrl-a d`) to open the d
 
 ## Config Structure
 
-A dashboard config has six top-level keys:
+A dashboard config has six main top-level keys:
 
 ```yaml
 dashboard:      # Required. Metadata (title, subtitle).
@@ -52,6 +52,21 @@ extra_roots:    # Optional. Additional directories for the file tree.
 watches:        # Optional. File watchers that trigger shell commands.
 ```
 
+`push_sources`, `hide_tree` and `kiosk_mode` are also accepted at the top level. See [[../technical/design/dashboard-system#push_sources]] for the first; the other two control the file tree and are read by the launch preset.
+
+### Errors and warnings
+
+A config that breaks the schema does not load: a missing `dashboard.title`, a view without an `id`, a panel naming a source that is not declared. The reason is written to the backend log and sent to the client, which logs it to the browser console. The dashboard pane does not show it yet.
+
+Problems that leave the config usable are reported as warnings instead, and the config loads. The dashboard lists them at the top of the pane, under a collapsed `Dashboard config: N warnings` line. Warnings cover:
+
+- a key nothing reads, on the top level, `dashboard`, a view, a panel or a data source (a typo such as `filterble:` lands here)
+- a component name CADE does not register, whose panel then shows as not available
+- a source `type` that has no adapter, whose source then loads no rows
+- `theme`, `sidebar_filters`, `tab_filter` and `actions_by_status`, which are accepted and not yet rendered
+
+Panels and sources may carry keys that only one component or source type reads, such as `page_size` on `cards` or `channel` on a `stream` source. Each component and source type has its own list, kept in `COMPONENT_EXTRA_KEYS` and `SOURCE_EXTRA_KEYS` in `core/backend/dashboard/config.py`, and a key outside it is a warning. The sections below name the keys for most of them.
+
 ### `dashboard` block
 
 ```yaml
@@ -60,7 +75,7 @@ dashboard:
   subtitle: "optional"      # shown below the title
 ```
 
-A `theme:` key is also accepted here, and nothing reads it. Dashboards use CADE's own theme, and setting `theme` has no effect.
+A `theme:` key is also accepted here, and nothing reads it. Dashboards use CADE's own theme, so setting `theme` has no effect and loads with a warning.
 
 ---
 
@@ -173,7 +188,7 @@ data_sources:
 
 Every `.md` or `.yml` file in the folder becomes one record. For subdirectories, the adapter looks for `index.md` or a file named after the folder. If your files are arbitrarily named inside subdirectories, use `vault` instead.
 
-**With entity config** (enables kanban drag-drop and status patching):
+**With entity config.** `statuses` fills the status select in table inline editing. `transitions` limits which kanban moves are allowed. `id_field` names the field that identifies a row in patches, and defaults to `id`.
 
 ```yaml
 data_sources:
@@ -222,16 +237,18 @@ data_sources:
     path: data/items/
 ```
 
-Each `.json` file = one record. Exposes `_filename`, `_json`. Optional extras:
+Each `.json` file = one record. Exposes `_filename`, `_file`, `_json` (the file pretty-printed) and `_json_md` (the same in a fenced block). Optional extras:
 
 ```yaml
 data_sources:
   items:
     type: json_directory
     path: data/items/
-    merge_suffix: ".meta.json"   # merge a sidecar file into each record
-    exclude: "data/items/draft*" # glob of files to skip
+    merge_suffix: "-map"         # for x.json, read x-map.json into the record as _sibling
+    exclude: [draft.json]        # exact file names to skip; a single name also works
 ```
+
+Files whose name ends with the suffix are not listed as records of their own.
 
 ### `rest` — HTTP endpoint
 
@@ -280,9 +297,12 @@ data_sources:
     path: ../server/logs/server.log
     parse: plog_llm          # log format: plog_llm or jsonl
     window: 7d               # rolling time window: 1d, 7d, 30d, etc.
-    static_quotas:           # optional hard limits per model
-      claude-3-5-sonnet: 1000000
+    static_quotas:           # optional token limits, keyed by provider
+      groq:
+        daily_tokens: 1000000
 ```
+
+Other keys: `inputs` (a list of `{path, label}` files to aggregate along with `path`), `label`, `model_providers` (model name to provider, overriding the inference from the name) and `quota_endpoints` (per provider, an `endpoint` and `headers` to fetch live quota from).
 
 Use with the `model_stats` component to render usage dashboards.
 
@@ -347,6 +367,18 @@ views:
 | `group` | Group name. Views sharing the same `group` are nested under a collapsible section in the tab bar. |
 | `panels` | List of panel configs. |
 
+### A source declared on the panel
+
+A panel's `source` is normally the name of an entry under `data_sources`. It can also be a mapping that declares a source in place. The backend registers it under a generated name, and it behaves like any other source:
+
+```yaml
+panels:
+  - component: markdown
+    source: {type: markdown, path: docs/readme.md, parse: raw}
+```
+
+Prefer a named source. It can be shared by several panels, and its warnings name it.
+
 ### Panel filtering
 
 Every panel can filter records before rendering. The `filter` field accepts field-value conditions:
@@ -367,20 +399,9 @@ panels:
 
 Multiple filter keys are ANDed together.
 
-### `on_click` — open a file in the viewer
+### Opening a file on click
 
-Panels can open a file in the right-pane viewer when a card or row is clicked:
-
-```yaml
-panels:
-  - component: cards
-    source: plans
-    on_click:
-      action: view_file
-      field: _file            # which record field holds the relative path
-```
-
-When the user clicks a card, the file at `record[field]` is loaded into the markdown viewer. Works with any source that exposes a `_file` or `_path` field (`directory`, `vault`).
+A `cards` card or `table` row whose record has a `_file` field opens that file in the viewer when clicked. `directory`, `vault` and `json_directory` sources set `_file` on each record. No panel key is needed. `on_click: detail` is the one `on_click` value that changes behaviour; see `cards` below.
 
 ---
 
@@ -393,12 +414,10 @@ component: checklist
 source: tasks
 fields: [text]
 on_check:
-  action: patch
-  field: done
-  value: true
+  patch: {done: true}
 ```
 
-Items with `done: true` render as checked. The `on_check` action patches the source file on click (requires a patchable source: `directory`, `vault`, or `json_file`).
+Items with `done: true` or `status: done` render as checked. With `on_check`, toggling a box sends `on_check.patch` to the source, or `{status: done}` when `patch` is absent. The same patch is sent whether the box is ticked or unticked. Without `on_check`, toggling changes nothing. The source must support write-back; see [[#Patching (Write-Back)]].
 
 ### `timeline` — chronological event list
 
@@ -409,7 +428,7 @@ fields: [what, product, type]
 limit: 12
 ```
 
-Sorts by `date` field. Use `date_entries` parse mode on a markdown table.
+Each row shows its `date`, the first of `fields` as its text (falling back to `text`, then `what`), and the other fields as secondary lines. A change of `heading` between rows starts a new section. Rows render in the order the source gives them. Use `date_entries` parse mode on a markdown table.
 
 ### `cards` — card grid
 
@@ -419,12 +438,11 @@ source: plans
 fields: [title, status, updated]
 badges: [status]
 searchable: [title]
-on_click:
-  action: view_file
-  field: _file
 ```
 
 `badges` renders the named field as a coloured pill. `searchable` adds a live-filter input above the grid.
+
+Keys only `cards` reads: `page_size`, `favourite_field`, `sort`, `group_by`, `inline_preview`, `view_file_preview`.
 
 **Inline detail expansion** — adding a `detail:` block to the panel makes each card click-expandable. Two shapes are supported:
 
@@ -477,6 +495,8 @@ extra:
   page_size: 20         # cards per page load
   favourite_field: starred  # field to toggle on star click
 ```
+
+Keys only `cards_paged` reads: `target_size`, `buffer_size`, `page_size`, `stale_ms`, `favourite_field`. Component keys can be written under `extra:` as here or directly on the panel. A key on the panel wins over the same key under `extra:`.
 
 ### `table` — sortable, filterable table
 
@@ -541,30 +561,49 @@ columns:
   - { status: submitted, label: "Submitted" }
   - { status: shortlisted, label: "Shortlisted" }
   - { status: won, label: "Won" }
-on_move:
-  action: patch
-  field: status
+on_move:                       # optional
+  patch: { status: $column, reviewed: false }
 ```
 
-Drag-drop patches the `status` field in the source file. Requires `entity` config on the data source with `statuses` and `transitions`.
+Cards are grouped into columns by their `status` field. A card can be moved by dragging it, or by clicking it and picking a column.
+
+A move sends a patch to the source. With `on_move.patch`, that template is sent with every `$column` replaced by the target column's `status`. Without it, the patch is `{status: <column>}`. `on_move` reads only `patch` and `action`; other keys load with a warning. Dropping a card on its own column sends nothing.
+
+If the source's `entity` declares `transitions`, a move they do not list is refused: the card stays in its column and is marked briefly, and the click menu offers only the allowed columns. A status with no entry in `transitions` is final. With no `transitions`, any move is allowed.
+
+```yaml
+data_sources:
+  applications:
+    type: directory
+    path: applications/
+    entity:
+      statuses: [draft, submitted, shortlisted, won]
+      transitions:
+        draft: [submitted]
+        submitted: [shortlisted, draft]
+        shortlisted: [won]
+```
+
+The patch is applied only if the source supports write-back. See [[#Patching (Write-Back)]].
 
 ### `markdown` — rendered markdown document
 
 ```yaml
 component: markdown
-source: some_source
+source: readme       # e.g. type: markdown, path: docs/readme.md, parse: raw
 ```
 
-Renders the `_body` or `content` field as full markdown with KaTeX and Mermaid diagram support.
+Renders one field of the source's first row as markdown. The field is the first of `fields`, or `content` when `fields` is empty, which is what a `markdown` source with `parse: raw` returns. For a `vault` source, set `fields: [_body]`.
 
 ### `key_value` — key/value pairs
 
 ```yaml
 component: key_value
 source: config
+fields: [version, owner]
 ```
 
-Renders each record field as a labelled value row.
+Renders one row per name in `fields`. When the source has a single row, each value is that row's field. When it has several, each value is the row count.
 
 ### `entity_detail` — composable record viewer
 
@@ -621,10 +660,12 @@ source: candidates
 options:
   left_label: "Pending"
   right_label: "Selected"
-on_move:
-  action: patch
-  field: selected
+  on_confirm:
+    action: provider_message
+    message: { type: assign }
 ```
+
+Rows carry `side: left` or `side: right`. Confirm sends `options.on_confirm` with the chosen quantities appended. See [[../technical/reference/dashboard-interactive-primitives#basket]].
 
 ### `graph` — network graph
 
@@ -633,9 +674,11 @@ Renders nodes and edges as an interactive network diagram.
 ```yaml
 component: graph
 source: relationships
-extra:
-  format: world-map    # optional: "world-map" for geographic layout
+options:
+  format: world-map    # with options.src: treat the fetched file as a world map
 ```
+
+The source's first row carries `nodes` and `edges`, or `rooms` for a world map. Without source rows, `options.src` names a URL to fetch the graph from. Clicking a reachable node sends a `provider_message`, which only a provider with an engine channel receives.
 
 ---
 
@@ -656,13 +699,17 @@ Some components can write back to source files on user interaction (checkbox tog
 
 | Source type | Patchable? | What gets patched |
 |------------|-----------|-------------------|
-| `directory` | Yes | YAML frontmatter block in the `.md` file |
-| `vault` | Yes | YAML frontmatter block in the `.md` file |
-| `json_file` | Yes | The matching entity in the JSON array |
-| `json_directory` | Yes | The individual `.json` file |
-| `markdown` | No | Not supported |
+| `directory` | Yes | YAML frontmatter of the file whose name, without extension, is the entity id |
+| `json_file` | Yes | The row in the JSON array whose `entity.id_field` matches |
 | `rest` | Yes | `PATCH {endpoint}/{id}` |
-| `stream` | No | Append-only — no write-back path |
+| `markdown` | No | Rows are parsed from lists and tables, so they have no place to write back to |
+| `vault` | No | Not built |
+| `json_directory`, `json_file_array`, `json_directory_expand`, `model_usage` | No | Not built |
+| `stream` | No | Append-only |
+
+A patch to a source that cannot take one is refused. The dashboard shows the reason at the top of the pane, and the source's rows are sent again so the change on screen is undone. The same happens when the write itself fails.
+
+Components send the row's entity id in each patch. They read it from the field the source's `entity.id_field` names, or `id` when it names none.
 
 For frontmatter patching to work, the markdown file must have a valid `---` frontmatter block.
 
@@ -674,7 +721,6 @@ For frontmatter patching to work, the markdown file must have a valid `---` fron
 dashboard:
   title: "Business Manager"
   subtitle: "Cognetic LTD"
-  theme: terminal-dark
 
 extra_roots:
   - name: common-knowledge
@@ -738,8 +784,7 @@ views:
           - { status: active, label: "Active" }
           - { status: complete, label: "Done" }
         on_move:
-          action: patch
-          field: status
+          patch: { status: $column }
 
   - id: applications
     title: "Applications"
@@ -751,9 +796,6 @@ views:
         sortable: true
         filterable: [status]
         searchable: [title]
-        on_click:
-          action: view_file
-          field: _file
 ```
 
 ---
@@ -764,9 +806,11 @@ views:
 
 **Data source empty** — for `directory` type with subdirectories, the adapter only finds `index.md` or a file named after the folder. Use `vault` for nested structures with arbitrary filenames.
 
-**Kanban drag-drop not working** — the data source needs an `entity` block with `statuses` and `transitions`. The dragged card's status must match one of the column `status` keys.
+**Something in the config has no effect.** Open the warnings line at the top of the dashboard. A misspelt key, component or source type is listed there.
 
-**Checklist `on_check` not patching** — `markdown` type sources are read-only. Move the data into a `directory` or `vault` source if you need write-back.
+**A card will not move on the kanban.** If the source declares `entity.transitions`, the move must be listed there. The card's `status` must also match one of the column `status` keys for it to appear at all. If the card moves and then jumps back, read the error at the top of the pane: the source probably cannot take patches.
+
+**Checklist `on_check` not patching.** `markdown` sources are read-only. Move the data into a `directory` or `json_file` source if you need write-back.
 
 **Parse mode produces unexpected fields** — use the `table` component first to inspect all fields a source returns. Add `columns: [_filename, _body, status, title]` to see everything.
 

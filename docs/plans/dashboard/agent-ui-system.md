@@ -17,6 +17,8 @@ Dashboards that agents create and change by writing configuration, and that carr
 
 **Phase 2: proving it on existing dashboards.** job-finder and socials have configs alongside their hand-built dashboards. The gaps this exposed are closed and documented in [[../../user/dashboard]]: inline editing and expandable rows on tables, detail on click, the `stats:` strip. Agent push through stream sources is in [[../../technical/reference/dashboard-interactive-primitives]]. One item is left over, below.
 
+**Schema clean-up.** Kanban `on_move` patch templates, `entity.transitions` in the kanban, sources declared inline on a panel, read-only `markdown` sources and config warnings for keys nothing reads. Design and reasoning: [[../../technical/design/dashboard-system]].
+
 ## What it adds
 
 ### 1. Score-radar component
@@ -25,23 +27,18 @@ The socials dashboard shows each post's persona scores across five dimensions (a
 
 ### 2. Fields the schema accepts and the screen ignores
 
-The schema was written ahead of the renderer. These parse without error and do nothing:
+The schema was written ahead of the renderer. These parse, load with a warning that they are not yet rendered, and do nothing:
 
 | Field | Where | Intended behaviour |
 |-------|-------|--------------------|
 | `sidebar_filters` | view | Filter controls beside the view, such as brand pills |
 | `tab_filter` | view | Tabs across the view that filter by one field, with counts |
 | `actions_by_status` | view | Buttons in the detail panel that depend on the entity's status |
-| `entity.transitions` | data source | Limit a status change to the allowed next statuses |
-| `on_move` | panel | Set what a kanban move patches. Today a move always patches `status` |
 | `theme` | `dashboard` | Per-project look. See open questions |
-| mapping as `source` | panel | A one-off source declared on the panel itself |
 
-Each needs one of two outcomes: render it, or remove it from the schema so configs that use it fail validation.
+Each needs one of two outcomes: render it, or remove it from the schema. Removing one would make the configs that use it fail validation, so the warning comes first.
 
 Components that appear in the original design and were never built: `grouped_cards` (cards grouped by a field, with an action per group), `post_preview`, `feedback_list`, `notes`, `list`, `chart`, `form`, `iframe`. Build these only when a dashboard needs one. `chart`, `form` and `iframe` are also proposed in [[dashboard-schema-overhaul]].
-
-The related code defects are in [[../quick-fixes/dashboard-schema-loose-ends]].
 
 ### 3. Agent callbacks
 
@@ -81,7 +78,7 @@ Python utilities that let an agent build and change a dashboard config in code: 
 - **Reaching the right agent.** A dashboard belongs to a project tab. An event must reach an agent working in that project, and there may be none running, or several.
 - **Events with no listener.** A callback fired when no agent is subscribed must do something visible: queue, start an agent, or tell the user.
 - **Schema growth.** Each new dashboard may need something the schema cannot express. The choice is between extending the schema and offering an escape hatch such as a raw HTML component. [[dashboard-schema-overhaul]] proposes the second.
-- **Tightening validation.** Rejecting unknown components and fields will break any existing config that relies on them being ignored. Nine projects under `~/projects` have a dashboard config.
+- **Tightening validation.** Unknown components and keys now load with warnings rather than failing. Turning any warning into an error would break the existing configs that carry it; [[../../technical/design/dashboard-system]] says why they are warnings.
 
 ## Integration points
 
@@ -104,4 +101,3 @@ Python utilities that let an agent build and change a dashboard config in code: 
 - [[../../user/dashboard]]: config reference
 - [[../../technical/reference/dashboard-interactive-primitives]]: actions and push
 - [[dashboard-schema-overhaul]]: the deferred proposal for a richer schema
-- [[../quick-fixes/dashboard-schema-loose-ends]]: small code defects in the current schema

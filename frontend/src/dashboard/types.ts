@@ -1,5 +1,5 @@
 /**
- * Dashboard config types — mirrors backend/dashboard/config.py
+ * Dashboard config types. Mirrors core/backend/dashboard/config.py.
  */
 
 export interface EntityConfig {
@@ -32,7 +32,9 @@ export interface PanelConfig {
   component: string;
   id?: string;
   title?: string;
-  source?: string | Record<string, unknown>;
+  // The backend registers a mapping written here as a named source, so the
+  // client only ever sees a name.
+  source?: string;
   fields: string[];
   columns: (string | Record<string, unknown>)[];
   badges: string[];
@@ -84,6 +86,8 @@ export interface DashboardConfig {
   views: ViewConfig[];
   stats: StatConfig[];
   extra_roots?: ExtraRootConfig[];
+  // Problems the backend found that did not stop the config loading.
+  warnings?: string[];
 }
 
 // Component rendering contract

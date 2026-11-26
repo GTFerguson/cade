@@ -20,6 +20,15 @@ import type {
   ViewConfig,
 } from "./types";
 
+// Off for a kiosk launch, where the dashboard is a game screen and the
+// person looking at it did not write its config and cannot act on a warning.
+let configWarningsShown = true;
+
+/** Whether dashboards list their config's warnings. Errors are always shown. */
+export function setConfigWarningsShown(shown: boolean): void {
+  configWarningsShown = shown;
+}
+
 export class DashboardPane implements Component {
   private config: DashboardConfig | null = null;
   private data: Record<string, Record<string, unknown>[]> = {};
@@ -31,6 +40,9 @@ export class DashboardPane implements Component {
   private activeGroupId: string | null = null;
 
   private headerEl: HTMLElement;
+  private noticesEl: HTMLElement;
+  private configWarnings: string[] = [];
+  private errorMessage: string | null = null;
   private statsBarEl: HTMLElement;
   private viewNavEl: HTMLElement;
   private subNavEl: HTMLElement;
@@ -45,6 +57,12 @@ export class DashboardPane implements Component {
 
     this.headerEl = document.createElement("div");
     this.headerEl.className = "dashboard-header";
+
+    // Config warnings and refused changes. Shown in the pane because the
+    // backend log is not somewhere the config's author is looking.
+    this.noticesEl = document.createElement("div");
+    this.noticesEl.className = "dashboard-notices";
+    this.noticesEl.style.display = "none";
 
     this.statsBarEl = document.createElement("div");
     this.statsBarEl.className = "dashboard-stats-bar";
@@ -64,6 +82,7 @@ export class DashboardPane implements Component {
     this.emptyEl.textContent = "No dashboard configured";
 
     this.container.appendChild(this.headerEl);
+    this.container.appendChild(this.noticesEl);
     this.container.appendChild(this.statsBarEl);
     this.container.appendChild(this.viewNavEl);
     this.container.appendChild(this.subNavEl);
@@ -89,6 +108,9 @@ export class DashboardPane implements Component {
       sub.textContent = config.dashboard.subtitle;
       this.headerEl.appendChild(sub);
     }
+    this.configWarnings = config.warnings ?? [];
+    this.errorMessage = null;
+    this.renderNotices();
     this.buildViewNav();
     this.renderStatsBar();
     this.emptyEl.style.display = "none";
@@ -132,9 +154,7 @@ export class DashboardPane implements Component {
     for (const panel of view.panels) {
       const comp = this.activeComponents.get(panel.id ?? panel.component);
       if (!comp) continue;
-      const sourceName =
-        typeof panel.source === "string" ? panel.source : undefined;
-      const panelData = sourceName ? this.data[sourceName] ?? [] : [];
+      const panelData = panel.source ? this.data[panel.source] ?? [] : [];
       const filteredData = this.applyFilters(panelData, panel);
       comp.update({
         panel,
@@ -293,7 +313,61 @@ export class DashboardPane implements Component {
     this.config = null;
     this.data = {};
     this.activeViewId = null;
+    this.configWarnings = [];
+    this.errorMessage = null;
+    this.renderNotices();
     this.showEmpty();
+  }
+
+  /**
+   * Show an error the server sent about this dashboard, such as a change
+   * it refused to save. It stays until the next config arrives or the
+   * user dismisses it.
+   */
+  showError(message: string): void {
+    this.errorMessage = message;
+    this.renderNotices();
+  }
+
+  private renderNotices(): void {
+    this.noticesEl.replaceChildren();
+    if (this.errorMessage) {
+      const row = document.createElement("div");
+      row.className = "dashboard-notice dashboard-notice--error";
+      const text = document.createElement("span");
+      text.textContent = this.errorMessage;
+      row.appendChild(text);
+      const dismiss = document.createElement("button");
+      dismiss.className = "dashboard-notice-dismiss";
+      dismiss.type = "button";
+      dismiss.textContent = "\u00d7";
+      dismiss.setAttribute("aria-label", "Dismiss");
+      dismiss.addEventListener("click", () => {
+        this.errorMessage = null;
+        this.renderNotices();
+      });
+      row.appendChild(dismiss);
+      this.noticesEl.appendChild(row);
+    }
+    const warnings = configWarningsShown ? this.configWarnings : [];
+    if (warnings.length > 0) {
+      const details = document.createElement("details");
+      details.className = "dashboard-notice dashboard-notice--warning";
+      const summary = document.createElement("summary");
+      const n = warnings.length;
+      summary.textContent = `Dashboard config: ${n} warning${n === 1 ? "" : "s"}`;
+      details.appendChild(summary);
+      const list = document.createElement("ul");
+      for (const warning of warnings) {
+        const li = document.createElement("li");
+        li.textContent = warning;
+        list.appendChild(li);
+      }
+      details.appendChild(list);
+      this.noticesEl.appendChild(details);
+    }
+    const empty = !this.errorMessage && warnings.length === 0;
+    this.noticesEl.style.display = empty ? "none" : "";
   }
 
   hasConfig(): boolean {
@@ -519,9 +593,7 @@ export class DashboardPane implements Component {
     container.appendChild(panelEl);
 
     // Resolve data for this panel
-    const sourceName =
-      typeof panel.source === "string" ? panel.source : undefined;
-    const panelData = sourceName ? this.data[sourceName] ?? [] : [];
+    const panelData = panel.source ? this.data[panel.source] ?? [] : [];
 
     // Apply client-side filters
     const filteredData = this.applyFilters(panelData, panel);

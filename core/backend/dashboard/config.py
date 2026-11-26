@@ -13,12 +13,11 @@ from typing import Any
 import yaml
 
 
-# Component types the renderer knows about. Keep in sync with the frontend
-# registry in `frontend/src/dashboard/registry.ts:createDefaultRegistry`.
-# Padarax-specific components (`claims`, `split_markdown`) are listed here too
-# because they live in the shared dashboard tree and are wired into the same
-# registry; they're general dashboard primitives, just not advertised to
-# agents in the prompt module.
+# Component names the CADE renderer registers in
+# `frontend/src/dashboard/registry.ts:createDefaultRegistry`. A test compares
+# the two lists. `claims` and `split_markdown` are listed although the prompt
+# module does not teach them: they are general components that Padarax
+# configs use.
 KNOWN_COMPONENTS = frozenset({
     "basket",
     "cards",
@@ -34,6 +33,58 @@ KNOWN_COMPONENTS = frozenset({
     "split_markdown",
     "table",
     "timeline",
+})
+
+# Panel keys outside the common panel fields that a component reads from
+# `panel.extra`. Any other extra key on a known component is reported as a
+# warning, because nothing reads it.
+COMPONENT_EXTRA_KEYS: dict[str, frozenset[str]] = {
+    "cards": frozenset({
+        "favourite_field", "group_by", "inline_preview", "page_size",
+        "sort", "view_file_preview",
+    }),
+    "cards_paged": frozenset({
+        "buffer_size", "favourite_field", "page_size", "stale_ms", "target_size",
+    }),
+}
+
+# Source keys outside the common source fields that each adapter reads from
+# `DataSourceConfig.extra`, keyed by source type. The keys of this map are the
+# valid source types; a test checks them against the adapter registry.
+SOURCE_EXTRA_KEYS: dict[str, frozenset[str]] = {
+    "directory": frozenset(),
+    "json_directory": frozenset({"exclude", "merge_suffix"}),
+    "json_directory_expand": frozenset({"exclude", "expand_field"}),
+    "json_file": frozenset(),
+    "json_file_array": frozenset({"array_field"}),
+    "markdown": frozenset(),
+    "model_usage": frozenset({
+        "inputs", "label", "model_providers", "quota_endpoints",
+        "static_quotas", "window",
+    }),
+    "rest": frozenset(),
+    "stream": frozenset({"buffer", "channel"}),
+    "vault": frozenset(),
+}
+
+# Keys read by the kanban's `on_move` and the checklist's `on_check`.
+_HANDLER_KEYS = frozenset({"action", "patch"})
+
+# Fields the schema accepts so existing configs keep loading, and that no
+# renderer reads yet.
+_NOT_RENDERED_VIEW_KEYS = ("sidebar_filters", "tab_filter", "actions_by_status")
+_NOT_RENDERED = "is accepted and not yet rendered, so it has no effect"
+
+_TOP_LEVEL_KEYS = frozenset({
+    "dashboard", "data_sources", "views", "stats", "watches", "extra_roots",
+    "push_sources",
+    # Read by backend/launch_preset.py from the active dashboard file.
+    "hide_tree", "kiosk_mode",
+})
+_DASHBOARD_KEYS = frozenset({"title", "subtitle", "theme"})
+_VIEW_KEYS = frozenset({
+    "id", "title", "layout", "hidden", "group", "panels", "detail",
+    *_NOT_RENDERED_VIEW_KEYS,
 })
 
 CONFIG_FILENAMES = ("dashboard.yml", "dashboard.yaml")
@@ -83,7 +134,9 @@ class PanelConfig:
     component: str
     id: str | None = None
     title: str | None = None
-    source: str | dict[str, Any] | None = None
+    # Always a source name. A mapping written here in YAML is registered as
+    # a source under a generated name during validation.
+    source: str | None = None
     fields: list[str] = field(default_factory=list)
     columns: list[str | dict[str, Any]] = field(default_factory=list)
     badges: list[str] = field(default_factory=list)
@@ -150,6 +203,10 @@ class DashboardConfig:
     stats: list[StatConfig] = field(default_factory=list)
     watches: list[WatchConfig] = field(default_factory=list)
     extra_roots: list[ExtraRootConfig] = field(default_factory=list)
+    # Problems that do not stop the config loading, such as keys nothing
+    # reads. They travel to the client with the config so whoever wrote it
+    # can see them.
+    warnings: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -169,11 +226,36 @@ def _parse_entity(raw: dict[str, Any] | None) -> EntityConfig | None:
 _DATA_SOURCE_KNOWN_FIELDS = {"type", "endpoint", "path", "parse", "entity", "headers", "refresh_interval"}
 
 
-def _parse_data_source(name: str, raw: dict[str, Any]) -> DataSourceConfig:
+def _parse_data_source(
+    name: str,
+    raw: Any,
+    warnings: list[str],
+    where: str | None = None,
+) -> DataSourceConfig:
+    where = where or f"data_sources.{name}"
+    if not isinstance(raw, dict):
+        raise DashboardConfigError(f"{where}: must be a mapping")
     src_type = raw.get("type")
     if not src_type:
-        raise DashboardConfigError(f"data_sources.{name}: missing 'type'")
+        raise DashboardConfigError(f"{where}: missing 'type'")
     extra = {k: v for k, v in raw.items() if k not in _DATA_SOURCE_KNOWN_FIELDS}
+
+    allowed = SOURCE_EXTRA_KEYS.get(src_type)
+    if allowed is None:
+        message = (
+            f"{where}: unknown type '{src_type}' "
+            f"(available: {', '.join(sorted(SOURCE_EXTRA_KEYS))}); it will load no rows"
+        )
+        if src_type == "file":
+            message += ". To read one markdown file, use type: markdown with parse: raw"
+        warnings.append(message)
+    else:
+        for key in extra:
+            if key not in allowed:
+                warnings.append(
+                    f"{where}: key '{key}' is not read by type '{src_type}' and has no effect"
+                )
+
     return DataSourceConfig(
         name=name,
         type=src_type,
@@ -191,21 +273,75 @@ _PANEL_SIMPLE_FIELDS = {
     "component", "id", "title", "source", "fields", "columns", "badges",
     "filter", "limit", "layout", "sortable", "filterable", "searchable",
     "inline_edit", "expandable", "options", "detail",
-    "on_click", "on_check", "on_move",
+    "on_click", "on_check", "on_move", "extra",
 }
 
 
-def _parse_panel(raw: dict[str, Any], view_id: str, idx: int) -> PanelConfig:
+def _panel_where(view_id: str, raw: dict[str, Any], idx: int) -> str:
+    return f"views[{view_id}].panels[{raw.get('id') or idx}]"
+
+
+def _check_handler_keys(where: str, key: str, value: Any, warnings: list[str]) -> None:
+    if not isinstance(value, dict):
+        return
+    for k in value:
+        if k not in _HANDLER_KEYS:
+            warnings.append(
+                f"{where}: {key} key '{k}' is not read and has no effect "
+                f"(read: {', '.join(sorted(_HANDLER_KEYS))})"
+            )
+
+
+def _parse_panel(raw: Any, view_id: str, idx: int, warnings: list[str]) -> PanelConfig:
+    if not isinstance(raw, dict):
+        raise DashboardConfigError(f"views[{view_id}].panels[{idx}]: must be a mapping")
+    where = _panel_where(view_id, raw, idx)
     component = raw.get("component")
     if not component:
         raise DashboardConfigError(f"views[{view_id}].panels[{idx}]: missing 'component'")
 
+    source = raw.get("source")
+    if source is not None and not isinstance(source, str):
+        raise DashboardConfigError(
+            f"{where}: source must be the name of a source under data_sources, "
+            "or a mapping that declares one"
+        )
+
     extra = {k: v for k, v in raw.items() if k not in _PANEL_SIMPLE_FIELDS}
+    # Docs and configs write component options both on the panel and under
+    # an `extra:` mapping, so both forms land in the same place. A key on
+    # the panel wins over the same key under `extra:`.
+    nested = raw.get("extra")
+    if isinstance(nested, dict):
+        extra = {**nested, **extra}
+    elif nested is not None:
+        warnings.append(f"{where}: 'extra' must be a mapping; it was ignored")
+
+    if component not in KNOWN_COMPONENTS:
+        # A warning, not an error: another renderer, such as Padarax's, may
+        # register components that CADE's registry lacks.
+        warnings.append(
+            f"{where}: unknown component '{component}' "
+            f"(valid: {', '.join(sorted(KNOWN_COMPONENTS))}); "
+            "CADE shows the panel as not available"
+        )
+    else:
+        allowed = COMPONENT_EXTRA_KEYS.get(component, frozenset())
+        for key in extra:
+            if key not in allowed:
+                warnings.append(
+                    f"{where}: key '{key}' is not read by component '{component}' "
+                    "and has no effect"
+                )
+
+    _check_handler_keys(where, "on_move", raw.get("on_move"), warnings)
+    _check_handler_keys(where, "on_check", raw.get("on_check"), warnings)
+
     return PanelConfig(
         component=component,
         id=raw.get("id"),
         title=raw.get("title"),
-        source=raw.get("source"),
+        source=source,
         fields=raw.get("fields", []),
         columns=raw.get("columns", []),
         badges=raw.get("badges", []),
@@ -226,7 +362,9 @@ def _parse_panel(raw: dict[str, Any], view_id: str, idx: int) -> PanelConfig:
     )
 
 
-def _parse_view(raw: dict[str, Any], idx: int) -> ViewConfig:
+def _parse_view(raw: Any, idx: int, warnings: list[str]) -> ViewConfig:
+    if not isinstance(raw, dict):
+        raise DashboardConfigError(f"views[{idx}]: must be a mapping")
     view_id = raw.get("id")
     if not view_id:
         raise DashboardConfigError(f"views[{idx}]: missing 'id'")
@@ -234,8 +372,15 @@ def _parse_view(raw: dict[str, Any], idx: int) -> ViewConfig:
     if not title:
         raise DashboardConfigError(f"views[{idx}]: missing 'title'")
 
+    for key in raw:
+        if key not in _VIEW_KEYS:
+            warnings.append(f"views[{view_id}]: key '{key}' is not read and has no effect")
+    for key in _NOT_RENDERED_VIEW_KEYS:
+        if key in raw:
+            warnings.append(f"views[{view_id}]: '{key}' {_NOT_RENDERED}")
+
     panels = [
-        _parse_panel(p, view_id, i)
+        _parse_panel(p, view_id, i, warnings)
         for i, p in enumerate(raw.get("panels", []))
     ]
 
@@ -251,6 +396,41 @@ def _parse_view(raw: dict[str, Any], idx: int) -> ViewConfig:
         detail=raw.get("detail"),
         actions_by_status=raw.get("actions_by_status"),
     )
+
+
+def _lift_inline_sources(
+    views_raw: list[Any],
+    taken: set[str],
+) -> tuple[list[Any], dict[str, tuple[str, dict[str, Any]]]]:
+    """Move each mapping given as a panel's `source` out of the panel.
+
+    Returns copies of the views in which every such mapping is replaced by
+    a generated source name, and the lifted sources keyed by that name,
+    each with a label that points back at the panel for messages.
+    """
+    lifted: dict[str, tuple[str, dict[str, Any]]] = {}
+    new_views: list[Any] = []
+    for v_idx, view in enumerate(views_raw):
+        if not isinstance(view, dict) or not isinstance(view.get("panels"), list):
+            new_views.append(view)
+            continue
+        view_id = view.get("id") or v_idx
+        new_panels: list[Any] = []
+        for p_idx, panel in enumerate(view["panels"]):
+            if isinstance(panel, dict) and isinstance(panel.get("source"), dict):
+                base = f"_inline:{view_id}:{panel.get('id') or p_idx}"
+                name = base
+                n = 2
+                while name in taken:
+                    name = f"{base}:{n}"
+                    n += 1
+                taken.add(name)
+                where = f"{_panel_where(str(view_id), panel, p_idx)}.source"
+                lifted[name] = (where, panel["source"])
+                panel = {**panel, "source": name}
+            new_panels.append(panel)
+        new_views.append({**view, "panels": new_panels})
+    return new_views, lifted
 
 
 def _parse_stat(raw: dict[str, Any], idx: int) -> StatConfig:
@@ -273,8 +453,17 @@ def _parse_stat(raw: dict[str, Any], idx: int) -> StatConfig:
 def validate_config(raw: dict[str, Any]) -> DashboardConfig:
     """Validate a parsed YAML dict and return a typed DashboardConfig.
 
-    Raises DashboardConfigError with a human-readable message on failure.
+    Raises DashboardConfigError with a human-readable message when the
+    config cannot be used. Problems that leave it usable, such as keys
+    nothing reads, are collected in ``DashboardConfig.warnings`` instead,
+    so configs written against a looser schema keep loading.
     """
+    warnings: list[str] = []
+
+    for key in raw:
+        if key not in _TOP_LEVEL_KEYS:
+            warnings.append(f"top-level key '{key}' is not read and has no effect")
+
     # Dashboard metadata
     dash_raw = raw.get("dashboard")
     if not dash_raw:
@@ -284,41 +473,51 @@ def validate_config(raw: dict[str, Any]) -> DashboardConfig:
     title = dash_raw.get("title")
     if not title:
         raise DashboardConfigError("dashboard.title is required")
+    for key in dash_raw:
+        if key not in _DASHBOARD_KEYS:
+            warnings.append(f"dashboard: key '{key}' is not read and has no effect")
+    if "theme" in dash_raw:
+        warnings.append(f"dashboard: 'theme' {_NOT_RENDERED}")
     dashboard = DashboardMeta(
         title=title,
         subtitle=dash_raw.get("subtitle"),
         theme=dash_raw.get("theme"),
     )
 
-    # Data sources
     sources_raw = raw.get("data_sources", {})
     if not isinstance(sources_raw, dict):
         raise DashboardConfigError("'data_sources' must be a mapping")
-    data_sources = {
-        name: _parse_data_source(name, cfg)
-        for name, cfg in sources_raw.items()
-    }
 
-    # Views
     views_raw = raw.get("views", [])
     if not isinstance(views_raw, list):
         raise DashboardConfigError("'views' must be a list")
     if not views_raw:
         raise DashboardConfigError("at least one view is required")
-    views = [_parse_view(v, i) for i, v in enumerate(views_raw)]
+
+    # Data sources, including any declared inline on a panel
+    views_raw, inline_sources = _lift_inline_sources(views_raw, set(sources_raw))
+    data_sources = {
+        name: _parse_data_source(name, cfg, warnings)
+        for name, cfg in sources_raw.items()
+    }
+    for name, (where, cfg) in inline_sources.items():
+        data_sources[name] = _parse_data_source(name, cfg, warnings, where=where)
+
+    views = [_parse_view(v, i, warnings) for i, v in enumerate(views_raw)]
 
     # Validate source references in panels.
     # push_sources lists sources sent by the server over WebSocket (no data_sources entry needed).
     push_sources_raw = raw.get("push_sources", [])
     push_sources = set(push_sources_raw) if isinstance(push_sources_raw, list) else set()
     source_names = set(data_sources.keys()) | push_sources
+    declared_names = sorted(n for n in source_names if n not in inline_sources)
     for view in views:
         for panel in view.panels:
-            if isinstance(panel.source, str) and panel.source not in source_names:
+            if panel.source is not None and panel.source not in source_names:
                 raise DashboardConfigError(
                     f"views[{view.id}].panels[{panel.id or panel.component}]: "
                     f"unknown source '{panel.source}' "
-                    f"(available: {', '.join(sorted(source_names)) or 'none'})"
+                    f"(available: {', '.join(declared_names) or 'none'})"
                 )
 
     # Stats (optional)
@@ -373,6 +572,7 @@ def validate_config(raw: dict[str, Any]) -> DashboardConfig:
         stats=stats,
         watches=watches,
         extra_roots=extra_roots,
+        warnings=warnings,
     )
 
 

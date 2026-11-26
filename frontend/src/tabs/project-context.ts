@@ -126,6 +126,10 @@ export class ProjectContextImpl implements IProjectContext {
         );
         this.terminalManager?.focusAtBottom();
       }
+      if (msg.code === ErrorCode.DASHBOARD_PATCH_ERROR) {
+        this.rightPane?.getDashboardPane()?.showError(msg.message);
+        this.dashboardFullPane?.showError(msg.message);
+      }
     },
     ptyExited: (msg: PtyExitedMessage) => {
       console.error(`[${this.name}] PTY exited:`, msg.message);

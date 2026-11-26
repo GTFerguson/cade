@@ -30,7 +30,7 @@ The component set and schema come from what the two hand-built dashboards had in
 | Pattern | Built as | State |
 |---------|----------|-------|
 | Several views with navigation | `views:` list, with optional `group` for a second navigation level | Built |
-| Entities that move through statuses | `entity.statuses` on a source feeds the status select in tables. Kanban columns patch the status on move | Built. `entity.transitions` is parsed and not enforced |
+| Entities that move through statuses | `entity.statuses` on a source feeds the status select in tables. A kanban move sends the panel's `on_move` patch, and `entity.transitions` limits which moves the kanban allows | Built. Transitions are checked in the kanban only, not by the backend or the table's status select |
 | Summary cards with key fields and badges | `cards` and `cards_paged` with `fields` and `badges` | Built |
 | Filterable, searchable lists | Panel `filter:`, plus `filterable` and `searchable` on `cards` and `table` | Built. View-level `sidebar_filters` and `tab_filter` are parsed and not rendered |
 | Detail on click | `detail:` on a panel or a view, with `on_click: detail` | Built |
@@ -66,7 +66,27 @@ CADE holds no project-specific dashboard logic. A project that needs behaviour C
 
 YAML is readable, allows comments, and agents write it reliably. The backend parses it with `yaml.safe_load` and validates it into frozen dataclasses (`core/backend/dashboard/config.py`). A config that fails validation is not sent to the client. The client receives a `dashboard-config-error` message with the reason.
 
-Validation is structural. It checks required keys and that each panel's `source` names a declared source. It does not reject unknown keys or unknown component names. See [[#Known limits]].
+### Errors for what cannot work, warnings for what has no effect
+
+Validation fails only on what makes a config unusable: missing required keys, a wrong shape, a panel naming a source that is not declared. Everything else that is wrong but harmless loads, and is reported in `DashboardConfig.warnings`:
+
+- keys nothing reads, at the top level, in `dashboard`, on a view, on a panel or on a source
+- component names missing from `KNOWN_COMPONENTS`
+- source types with no adapter
+- `theme`, `sidebar_filters`, `tab_filter` and `actions_by_status`, which are accepted and not rendered
+- keys under a kanban's `on_move` or a checklist's `on_check` other than `action` and `patch`
+
+Warnings rather than errors because existing configs in other projects were written against a looser schema, and a config that fails to load shows the user nothing. Rejecting unknown component names would also break Padarax's player dashboard, which uses components only Padarax's own renderer registers.
+
+Which extra keys are valid depends on the component or source type. `COMPONENT_EXTRA_KEYS` and `SOURCE_EXTRA_KEYS` in `config.py` list them, read from what each component and adapter actually reads. A key written under a panel's `extra:` mapping is treated as if it were written on the panel, because the docs and real configs use both forms.
+
+Two lists are kept in step by tests in `backend/tests/test_dashboard_config.py`: `KNOWN_COMPONENTS` against the registrations in `frontend/src/dashboard/registry.ts`, and the keys of `SOURCE_EXTRA_KEYS` against the adapter registry.
+
+Warnings travel to the client inside the `dashboard-config` payload, as `config.warnings`, and the backend logs each one. `DashboardPane` lists them at the top of the pane. They ride on the config payload rather than a message type of their own so that no change to the WebSocket routing was needed. The agent that wrote the config cannot read them directly: there is no endpoint or tool that returns them, so the agent learns of them only if the user passes them on.
+
+### Inline sources
+
+A panel's `source` may be a mapping that declares a source in place. Validation lifts each one into `data_sources` under a generated name, `_inline:<view id>:<panel id or index>`, and replaces the panel's `source` with that name. After validation every panel source is a string, so the renderer and `fetch_all_sources` need no special case. This form is supported, not just rejected, because real configs use it.
 
 ### Hybrid data sources
 
@@ -90,7 +110,11 @@ The design has three tiers of interaction. Only the first is built.
 | 2. Agent callback | A user action fires a named event that an agent picks up and answers | Not built |
 | 3. Workflow | A user action starts a multi-step agent pipeline that reports progress | Not built |
 
-Tier 1 was built first because it covers most of what the hand-built dashboards did. A `patch` action goes to `DashboardHandler`, which applies it and pushes fresh data. Patches are applied for `rest` (an HTTP PATCH to `<endpoint>/<id>`), `directory` and `json_file` sources. A patch against any other source type is dropped with no error, except `markdown`, which is covered under [[#Known limits]].
+Tier 1 was built first because it covers most of what the hand-built dashboards did. A `patch` action goes to `DashboardHandler`, which applies it and pushes fresh data. Patches are applied for the types in `PATCHABLE_SOURCE_TYPES` in `handler.py`: `rest` (an HTTP PATCH to `<endpoint>/<id>`), `directory` and `json_file`.
+
+A patch against any other type is refused, and so is a patch whose write fails. Either way the handler sends an error frame with code `dashboard-patch-error`, which `DashboardPane` shows at the top of the pane, and then sends the source's current rows so the client drops its optimistic change. `markdown` sources are read-only on purpose: their rows are parsed from list items, headings or table rows, and a row has no stable place in the file to write back to. No real config patches one.
+
+Components send the row's entity id through `entityIdOf` in `frontend/src/dashboard/entity.ts`, which reads the field the source's `entity.id_field` names, defaulting to `id`.
 
 Two built pieces sit near the upper tiers without being them:
 
@@ -154,15 +178,14 @@ dashboard_file: .cade/dashboard-player.yml
 
 ## Known limits
 
-These are gaps between what the schema accepts and what the screen does. The planned work is in [[../../plans/dashboard/agent-ui-system]], and the code-level fixes are in [[../../plans/quick-fixes/dashboard-schema-loose-ends]].
+These are gaps between what the schema accepts and what the screen does. The planned work is in [[../../plans/dashboard/agent-ui-system]].
 
-- **`theme` does nothing.** `dashboard.theme` is parsed and sent to the client. No frontend code reads it. Dashboards use CADE's own theme.
-- **Unknown component names pass validation.** `KNOWN_COMPONENTS` in `config.py` lists the valid names and nothing checks against it. A misspelt component loads and its panel shows `Component "<name>" not yet available`.
-- **Unknown keys pass validation.** No key is ever rejected. Extra keys on a panel or a source are kept in an `extra` map. Extra keys elsewhere are ignored.
-- **Some accepted fields are not rendered.** `sidebar_filters`, `tab_filter`, `actions_by_status`, `entity.transitions` and `on_move` are parsed and no frontend code reads them. A kanban move always patches `status` to the target column.
-- **Components send `id` as the entity id.** `entity.id_field` is used when patching a `json_file` source, but the components that emit patches read the row's `id` key.
-- **A panel's `source` must be a name.** The schema also accepts a mapping there, but the renderer only resolves a string, so such a panel gets no rows.
-- **Patching a `markdown` source is expected to fail.** The patch is routed to the code that looks for files inside a directory, and a `markdown` source's `path` is a single file. This was read from the code and not run.
+- **Accepted fields that are not rendered.** `dashboard.theme` and the view keys `sidebar_filters`, `tab_filter` and `actions_by_status` are parsed and sent to the client, and nothing reads them. Each loads with a warning.
+- **Warnings reach the pane, not the agent.** An agent that edits the config has no way to read the warnings it caused. See [[#Errors for what cannot work, warnings for what has no effect]].
+- **Config errors are not shown in the pane.** A config that fails validation sends a `dashboard-config-error` frame, which the client only logs to the browser console.
+- **Transitions are a client-side check.** The kanban refuses moves `entity.transitions` does not allow. The backend applies any patch it is sent, and the table's status select offers every status.
+- **Several source types are read-only.** `vault`, `json_directory`, `json_file_array`, `json_directory_expand`, `model_usage` and `stream` sources refuse patches. A kanban on a `vault` source shows a refusal for every move.
+- **Unknown source types load no rows.** A source whose `type` has no adapter, such as `file`, loads with a warning and stays empty.
 - **No state is stored in the browser.** The dashboard code does not use `localStorage` or `sessionStorage`, so the active view, filters and expanded rows last only as long as the pane.
 
 ## See Also

@@ -20,12 +20,13 @@ from core.backend.dashboard.config import (
     CONFIG_FILENAMES,
     DashboardConfig,
     DashboardConfigError,
+    DataSourceConfig,
     WatchConfig,
     config_to_dict,
     load_dashboard_config,
 )
 from core.backend.models import FileChangeEvent
-from backend.protocol import MessageType
+from backend.protocol import ErrorCode, MessageType
 from core.backend.providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,16 @@ SendFn = Callable[[dict[str, Any]], Awaitable[None]]
 
 # The project-local directory the dashboard config lives in.
 CADE_DIR_NAME = ".cade"
+
+CONFIG_ERROR_CODE = ErrorCode.DASHBOARD_CONFIG_ERROR
+PATCH_ERROR_CODE = ErrorCode.DASHBOARD_PATCH_ERROR
+
+# Source types a patch can be written back to.
+PATCHABLE_SOURCE_TYPES = frozenset({"rest", "directory", "json_file"})
+
+
+class PatchRefused(Exception):
+    """A patch the handler will not apply to its source."""
 
 
 class DashboardHandler:
@@ -96,13 +107,16 @@ class DashboardHandler:
             logger.warning("Dashboard config error: %s", e)
             await self._send({
                 "type": MessageType.ERROR,
-                "code": "dashboard-config-error",
+                "code": CONFIG_ERROR_CODE,
                 "message": str(e),
             })
             return
 
         if self._config is None:
             return
+
+        for warning in self._config.warnings:
+            logger.warning("Dashboard config warning: %s", warning)
 
         await self._send({
             "type": MessageType.DASHBOARD_CONFIG,
@@ -134,7 +148,7 @@ class DashboardHandler:
         """Handle a user interaction from the dashboard.
 
         Two action types today:
-        - `patch`: direct mutation of a data source (REST / markdown / directory).
+        - `patch`: direct mutation of a data source (REST / directory / JSON file).
           Handler applies the patch and pushes a refreshed snapshot.
         - `provider_message`: forward a freeform frame through the active
           provider's engine channel (e.g. trade commit, macro trigger).
@@ -154,7 +168,12 @@ class DashboardHandler:
             logger.warning("Dashboard action: unknown action type '%s'", action_type)
 
     async def _handle_patch_action(self, data: dict[str, Any]) -> None:
-        """Apply a direct mutation to a data source and refresh it."""
+        """Apply a direct mutation to a data source and refresh it.
+
+        A patch that cannot be applied is answered with an error frame and
+        then the source's current rows, so the client drops whatever it
+        changed ahead of the server.
+        """
         assert self._config is not None
         source_name = data.get("source")
         entity_id = data.get("entityId")
@@ -162,22 +181,26 @@ class DashboardHandler:
 
         if not source_name or source_name not in self._config.data_sources:
             logger.warning("Dashboard patch action: unknown source '%s'", source_name)
+            await self._send_patch_error(f"Cannot save the change: unknown source '{source_name}'")
             return
 
         src = self._config.data_sources[source_name]
-        await self._apply_patch(src, entity_id, patch)
-
-        # Re-fetch the affected source and push updated data
         try:
-            adapter = get_adapter(src.type)
-            updated = await adapter.fetch(src, self._working_dir)
-        except AdapterError as e:
-            logger.warning("Dashboard data refresh failed: %s", e)
-            return
+            await self._apply_patch(src, entity_id, patch)
+        except PatchRefused as e:
+            logger.warning("Dashboard patch refused: %s", e)
+            await self._send_patch_error(str(e))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Dashboard patch to '%s' failed: %s", source_name, e)
+            await self._send_patch_error(f"Saving to '{source_name}' failed: {e}")
 
+        await self._refresh_source(source_name)
+
+    async def _send_patch_error(self, message: str) -> None:
         await self._send({
-            "type": MessageType.DASHBOARD_DATA,
-            "sources": {source_name: updated},
+            "type": MessageType.ERROR,
+            "code": PATCH_ERROR_CODE,
+            "message": message,
         })
 
     async def _handle_provider_message(self, data: dict[str, Any]) -> None:
@@ -209,7 +232,19 @@ class DashboardHandler:
     async def _apply_patch(
         self, src: DataSourceConfig, entity_id: str | None, patch: dict[str, Any]
     ) -> None:
-        """Apply a patch mutation to a data source."""
+        """Apply a patch mutation to a data source.
+
+        Raises PatchRefused for a source type with no write-back. A
+        `markdown` source is parsed from list items, headings or tables,
+        so a row has no stable place in the file to write back to.
+        """
+        if src.type not in PATCHABLE_SOURCE_TYPES:
+            raise PatchRefused(
+                f"Cannot save the change: '{src.name}' is a {src.type} source, "
+                f"which is read-only (write-back works for "
+                f"{', '.join(sorted(PATCHABLE_SOURCE_TYPES))})"
+            )
+
         if src.type == "rest" and src.endpoint:
             import httpx
             url = f"{src.endpoint}/{entity_id}" if entity_id else src.endpoint
@@ -217,7 +252,7 @@ class DashboardHandler:
                 resp = await client.patch(url, json=patch, headers=src.headers)
                 resp.raise_for_status()
 
-        elif src.type in ("directory", "markdown"):
+        elif src.type == "directory":
             await self._patch_file_source(src, entity_id, patch)
 
         elif src.type == "json_file" and src.path:

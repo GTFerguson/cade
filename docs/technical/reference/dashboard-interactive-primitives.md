@@ -1,7 +1,7 @@
 ---
 title: Interactive Dashboard Primitives
 created: 2026-04-17
-updated: 2026-05-06
+updated: 2026-11-26
 status: complete
 tags: [reference, dashboard, protocol, components]
 ---
@@ -19,7 +19,7 @@ A dashboard component calls `props.onAction({ action, source, ... })` when the u
 | Action           | Route                                                | Notes |
 |------------------|------------------------------------------------------|-------|
 | `view_file`      | Client-side — opens the file in the markdown viewer. | Pre-existing. |
-| `patch`          | Server: `DashboardHandler._handle_patch_action`. Applies a field-level mutation to the named data source (REST, directory, markdown adapter). Handler re-fetches + pushes fresh data. | Pre-existing. |
+| `patch`          | Server: `DashboardHandler._handle_patch_action`. Applies a field-level mutation to the named data source (`rest`, `directory`, `json_file`). Handler re-fetches + pushes fresh data. | Pre-existing. A refused or failed patch is answered as below. |
 | `provider_message` | Server: `DashboardHandler._handle_provider_message`. Forwards `data.message` through the active provider's `send_frame` to the engine. Fire-and-forget; server-side effects drive dashboard refresh via the normal file-watch loop. | **New.** |
 
 A panel declares its action shape in YAML under `options.on_<event>`:
@@ -37,6 +37,18 @@ panels:
 ```
 
 The component is responsible for reading its own `on_<event>` keys out of `panel.options` and building the action object; `handleAction` doesn't care what `action` string it gets, only how to route it.
+
+### Refused patches
+
+A `patch` the handler cannot apply is answered in two frames. First an error:
+
+```json
+{"type": "error", "code": "dashboard-patch-error", "message": "Cannot save the change: 'todo' is a markdown source, which is read-only (write-back works for directory, json_file, rest)"}
+```
+
+Then a `dashboard-data` frame with the source's current rows, so a component that changed its display ahead of the server shows the saved state again. This happens when the source is unknown, when its type is not in `PATCHABLE_SOURCE_TYPES` (`core/backend/dashboard/handler.py`), and when the write itself raises. `ProjectContext` passes the message to `DashboardPane.showError`, which shows it at the top of the pane until it is dismissed or a new config arrives.
+
+The `entityId` on a patch is the row's value for the source's `entity.id_field`, or `id` when the source names none. Components read it with `entityIdOf` from `frontend/src/dashboard/entity.ts`.
 
 ## Provider `send_frame`
 
@@ -82,7 +94,7 @@ Built-in components that emit actions:
 | Component     | Action                              | Notes |
 |---------------|-------------------------------------|-------|
 | `checklist`   | `patch`                             | Toggle a row's done state. |
-| `kanban`      | `patch`                             | Move a card between columns. |
+| `kanban`      | `patch`                             | Move a card between columns. Sends `on_move.patch` with `$column` replaced by the target column, or `{status: <column>}`. Moves the source's `entity.transitions` do not allow are refused before anything is sent. |
 | `table`       | `patch`                             | Inline-editable cells (`inline_edit: [field, …]`) emit `patch` per change. Expandable detail rows (`expandable: { fields, editable }`) emit `patch` on textarea blur. |
 | `cards`       | `patch` (via `panel.detail` toggle) | Inline detail expansion; supports `panel.detail.component` (single-section) and `panel.detail.sections: […]` (multi-section). When a panel sets `on_click: detail` without its own `panel.detail`, `DashboardPane.renderPanel` hoists the view-level `view.detail` into the panel before render. |
 | `basket`      | `provider_message` or user-defined  | Two-column stepper basket with balance + Confirm. |
