@@ -38,6 +38,12 @@ export interface TabInfo {
    * after a backend restart starts the same agent.
    */
   agent?: string;
+  /**
+   * The handoff brief the tab was opened on, as a path inside its project.
+   * Kept with the tab and sent on every connect, so that what the tab is
+   * working on survives the backend forgetting its session.
+   */
+  handoff?: string;
   isRemote?: boolean;
   remoteProfileId?: string;
   remoteUrl?: string;

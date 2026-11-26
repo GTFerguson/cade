@@ -45,6 +45,7 @@ _WIKI_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]")
 _CODE_RE = re.compile(r"`([^`]+)`")
 _PR_RE = re.compile(r"#(\d+)\b")
 # How a row records the ticket it sits under: "parent ABC-1" or "child of ABC-1".
+_HANDOFF_LINK_RE = re.compile(r"\[\[(handoff/[^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]")
 _PARENT_RE = re.compile(r"\b(?:parent|child of)\s+([A-Z][A-Z0-9]+-\d+)\b")
 
 # Where the owner's tickets go that the board file does not mention. It is
@@ -118,7 +119,14 @@ def parse_board(text: str) -> list[dict[str, Any]]:
         link = _LINK_RE.search(ticket_cell)
         linear = _plain(col("linear"))
         status, _, detail = linear.partition(" (")
-        handoff = _WIKI_RE.search(col("handoff"))
+        # The doc a session on this ticket starts from. The column has been
+        # called "Handoff" and "Resumption owner" and may be renamed again,
+        # and it names a handoff or a plan; failing a column by any of those
+        # names, a link into the handoff folder anywhere in the row will do.
+        owner = _WIKI_RE.search(col("handoff", "resumption", "owner")) or next(
+            (m for m in (_HANDOFF_LINK_RE.search(c) for c in cells) if m), None
+        )
+        target = owner.group(1).strip() if owner else None
         carries = col("worktree", "branch")
         rows.append({
             "ticket": found.group(0),
@@ -128,7 +136,9 @@ def parse_board(text: str) -> list[dict[str, Any]]:
             "statusDetail": detail.rstrip(")").strip(),
             "parent": (_PARENT_RE.search(linear) or [None, None])[1],
             "section": section,
-            "handoff": handoff.group(1).rsplit("/", 1)[-1] if handoff else None,
+            "handoff": target.rsplit("/", 1)[-1] if target else None,
+            # The link as written, relative to the plans folder.
+            "owner": target,
             "names": _CODE_RE.findall(carries),
             "prs": [int(n) for n in _PR_RE.findall(carries)],
             "next": _plain(col("next", "remaining", "evidence")),
@@ -364,8 +374,8 @@ def assemble(
             tree = by_name.get(key) if isinstance(key, str) else by_pr.get(key)
             if tree and tree not in trees:
                 trees.append(tree)
-        handoff = by_handoff.get(row["handoff"]) if row["handoff"] else None
-        if handoff:
+        handoff = _owner_doc(project, row, by_handoff)
+        if handoff and handoff.get("kind") != "plan":
             used_handoffs.add(row["handoff"])
         used_trees.update(t["path"] for t in trees)
         streams.append({
@@ -404,6 +414,37 @@ def _handoff_view(handoff: dict[str, Any]) -> dict[str, Any]:
         "relPath": handoff["relPath"],
         "title": handoff["title"],
         "modified": handoff["modified"],
+        "kind": handoff.get("kind", "handoff"),
+    }
+
+
+def _owner_doc(
+    project: Path, row: dict[str, Any], by_handoff: dict[str, dict[str, Any]]
+) -> dict[str, Any] | None:
+    """The doc a row names as where its work is picked up: a handoff, or a
+    plan beside the handoff folder. None when it names none or the doc is
+    not there."""
+    target = row.get("owner") or (f"handoff/{row['handoff']}" if row.get("handoff") else None)
+    if not target:
+        return None
+    if target.startswith("handoff/"):
+        return by_handoff.get(target.rsplit("/", 1)[-1])
+    plans = (project / BOARD_FILE).parent
+    path = (plans / target).with_suffix(".md")
+    try:
+        resolved = path.resolve()
+        rel = resolved.relative_to(project.resolve())
+        if not resolved.is_file():
+            return None
+        modified = resolved.stat().st_mtime
+    except (OSError, ValueError):
+        # Missing, unreadable, or outside the project.
+        return None
+    from backend.projects import doc_title
+
+    return {
+        "name": f"{resolved.stem}.md", "relPath": str(rel), "title": doc_title(resolved),
+        "modified": modified, "kind": "plan",
     }
 
 
@@ -519,11 +560,17 @@ _cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _gathering: dict[str, asyncio.Task] = {}
 
 
-async def board(project: Path, *, fresh: bool = False) -> dict[str, Any]:
-    """The project's board, gathered at most once a minute unless asked."""
+async def board(
+    project: Path, *, fresh: bool = False, max_age: float = CACHE_SECONDS
+) -> dict[str, Any]:
+    """The project's board, gathered at most once a minute unless asked.
+
+    `max_age` lets a caller that needs it less fresh (the line above a
+    terminal) take an older one instead of causing another gathering.
+    """
     key = str(project)
     cached = _cache.get(key)
-    if cached and not fresh and time.time() - cached[0] < CACHE_SECONDS:
+    if cached and not fresh and time.time() - cached[0] < max_age:
         return cached[1]
     # Two requests for one project share a gathering instead of running git
     # in every worktree twice.

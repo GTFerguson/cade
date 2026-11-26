@@ -137,6 +137,24 @@ describe("asking for the agent to be started", () => {
   });
 });
 
+describe("telling the backend which handoff a tab is on", () => {
+  it("sends it with every handshake, and nothing when the tab is on none", () => {
+    const first = new WebSocketClient("ws://test/ws");
+    first.sendSetProject("/proj", "tab-1", undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, "docs/plans/handoff/x.md");
+    first.connect();
+    const socket = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!;
+    socket.simulateOpen();
+    expect(JSON.parse(socket.sent[0]!).handoff).toBe("docs/plans/handoff/x.md");
+
+    const second = new WebSocketClient("ws://test/ws");
+    second.sendSetProject("/proj", "tab-2");
+    second.connect();
+    const other = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!;
+    other.simulateOpen();
+    expect(JSON.parse(other.sent[0]!)).not.toHaveProperty("handoff");
+  });
+});
+
 describe("closing a tab", () => {
   it("tells the backend, so the session ends with the tab", () => {
     const { client, socket } = connectedClient();

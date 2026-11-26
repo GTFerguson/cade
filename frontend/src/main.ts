@@ -57,6 +57,7 @@ import { handoffPrompt } from "./local/picker-model";
 import { WorkspaceSwitcher, type WorkspaceRow } from "./tabs/workspace-switcher";
 import { carryStops, groupRollup } from "./tabs/tab-groups";
 import { BoardScreen } from "./board/board-screen";
+import type { PullRequestSummary } from "./tabs/pull-request";
 import { loadRecentProjects, rememberRecentProject } from "./local/recent-projects";
 import { Splash } from "./ui/splash";
 import type { RemoteProfile } from "./remote/types";
@@ -860,7 +861,21 @@ class App {
     // attention frame on it is about this tab.
     tab.ws.on("group-changed", (msg) => this.adoptGroupFromBackend(tab, msg.group));
 
-    tab.ws.on("session-pr", (msg) => this.tabBar?.setPullRequest(tab.id, msg.pr));
+    // The badge is for the tab's own stream when that is known: tabs opened
+    // on one project folder would otherwise all show that folder's branch.
+    let folderPr: PullRequestSummary | null = null;
+    let streamPr: PullRequestSummary | null = null;
+    const showBadge = () => this.tabBar?.setPullRequest(tab.id, streamPr ?? folderPr);
+    tab.ws.on("session-pr", (msg) => {
+      folderPr = msg.pr;
+      showBadge();
+    });
+    tab.ws.on("session-context", (msg) => {
+      const pr = msg.context?.pr;
+      // A merged or closed one is said on the strip; the badge is for one in play.
+      streamPr = pr && pr.state === "open" ? (pr as unknown as PullRequestSummary) : null;
+      showBadge();
+    });
 
     tab.ws.on("session-attention", (msg) => {
       const previous = this.attentionByTab.get(tab.id) ?? null;
@@ -896,6 +911,7 @@ class App {
         tab.group,
         tab.agent,
         tab.startAgent,
+        tab.handoff,
       );
 
       // Auth is project-driven now: connect first; if the project's launch.yml
@@ -990,7 +1006,7 @@ class App {
       startAgent: true,
       // The agent is handed the brief's path; what to do with it is the user's to say.
       ...(choice.kind === "project" &&
-        choice.handoff && { initialPrompt: handoffPrompt(choice.handoff) }),
+        choice.handoff && { initialPrompt: handoffPrompt(choice.handoff), handoff: choice.handoff }),
     });
     this.tabManager.switchTab(tab.id);
   }
@@ -1019,7 +1035,7 @@ class App {
       // The board has no agent toggle of its own: the new tab runs what the tab in front runs.
       ...(active.agent && { agent: active.agent }),
       startAgent: true,
-      ...(choice.handoff && { initialPrompt: handoffPrompt(choice.handoff) }),
+      ...(choice.handoff && { initialPrompt: handoffPrompt(choice.handoff), handoff: choice.handoff }),
     });
     this.tabManager.switchTab(tab.id);
   }

@@ -257,9 +257,13 @@ class PTYSession:
     # Summary of the open pull request for the branch checked out in the
     # project, or None (see backend/pull_requests.py).
     pull_request: dict | None = None
-    # Branch, pending work and latest handoff of the project, or None (see
-    # backend/session_context.py).
+    # Where the tab's work stands: its handoff, tickets, branch and pull
+    # request, or None (see backend/session_context.py).
     context: dict | None = None
+    # The handoff brief the tab was opened on, as a path inside the project.
+    # None when it was not opened on one; what it is working on is then
+    # worked out from what its agent writes (see session_context.py).
+    handoff: str | None = None
 
     @property
     def pty(self) -> PTYManager:

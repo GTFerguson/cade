@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from "vitest";
-import { ContextStrip, stripCells, type SessionContext } from "./context-strip";
+import { ContextStrip, effectivePullRequest, stripCells, type ContextTicket, type SessionContext } from "./context-strip";
 import type { PullRequestSummary } from "./pull-request";
 
 const NOW = 100_000;
@@ -54,6 +54,73 @@ describe("what the strip says", () => {
   it("orders pull request, branch, handoff", () => {
     const handoff = { name: "h", relPath: "h.md", title: "H", modified: NOW };
     expect(stripCells(pr(), context({ handoff }), NOW).map((c) => c.kind)).toEqual(["pr", "branch", "handoff"]);
+  });
+});
+
+describe("a tab on its own stream", () => {
+  const ticket = (id: string, over: Partial<ContextTicket> = {}): ContextTicket => ({
+    ticket: id, title: `Title of ${id}`, url: `https://tracker.test/${id}`, status: "In Progress", statusType: "started", ...over,
+  });
+  const handoff = { name: "model-metrics", relPath: "docs/plans/handoff/model-metrics.md", title: "Metrics", modified: NOW - 240, source: "titled" };
+
+  it("leads with the ticket it is on, and says how many more the handoff carries", () => {
+    const cells = stripCells(null, context({ tickets: [ticket("W-1"), ticket("W-2"), ticket("W-3")] }), NOW);
+    expect(cells[0]!.kind).toBe("ticket");
+    expect(text(cells)[0]).toBe("W-1 In Progress +2  Title of W-1");
+    expect(cells[0]!.open).toEqual({ url: "https://tracker.test/W-1" });
+  });
+
+  it("leads with a ticket still open, not one already finished", () => {
+    const cells = stripCells(null, context({ tickets: [ticket("W-1", { status: "Done", statusType: "completed" }), ticket("W-2")] }), NOW);
+    expect(text(cells)[0]).toContain("W-2 In Progress +1");
+  });
+
+  it("leads with a ticket under way before one still in the backlog", () => {
+    const cells = stripCells(null, context({ tickets: [ticket("W-1", { status: "Backlog", statusType: "backlog" }), ticket("W-2")] }), NOW);
+    expect(text(cells)[0]).toContain("W-2 In Progress +1");
+  });
+
+  it("shows the stream's pull request in place of the folder's", () => {
+    const stream = { number: 77, title: "Stream PR", url: "https://example.test/pr/77", state: "open" as const, draft: false, checks: "running" as const, review: null, conflicts: false };
+    const cells = stripCells(pr({ checks: "failing" }), context({ pr: stream }), NOW);
+    expect(text(cells)).toContain("#77 \u2026 checks running");
+    expect(text(cells).join()).not.toContain("#12");
+  });
+
+  it("says a merged or closed pull request plainly", () => {
+    const merged = { number: 77, title: "Stream PR", url: "https://example.test/pr/77", state: "merged" as const };
+    const cells = stripCells(null, context({ pr: merged }), NOW);
+    expect(text(cells)).toContain("#77 merged");
+    expect(cells.find((c) => c.kind === "pr")!.parts[0]!.tone).toBe("good");
+    expect(text(stripCells(null, context({ pr: { ...merged, state: "closed" } }), NOW))).toContain("#77 closed");
+  });
+
+  it("shows the stream's worktree in place of the folder the tab was opened on", () => {
+    const cells = stripCells(null, context({ branch: "main", worktree: { name: "platform-metrics", branch: "gary/metrics", uncommitted: 2, unpushed: 0 } }), NOW);
+    expect(text(cells)).toEqual(["branch gary/metrics \u00b7 2 uncommitted"]);
+    expect(cells[0]!.title).toBe("worktree platform-metrics");
+  });
+
+  it("falls back on the folder when the stream has no worktree", () => {
+    expect(text(stripCells(null, context({ branch: "main", worktree: null }), NOW))).toEqual(["branch main \u00b7 clean"]);
+  });
+
+  it("says how the handoff is known", () => {
+    const cells = stripCells(null, context({ branch: null, handoff }), NOW);
+    expect(cells[0]!.title).toContain("the handoff this tab's title names");
+  });
+
+  it("orders ticket, pull request, branch, handoff", () => {
+    const stream = { number: 77, title: "t", url: "u", state: "merged" as const };
+    const cells = stripCells(null, context({ tickets: [ticket("W-1")], pr: stream, handoff }), NOW);
+    expect(cells.map((c) => c.kind)).toEqual(["ticket", "pr", "branch", "handoff"]);
+  });
+
+  it("gives the tab's badge the stream's pull request before the folder's", () => {
+    const stream = { number: 77, title: "t", url: "u", state: "open" as const };
+    expect(effectivePullRequest(pr(), context({ pr: stream }))!.number).toBe(77);
+    expect(effectivePullRequest(pr(), context())!.number).toBe(12);
+    expect(effectivePullRequest(null, null)).toBeNull();
   });
 });
 

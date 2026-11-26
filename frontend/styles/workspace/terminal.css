@@ -389,6 +389,12 @@
   flex-shrink: 0;
 }
 
+/* The ticket's title is the first thing to give way; its id and status stay. */
+.context-strip-cell[data-kind="ticket"] {
+  flex-shrink: 4;
+  min-width: 22ch;
+}
+
 button.context-strip-cell {
   cursor: pointer;
 }

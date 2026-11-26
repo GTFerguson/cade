@@ -1,28 +1,56 @@
 /**
- * The line above a tab's terminal saying where its work stands: the pull
- * request for its branch, the branch and what is pending on it, and the
- * handoff last written for the project.
+ * The line above a tab's terminal saying where its work stands: the ticket
+ * it is on, the pull request, the branch and what is pending on it, and the
+ * handoff it is working from.
  *
- * It shows only what is known, so it is shorter on a tab with less going on
- * and absent on one with nothing to say. Each cell that names something
- * opens it.
+ * It is about the tab's own stream, not the folder the tab was opened on:
+ * several tabs are often opened on one project folder, each on a different
+ * handoff. The backend works out the handoff and reads the rest from the
+ * board (backend/session_context.py). It shows only what is known, so it is
+ * shorter on a tab with less going on and absent on one with nothing to
+ * say. Each cell that names something opens it.
  */
 
 import { ago } from "../local/picker-model";
 import { PR_DISPLAY, pullRequestState, type PullRequestSummary } from "./pull-request";
 
+export interface ContextTicket {
+  ticket: string;
+  title: string;
+  url: string | null;
+  status: string;
+  /** The tracker's kind of state; empty when the status is only the board file's. */
+  statusType?: string;
+}
+
+/** A stream's pull request, which unlike a tab's badge may be merged or closed. */
+export interface StreamPullRequest extends Partial<Omit<PullRequestSummary, "number" | "title" | "url">> {
+  number: number;
+  title: string;
+  url: string;
+  state: "open" | "merged" | "closed";
+}
+
 export interface SessionContext {
+  /** The folder the tab was opened on: its branch and what is pending there. */
   branch: string | null;
   uncommitted: number;
   /** Commits not on the remote; null when the branch has no upstream. */
   unpushed: number | null;
-  handoff: { name: string; relPath: string; title: string; modified: number } | null;
+  /** The handoff the tab is working from, and how that is known. */
+  handoff: { name: string; relPath: string; title: string; modified: number; source?: string } | null;
+  /** The tickets that handoff carries. */
+  tickets?: ContextTicket[];
+  /** The worktree that stands for the stream, in place of the tab's folder. */
+  worktree?: { name: string; branch: string | null; uncommitted: number; unpushed: number | null } | null;
+  /** The stream's pull request, in place of the folder's. */
+  pr?: StreamPullRequest | null;
 }
 
 export type CellTone = "plain" | "muted" | "good" | "bad" | "warn" | "review" | "busy";
 
 export interface StripCell {
-  kind: "pr" | "branch" | "handoff";
+  kind: "ticket" | "pr" | "branch" | "handoff";
   parts: { text: string; tone: CellTone }[];
   title?: string;
   open?: { url: string } | { file: string };
@@ -38,24 +66,74 @@ const PR_TONE: Record<ReturnType<typeof pullRequestState>, CellTone> = {
   open: "plain",
 };
 
-function prCell(pr: PullRequestSummary): StripCell {
-  const state = pullRequestState(pr);
+const FINISHED = new Set(["completed", "canceled"]);
+const NOT_STARTED = new Set(["backlog", "unstarted", "triage"]);
+
+function ticketTone(ticket: ContextTicket): CellTone {
+  if (FINISHED.has(ticket.statusType ?? "") || ticket.status === "Done") return "good";
+  if (NOT_STARTED.has(ticket.statusType ?? "") || ticket.status === "Backlog" || ticket.status === "Todo") return "muted";
+  return ticket.status === "In Review" ? "review" : "busy";
+}
+
+/**
+ * The ticket to lead with: one being worked on, else one not yet started,
+ * else whatever there is. A handoff often carries a ticket in progress
+ * beside others still in the backlog, and the tab is on the first kind.
+ */
+function leadTicket(tickets: ContextTicket[]): ContextTicket | null {
+  const under_way = (t: ContextTicket) => ticketTone(t) === "busy" || ticketTone(t) === "review";
+  return (
+    tickets.find(under_way) ?? tickets.find((t) => ticketTone(t) !== "good") ?? tickets[0] ?? null
+  );
+}
+
+function ticketCell(tickets: ContextTicket[]): StripCell | null {
+  const lead = leadTicket(tickets);
+  if (!lead) return null;
+  const others = tickets.length - 1;
+  return {
+    kind: "ticket",
+    parts: [
+      { text: lead.ticket, tone: "plain" },
+      { text: ` ${lead.status}`, tone: ticketTone(lead) },
+      ...(others > 0 ? [{ text: ` +${others}`, tone: "muted" as const }] : []),
+      { text: `  ${lead.title}`, tone: "muted" },
+    ],
+    title:
+      tickets.map((t) => `${t.ticket}  ${t.status}  ${t.title}`).join("\n") +
+      (lead.url ? "\nClick to open in the tracker" : ""),
+    ...(lead.url ? { open: { url: lead.url } } : {}),
+  };
+}
+
+function prCell(pr: PullRequestSummary | StreamPullRequest): StripCell {
+  const done = "state" in pr && pr.state !== "open" ? pr.state : null;
+  if (done) {
+    return {
+      kind: "pr",
+      parts: [{ text: `#${pr.number} ${done}`, tone: done === "merged" ? "good" : "muted" }],
+      title: `${pr.title}\nClick to open on GitHub`,
+      open: { url: pr.url },
+    };
+  }
+  const summary = pr as PullRequestSummary;
+  const state = pullRequestState(summary);
   const mark = PR_DISPLAY[state].mark;
   const lead = `#${pr.number}${mark ? ` ${mark}` : ""} ${PR_DISPLAY[state].says}`;
   // What the leading state does not already say.
   const rest = [
-    pr.draft ? "draft" : null,
-    state !== "failing" && pr.checks === "failing" ? "checks failing" : null,
-    state !== "running" && pr.checks === "running" ? "checks running" : null,
-    state !== "changes" && pr.review === "changes" ? "changes requested" : null,
-    pr.review === "required" ? "review required" : null,
-    state !== "approved" && pr.review === "approved" ? "approved" : null,
+    summary.draft ? "draft" : null,
+    state !== "failing" && summary.checks === "failing" ? "checks failing" : null,
+    state !== "running" && summary.checks === "running" ? "checks running" : null,
+    state !== "changes" && summary.review === "changes" ? "changes requested" : null,
+    summary.review === "required" ? "review required" : null,
+    state !== "approved" && summary.review === "approved" ? "approved" : null,
   ].filter((x): x is string => x !== null);
   return {
     kind: "pr",
     parts: [
       { text: lead, tone: PR_TONE[state] },
-      ...(rest.length > 0 ? [{ text: ` · ${rest.join(" · ")}`, tone: "muted" as const }] : []),
+      ...(rest.length > 0 ? [{ text: ` \u00b7 ${rest.join(" \u00b7 ")}`, tone: "muted" as const }] : []),
     ],
     title: `${pr.title}\nClick to open on GitHub`,
     open: { url: pr.url },
@@ -63,24 +141,37 @@ function prCell(pr: PullRequestSummary): StripCell {
 }
 
 function branchCell(context: SessionContext): StripCell | null {
-  if (!context.branch) return null;
+  // The stream's own worktree when it has one; the tab's folder otherwise.
+  const tree = context.worktree ?? context;
+  if (!tree.branch) return null;
   const parts: StripCell["parts"] = [
     { text: "branch ", tone: "muted" },
-    { text: context.branch, tone: "plain" },
+    { text: tree.branch, tone: "plain" },
   ];
-  if (context.uncommitted > 0) {
-    parts.push({ text: ` · ${context.uncommitted} uncommitted`, tone: "warn" });
+  if (tree.uncommitted > 0) {
+    parts.push({ text: ` \u00b7 ${tree.uncommitted} uncommitted`, tone: "warn" });
   }
-  if (context.unpushed) parts.push({ text: ` · ${context.unpushed} unpushed`, tone: "muted" });
-  if (context.uncommitted === 0 && !context.unpushed) parts.push({ text: " · clean", tone: "muted" });
-  return { kind: "branch", parts };
+  if (tree.unpushed) parts.push({ text: ` \u00b7 ${tree.unpushed} unpushed`, tone: "muted" });
+  if (tree.uncommitted === 0 && !tree.unpushed) parts.push({ text: " \u00b7 clean", tone: "muted" });
+  return {
+    kind: "branch",
+    parts,
+    ...(context.worktree ? { title: `worktree ${context.worktree.name}` } : {}),
+  };
 }
+
+const SOURCE_SAYS: Record<string, string> = {
+  chosen: "the handoff this tab was opened on",
+  written: "the handoff this tab's agent last wrote",
+  titled: "the handoff this tab's title names",
+};
 
 function handoffCell(context: SessionContext, now: number): StripCell | null {
   const handoff = context.handoff;
   if (!handoff) return null;
   // "4m", not "4m ago": the strip has one line and the label says what it is.
   const when = ago(handoff.modified, now).replace(/ ago$/, "");
+  const how = handoff.source ? SOURCE_SAYS[handoff.source] : undefined;
   return {
     kind: "handoff",
     parts: [
@@ -88,19 +179,29 @@ function handoffCell(context: SessionContext, now: number): StripCell | null {
       { text: handoff.name, tone: "plain" },
       ...(when ? [{ text: ` ${when}`, tone: "muted" as const }] : []),
     ],
-    title: `${handoff.title}\nClick to read it`,
+    title: `${handoff.title}${how ? `\n${how}` : ""}\nClick to read it`,
     open: { file: handoff.relPath },
   };
 }
 
-/** The cells to show, most pressing first. Empty when nothing is known. */
+/** The pull request to show: the stream's when it has one, else the folder's. */
+export function effectivePullRequest(
+  folder: PullRequestSummary | null,
+  context: SessionContext | null,
+): PullRequestSummary | StreamPullRequest | null {
+  return context?.pr ?? folder;
+}
+
+/** The cells to show, most identifying first. Empty when nothing is known. */
 export function stripCells(
   pr: PullRequestSummary | null,
   context: SessionContext | null,
   now: number,
 ): StripCell[] {
+  const shown = effectivePullRequest(pr, context);
   return [
-    pr ? prCell(pr) : null,
+    context ? ticketCell(context.tickets ?? []) : null,
+    shown ? prCell(shown) : null,
     context ? branchCell(context) : null,
     context ? handoffCell(context, now) : null,
   ].filter((c): c is StripCell => c !== null);

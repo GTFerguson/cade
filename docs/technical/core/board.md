@@ -34,7 +34,9 @@ graph LR
 
 ### Reading the board file
 
-`parse_board` (`backend/board.py`) reads `docs/plans/work-board.md`. Any markdown table with a column headed "Ticket" counts, and the other columns are found by name (title, linear, handoff, worktree, next), so tables of different shapes in one file all read. From a row it takes the ticket id and link, the title, the status with whatever follows it in brackets, the handoff a wiki-link names, every backticked name and `#number` in the worktree column, and the next step. The heading a table sits under is kept as the row's section.
+`parse_board` (`backend/board.py`) reads `docs/plans/work-board.md`. Any markdown table with a column headed "Ticket" counts, and the other columns are found by name (title, linear, handoff, worktree, next), so tables of different shapes in one file all read. From a row it takes the ticket id and link, the title, the status with whatever follows it in brackets, the doc a session on it starts from, every backticked name and `#number` in the worktree column, and the next step.
+
+The file is edited by people and agents and its shape drifts. Within a day of this being built, the column naming each row's handoff was renamed from "Handoff" to "Resumption owner" and began to hold links to plans as well as handoffs, and every row lost its handoff here until the reader was loosened. The owning doc is now found in a column called handoff, resumption or owner, and failing that in any link into the handoff folder anywhere in the row. A link elsewhere in the plans folder is read as a plan (`_owner_doc`) and stands in the handoff's place: it is what a session on that ticket is opened on. A link that leads outside the project is not followed. The heading a table sits under is kept as the row's section.
 
 A project with no board file still has a board: its handoffs and worktrees, all unassigned.
 

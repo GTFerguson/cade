@@ -143,6 +143,8 @@ class ConnectionHandler:
         # The tab was opened from the project picker, which is a request to
         # start the agent chosen there. Sent once, in SET_PROJECT.
         self._start_agent_requested = False
+        # The handoff the tab says it was opened on, sent in SET_PROJECT.
+        self._requested_handoff: str | None = None
         # Watching and indexing are shared with other connections on the same
         # directory; this connection only queues what it must forward.
         self._project: ProjectServices | None = None
@@ -354,6 +356,8 @@ class ConnectionHandler:
                         self._requested_group = clean_group_name(data.get("group"))
                         self._requested_agent = clean_agent_id(data.get("agent"))
                         self._start_agent_requested = data.get("startAgent") is True
+                        handoff = data.get("handoff")
+                        self._requested_handoff = handoff.strip() if isinstance(handoff, str) and handoff.strip() else None
                         last_seq = data.get("lastSeq")
                         if isinstance(last_seq, dict):
                             self._client_seqs = {
@@ -2358,6 +2362,11 @@ class ConnectionHandler:
             from backend.pull_requests import pr_message
 
             await self._send(pr_message(self._session))
+        # A tab knows which handoff it was opened on and says so each time it
+        # connects. The session takes it once: after a backend restart the
+        # tab's word is all there is, and a later choice is not overwritten.
+        if self._session.handoff is None and self._requested_handoff:
+            self._session.handoff = self._requested_handoff
         # Read now, not at the next poll: a tab that has just attached is
         # being looked at, and what it had may predate a long absence.
         from backend.session_context import context_message, get_session_context_monitor

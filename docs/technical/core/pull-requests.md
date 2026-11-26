@@ -57,25 +57,36 @@ The badge is the number and the mark, coloured by state (`PR_DISPLAY`, `.tab-pr`
 
 ## The strip above the terminal
 
-Each tab has one line between the tab bar and its terminal (`ContextStrip`, `frontend/src/tabs/context-strip.ts`), mounted inside the terminal pane so it is as wide as the terminal and belongs to that tab. It has up to three cells, in this order:
+Each tab has one line between the tab bar and its terminal (`ContextStrip`, `frontend/src/tabs/context-strip.ts`), mounted inside the terminal pane so it is as wide as the terminal and belongs to that tab. It has up to four cells, in this order:
 
 | Cell | Says | Click |
 |---|---|---|
-| Pull request | Number, mark and state, then whatever the state leaves unsaid (draft, review required, and so on) | Opens it on GitHub |
+| Ticket | The ticket the tab is on, its status and title, and how many more its handoff carries | Opens it in the tracker |
+| Pull request | Number, mark and state, then whatever the state leaves unsaid; "merged" or "closed" once it is | Opens it on GitHub |
 | Branch | The branch, the number of uncommitted files, commits not yet pushed, or "clean" | |
-| Handoff | The handoff most recently written for the project, and how long ago | Opens it in the viewer |
+| Handoff | The handoff the tab is working from, and how long since it was written | Opens it in the viewer |
 
-A cell appears only when there is something to put in it, and the strip is hidden when there are none, so a tab outside a repository with no handoffs looks as it did before. `stripCells` decides the cells and is tested without a DOM. When the line is too long for the pane the later cells give way with an ellipsis and the pull request keeps its room. The terminal refits itself when the strip appears or goes, through the resize observer it already has. The phone does not show it.
+A cell appears only when there is something to put in it, and the strip is hidden when there are none. `stripCells` decides the cells and is tested without a DOM. When the line is too long for the pane the ticket's title gives way first, then the later cells, and the pull request keeps its room. The terminal refits itself when the strip appears or goes. The phone does not show it.
 
-The branch and handoff come from `backend/session_context.py`, not from GitHub:
+### The strip is about the tab's stream, not its folder
 
-- `working_tree` runs `git status --porcelain=v2 --branch` once and reads the branch, the count of changed and untracked files, and how far the branch is ahead of its upstream. `unpushed` is `null` when the branch has no upstream, which is different from having nothing to push.
-- `latest_handoff` is the newest brief in the project's `docs/plans/handoff/`, the list the project picker reads.
-- `SessionContextMonitor` refreshes every `POLL_SECONDS` (30 s; the count of uncommitted files goes stale faster than anything on GitHub) and only for sessions with a client attached. A session is also read the moment a client attaches (`refresh_soon`), since what it held may predate a long absence. The result lives on `PTYSession.context` and travels as `session-context`.
+The first version read everything from the folder the tab was opened on: that folder's branch, its pull request, and the project's newest handoff. Several tabs are often opened on one project folder, each driving a different stream in a worktree beneath it, and every one of those tabs then showed the same line.
+
+So the backend first works out which handoff a session is on (`session_handoff` in `backend/session_context.py`), from the first of these that gives one:
+
+| Source | How |
+|---|---|
+| Chosen | The handoff picked in the project picker or on the board when the tab was opened. The tab keeps it (`TabInfo.handoff`) and sends it with every `set-project`; the session takes it once, so it survives the backend forgetting the session. |
+| Written | The handoff the session's agent last wrote, which the edit hook records per session under `~/.cache/cade-resume/` (`record_handoff_owner` in `backend/hooks/commands.py`). |
+| Titled | The handoff the tab's title names. An agent titles its tab after what it is doing ("Review model metrics handoff"), and `handoff_named_in` looks for a handoff's name in those words: the whole name, or its first three or more words, together and in order, the longest match winning and a tie counting as no match. |
+
+With the handoff known, the rest comes from the board's rows for it (`stream_for`, see [[board]]): the tickets it carries, the worktree and pull request that stand for it (one with an open pull request, then a merged one), read from a board no older than `BOARD_MAX_AGE_SECONDS`. The strip's branch and pull request cells then show the stream's worktree in place of the tab's folder, and the tab's badge shows the stream's open pull request.
+
+A tab whose handoff cannot be worked out falls back on its folder's branch and shows no handoff at all: the project's newest handoff, shown on every such tab, said something untrue about most of them. The title rule is a guess, and the handoff cell's tooltip says which source was used.
+
+The folder's own branch and pending work come from `working_tree` (`git status --porcelain=v2 --branch`). `SessionContextMonitor` refreshes every `POLL_SECONDS` (30 s) and only for sessions with a client attached, and a session is also read the moment a client attaches (`refresh_soon`). The result lives on `PTYSession.context` and travels as `session-context`.
 
 The monitor owns every read it starts. A read begun on attach and left to run with nothing to end it hung the test suite at shutdown, which is why `refresh_soon` does nothing while the monitor is stopped and `stop` cancels what is outstanding.
-
-A ticket cell is planned for when CADE can read Linear; see [[../../plans/pr-monitoring]].
 
 ## Design decisions
 

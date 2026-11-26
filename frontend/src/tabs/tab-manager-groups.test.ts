@@ -132,6 +132,13 @@ describe("a tab opened from the picker", () => {
   });
 });
 
+describe("a tab opened on a handoff", () => {
+  it("keeps the handoff with the tab, so it is known after a restart", () => {
+    const tab = manager.createTab("/p/e", { handoff: "docs/plans/handoff/x.md" });
+    expect(saved().tabs.find((t) => t.id === tab.id)!.handoff).toBe("docs/plans/handoff/x.md");
+  });
+});
+
 describe("moving between workspaces", () => {
   beforeEach(() => {
     manager.setTabGroup(b.id, "Work");

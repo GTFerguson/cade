@@ -152,6 +152,8 @@ export interface SetProjectMessage extends BaseMessage {
   reloadOnUpgrade?: boolean;
   /** Start the tab's agent even where the user has asked for idle shells. */
   startAgent?: boolean;
+  /** The handoff brief the tab was opened on, as a path inside its project. */
+  handoff?: string;
   /** Tab name, shown to other devices listing this backend's sessions. */
   label?: string;
   /** Tab group the tab was last in. Only a session being created takes it. */

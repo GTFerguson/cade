@@ -72,6 +72,20 @@ class TestParsingTheBoardFile:
         assert parents["WRK-150"] == "WRK-90"
         assert parents["WRK-230"] is None
 
+    def test_finds_the_handoff_when_its_column_is_called_something_else(self):
+        renamed = BOARD.replace("| Handoff | Worktree / branch / PR |", "| Resumption owner | Worktree / branch / PR |")
+        row = parse_board(renamed)[0]
+        assert (row["handoff"], row["owner"]) == ("model-metrics", "handoff/model-metrics")
+
+    def test_finds_a_handoff_link_in_a_column_it_has_no_name_for(self):
+        renamed = BOARD.replace("| Handoff | Worktree / branch / PR |", "| Picks up from | Worktree / branch / PR |")
+        assert parse_board(renamed)[0]["handoff"] == "model-metrics"
+
+    def test_the_owner_may_be_a_plan_and_not_a_handoff(self):
+        text = BOARD.replace("[[handoff/model-metrics]]", "[[court-solve-improvements]]")
+        row = parse_board(text)[0]
+        assert (row["handoff"], row["owner"]) == ("court-solve-improvements", "court-solve-improvements")
+
     def test_a_handoff_link_to_a_heading_still_names_the_handoff(self):
         assert parse_board(BOARD)[1]["handoff"] == "shooter-assist"
 
@@ -255,6 +269,27 @@ class TestAssembling:
         rows = [{**self.rows[0], "names": []}]
         result = assemble(Path("/w"), rows, [], [self.metrics])
         assert [t["name"] for t in result["streams"][0]["worktrees"]] == ["platform-metrics"]
+
+    def test_a_row_owned_by_a_plan_gets_the_plan_as_its_doc(self, tmp_path: Path):
+        plans = tmp_path / "docs" / "plans"
+        plans.mkdir(parents=True)
+        (plans / "court-solve-improvements.md").write_text("---\ntitle: Court solve improvements\n---\n")
+        rows = [{**self.rows[0], "handoff": "court-solve-improvements", "owner": "court-solve-improvements"}]
+        result = assemble(tmp_path, rows, self.handoffs, [])
+        doc = result["streams"][0]["handoff"]
+        assert doc == {
+            "name": "court-solve-improvements", "relPath": "docs/plans/court-solve-improvements.md",
+            "title": "Court solve improvements", "modified": doc["modified"], "kind": "plan",
+        }
+        # A plan is not a handoff with no ticket, and neither are the real ones it left unclaimed.
+        assert sorted(h["name"] for h in result["handoffs"]) == ["model-metrics", "orphan"]
+
+    def test_an_owner_outside_the_project_is_not_followed(self, tmp_path: Path):
+        project = tmp_path / "work"
+        (project / "docs" / "plans").mkdir(parents=True)
+        (tmp_path / "secret.md").write_text("# Not this project's\n")
+        rows = [{**self.rows[0], "handoff": "secret", "owner": "../../../secret"}]
+        assert assemble(project, rows, [], [])["streams"][0]["handoff"] is None
 
     def test_says_when_a_row_names_a_handoff_that_is_not_there(self):
         s = self.stream("WRK-230")
