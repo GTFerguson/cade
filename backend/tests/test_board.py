@@ -112,6 +112,54 @@ class TestVerdict:
         assert verdict({"state": "merged", "head": None}, None, 0) == board.MERGED_DIRTY
 
 
+def node(number: int, state: str, **more):
+    return {"number": number, "title": f"PR {number}", "url": f"https://example.test/{number}",
+            "state": state, "headRefOid": f"sha{number}", "mergedAt": None, **more}
+
+
+def answer(**aliases):
+    return {"data": {"repository": {k: {"nodes": v} for k, v in aliases.items()}}}
+
+
+class TestAskingGitHubByBranch:
+    def test_asks_about_each_branch_under_its_own_alias(self):
+        query = board.branch_query(["gary/metrics", 'odd"name'])
+        assert 'b0: pullRequests(headRefName:"gary/metrics"' in query
+        assert 'b1: pullRequests(headRefName:"odd\\"name"' in query
+        assert query.startswith("query($owner:String!,$name:String!)")
+
+    def test_reads_an_open_pull_request_in_full(self):
+        open_pr = node(
+            7, "OPEN", isDraft=True, reviewDecision="CHANGES_REQUESTED", mergeable="CONFLICTING",
+            commits={"nodes": [{"commit": {"statusCheckRollup": {"state": "FAILURE"}}}]},
+        )
+        (pr,) = board.prs_from_answer(answer(b0=[open_pr]), ["feature"]).values()
+        assert pr == {
+            "number": 7, "title": "PR 7", "url": "https://example.test/7", "state": "open",
+            "head": "sha7", "mergedAt": None,
+            "draft": True, "checks": "failing", "review": "changes", "conflicts": True,
+        }
+
+    def test_checks_still_running_and_none_at_all(self):
+        running = node(7, "OPEN", commits={"nodes": [{"commit": {"statusCheckRollup": {"state": "PENDING"}}}]})
+        none = node(8, "OPEN", commits={"nodes": [{"commit": {"statusCheckRollup": None}}]})
+        found = board.prs_from_answer(answer(b0=[running], b1=[none]), ["a", "b"])
+        assert (found["a"]["checks"], found["b"]["checks"]) == ("running", None)
+
+    def test_an_open_pull_request_stands_for_the_branch_before_a_merged_or_closed_one(self):
+        nodes = [node(9, "CLOSED"), node(8, "MERGED", mergedAt="2026-11-01T00:00:00Z"), node(7, "OPEN")]
+        assert board.prs_from_answer(answer(b0=nodes), ["f"])["f"]["number"] == 7
+        assert board.prs_from_answer(answer(b0=nodes[:2]), ["f"])["f"]["state"] == "merged"
+        assert board.prs_from_answer(answer(b0=nodes[:1]), ["f"])["f"]["state"] == "closed"
+
+    def test_a_branch_with_no_pull_request_is_left_out(self):
+        assert board.prs_from_answer(answer(b0=[], b1=[node(3, "MERGED")]), ["a", "b"]).keys() == {"b"}
+
+    def test_an_answer_with_nothing_in_it_is_no_pull_requests(self):
+        assert board.prs_from_answer({"data": {"repository": None}}, ["a"]) == {}
+        assert board.prs_from_answer(None, ["a"]) == {}
+
+
 def handoff(name: str, modified: float = 1.0):
     return {"name": f"{name}.md", "relPath": f"docs/plans/handoff/{name}.md", "title": name.title(), "modified": modified}
 
@@ -206,6 +254,25 @@ class TestGatheringFromDisk:
         (folder / ".git").write_text("gitdir: /nonexistent\n")
         result = await board.gather(folder)
         assert (result["streams"], result["handoffs"], result["worktrees"]) == ([], [], [])
+
+    async def test_the_quick_board_is_tickets_and_handoffs_marked_partial(self, tmp_path: Path):
+        project = tmp_path / "quick"
+        (project / "docs" / "plans" / "handoff").mkdir(parents=True)
+        (project / "docs" / "plans" / "handoff" / "model-metrics.md").write_text("# Metrics\n")
+        (project / "docs" / "plans" / "work-board.md").write_text(BOARD)
+
+        result = await board.quick(project)
+        assert result["partial"] is True
+        assert result["worktrees"] == []
+        first = next(s for s in result["streams"] if s["ticket"] == "WRK-214")
+        assert first["handoff"]["name"] == "model-metrics" and first["worktrees"] == []
+
+    async def test_the_quick_board_is_the_last_full_one_when_there_is_one(self, tmp_path_factory, monkeypatch):
+        folder = tmp_path_factory.mktemp("warm")
+        (folder / ".git").write_text("gitdir: /nonexistent\n")
+        full = await board.board(folder)
+        assert full["partial"] is False
+        assert await board.quick(folder) is full
 
     async def test_serves_a_gathered_board_again_without_looking(self, tmp_path_factory, monkeypatch):
         folder = tmp_path_factory.mktemp("cached")

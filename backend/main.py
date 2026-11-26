@@ -949,11 +949,16 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def get_board(
         path: str,
         fresh: bool = False,
+        quick: bool = False,
         cade_session: str | None = Cookie(default=None),
     ) -> JSONResponse:
         """A project's streams of work: tickets from its board file joined to
-        handoffs, worktrees and pull requests. Read-only (see backend/board.py)."""
+        handoffs, worktrees and pull requests. Read-only (see backend/board.py).
+
+        `quick` answers at once with what is to hand; the caller then asks
+        again without it for the full board."""
         from backend.board import board
+        from backend.board import quick as quick_board
 
         cfg = get_config()
         if cfg.auth_enabled and not validate_session_cookie(cade_session or "", cfg):
@@ -961,6 +966,8 @@ def create_app(config: Config | None = None) -> FastAPI:
         project = Path(path).expanduser().resolve()
         if not project.is_dir():
             return JSONResponse({"error": "No such folder"}, status_code=404)
+        if quick:
+            return JSONResponse(await quick_board(project))
         return JSONResponse(await board(project, fresh=fresh))
 
     @app.get("/api/tab-groups")

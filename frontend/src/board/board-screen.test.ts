@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { BoardScreen, pullRequestText, type BoardResult } from "./board-screen";
+import { BoardScreen, pullRequestText, type BoardRead, type BoardResult } from "./board-screen";
 import type { BoardData, BoardStream, BoardWorktree } from "./board-model";
 
 const NOW = 10_000;
@@ -46,7 +46,7 @@ const sections = () => [...host.querySelectorAll(".picker-column-main .picker-se
 const selected = () => host.querySelector(".picker-option.selected .picker-option-label")?.textContent;
 const detail = () => host.querySelector(".board-detail")!.textContent!;
 
-async function open(load: (fresh: boolean) => Promise<BoardData | null> = async () => DATA) {
+async function open(load: (how: BoardRead) => Promise<BoardData | null> = async () => DATA) {
   openUrl = vi.fn();
   const screen = new BoardScreen(host, { project: "/w", load, openUrl, now: () => NOW });
   result = screen.show();
@@ -67,6 +67,28 @@ describe("the board screen", () => {
     arrive(DATA);
     await flush();
     expect(labels()).toContain("W-214");
+  });
+
+  it("shows the tickets at once and fills in the worktrees when they arrive", async () => {
+    const partial: BoardData = {
+      ...DATA, partial: true, worktrees: [],
+      streams: DATA.streams.map((s) => ({ ...s, worktrees: [] })),
+    };
+    let arrive!: (d: BoardData) => void;
+    await open((how) => (how === "quick" ? Promise.resolve(partial) : new Promise((r) => (arrive = r))));
+    await flush();
+    expect(labels()).toEqual(["W-214", "W-230", "orphan"]);
+    expect(host.querySelector(".board-summary")!.textContent).toContain("reading worktrees");
+    expect(detail()).toContain("reading…");
+
+    press("j");
+    arrive(DATA);
+    await flush();
+    await flush();
+    expect(labels()).toEqual(["W-214", "W-230", "orphan", "[stray/]"]);
+    // The selection stays on the row it was on.
+    expect(selected()).toBe("W-230");
+    expect(host.querySelector(".board-summary")!.textContent).toContain("read ");
   });
 
   it("lists tickets by status, then handoffs with no ticket, then unlisted worktrees", async () => {
@@ -146,11 +168,11 @@ describe("the board screen", () => {
   });
 
   it("reads the board again on r, past the cache", async () => {
-    const load = vi.fn(async (_fresh: boolean) => DATA);
+    const load = vi.fn(async (_how: BoardRead) => DATA);
     await open(load);
     press("r");
     await flush();
-    expect(load.mock.calls.map((c) => c[0])).toEqual([false, true]);
+    expect(load.mock.calls.map((c) => c[0])).toEqual(["quick", "full", "fresh"]);
   });
 
   it("closes on escape with nothing chosen", async () => {

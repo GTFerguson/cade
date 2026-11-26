@@ -40,7 +40,7 @@ A project with no board file still has a board: its handoffs and worktrees, all 
 
 ### Worktrees and their verdicts
 
-The repositories of a project are the project itself and each folder under `repos/`, counted once per repository however many worktrees sit beside it. For each, `git worktree list` gives the worktrees and `git status --porcelain=v2 --branch` (at most `STATUS_CONCURRENCY` at once) gives each one's branch and pending work. `gh pr list` is asked three times per repository, for open, merged and closed pull requests, keyed by head branch.
+The repositories of a project are the project itself and each folder under `repos/`, counted once per repository however many worktrees sit beside it. For each, `git worktree list` gives the worktrees and `git status --porcelain=v2 --branch` (at most `STATUS_CONCURRENCY` at once) gives each one's branch and pending work. GitHub is asked once per repository, through `gh api graphql`, for the newest pull requests of each branch that is checked out (`branch_query`); an open one stands for the branch before a merged one before a closed one. Repositories are read at the same time, and within one, GitHub and the working trees are too.
 
 Each worktree gets a verdict, worked out one way (`verdict`):
 
@@ -58,7 +58,9 @@ Each worktree gets a verdict, worked out one way (`verdict`):
 
 `assemble` attaches to each ticket row the handoff it names and every worktree it names by folder, by branch or by pull request number. A handoff named on the board but missing from disk is reported as such. Handoffs and worktrees that no row names are returned as their own lists: they are the gaps the board exists to show.
 
-Gathering runs git in every worktree and asks GitHub, which takes seconds on a large project (about twenty for one with 67 worktrees). A gathered board is cached for `CACHE_SECONDS`, and two requests for one project share one gathering.
+Gathering runs git in every worktree and asks GitHub, which takes a few seconds on a large project (under four for one with 81 worktrees across eleven repositories). A gathered board is cached for `CACHE_SECONDS`, and two requests for one project share one gathering.
+
+So that the screen never opens empty, it asks twice. `GET /api/board?quick=true` answers at once with the last full board if there is one, however old, and otherwise with the tickets and handoffs alone, marked `partial`; the screen draws that, then asks for the full board and swaps it in, keeping the selection on the row it was on. A partial board says "reading" where its worktrees would be, since not yet read is not the same as none.
 
 ### The screen
 
@@ -90,6 +92,7 @@ A tab opened from the board joins the open workspace, runs the agent of the tab 
 - **The hand-kept table is the source of the mapping, not something to replace yet.** Nothing else records which ticket goes with which handoff and worktree: few handoffs name a ticket and few branches carry an id. Reading the table gives a useful board today, without CADE needing access to the tracker, and leaves the table's upkeep to shrink to the columns only a person can fill.
 - **Ticket status is the table's, with its date.** It is shown as recorded, including the "read back on" note the table carries, because CADE cannot yet ask the tracker. Reading tickets live is planned.
 - **The picker's look, not a table.** A first mock drew the board as an eight-column table and was rejected as cluttered. The built screen reuses the picker's rows and section bars, with the detail beside the list instead of in more columns.
+- **Ask GitHub about our branches, not for its pull requests.** The first version listed each repository's open, merged and closed pull requests and looked for ours among them. That took twenty seconds on a real project, nearly all of it GitHub: hundreds of pull requests per repository, one repository a fork carrying its upstream's, each repository in turn. It also missed anything older than the list's limit. Asking by branch costs the same however many pull requests a repository has, and finds one that merged long ago.
 - **Verdicts live in the backend** so that the board, a count elsewhere and a future cleanup skill all agree on what "finished" means.
 
 ## Configuration
@@ -100,7 +103,7 @@ A tab opened from the board joins the open workspace, runs the agent of the tab 
 | Folder of clones and worktrees | `REPOS_DIR` | `repos` |
 | Worktree status checks at once | `STATUS_CONCURRENCY` | 8 |
 | Cache | `CACHE_SECONDS` | 60 s |
-| Merged pull requests read per repository | `MERGED_PR_LIMIT` | 300 |
+| Branches asked about per GitHub request | `BRANCHES_PER_QUERY` | 50 |
 
 ## Boundaries
 

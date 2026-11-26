@@ -65,6 +65,17 @@ export interface BoardData {
   /** Worktrees no ticket row names. */
   worktrees: BoardWorktree[];
   gathered: number;
+  /** Tickets and handoffs only: the worktrees have not been read yet. */
+  partial?: boolean;
+}
+
+/** What identifies a row, so that it can be found again in a newer board. */
+export function rowKey(row: BoardRow): string {
+  return row.kind === "stream"
+    ? `stream:${row.stream.section}:${row.stream.ticket}`
+    : row.kind === "handoff"
+      ? `handoff:${row.handoff.relPath}`
+      : `worktree:${row.worktree.path}`;
 }
 
 export type BoardRow =

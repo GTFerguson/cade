@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.projects import list_handoffs
-from backend.pull_requests import PR_FIELDS, _run, summarise
+from backend.pull_requests import _run
 from backend.session_context import parse_status
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,6 @@ STATUS_CONCURRENCY = 8
 # How long a gathered board is served again without looking. Gathering runs
 # git in every worktree and asks GitHub, which takes seconds.
 CACHE_SECONDS = 60.0
-MERGED_PR_LIMIT = 300
 
 TICKET_RE = re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b")
 _LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
@@ -165,44 +164,95 @@ async def _worktrees(repo: Path) -> list[dict[str, Any]]:
     return trees
 
 
-async def _pull_requests(repo: Path) -> dict[str, dict[str, Any]]:
-    """Pull requests of a repository by head branch: the open ones in full,
-    and the merged and closed ones by their state. Empty when `gh` cannot say."""
-    by_branch: dict[str, dict[str, Any]] = {}
+_PR_NODE = (
+    "number title url state isDraft mergedAt headRefOid reviewDecision mergeable "
+    "commits(last:1){nodes{commit{statusCheckRollup{state}}}}"
+)
+# Branches asked about in one request. GitHub limits how much one query may
+# select, and a repository can have more worktrees than fit.
+BRANCHES_PER_QUERY = 50
 
-    async def listed(state: str, fields: str, limit: int) -> list[dict[str, Any]]:
+_ROLLUP = {
+    "SUCCESS": "passing",
+    "FAILURE": "failing",
+    "ERROR": "failing",
+    "PENDING": "running",
+    "EXPECTED": "running",
+}
+_REVIEW = {"APPROVED": "approved", "CHANGES_REQUESTED": "changes", "REVIEW_REQUIRED": "required"}
+
+
+def branch_query(branches: list[str]) -> str:
+    """One GraphQL query asking for the newest pull requests of each branch.
+
+    Asking by branch, instead of listing a repository's pull requests and
+    looking for ours among them, costs the same however many pull requests
+    the repository has, and finds one that merged long ago.
+    """
+    asks = " ".join(
+        f"b{i}: pullRequests(headRefName:{json.dumps(branch)}, first:3, "
+        f"orderBy:{{field:CREATED_AT,direction:DESC}}){{nodes{{{_PR_NODE}}}}}"
+        for i, branch in enumerate(branches)
+    )
+    return f"query($owner:String!,$name:String!){{repository(owner:$owner,name:$name){{{asks}}}}}"
+
+
+def prs_from_answer(answer: Any, branches: list[str]) -> dict[str, dict[str, Any]]:
+    """The pull request that stands for each branch, from a `branch_query`
+    answer: an open one before a merged one before a closed one, the newest
+    of each."""
+    repository = ((answer or {}).get("data") or {}).get("repository") or {}
+    found: dict[str, dict[str, Any]] = {}
+    for i, branch in enumerate(branches):
+        nodes = (repository.get(f"b{i}") or {}).get("nodes") or []
+        pick = next(
+            (n for state in ("OPEN", "MERGED", "CLOSED") for n in nodes if n.get("state") == state),
+            None,
+        )
+        if pick is None:
+            continue
+        state = str(pick.get("state")).lower()
+        pr: dict[str, Any] = {
+            "number": pick.get("number"),
+            "title": pick.get("title") or "",
+            "url": pick.get("url") or "",
+            "state": state,
+            "head": pick.get("headRefOid"),
+            "mergedAt": pick.get("mergedAt"),
+        }
+        if state == "open":
+            commits = (pick.get("commits") or {}).get("nodes") or []
+            rollup = ((commits[0].get("commit") or {}).get("statusCheckRollup") or {}) if commits else {}
+            pr.update({
+                "draft": bool(pick.get("isDraft")),
+                "checks": _ROLLUP.get(str(rollup.get("state") or "").upper()),
+                "review": _REVIEW.get(str(pick.get("reviewDecision") or "").upper()),
+                "conflicts": str(pick.get("mergeable") or "").upper() == "CONFLICTING",
+            })
+        found[branch] = pr
+    return found
+
+
+async def _pull_requests(repo: Path, branches: list[str]) -> dict[str, dict[str, Any]]:
+    """The pull request for each of a repository's branches we have checked
+    out. Empty when `gh` cannot say (no GitHub remote, signed out, offline)."""
+
+    async def ask(chunk: list[str]) -> dict[str, dict[str, Any]]:
         out = await _run(
-            ["gh", "pr", "list", "--state", state, "--limit", str(limit), "--json", fields], repo
+            ["gh", "api", "graphql", "-F", "owner={owner}", "-F", "name={repo}",
+             "-f", f"query={branch_query(chunk)}"],
+            repo,
         )
         try:
-            prs = json.loads(out) if out else []
+            return prs_from_answer(json.loads(out), chunk) if out else {}
         except ValueError:
-            prs = []
-        return prs if isinstance(prs, list) else []
+            return {}
 
-    done_fields = "number,title,url,headRefName,headRefOid,state,mergedAt"
-    open_prs, merged, closed = await asyncio.gather(
-        listed("open", PR_FIELDS + ",headRefOid", 100),
-        listed("merged", done_fields, MERGED_PR_LIMIT),
-        listed("closed", done_fields, 100),
-    )
-    # Open outranks merged outranks closed for a branch that has several, and
-    # `gh` lists newest first within each.
-    for state, prs in (("open", open_prs), ("merged", merged), ("closed", closed)):
-        for pr in prs:
-            branch = pr.get("headRefName")
-            if not isinstance(branch, str) or branch in by_branch:
-                continue
-            summary = summarise(pr) if state == "open" else {
-                "number": pr.get("number"), "title": pr.get("title") or "", "url": pr.get("url") or "",
-            }
-            by_branch[branch] = {
-                **summary,
-                "state": "merged" if state == "merged" else ("closed" if state == "closed" else "open"),
-                "head": pr.get("headRefOid"),
-                "mergedAt": pr.get("mergedAt"),
-            }
-    return by_branch
+    chunks = [branches[i:i + BRANCHES_PER_QUERY] for i in range(0, len(branches), BRANCHES_PER_QUERY)]
+    found: dict[str, dict[str, Any]] = {}
+    for part in await asyncio.gather(*(ask(c) for c in chunks)):
+        found.update(part)
+    return found
 
 
 def verdict(
@@ -242,17 +292,26 @@ async def _describe_worktrees(project: Path) -> list[dict[str, Any]]:
             out = await _run(["git", "status", "--porcelain=v2", "--branch"], Path(path))
         return parse_status(out) if out is not None else None
 
-    described: list[dict[str, Any]] = []
-    for repo in await _repositories(project):
-        trees, prs = await asyncio.gather(_worktrees(repo), _pull_requests(repo))
-        states = await asyncio.gather(*(status(t["path"]) for t in trees))
-        for tree, state in zip(trees, states):
+    async def describe(repo: Path) -> list[dict[str, Any]]:
+        trees = await _worktrees(repo)
+        branches = sorted({t["branch"] for t in trees if t["branch"]})
+        # GitHub and the working trees are asked at the same time: neither
+        # needs the other, and GitHub is the slow one.
+        prs, states = await asyncio.gather(
+            _pull_requests(repo, branches),
+            asyncio.gather(*(status(t["path"]) for t in trees)),
+        )
+        contained = await asyncio.gather(*(
+            _contained(Path(t["path"]), t["head"], prs.get(t["branch"]) if t["branch"] else None)
+            for t in trees
+        ))
+        out: list[dict[str, Any]] = []
+        for tree, state, held in zip(trees, states, contained):
             branch = tree["branch"]
             pr = prs.get(branch) if branch else None
             uncommitted = state["uncommitted"] if state else 0
             path = Path(tree["path"])
-            contained = await _contained(path, tree["head"], pr)
-            described.append({
+            out.append({
                 "name": path.name,
                 "path": str(path),
                 "repo": repo.name,
@@ -260,9 +319,14 @@ async def _describe_worktrees(project: Path) -> list[dict[str, Any]]:
                 "uncommitted": uncommitted,
                 "unpushed": state["unpushed"] if state else None,
                 "pr": pr,
-                "verdict": verdict(pr, tree["head"], uncommitted, contained=contained),
+                "verdict": verdict(pr, tree["head"], uncommitted, contained=held),
             })
-    return described
+        return out
+
+    # Every repository at once: one slow answer from GitHub should not hold
+    # up the rest.
+    per_repo = await asyncio.gather(*(describe(r) for r in await _repositories(project)))
+    return [tree for trees in per_repo for tree in trees]
 
 
 def assemble(
@@ -319,6 +383,8 @@ def assemble(
         "handoffs": [_handoff_view(h) for h in handoffs if Path(h["name"]).stem not in used_handoffs],
         "worktrees": [t for t in worktrees if t["path"] not in used_trees],
         "gathered": time.time(),
+        # Set on a board read without its worktrees (see `quick`).
+        "partial": False,
     }
 
 
@@ -331,17 +397,39 @@ def _handoff_view(handoff: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _read_board_file(project: Path) -> str:
+    try:
+        return (project / BOARD_FILE).read_text("utf-8")
+    except OSError:
+        return ""
+
+
 async def gather(project: Path) -> dict[str, Any]:
     """Read everything the board shows for a project."""
-    try:
-        text = await asyncio.to_thread((project / BOARD_FILE).read_text, "utf-8")
-    except OSError:
-        text = ""
-    handoffs, worktrees = await asyncio.gather(
+    text, handoffs, worktrees = await asyncio.gather(
+        asyncio.to_thread(_read_board_file, project),
         asyncio.to_thread(list_handoffs, project),
         _describe_worktrees(project),
     )
     return assemble(project, parse_board(text), handoffs, worktrees)
+
+
+async def quick(project: Path) -> dict[str, Any]:
+    """The board at once, for a screen that should not open empty.
+
+    The last full board if there is one, however old: stale worktree state
+    is better to look at than nothing while the fresh one is read. Otherwise
+    the tickets and handoffs alone, which need only two reads from disk, and
+    marked partial so that missing worktrees are not taken for none.
+    """
+    cached = _cache.get(str(project))
+    if cached:
+        return cached[1]
+    text, handoffs = await asyncio.gather(
+        asyncio.to_thread(_read_board_file, project),
+        asyncio.to_thread(list_handoffs, project),
+    )
+    return {**assemble(project, parse_board(text), handoffs, []), "partial": True}
 
 
 _cache: dict[str, tuple[float, dict[str, Any]]] = {}

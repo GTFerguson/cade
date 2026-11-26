@@ -20,6 +20,7 @@ import {
   finishedCount,
   leadPullRequest,
   openTarget,
+  rowKey,
   type BoardData,
   type BoardPullRequest,
   type BoardRow,
@@ -28,12 +29,17 @@ import {
 } from "./board-model";
 
 export type BoardResult = { path: string; handoff: string | null };
+export type BoardRead = "quick" | "full" | "fresh";
 
 export interface BoardScreenOptions {
   /** The project whose board this is. */
   project: string;
-  /** Reads the board; `fresh` skips the backend's cache. Null when it cannot be read. */
-  load?: (fresh: boolean) => Promise<BoardData | null>;
+  /**
+   * Reads the board, null when it cannot be read. "quick" is whatever the
+   * backend has to hand, at once; "full" the whole board; "fresh" the whole
+   * board read again past the backend's cache.
+   */
+  load?: (how: BoardRead) => Promise<BoardData | null>;
   openUrl: (url: string) => void;
   now?: () => number;
 }
@@ -95,7 +101,7 @@ export class BoardScreen {
   private filtering = false;
   private resolve: ((result: BoardResult | null) => void) | null = null;
   private focusBefore: HTMLElement | null = null;
-  private load: (fresh: boolean) => Promise<BoardData | null>;
+  private load: (how: BoardRead) => Promise<BoardData | null>;
   private now: () => number;
   private onKeyDown = (e: KeyboardEvent) => this.handleKey(e);
 
@@ -103,8 +109,9 @@ export class BoardScreen {
     this.now = options.now ?? (() => Date.now() / 1000);
     this.load =
       options.load ??
-      (async (fresh) => {
-        const url = `${apiBase()}/api/board?path=${encodeURIComponent(options.project)}${fresh ? "&fresh=true" : ""}`;
+      (async (how) => {
+        const flag = how === "quick" ? "&quick=true" : how === "fresh" ? "&fresh=true" : "";
+        const url = `${apiBase()}/api/board?path=${encodeURIComponent(options.project)}${flag}`;
         const resp = await fetch(url, { credentials: "include" });
         return resp.ok ? ((await resp.json()) as BoardData) : null;
       });
@@ -162,26 +169,50 @@ export class BoardScreen {
     document.addEventListener("keydown", this.onKeyDown, true);
     this.root.focus();
     this.render();
-    void this.read(false);
+    void this.read("full");
     return new Promise((resolve) => {
       this.resolve = resolve;
     });
   }
 
-  private async read(fresh: boolean): Promise<void> {
+  /**
+   * Read the board. The first read shows what the backend has to hand
+   * before the whole board arrives: the tickets take two reads from disk,
+   * the worktrees take git and GitHub.
+   */
+  private async read(how: "full" | "fresh"): Promise<void> {
     this.loading = true;
     this.failed = false;
     this.render();
-    let data: BoardData | null = null;
-    try {
-      data = await this.load(fresh);
-    } catch {
-      data = null;
+    const attempt = async (h: BoardRead): Promise<BoardData | null> => {
+      try {
+        return await this.load(h);
+      } catch {
+        return null;
+      }
+    };
+    if (how === "full" && !this.data) {
+      const first = await attempt("quick");
+      if (!this.resolve) return;
+      if (first) this.adopt(first);
     }
+    const data = await attempt(how);
     if (!this.resolve) return;
     this.loading = false;
-    if (data) this.data = data;
+    if (data) this.adopt(data);
     else this.failed = true;
+    this.render();
+  }
+
+  /** Take a newer board, keeping the selection on the row it was on. */
+  private adopt(data: BoardData): void {
+    const held = this.rows[this.selected];
+    const key = held ? rowKey(held) : null;
+    this.data = data;
+    if (key !== null) {
+      const at = this.sections().flatMap((s) => s.rows).findIndex((r) => rowKey(r) === key);
+      if (at !== -1) this.selected = at;
+    }
     this.render();
   }
 
@@ -232,7 +263,13 @@ export class BoardScreen {
       const finished = finishedCount(this.data);
       if (finished > 0) parts.push(`${finished} worktrees finished`);
       if (!this.data.hasBoardFile) parts.push("no docs/plans/work-board.md here");
-      parts.push(this.loading ? "reading again…" : `read ${ago(this.data.gathered, this.now()) || "just now"}`);
+      parts.push(
+        this.data.partial
+          ? "reading worktrees and pull requests…"
+          : this.loading
+            ? "reading again…"
+            : `read ${ago(this.data.gathered, this.now()) || "just now"}`,
+      );
     }
     this.summaryEl.textContent = parts.join("  ·  ");
   }
@@ -326,7 +363,9 @@ export class BoardScreen {
         ),
       );
       if (s.worktrees.length === 0) {
-        this.detailEl.appendChild(this.fact("worktree", [{ text: "none found", tone: "muted" }]));
+        // Not yet read is not the same as none.
+        const text = this.data?.partial ? "reading…" : "none found";
+        this.detailEl.appendChild(this.fact("worktree", [{ text, tone: "muted" }]));
       }
       for (const worktree of s.worktrees) this.detailEl.append(...this.worktreeFacts(worktree));
       if (s.next) {
@@ -387,7 +426,7 @@ export class BoardScreen {
       case "p":
         return this.openPullRequest();
       case "r":
-        return void this.read(true);
+        return void this.read("fresh");
       case "/":
         return this.startFiltering();
       case "Escape":
