@@ -5,7 +5,7 @@ updated: 2026-11-26
 status: in-flight
 ---
 
-# Resume: Gary's choice on how to stop helper processes unpacking the backend into /tmp, his verdict on the strip, board and daylight, then the cleanup skill
+# Resume: install the Codex and attention fixes when Gary says, check them, get his verdict on the strip, board and daylight, then the cleanup skill
 
 ## Active plans
 
@@ -29,7 +29,12 @@ This file is persistent working memory for one in-flight task. Procedure:
 
 Everything through `19e8508f` is committed, pushed and installed (26 Nov 17:40): the rebuilt board, live Linear data, the workspace list that slides in at the right, the strip that follows each tab's own stream, the efficiency pass, and the handshake fix. No errors in `~/.cade/logs/cade.log` since the 17:03 install. The installed backend was sampled for 65 s with ten tabs attached and started 26 processes (21 `git`, 5 `gh`). What each tab's strip should say was worked out from source against the live sessions and given to Gary to compare with his screen, since nothing can read a tab's strip from outside without attaching to it; his answer is still open.
 
-The handshake fix (`docs/technical/core/remote-sessions.md`, "Handshake") was seen working on its own install: four tabs sent their handshake 4 to 7 s late, were closed and were back on their own sessions and workspaces 12 s after the upgrade. Gary's window is on the page from before the fix until he clicks the update marker; from then on a late tab is waited for instead of bounced.
+The handshake fix (`docs/technical/core/remote-sessions.md`, "Handshake") was seen working on its own install: four tabs sent their handshake 4 to 7 s late, were closed and were back on their own sessions and workspaces 12 s after the upgrade. Gary's window has been on the new page since 18:29, so a late tab is now waited for instead of bounced.
+
+Committed and pushed after that install, **not installed** (both backend only):
+
+- `22d241e0` CADE no longer writes its two helper servers into `~/.codex/config.toml`. Every Codex thread on the machine started both, each unpacking a 219 MB copy of the backend into `/tmp` (21 running, 4.6 GB, on a disk with about 20 GB free). Gary does not use the orchestrator from Codex. The notify command is still written.
+- `fcabe41e` Claude Code's idle reminder no longer turns a finished tab into one waiting on him.
 
 In use and liked: workspaces (`Alt+w` / `Alt+Shift+w`, hold `Alt` for the list, `Ctrl+Alt+w` or a drag onto a chip to move a tab, `Alt+x` closes a tab), the strip above the terminal, quiet upgrades. Built and waiting for Gary's opinion: the rebuilt board (`Alt+b`) and the daylight theme fixes.
 
@@ -48,9 +53,9 @@ Nothing. Untracked files from other sessions, leave alone and never stage: `AGEN
 
 ## Next actions (ordered)
 
-1. **Every helper process unpacks its own 219 MB copy of the backend into `/tmp`.** Measured 26 Nov 18:40 on a disk with 20 GB free: 21 live `cade-backend mcp-server` processes, each with its own `/tmp/_MEI*` (4.6 GB), all children of the Codex daemon. CADE writes its two MCP servers into the user-level `~/.codex/config.toml` (`_merge_codex_mcp_servers`, `backend/terminal/cli_agent_adapters.py`), so every Codex thread starts both, inside CADE or not, and all of them carry the connection id of whichever tab connected last. Two ways out, Gary's to choose: build the backend unpacked (PyInstaller one-folder) so nothing is copied per process, or serve those tools from the running backend so no process is started per thread. `[safe]` to design, ask before building either.
-   - 12 copies that no process touched were deleted (2.6 GB). Where they came from was not established; `remove_old_extraction` was not shown to fail, despite what an earlier version of this note said. Before deleting any again, check maps, open files, cwd and environment of every process for the directory: most of what looks stale is in use.
-   - The backend is a chain of launcher processes, one per upgrade since it started (26), and the watchers each old image left behind are zombies under them (56). Small, and gone when the backend exits, but it grows with every upgrade.
+1. Install when Gary says (`make install-desktop`); it carries the two commits above. Then check: the `cade-orchestrator` and `cade-permissions` blocks are gone from `~/.codex/config.toml` once a Codex tab has reconnected and its `notify` line is still there; a new Codex thread starts no `cade-backend mcp-server`; a Claude Code tab that finishes still shows finished two minutes later. The helper processes already running, and their copies in `/tmp`, last until their Codex threads end. `[confirm]`
+   - Before deleting anything under `/tmp/_MEI*`, check maps, open files, cwd and environment of every process for the directory: most of what looks stale is in use. 12 that nothing touched were deleted on 26 Nov (2.6 GB); where they came from was not established.
+   - Left alone: Claude Code tabs are still given both helper servers per session (`--mcp-config`), each of which would unpack its own copy when started, and the backend is a chain of launcher processes, one per upgrade since it started, with the watchers each old image left behind as zombies under them. Building the backend unpacked (PyInstaller one-folder) would end all of it; raise it if `/tmp` fills again.
 2. Ask how the rebuilt board reads (streams grouped as needs you / in review / close out / in progress, `v` for a view by parent ticket, `]` `[` by section), and whether daylight is readable now. His Claude Code theme was `dark-daltonized`, which is why agent output and the agent-drawn cursor were pale. `[safe]`
 3. The cleanup skill (`docs/plans/worktree-cleanup.md`): takes the board's "finished" worktrees, shows what it will remove, waits for a yes, uses only `git worktree remove` and `git branch -d`. `[safe]` to write; running it is Gary's.
 4. Keep the board warm in the background for projects with open tabs, if the full read still drags. `[safe]`
@@ -79,7 +84,7 @@ cd /home/gary/projects/cade/frontend && npx tsc --noEmit -p . && npx vitest run
 cd /home/gary/projects/cade && PATH="$PWD/.venv/bin:$PATH" make install-desktop
 ```
 
-Both suites green with the handshake fix (1,473 backend, 910 frontend). An install needs Gary's explicit go-ahead each time; the permission check blocks it otherwise.
+Both suites green at `fcabe41e` (1,480 backend, 910 frontend). `test_session_scope.py::TestFallback::test_runs_as_a_plain_child_without_systemd` failed once in a full run and passes alone and on rerun. An install needs Gary's explicit go-ahead each time; the permission check blocks it otherwise.
 
 ## Gotchas encountered
 
