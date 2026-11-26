@@ -31,11 +31,12 @@ Everything through `19e8508f` is committed, pushed and installed (26 Nov 17:40):
 
 The handshake fix (`docs/technical/core/remote-sessions.md`, "Handshake") was seen working on its own install: four tabs sent their handshake 4 to 7 s late, were closed and were back on their own sessions and workspaces 12 s after the upgrade. Gary's window has been on the new page since 18:29, so a late tab is now waited for instead of bounced.
 
-Committed and pushed after that install, **not installed** (both backend only):
+Committed and pushed after that install, **not installed**:
 
 - `22d241e0` CADE no longer writes its two helper servers into `~/.codex/config.toml`. Every Codex thread on the machine started both, each unpacking a 219 MB copy of the backend into `/tmp` (21 running, 4.6 GB, on a disk with about 20 GB free). Gary does not use the orchestrator from Codex. The notify command is still written.
 - `fcabe41e` Claude Code's idle reminder no longer turns a finished tab into one waiting on him.
 - `be3b062c` The chat agent's base prompt names the file tools it has.
+- `c6e07ae6` The held workspace list closes on a pointer move without Alt or four seconds after the last press, and logs a `workspace-list-stuck` diagnostic when it had to. Frontend change, so Gary must click the update marker after the install. The cause of the missed key-up is not known; after a day of use, read those lines in `~/.cade/logs/cade.log`.
 
 Every plan was checked against the code on 26 Nov and cut to what is unbuilt; what they alone recorded moved into `docs/technical/` and `docs/architecture/` (new: `core/provider-stack.md`, `design/dashboard-system.md`). Code defects found on the way are written up in `docs/plans/quick-fixes/`, not fixed. The one that matters most: a failover provider never falls back (`failover-never-triggers.md`).
 
@@ -56,7 +57,7 @@ Nothing. Untracked files from other sessions, leave alone and never stage: `AGEN
 
 ## Next actions (ordered)
 
-1. Install when Gary says in so many words (`make install-desktop`); the permission check refused it on a loose "okay". It carries the three commits above. Then check: the `cade-orchestrator` and `cade-permissions` blocks are gone from `~/.codex/config.toml` once a Codex tab has reconnected and its `notify` line is still there; a new Codex thread starts no `cade-backend mcp-server`; a Claude Code tab that finishes still shows finished two minutes later. The helper processes already running, and their copies in `/tmp`, last until their Codex threads end. `[confirm]`
+1. Install when Gary says in so many words (`make install-desktop`); the permission check refused it on a loose "okay". It carries the commits above. Then check: the `cade-orchestrator` and `cade-permissions` blocks are gone from `~/.codex/config.toml` once a Codex tab has reconnected and its `notify` line is still there; a new Codex thread starts no `cade-backend mcp-server`; a Claude Code tab that finishes still shows finished two minutes later. The helper processes already running, and their copies in `/tmp`, last until their Codex threads end. `[confirm]`
    - Before deleting anything under `/tmp/_MEI*`, check maps, open files, cwd and environment of every process for the directory: most of what looks stale is in use. 12 that nothing touched were deleted on 26 Nov (2.6 GB); where they came from was not established.
    - Left alone: Claude Code tabs are still given both helper servers per session (`--mcp-config`), each of which would unpack its own copy when started, and the backend is a chain of launcher processes, one per upgrade since it started, with the watchers each old image left behind as zombies under them. Building the backend unpacked (PyInstaller one-folder) would end all of it; raise it if `/tmp` fills again.
 2. Ask how the rebuilt board reads (streams grouped as needs you / in review / close out / in progress, `v` for a view by parent ticket, `]` `[` by section), and whether daylight is readable now. His Claude Code theme was `dark-daltonized`, which is why agent output and the agent-drawn cursor were pale. `[safe]`
