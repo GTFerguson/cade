@@ -1,7 +1,7 @@
 ---
 title: Keyboard Navigation Guide
 created: 2026-01-18
-updated: 2026-09-23
+updated: 2026-11-26
 status: active
 tags: [user, keybindings, navigation, vim, tmux]
 ---
@@ -88,6 +88,78 @@ Scroll the terminal output when Claude or shell has generated a lot of text.
 |----------|--------|
 | `Ctrl+a` then `s` | Toggle between Claude and shell terminal |
 | `Ctrl+a` then `?` | Show help overlay |
+
+## Direct Shortcuts (Alt)
+
+These work at once, with no prefix, wherever the focus is.
+
+### Tabs and workspaces
+
+A workspace is a named group of tabs. One is open at a time and the rest are chips on the tab bar, so the tab keys below stay inside the workspace on screen.
+
+| Shortcut | Action |
+|----------|--------|
+| `Alt+f` / `Alt+d` | Next / previous tab |
+| `Alt+1`…`Alt+9`, `Alt+0` | Go to tab 1 to 9, or 10 |
+| `Alt+t` | New tab: opens the project picker |
+| `Alt+r` | New remote tab |
+| `Alt+x` | Close the tab and end its session |
+| `Alt+w` / `Alt+Shift+w` | Next / previous workspace. Keep `Alt` held to see the list of workspaces |
+| `Ctrl+Alt+w` / `Ctrl+Alt+Shift+w` | Take the tab in front to the next / previous workspace and go with it |
+
+A tab can also be dragged onto another workspace's chip.
+
+### The project picker
+
+`Alt+t` opens it. Pick a folder, then a new session or one of the project's handoffs.
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Move within a column |
+| `Tab` | Cross between columns |
+| `h` / `l` | Walk up / down folders, without opening anything |
+| `Enter` | Choose |
+| `/` | Filter, or type a path |
+| `a` | Switch the agent the tab will run |
+| `g` | Switch the workspace the tab will join |
+
+It also lists sessions that are running with no tab, to attach to.
+
+### The board
+
+`Alt+b` opens the board for the project of the tab in front: its streams of work, each with its tickets, worktree and pull request.
+
+| Key | Action |
+|-----|--------|
+| `j` / `k`, `g` / `G` | Move |
+| `]` / `[` | Next / previous section |
+| `Enter` | Open a tab on the stream's handoff or a worktree's folder; unfold a folded section |
+| `h` | Fold the section the selection is in |
+| `v` | Switch between grouping by need and by parent ticket |
+| `/` | Search |
+| `t` / `p` | Open the ticket / the pull request in the browser |
+| `r` | Read again, past the cache |
+| `Esc` | Clear the search, then close |
+
+### Panes and views
+
+| Shortcut | Action |
+|----------|--------|
+| `Alt+h` / `Alt+l` | Focus the pane to the left / right |
+| `Alt+Shift+h` / `Alt+Shift+l` | Move the pane boundary left / right |
+| `Alt+s` | Toggle between the agent and the shell terminal |
+| `Alt+v` | Cycle the viewer |
+| `Alt+q` | Toggle the dashboard |
+| `Alt+e` | Toggle enhanced chat |
+| `Alt+i` | Focus the chat input |
+
+### Agents
+
+| Shortcut | Action |
+|----------|--------|
+| `Alt+m` / `Alt+Shift+m` | Next / previous mode |
+| `Alt+]` / `Alt+[` | Next / previous agent |
+| `Alt+y` / `Alt+n` | Approve / reject what an agent is asking for |
 
 ## File Tree Navigation
 
@@ -238,6 +310,17 @@ prefix = "C-b"
 │  s       Toggle Claude/shell                            │
 │  g/G     Scroll terminal to top/bottom                  │
 │  ?       Help                                           │
+├─────────────────────────────────────────────────────────┤
+│                    DIRECT (Alt +)                       │
+├─────────────────────────────────────────────────────────┤
+│  f/d     Next/previous tab                              │
+│  1-9, 0  Go to tab N                                    │
+│  t/x     New tab (picker) / close tab                   │
+│  w/W     Next/previous workspace (hold Alt: list)       │
+│  C-A-w   Take the tab to the next workspace             │
+│  b       Board                                          │
+│  h/l     Focus left/right pane                          │
+│  s/v/q   Agent or shell / viewer / dashboard            │
 ├─────────────────────────────────────────────────────────┤
 │                    TERMINAL                             │
 ├─────────────────────────────────────────────────────────┤
