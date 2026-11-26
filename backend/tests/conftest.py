@@ -22,6 +22,12 @@ def _isolate_global_state(monkeypatch: pytest.MonkeyPatch) -> Generator[None, No
     """
     monkeypatch.setenv("CADE_CLI_ORCHESTRATOR", "false")
 
+    # A developer with a real tracker key in ~/.cade/.env must not have tests
+    # send queries to their tracker. Tests of the reader pass their own fake.
+    import backend.linear as linear_mod
+
+    monkeypatch.setattr(linear_mod, "api_key", lambda: None)
+
     # A developer running tests from a profiled Claude session, or with a real
     # ~/.config/cade/claude.toml, must not change which Claude directory tests see.
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)

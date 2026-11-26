@@ -38,6 +38,18 @@ graph LR
 
 A project with no board file still has a board: its handoffs and worktrees, all unassigned.
 
+### Tickets from the tracker
+
+With a key, each ticket's title, status, link and parent are read from Linear (`backend/linear.py`) and the board file's copies of them are ignored (`overlay_tracker`). The file keeps what only it knows: the handoff, the worktree and the next step. Three things are read, in a second or so:
+
+- the key owner's unfinished tickets, a page at a time;
+- the tickets the board file names, whoever they belong to and whatever their state, one request per team;
+- the parents above any of those, up to `PARENT_LEVELS` levels, so the parent view has its upper levels and can name a parent that is not a row.
+
+An unfinished ticket of the owner's that the file does not mention becomes a row of its own, with no handoff: it is theirs to do whether or not anyone wrote it down. A ticket is finished or queued by the tracker's own kind of state (`statusType`: backlog, unstarted, started, completed, canceled, triage), which holds whatever a team has named its states.
+
+The key is `LINEAR_API_KEY`, from the environment or `~/.cade/.env`. A key made with only the Read permission is all it needs: this module sends queries and nothing else. Without a key, or when Linear cannot be reached, the board shows what the file says and its top line says so ("tickets from the board file"). The first board the screen draws is never live, since it must not wait on the network.
+
 ### Worktrees and their verdicts
 
 The repositories of a project are the project itself and each folder under `repos/`, counted once per repository however many worktrees sit beside it. For each, `git worktree list` gives the worktrees and `git status --porcelain=v2 --branch` (at most `STATUS_CONCURRENCY` at once) gives each one's branch and pending work. GitHub is asked once per repository, through `gh api graphql`, for the newest pull requests of each branch that is checked out (`branch_query`); an open one stands for the branch before a merged one before a closed one. Repositories are read at the same time, and within one, GitHub and the working trees are too.
@@ -81,7 +93,7 @@ So that the screen never opens empty, it asks twice. `GET /api/board?quick=true`
 
 After these come the board file's other headings (deferred, coming, and so on), handoffs with no ticket, and worktrees not on the board, all folded. A folded section is one row with its name and count; Enter unfolds it and `h` folds the section the selection is in. The screen therefore opens on what is to be acted on: seventeen rows for that project, where the first version opened on about a hundred and fifty.
 
-**By parent.** `v` switches to a second arrangement: each ticket that others sit under heads a section, with those beneath it and theirs beneath them, indented. A parent that is not itself on the board still heads its section, by id. The parent comes from the board file ("parent ABC-1" or "child of ABC-1" in a row's tracker column), which records it for few tickets; tickets with none are gathered in one folded section.
+**By parent.** `v` switches to a second arrangement: each ticket that others sit under heads a section, with those beneath it and theirs beneath them, indented. A parent that is not itself a row still heads its section, named when the tracker gave its title. The parent comes from the tracker when it is read, and otherwise from the board file ("parent ABC-1" or "child of ABC-1" in a row's tracker column); tickets with none are gathered in one folded section.
 
 **Search.** The search line is always on show. It matches ticket ids, titles, statuses, parents, handoff names and titles, worktrees, branches and `#numbers`, needs every word, looks inside folded sections and shows what it finds there unfolded. The first Escape gives the whole board back; the second closes it.
 
@@ -104,7 +116,7 @@ A tab opened from the board joins the open workspace, runs the agent of the tab 
 ## Design decisions
 
 - **The hand-kept table is the source of the mapping, not something to replace yet.** Nothing else records which ticket goes with which handoff and worktree: few handoffs name a ticket and few branches carry an id. Reading the table gives a useful board today, without CADE needing access to the tracker, and leaves the table's upkeep to shrink to the columns only a person can fill.
-- **Ticket status is the table's, with its date.** It is shown as recorded, including the "read back on" note the table carries, because CADE cannot yet ask the tracker. Reading tickets live is planned.
+- **The tracker's word over the file's, where the tracker knows better.** The file recorded a parent for 9 of 62 tickets on one real project; the tracker gave one for 54, and showed several tickets finished that the file still called in progress. Title, status and parent therefore come from the tracker when it can be read, and the mapping to handoffs and worktrees, which the tracker does not have, stays the file's.
 - **The picker's look, not a table.** A first mock drew the board as an eight-column table and was rejected as cluttered. The built screen reuses the picker's rows, with the detail beside the list instead of in more columns.
 - **By need, not by tracker status, and folded.** The first built version listed every ticket under its tracker status, then every unassigned handoff and worktree. It was one long list that answered nothing: "in progress" covered a failing pull request, one merged days before and one not yet opened, and sixty worktrees nobody needed sat at the bottom. Grouping by what a stream needs answers "what should I be doing", and folding the rest keeps that answer on one screen.
 - **Quiet section headings.** The picker's filled red bars, repeated for eight sections, were the loudest thing on the screen. The board's headings are text with a rule, and red is kept for the selected row and the detail's title.
@@ -120,10 +132,13 @@ A tab opened from the board joins the open workspace, runs the agent of the tab 
 | Worktree status checks at once | `STATUS_CONCURRENCY` | 8 |
 | Cache | `CACHE_SECONDS` | 60 s |
 | Branches asked about per GitHub request | `BRANCHES_PER_QUERY` | 50 |
+| Tracker key | `LINEAR_API_KEY`, environment or `~/.cade/.env` | none |
+| Levels of parents followed | `PARENT_LEVELS` in `linear.py` | 3 |
 
 ## Boundaries
 
-- No live tracker data. Titles, statuses and parents are what the board file says, and it records a parent for few tickets; the full tree needs the tracker itself.
+- Linear only, and read only. Nothing is written to the tracker, and other trackers are not supported.
+- Without a key the titles, statuses and parents are what the board file says, and it records a parent for few tickets.
 - No cleanup. The board says which worktrees are finished; removing them is planned as a skill ([[../../plans/worktree-cleanup]]).
 - A running session is not shown against its stream. Tabs are often opened on the project root, so a tab's folder does not say which stream it serves.
 - One project at a time: the board is for the project of the tab in front, not for a whole workspace.

@@ -138,6 +138,20 @@ describe("what a stream needs", () => {
   });
 });
 
+describe("reading a status the tracker gave", () => {
+  it("goes by the tracker's kind of state, whatever the team calls it", () => {
+    expect(stageOf(group(stream("W-1", { status: "Shipped", statusType: "completed" })))).toBe("done");
+    expect(stageOf(group(stream("W-1", { status: "Wontfix", statusType: "canceled" })))).toBe("done");
+    expect(stageOf(group(stream("W-1", { status: "Up next", statusType: "unstarted" })))).toBe("queued");
+    expect(stageOf(group(stream("W-1", { status: "Building", statusType: "started" })))).toBe("in-progress");
+  });
+
+  it("falls back on the name when the status is only the board file's", () => {
+    expect(stageOf(group(stream("W-1", { status: "Done" })))).toBe("done");
+    expect(stageOf(group(stream("W-1", { status: "Backlog" })))).toBe("queued");
+  });
+});
+
 describe("the board by need", () => {
   const d = data({
     streams: [
@@ -204,6 +218,11 @@ describe("the board by parent", () => {
   it("heads a section with each ticket others sit under, and nests theirs beneath", () => {
     expect(sections[0]!.title).toBe("W-10");
     expect(sections[0]!.rows.map(name)).toEqual(["W-10", "  W-11", "    W-12", "  W-13"]);
+  });
+
+  it("names a parent that is not a row when the tracker gave its title", () => {
+    const named = boardSections({ ...d, parents: { "W-99": { title: "The epic", status: "In Progress", url: null, parent: null } } }, "parent");
+    expect([named[1]!.title, named[1]!.hint]).toEqual(["W-99", "The epic"]);
   });
 
   it("heads a section with a parent that is not on the board, by its id", () => {

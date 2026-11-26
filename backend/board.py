@@ -47,6 +47,10 @@ _PR_RE = re.compile(r"#(\d+)\b")
 # How a row records the ticket it sits under: "parent ABC-1" or "child of ABC-1".
 _PARENT_RE = re.compile(r"\b(?:parent|child of)\s+([A-Z][A-Z0-9]+-\d+)\b")
 
+# Where the owner's tickets go that the board file does not mention. It is
+# counted with the tickets in play: they are theirs and unfinished.
+UNLISTED_SECTION = "Active tickets"
+
 # A worktree's standing, worked out the same way wherever it is shown.
 FINISHED = "finished"          # merged, nothing newer than the merge, clean
 MERGED_DIRTY = "merged-dirty"  # merged, but removing it would lose something
@@ -370,6 +374,8 @@ def assemble(
             "title": row["title"],
             "status": row["status"],
             "statusDetail": row["statusDetail"],
+            "statusType": row.get("statusType", ""),
+            "live": row.get("live", False),
             "parent": row["parent"],
             "section": row["section"],
             "next": row["next"],
@@ -408,14 +414,81 @@ def _read_board_file(project: Path) -> str:
         return ""
 
 
+def overlay_tracker(
+    rows: list[dict[str, Any]], known: dict[str, dict[str, Any]] | None
+) -> list[dict[str, Any]]:
+    """The board file's rows with the tracker's word taken over the file's.
+
+    A row keeps what only the file knows (handoff, worktree, next step) and
+    takes its title, status, link and parent from the tracker, which is
+    where those are kept true. The owner's unfinished tickets that the file
+    does not mention are added as rows of their own: a ticket nobody wrote
+    down is still theirs to do. With no tracker the rows are returned as
+    they are.
+    """
+    if known is None:
+        return [{**row, "statusType": "", "live": False} for row in rows]
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        ticket = known.get(row["ticket"])
+        if ticket is None:
+            out.append({**row, "statusType": "", "live": False})
+            continue
+        out.append({
+            **row,
+            "title": ticket["title"] or row["title"],
+            "url": ticket["url"] or row["url"],
+            "status": ticket["status"],
+            "statusType": ticket["statusType"],
+            # The file's note beside the status says when it was last read
+            # by hand, which is beside the point once it is read live.
+            "statusDetail": "",
+            "parent": ticket["parent"],
+            "live": True,
+        })
+    listed = {row["ticket"] for row in rows}
+    for ticket in known.values():
+        if ticket["mine"] and ticket["ticket"] not in listed:
+            out.append({
+                "ticket": ticket["ticket"], "url": ticket["url"], "title": ticket["title"],
+                "status": ticket["status"], "statusType": ticket["statusType"], "statusDetail": "",
+                "parent": ticket["parent"], "section": UNLISTED_SECTION, "handoff": None,
+                "names": [], "prs": [], "next": "", "live": True,
+            })
+    return out
+
+
+def parent_titles(rows: list[dict[str, Any]], known: dict[str, dict[str, Any]] | None) -> dict[str, Any]:
+    """Tickets that rows sit under but that are not rows themselves, so a
+    tree's upper levels can be named."""
+    listed = {row["ticket"] for row in rows}
+    return {
+        t["ticket"]: {"title": t["title"], "status": t["status"], "url": t["url"], "parent": t["parent"]}
+        for t in (known or {}).values()
+        if t["ticket"] not in listed
+    }
+
+
 async def gather(project: Path) -> dict[str, Any]:
     """Read everything the board shows for a project."""
-    text, handoffs, worktrees = await asyncio.gather(
-        asyncio.to_thread(_read_board_file, project),
+    from backend import linear
+
+    text = await asyncio.to_thread(_read_board_file, project)
+    rows = parse_board(text)
+    wanted = {r["ticket"] for r in rows} | {r["parent"] for r in rows if r["parent"]}
+    handoffs, worktrees, known = await asyncio.gather(
         asyncio.to_thread(list_handoffs, project),
         _describe_worktrees(project),
+        linear.tickets(wanted),
     )
-    return assemble(project, parse_board(text), handoffs, worktrees)
+    has_file = bool(rows)
+    rows = overlay_tracker(rows, known)
+    result = assemble(project, rows, handoffs, worktrees)
+    # Tickets added from the tracker are not the project having a board file.
+    result["hasBoardFile"] = has_file
+    result["tracker"] = {"live": known is not None, "tickets": len(known or {})}
+    result["parents"] = parent_titles(rows, known)
+    return result
 
 
 async def quick(project: Path) -> dict[str, Any]:
@@ -433,7 +506,13 @@ async def quick(project: Path) -> dict[str, Any]:
         asyncio.to_thread(_read_board_file, project),
         asyncio.to_thread(list_handoffs, project),
     )
-    return {**assemble(project, parse_board(text), handoffs, []), "partial": True}
+    rows = overlay_tracker(parse_board(text), None)
+    return {
+        **assemble(project, rows, handoffs, []),
+        "partial": True,
+        "tracker": {"live": False, "tickets": 0},
+        "parents": {},
+    }
 
 
 _cache: dict[str, tuple[float, dict[str, Any]]] = {}

@@ -19,6 +19,8 @@ import {
   boardSections,
   filterSections,
   finishedCount,
+  isDone,
+  isQueued,
   leadPullRequest,
   openTarget,
   openTickets,
@@ -120,11 +122,10 @@ const VERDICT_TONE: Record<BoardWorktree["verdict"], Tone> = {
   local: "muted",
 };
 
-function statusTone(status: string): Tone {
-  if (status === "In Review") return "review";
-  if (status === "In Progress") return "busy";
-  if (status === "Done" || status === "Completed") return "good";
-  return "muted";
+function statusTone(ticket: BoardStream): Tone {
+  if (isDone(ticket)) return "good";
+  if (isQueued(ticket)) return "muted";
+  return ticket.status === "In Review" ? "review" : "busy";
 }
 
 const VIEW_SAYS: Record<BoardView, string> = { need: "by what it needs", parent: "by parent ticket" };
@@ -337,6 +338,12 @@ export class BoardScreen {
       say(counts["in-progress"], "in progress", "plain");
       say(finishedCount(this.data), "worktrees finished", "good");
       if (!this.data.hasBoardFile) parts.push({ text: "no docs/plans/work-board.md here", tone: "muted" });
+      if (!this.data.partial) {
+        parts.push({
+          text: this.data.tracker?.live ? "tickets live from Linear" : "tickets from the board file",
+          tone: "muted",
+        });
+      }
       parts.push({ text: VIEW_SAYS[this.view], tone: "muted" });
       parts.push({
         text: this.data.partial
@@ -380,7 +387,7 @@ export class BoardScreen {
     } else if (row.kind === "ticket") {
       label = row.stream.ticket;
       meta = row.stream.title;
-      aside = { text: row.stream.status || "no status", tone: statusTone(row.stream.status) };
+      aside = { text: row.stream.status || "no status", tone: statusTone(row.stream) };
       rowEl.style.paddingLeft = `${16 + row.depth * 18}px`;
       if (row.depth > 0) rowEl.dataset["nested"] = "true";
     } else if (row.kind === "handoff") {
@@ -456,7 +463,7 @@ export class BoardScreen {
     const line = el("div", "board-ticket");
     line.appendChild(el("span", "board-ticket-id", ticket.ticket));
     const status = el("span", "board-ticket-status", ticket.status || "no status");
-    status.dataset["tone"] = statusTone(ticket.status);
+    status.dataset["tone"] = statusTone(ticket);
     line.appendChild(status);
     const title = el("span", "board-ticket-title", ticket.title);
     line.appendChild(title);
@@ -501,7 +508,7 @@ export class BoardScreen {
       add(el("div", "board-title", s.title));
       add(
         this.fact("status", [
-          { text: s.status || "none recorded", tone: statusTone(s.status) },
+          { text: s.status || "none recorded", tone: statusTone(s) },
           ...(s.statusDetail ? [{ text: ` · ${s.statusDetail}`, tone: "muted" as const }] : []),
         ]),
       );

@@ -99,6 +99,14 @@ describe("what the board opens on", () => {
     expect(summary()).toContain("by what it needs");
   });
 
+  it("says where the tickets came from", async () => {
+    await open();
+    expect(summary()).toContain("tickets from the board file");
+    host.innerHTML = "";
+    await open(async () => ({ ...DATA, tracker: { live: true, tickets: 6 } }));
+    expect(summary()).toContain("tickets live from Linear");
+  });
+
   it("offers the search line without being asked", async () => {
     await open();
     const input = host.querySelector<HTMLInputElement>(".picker-filter-input")!;

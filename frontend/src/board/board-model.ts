@@ -46,7 +46,15 @@ export interface BoardStream {
   title: string;
   status: string;
   statusDetail: string;
-  /** The ticket this one sits under, when the board file says. */
+  /**
+   * The tracker's own kind of state (backlog, unstarted, started, completed,
+   * canceled, triage), which holds whatever a team calls its states. Empty
+   * when the status is only what the board file says.
+   */
+  statusType?: string;
+  /** Whether title, status and parent were read from the tracker just now. */
+  live?: boolean;
+  /** The ticket this one sits under. */
   parent?: string | null;
   /** The heading the row sits under in the board file. */
   section: string;
@@ -69,6 +77,10 @@ export interface BoardData {
   gathered: number;
   /** Tickets and handoffs only: the worktrees have not been read yet. */
   partial?: boolean;
+  /** Whether tickets were read from the tracker, and how many it gave. */
+  tracker?: { live: boolean; tickets: number };
+  /** Tickets that others sit under and that are not rows themselves. */
+  parents?: Record<string, { title: string; status: string; url: string | null; parent: string | null }>;
 }
 
 /**
@@ -115,8 +127,20 @@ export interface BoardSection {
 /** By what each stream needs, or by which ticket each sits under. */
 export type BoardView = "need" | "parent";
 
-const DONE = new Set(["Done", "Completed", "Canceled", "Cancelled"]);
-const QUEUED = new Set(["Todo", "Backlog", "Triage", ""]);
+const DONE_NAMES = new Set(["Done", "Completed", "Canceled", "Cancelled"]);
+const QUEUED_NAMES = new Set(["Todo", "Backlog", "Triage", ""]);
+const DONE_TYPES = new Set(["completed", "canceled"]);
+const QUEUED_TYPES = new Set(["backlog", "unstarted", "triage"]);
+
+/** Finished in the tracker: by its kind of state when known, else by name. */
+export function isDone(ticket: BoardStream): boolean {
+  return ticket.statusType ? DONE_TYPES.has(ticket.statusType) : DONE_NAMES.has(ticket.status);
+}
+
+/** Not started: by the tracker's kind of state when known, else by name. */
+export function isQueued(ticket: BoardStream): boolean {
+  return ticket.statusType ? QUEUED_TYPES.has(ticket.statusType) : QUEUED_NAMES.has(ticket.status);
+}
 const VERDICT_ORDER: Verdict[] = ["finished", "merged-dirty", "in-review", "closed", "local"];
 
 export const VERDICT_SAYS: Record<Verdict, string> = {
@@ -176,12 +200,12 @@ export function stageOf(group: BoardGroup): Stage {
   const unfinished = openTickets(group);
   if (unfinished.length === 0) return "done";
   if (prs.some((p) => p.state === "merged")) return "close-out";
-  return unfinished.every((t) => QUEUED.has(t.status)) ? "queued" : "in-progress";
+  return unfinished.every(isQueued) ? "queued" : "in-progress";
 }
 
 /** The tickets of a group that are not finished in the tracker. */
 export function openTickets(group: BoardGroup): BoardStream[] {
-  return group.tickets.filter((t) => !DONE.has(t.status));
+  return group.tickets.filter((t) => !isDone(t));
 }
 
 /** The pull request a stream is best summed up by: one that wants its author, then any open one, then a merged one. */
@@ -302,11 +326,13 @@ function byParent(data: BoardData): (Omit<BoardSection, "folded"> & { foldedByDe
       ...(self ? [{ kind: "ticket" as const, stream: self, depth: 0 }] : []),
       ...descend(top, self ? 1 : 0, new Set()),
     ];
+    const named = data.parents?.[top];
     out.push({
       id: `parent:${top}`,
-      // The ticket's own row, first in the section, carries its title.
+      // The ticket's own row, first in the section, carries its title; a
+      // parent that is not a row is named here, when the tracker gave it.
       title: top,
-      hint: self ? "" : "not on the board",
+      hint: self ? "" : named ? named.title : "not on the board",
       rows,
       foldedByDefault: false,
     });

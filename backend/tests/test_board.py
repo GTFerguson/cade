@@ -167,6 +167,61 @@ class TestAskingGitHubByBranch:
         assert board.prs_from_answer(None, ["a"]) == {}
 
 
+def live(ticket: str, *, mine: bool = True, status: str = "In Review", kind: str = "started", parent: str | None = None):
+    return {"ticket": ticket, "title": f"Live title of {ticket}", "url": f"https://live.test/{ticket}",
+            "status": status, "statusType": kind, "parent": parent, "updated": None, "mine": mine}
+
+
+class TestTakingTheTrackersWord:
+    def setup_method(self):
+        self.rows = parse_board(BOARD)
+
+    def row(self, rows, ticket):
+        return next(r for r in rows if r["ticket"] == ticket)
+
+    def test_with_no_tracker_the_file_stands(self):
+        rows = board.overlay_tracker(self.rows, None)
+        first = self.row(rows, "WRK-214")
+        assert (first["status"], first["statusDetail"], first["live"]) == (
+            "In Progress", "25 Nov readback; parent WRK-100", False,
+        )
+
+    def test_title_status_link_and_parent_come_from_the_tracker(self):
+        rows = board.overlay_tracker(self.rows, {"WRK-214": live("WRK-214", parent="WRK-7")})
+        first = self.row(rows, "WRK-214")
+        assert first["title"] == "Live title of WRK-214"
+        assert (first["status"], first["statusType"], first["statusDetail"]) == ("In Review", "started", "")
+        assert first["url"] == "https://live.test/WRK-214"
+        assert first["parent"] == "WRK-7"
+        assert first["live"] is True
+
+    def test_what_only_the_file_knows_is_kept(self):
+        first = self.row(board.overlay_tracker(self.rows, {"WRK-214": live("WRK-214")}), "WRK-214")
+        assert first["handoff"] == "model-metrics"
+        assert first["names"][:2] == ["platform-metrics", "gary/metrics"]
+        assert first["next"] == "Repair the release; see handoff"
+
+    def test_a_row_the_tracker_does_not_know_keeps_the_files_word(self):
+        rows = board.overlay_tracker(self.rows, {"WRK-214": live("WRK-214")})
+        assert self.row(rows, "WRK-230")["live"] is False
+        assert self.row(rows, "WRK-230")["status"] == "Backlog"
+
+    def test_my_unfinished_tickets_the_file_leaves_out_are_added(self):
+        known = {"WRK-214": live("WRK-214"), "WRK-777": live("WRK-777", status="Todo", kind="unstarted")}
+        added = self.row(board.overlay_tracker(self.rows, known), "WRK-777")
+        assert added["section"] == board.UNLISTED_SECTION
+        assert (added["handoff"], added["names"], added["next"]) == (None, [], "")
+        assert added["status"] == "Todo"
+
+    def test_a_ticket_fetched_only_as_a_parent_is_not_made_a_row(self):
+        known = {"WRK-214": live("WRK-214", parent="WRK-100"), "WRK-100": live("WRK-100", mine=False)}
+        rows = board.overlay_tracker(self.rows, known)
+        assert "WRK-100" not in {r["ticket"] for r in rows}
+        assert board.parent_titles(rows, known) == {
+            "WRK-100": {"title": "Live title of WRK-100", "status": "In Review", "url": "https://live.test/WRK-100", "parent": None},
+        }
+
+
 def handoff(name: str, modified: float = 1.0):
     return {"name": f"{name}.md", "relPath": f"docs/plans/handoff/{name}.md", "title": name.title(), "modified": modified}
 
@@ -255,6 +310,37 @@ class TestGatheringFromDisk:
         assert wt["verdict"] == board.LOCAL
         # The clone's own checkout is a worktree nobody named.
         assert [t["name"] for t in result["worktrees"]] == ["platform"]
+
+    async def test_reads_the_tracker_when_there_is_one(self, tmp_path: Path, monkeypatch):
+        from backend import linear
+
+        project = tmp_path / "work"
+        (project / "docs" / "plans").mkdir(parents=True)
+        (project / "docs" / "plans" / "work-board.md").write_text(BOARD)
+        (project / ".git").write_text("gitdir: /nonexistent\n")
+        asked: list[set[str]] = []
+
+        async def tracker(wanted: set[str]):
+            asked.append(wanted)
+            return {"WRK-214": live("WRK-214", status="Done", kind="completed"), "WRK-900": live("WRK-900")}
+
+        monkeypatch.setattr(linear, "tickets", tracker)
+        result = await board.gather(project)
+
+        # Asked about every ticket the file names, and the parents it names.
+        assert {"WRK-214", "WRK-230", "WRK-150", "WRK-301", "WRK-100"} <= asked[0]
+        assert result["tracker"] == {"live": True, "tickets": 2}
+        by_ticket = {s["ticket"]: s for s in result["streams"]}
+        assert by_ticket["WRK-214"]["status"] == "Done"
+        assert by_ticket["WRK-214"]["statusType"] == "completed"
+        assert by_ticket["WRK-900"]["live"] is True
+
+    async def test_without_a_tracker_says_so(self, tmp_path_factory):
+        folder = tmp_path_factory.mktemp("offline")
+        (folder / ".git").write_text("gitdir: /nonexistent\n")
+        result = await board.gather(folder)
+        assert result["tracker"] == {"live": False, "tickets": 0}
+        assert result["parents"] == {}
 
     async def test_a_plain_folder_gives_an_empty_board(self, tmp_path_factory):
         folder = tmp_path_factory.mktemp("plain")
