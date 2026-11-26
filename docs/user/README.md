@@ -203,3 +203,4 @@ See [[dashboard|Dashboard Guide]] for the full YAML schema, component reference,
 - [[../README|Documentation Hub]]
 - [[../future/README|Roadmap]] - See what's planned
 - [[mobile-guide|Mobile Guide]] - Using CADE on phones and tablets
+- [[hook-troubleshooting|Hook Troubleshooting]] - When the plan viewer hook does not fire

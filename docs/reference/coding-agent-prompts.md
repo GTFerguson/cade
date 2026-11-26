@@ -614,17 +614,13 @@ When building coding agents, ensure:
 
 ### Internal References
 
-- [[../architecture/agent-system]] — CADE agent architecture
-- [[../../../nkrdn/plans/nkrdn-advanced-coding-agent-research.md]] — nkrdn agent system design
-- [[../../../nkrdn/plans/coding-agent/01-overview.md]] — Detailed coding agent architecture
-- [[../../plans/research-mode-feature.md]] — Implementation plan for research mode and dynamic context switching
+- [[../technical/core/agent-orchestration]] — CADE agent orchestration
+- [[../technical/core/prompt-composition]] — how CADE assembles its system prompt
 
 ---
 
 ## See Also
 
-- [[proven-system]] — Full PROVEN methodology for research-grounded documentation
-- [[agentic-context-engineering]] (created by research mode) — Detailed ACE paper summary with implementation examples
-- [[code-quality-metrics]] (planned) — Detailed metric definitions and tools
-- [[llm-limitations]] (planned) — Known failure modes and mitigation strategies
+- The PROVEN documentation principles (`~/.claude/rules/proven-documentation.md`) — methodology for research-grounded documentation
+- [[agentic-context-engineering]] — Detailed ACE paper summary with implementation examples
 - `/research` — Research mode command for evidence gathering

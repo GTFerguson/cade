@@ -324,7 +324,6 @@ Essential metrics for production deployments:
 
 ## See Also
 
-- [[docs/plans/context-management/context-budget-indicator]] — CADE plan for context budget visualization
-- [[docs/reference/ace-self-improving-agents]] — Self-improvement mechanisms for agents (context eviction related)
+- [[self-improving-agent-systems]] — Self-improvement mechanisms for agents (context eviction related)
 - [[backend/prompts/bundled/rules/context-management]] — Current CADE context management rules
 - [[docs/technical/core/agent-orchestration]] — Agent lifecycle management (multi-agent coordination)

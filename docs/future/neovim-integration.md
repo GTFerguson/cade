@@ -350,4 +350,3 @@ Optional companion Neovim plugin for enhanced integration:
 
 - [[../technical/core/agent-orchestration|Agent Orchestration]] - Hooks system that feeds observation layer
 - [[../technical/core/frontend-architecture|Frontend Architecture]]
-- [[mobile-interface|Mobile Interface]] - How Neovim pane works on mobile

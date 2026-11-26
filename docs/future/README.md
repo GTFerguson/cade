@@ -117,9 +117,7 @@ Generate a QR code on desktop that encodes the remote URL with auth token. Scann
 
 ## Blocking Issues
 
-See [[blocking-issues]] for critical issues that must be resolved before major progress.
-
-*No blocking issues documented yet.*
+None are recorded. One that must be resolved before the roadmap can move goes in `docs/future/blocking-issues.md`, which does not exist until there is one.
 
 ## Low Priority Optimizations
 
@@ -129,6 +127,7 @@ See [[blocking-issues]] for critical issues that must be resolved before major p
 
 ### Integration & Architecture
 
+- [[agent-memory]] - Agent memory built on nkrdn
 - [[multi-provider-architecture]] - Modular provider system: any API model as agent backbone (Bedrock, Vertex, Anthropic, OpenAI) alongside CC CLI
 - [[remote-deployment]] - Remote server deployment (Phases 1-3 complete, 4-5 planned)
 - [[neovim-integration]] - Neovim integration for collaborative editing workflows

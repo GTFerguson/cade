@@ -324,9 +324,8 @@ cooldown = min(base_cooldown * (backoff_factor ** failure_count) * random.unifor
 
 ## See Also
 
-- [[../technical/core/provider-architecture]] — Provider abstraction and LiteLLM integration
-- [[../technical/reference/api-provider]] — APIProvider implementation details
-- [[../technical/design/visual-design-philosophy]] — Theme system (unrelated but in same reference dir)
+- [[provider-architecture]] — Provider abstraction and LiteLLM integration
+- `core/backend/providers/api_provider.py` — the `APIProvider` implementation
 - `core/backend/providers/failover_provider.py` — FailoverProvider source
 - `core/backend/providers/api_provider.py` — APIProvider source
 - `core/backend/providers/config.py` — Provider configuration

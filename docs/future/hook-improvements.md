@@ -33,4 +33,3 @@ Future improvements for the Claude Code hook system.
 
 ## See Also
 
-- [[../technical/design/hook-architecture|Hook Architecture]] (if exists)

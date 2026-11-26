@@ -1,7 +1,7 @@
 ---
 title: Technical Documentation
 created: 2026-01-16
-updated: 2026-11-25
+updated: 2026-11-26
 status: active
 tags: [index, technical]
 ---
@@ -32,6 +32,7 @@ Architecture and essential developer documentation.
 API documentation and specifications.
 
 - [[reference/websocket-protocol|WebSocket Protocol]] - WebSocket message types and communication protocol
+- [[reference/dashboard-interactive-primitives|Interactive Dashboard Primitives]] - The dashboard's interactive building blocks
 
 ### Design
 
@@ -47,7 +48,7 @@ When adding technical documentation:
 3. Link from this index
 4. Cross-reference related docs
 
-See [[../.roo/rules/documentation-organization|documentation-organization]] for full guidelines.
+See `.claude/rules/documentation-organization.md` for full guidelines.
 
 ## See Also
 

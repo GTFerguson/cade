@@ -450,4 +450,4 @@ max_agents_per_user = 5
 - [[../user/mobile-guide|Mobile Guide]] - Mobile interface for remote access from phones and tablets
 - [[agent-orchestration|Agent Orchestration]] - Multi-agent works well with persistent remote sessions
 - [[../technical/core/frontend-architecture|Frontend Architecture]]
-- [[../technical/core/backend-architecture|Backend Architecture]] (if exists)
+- [[../architecture/overview|Architecture Overview]]

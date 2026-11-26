@@ -440,5 +440,4 @@ Deduplicate when:
 ## See Also
 
 - [[coding-agent-prompts]] — Broader prompt engineering guidance with Alchemy and ACE integration
-- [[../../plans/research-mode-feature.md]] — Implementation plan for dynamic context switching in CADE
-- [[proven-system]] — PROVEN methodology for evidence-based documentation
+- The PROVEN documentation principles (`~/.claude/rules/proven-documentation.md`) — methodology for evidence-based documentation

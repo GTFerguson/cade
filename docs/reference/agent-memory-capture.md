@@ -16,8 +16,7 @@ the CADE writer module and tool registration.
 
 For retrieval evidence see [[agent-memory-systems]]. For the architectural
 context of how nkrdn ingests these files see [[../architecture/nkrdn-agent-memory]].
-For the implementation handoff see
-[[../plans/handoff/agent-memory-phase-4-capture]].
+The implementation is in `backend/memory/`.
 
 ## 1. The Capture Decision Tree
 
@@ -312,8 +311,7 @@ materialisation on rebuild — CADE doesn't duplicate that logic.
 
 ## 9. Test Plan
 
-Unit tests for the writer
-([[../plans/handoff/agent-memory-phase-4-capture#next-actions-ordered]] step 6):
+Unit tests for the writer:
 
 | Test | Asserts |
 |---|---|
@@ -462,8 +460,7 @@ validation pipeline)
 
 - [[agent-memory-systems]] — retrieval scoring evidence
 - [[../architecture/nkrdn-agent-memory]] — nkrdn ingestion architecture
-- [[../plans/handoff/agent-memory-phase-4-capture]] — current implementation
-  handoff
+- `backend/memory/` — the implementation
 - [[common-knowledge/ai-agents/agent-memory-write-tools]] — capture surface
   research foundation
 - [[common-knowledge/ai-agents/memory-write-deduplication]] — dedup decision

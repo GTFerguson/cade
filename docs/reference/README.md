@@ -6,7 +6,7 @@ updated: 2026-04-22
 
 # Reference Documentation
 
-Evidence base for CADE's design decisions. Each doc covers a single topic with full citations and evidence tiers. See [[proven-documentation]] principles for quality standards.
+Evidence base for CADE's design decisions. Each doc covers a single topic with full citations and evidence tiers. The PROVEN principles (`~/.claude/rules/proven-documentation.md`) set the quality standard.
 
 ## Documents
 
@@ -18,6 +18,15 @@ Evidence base for CADE's design decisions. Each doc covers a single topic with f
 - [[browser-terminal-emulators]] — xterm.js landscape, WebGL vs canvas vs DOM tradeoffs, documented rendering failures and patches
 - [[xterm-rendering-issue]] — Black-block glyph corruption: full attempt log, confirmed dead-ends, current theory, escalation path
 - [[xterm-webfont-loading]] — Official `@xterm/addon-web-fonts` solution, gap analysis vs our implementation, recommended migration
+- [[pty-websocket-architecture]] — PTY–WebSocket architecture for terminal session management
+- [[session-persistence]] — Session persistence for agentic development environments
+- [[provider-architecture]] — LLM provider architectures for agentic development environments
+- [[multi-provider-failover]] — Multi-provider LLM failover and load balancing strategies
+- [[context-window-management]] — Context window management strategies for LLM agents
+- [[tool-design-for-agents]] — Tool design for LLM-powered coding agents
+- [[permission-allowance-models]] — Permission allowance models for LLM agents
+- [[dashboard-config-driven-ui]] — Config-driven UI: live rendering from declarative configuration
+- [[brand-voice-guide]] — How to write a brand voice YAML
 
 ## Common Knowledge
 

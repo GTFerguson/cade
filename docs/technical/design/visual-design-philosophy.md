@@ -1047,8 +1047,6 @@ Terminal aesthetics can conflict with accessibility:
 
 ## See Also
 
-- [[cli-conventions]] - Command-line interface design
-- [[tmux-integration-design]] - tmux workflow integration
 - `frontend/styles/` - CSS directory (see CSS directory structure above)
 - `frontend/src/config/themes.ts` - Theme definitions
 - `frontend/src/ui/menu-nav.ts` - MenuNav controller
