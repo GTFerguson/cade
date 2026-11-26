@@ -220,9 +220,12 @@ export class TabBar implements Component {
     });
 
     tabArea.appendChild(addButton);
-    // In the desktop window the marker goes beside the window buttons (below).
-    if (this.updateReady && !isTauri) tabArea.appendChild(this.createUpdateMarker());
     this.container.appendChild(tabArea);
+    // Over the stretch of bar above the file tree, which nothing else uses.
+    // At the end of the tab area it went unseen in the desktop window: with
+    // the viewer closed the tabs reach the corner, and the window buttons
+    // there are drawn on top.
+    if (this.updateReady) this.container.appendChild(this.createUpdateMarker());
 
     if (isTauri) {
       const spacerRight = document.createElement("div");
@@ -231,10 +234,6 @@ export class TabBar implements Component {
       this.container.appendChild(spacerRight);
 
       const windowControls = this.createWindowControls();
-      // The window buttons sit over the right end of the bar and cover
-      // anything at the end of the tab area, which is where the marker went
-      // unseen. Inside their box it is always on top and where the eye goes.
-      if (this.updateReady) windowControls.prepend(this.createUpdateMarker());
       this.container.appendChild(windowControls);
     }
   }

@@ -217,29 +217,26 @@
   color: var(--text-primary);
 }
 
-/* A newer interface is installed and waiting. Pushed to the far end of the
-   bar and on the tabs' text line, like the plus. */
+/* A newer interface is installed and waiting. Laid over the left end of
+   the bar, above the file tree: that stretch is otherwise empty, and unlike
+   the far end of the tabs nothing is ever drawn on top of it. */
 .tab-update-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
-  margin-left: auto;
-  padding: 8px 10px;
+  padding: 0 12px;
   border: none;
-  border-bottom: 1px solid transparent;
   background: transparent;
   color: var(--accent-green);
   font-family: var(--font-mono);
   font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
-  flex-shrink: 0;
   pointer-events: auto;
-}
-
-/* Beside the window buttons there is nothing to be pushed away from. */
-.tab-bar-window-controls .tab-update-marker {
-  margin-left: 0;
-  margin-right: 6px;
 }
 
 .tab-update-marker::before {
