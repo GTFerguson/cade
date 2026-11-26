@@ -1,11 +1,11 @@
 ---
-title: Organisation roadmap: workspaces, picker, pull request state and the board are shipped; next is the board on real data, Linear, and the cleanup skill
+title: Organisation roadmap: workspaces, picker, per-tab strip, the board and Linear are shipped; next is an install carrying the handshake fix, then the cleanup skill
 created: 2026-11-25
 updated: 2026-11-26
 status: in-flight
 ---
 
-# Resume: get Gary's verdict on the board with his real tickets, then Linear access, the cleanup skill, and linking a tab to its stream
+# Resume: install the handshake fix when Gary says, check the per-tab strip in the real app, then the cleanup skill
 
 ## Active plans
 
@@ -27,11 +27,15 @@ This file is persistent working memory for one in-flight task. Procedure:
 
 ## Where we are
 
-Everything built on 25 and 26 Nov is committed, pushed and installed (last install 26 Nov 12:48, HEAD `6f90cbae`). Gary's window needs the "update ready" marker clicked to load the newest interface; from this build on the marker sits at the top left, above the file tree.
+Everything through `7c079e1a` is committed, pushed and installed (26 Nov 17:03): the rebuilt board, live Linear data, the workspace list that slides in at the right, the strip that follows each tab's own stream, and the efficiency pass. No errors in `~/.cade/logs/cade.log` since that install. What that install was meant to be followed by, and was not: looking at what each tab's strip reports in the real app, and the installed backend's process counts.
 
-In use and liked: workspaces (`Alt+w` / `Alt+Shift+w`, hold `Alt` for the list, `Ctrl+Alt+w` or a drag onto a chip to move a tab, `Alt+x` closes a tab), the strip above the terminal, quiet upgrades. Built and waiting for Gary's opinion: the board (`Alt+b`) with his real tickets, and the daylight theme fixes.
+Committed and pushed after it, **not installed**: the handshake fix (`docs/technical/core/remote-sessions.md`, "Handshake"). After an upgrade the backend gave up on slow tabs after two seconds, attached them to a fresh shell in the home folder and told them "no group", which is what kept emptying the AirPLAi workspace and making sessions look killed.
 
-Not built: live Linear data, the cleanup skill, tickets and pull requests on the picker's rows (mock only, `docs/plans/design/workspace-board-mock.html`).
+In use and liked: workspaces (`Alt+w` / `Alt+Shift+w`, hold `Alt` for the list, `Ctrl+Alt+w` or a drag onto a chip to move a tab, `Alt+x` closes a tab), the strip above the terminal, quiet upgrades. Built and waiting for Gary's opinion: the rebuilt board (`Alt+b`) and the daylight theme fixes.
+
+Not built: the cleanup skill, tickets and pull requests on the picker's rows (mock only, `docs/plans/design/workspace-board-mock.html`).
+
+One session is running with no tab: `2f56e385` "Clean up handoffs" (AirPLAi, Codex). Its tab was one of the stuck ones and was closed while it was attached to nothing, so the close never reached the session. Gary's to reattach or end.
 
 ## Worktree / branch
 
@@ -44,15 +48,15 @@ Nothing. Untracked files from other sessions, leave alone and never stage: `AGEN
 
 ## Next actions (ordered)
 
-1. The board was rebuilt 26 Nov after Gary called the first version "a massive list... impossible to use": rows are streams (a handoff and its tickets), grouped as needs you / in review / close out / in progress with the rest folded, `v` for a view by parent ticket, `]` `[` to move by section, search always on show. Ask how this version reads once installed. `[safe]`
-2. Ask whether daylight is readable now, and whether he changed Claude Code's own theme (`/theme`; his was `dark-daltonized`, which is why agent output and the agent-drawn cursor were pale). `[safe]`
-3. ~~Linear~~ Done 26 Nov: Gary made a read-only personal key, stored as `LINEAR_API_KEY` in `~/.cade/.env` (mode 600, outside the repository; he pasted it in chat, so it is in the transcript, and it is read-only). `backend/linear.py` reads his open tickets, the board file's tickets and their parents; the board takes title, status and parent from it. Tests never reach the tracker (`conftest.py` switches the key off).
-4. Link a tab to its stream. Gary opens AirPLAi tabs on the project root (`~/projects/airplai`), not on a worktree, so the strip and badge show the root's branch. Options: a `ticket:` and `worktree:` field in handoff frontmatter (changes the AirPLAi workspace's own rules, ask first), or remembering which handoff a tab was opened from and reading the board's row for it. `[safe]` to design, `[confirm]` before touching AirPLAi's files.
-5. The cleanup skill (`docs/plans/worktree-cleanup.md`): takes the board's "finished" worktrees, shows what it will remove, waits for a yes, uses only `git worktree remove` and `git branch -d`. 15 are finished on the AirPLAi project today. `[safe]` to write; running it is Gary's.
-6. Keep the board warm in the background for projects with open tabs, if the 6 s full read still drags. `[safe]`
-7. Pull request monitoring steps 2 to 4 (`pr-monitoring.md`). `[safe]`
-8. Offered, not accepted yet: after an in-place upgrade every terminal has no controller, so any client that connects can resize it (this is how a diagnostic garbled Gary's tab). The window in control before the upgrade should keep control across it. `[safe]`
-9. Tabs past the end of a crowded workspace are cut off (still reachable by key). Wants a real answer if Gary keeps many tabs in one workspace. `[safe]`
+1. Install when Gary says (`make install-desktop`); it carries only the handshake fix. Afterwards check the log: every session in `GET /api/sessions` should have a client again within seconds, and a tab that was late shows as "SET_PROJECT arrived after setup" followed by a reattach, never as a tab left on the home folder. `[confirm]`
+2. Look at what each tab's strip reports in the installed app, and the backend's process counts, which the 17:03 install was never followed by. `[safe]`, without attaching anything to a live session.
+3. Ask how the rebuilt board reads (streams grouped as needs you / in review / close out / in progress, `v` for a view by parent ticket, `]` `[` by section), and whether daylight is readable now. His Claude Code theme was `dark-daltonized`, which is why agent output and the agent-drawn cursor were pale. `[safe]`
+4. The cleanup skill (`docs/plans/worktree-cleanup.md`): takes the board's "finished" worktrees, shows what it will remove, waits for a yes, uses only `git worktree remove` and `git branch -d`. `[safe]` to write; running it is Gary's.
+5. Keep the board warm in the background for projects with open tabs, if the full read still drags. `[safe]`
+6. Pull request monitoring steps 2 to 4 (`pr-monitoring.md`). `[safe]`
+7. Offered, not accepted yet: after an in-place upgrade every terminal has no controller, so any client that connects can resize it (this is how a diagnostic garbled Gary's tab). The window in control before the upgrade should keep control across it. `[safe]`
+8. Tabs past the end of a crowded workspace are cut off (still reachable by key). Wants a real answer if Gary keeps many tabs in one workspace. `[safe]`
+9. A connection that names no session still gets a shell, a file watcher and a knowledge graph build on the backend's working directory, which for the desktop app is the home folder. Nothing in the app needs that any more; worth removing if it shows up as load. `[safe]` to investigate.
 
 ## Key design decisions
 
@@ -74,7 +78,7 @@ cd /home/gary/projects/cade/frontend && npx tsc --noEmit -p . && npx vitest run
 cd /home/gary/projects/cade && PATH="$PWD/.venv/bin:$PATH" make install-desktop
 ```
 
-Both suites green at `6f90cbae` (1,419 backend, 853 frontend). An install needs Gary's explicit go-ahead each time; the permission check blocks it otherwise.
+Both suites green with the handshake fix (1,473 backend, 910 frontend). An install needs Gary's explicit go-ahead each time; the permission check blocks it otherwise.
 
 ## Gotchas encountered
 
@@ -85,7 +89,8 @@ Both suites green at `6f90cbae` (1,419 backend, 853 frontend). An install needs 
 - **Do not leave a task running with nothing to end it.** A read started on attach hung the test suite at shutdown; the monitor that starts a task must own and cancel it.
 - **Do not remove or replace behaviour Gary did not ask to change**, and keep messages to him short: a long explanation of the hostname mistake got "wa da fok u on aou".
 - **Do not install after every change**; batch, and say what the install carries.
-- **Check that an install really upgraded**: look for "Upgrading in place" and "Resumed N session(s)" in the log, and probe something the new build has.
+- **Check that an install really upgraded**: look for "Upgrading in place" and "Resumed N session(s)" in the log, and probe something the new build has. "Resumed N" is the backend's side only: compare it with the clients in `GET /api/sessions` to see that every tab came back.
+- **The linear key is in `~/.cade/.env`** (`LINEAR_API_KEY`, read-only, mode 600). Tests never reach the tracker (`conftest.py` switches the key off).
 - The Vite dev server needs file watches; if the machine is out of them it dies with ENOSPC. `CHOKIDAR_USEPOLLING=true` gets round it, and the per-process count recipe is in the memory note on inotify.
 - A puppeteer script must sit inside `frontend/` to resolve its modules; `captureBeyondViewport: false` stops a clipped screenshot firing a resize.
 - Never kill by pattern from this shell; record the pid and kill that. `python` is not on PATH; use `.venv/bin/python`.
