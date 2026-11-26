@@ -619,7 +619,7 @@ class App {
   ): void {
     const opts =
       kind === "cli"
-        ? { initialPrompt: `Read \`${relPath}\` and continue the work described there.` }
+        ? { initialPrompt: handoffPrompt(relPath) }
         : { chatHandoff: relPath };
     const tab = this.tabManager.createTab(projectPath, opts);
     this.tabManager.switchTab(tab.id);
@@ -665,9 +665,7 @@ class App {
         if (primed) return; // one-shot: don't re-fire on reconnect
         primed = true;
         tab.context?.getTerminalManager()?.setEnhanced(true);
-        tab.ws.sendChatMessage(
-          `Read \`${seedRel}\` and continue the work described there.`,
-        );
+        tab.ws.sendChatMessage(handoffPrompt(seedRel));
       });
     }
 

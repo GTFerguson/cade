@@ -28,7 +28,13 @@ Tab groups became workspaces on 25 Nov: one open at a time, `Alt+j`/`Alt+k` to m
 
 **Open problem: the "update ready" marker did not appear in the desktop window** after two installs that changed the interface (15:59, 16:09), though the backend sent the new `frontendVersion` and the installed bundle shows the marker in a headless browser against the live backend. Gary reloaded by hand at 16:45. `cefbff7f` makes the page log `build-notice` and `update-ready` diagnostics ("Client diagnostic" in `~/.cade/logs/cade.log`); they report from the second install after it, since the running page predates it.
 
-**Not installed** (an install needs Gary's go-ahead each time; he said "no install yet, I'll tell you when"): everything after `3b1d00f9`, which is the `[claude]` label removal, the upgrade diagnostic, the workspace outline, phone workspaces, `Alt+w` / `Alt+Shift+w` for workspaces with `Alt+x` to close a tab, the pull request badge, the strip above the terminal, and the picker's workspace toggle moved to the top left.
+**Installed 26 Nov** (an install still needs Gary's go-ahead each time): everything up to the cleanup commit of 26 Nov, including workspaces keys (`Alt+w` / `Alt+Shift+w`, `Alt+x` closes a tab), the pull request badge, the strip above the terminal, the picker's workspace toggle on the left, and the picker starting its agent.
+
+**Picker launch, settled 26 Nov**: Gary's `~/.config/cade/behavior.toml` has `auto-start-claude = false`, which made every picker tab an idle shell. A picker choice now sends `startAgent` and starts the agent; restored tabs still open a shell. A handoff is handed to the agent as its path and nothing else: "resume the work" and "report and wait" were both rejected as over-steering ("just dump the path").
+
+**Known gap**: Gary's AirPLAi tabs are opened on `~/projects/airplai` (the workspace root), not on a worktree, so the pull request badge and strip show the workspace's own branch, not the stream the agent is working on. To be solved with the `ticket:` / worktree link in the Linear plan.
+
+**Public repo**: a broad `git add docs` once swept other sessions' untracked files into a pushed commit, one holding a Tailscale hostname. They are untracked again; history was left as it is at Gary's word ("whatever"). Stage files by name here.
 
 **Built 25 Nov, in `docs/technical/core/pull-requests.md`**: pull request badge on tabs and the strip above the terminal (pull request, branch and pending work, latest handoff). Neither has run in the installed app.
 

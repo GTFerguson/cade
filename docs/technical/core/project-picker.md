@@ -45,7 +45,7 @@ Recent projects are kept in the browser, not on the backend, because "recent" is
 
 ### Starting from a handoff
 
-Choosing a handoff opens a tab whose `set-project` carries an `initialPrompt` (`handoffPrompt` in `picker-model.ts`), which the backend passes to the agent at launch. The prompt is the brief's path and nothing else. The brief carries the context; an instruction added to it (resume the work, or report and wait) decides for the user what the session is for, and both were tried and dropped for that reason.
+Choosing a handoff opens a tab whose `set-project` carries an `initialPrompt` (`handoffPrompt` in `picker-model.ts`), which the backend passes to the agent at launch. The prompt is the brief's path and nothing else. The brief carries the context; an instruction added to it (resume the work, or report and wait) decides for the user what the session is for, and both were tried and dropped for that reason. The Plans pane's launches (a CLI tab, or the API chat) hand over the path in the same way.
 
 ## Per-tab agent
 
