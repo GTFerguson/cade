@@ -5,7 +5,7 @@ updated: 2026-11-26
 status: in-flight
 ---
 
-# Resume: find why upgrades leave their unpacked copy in /tmp, get Gary's verdict on the strip, board and daylight, then the cleanup skill
+# Resume: Gary's choice on how to stop helper processes unpacking the backend into /tmp, his verdict on the strip, board and daylight, then the cleanup skill
 
 ## Active plans
 
@@ -48,7 +48,9 @@ Nothing. Untracked files from other sessions, leave alone and never stage: `AGEN
 
 ## Next actions (ordered)
 
-1. **Upgrades leave their unpacked copy behind.** On 26 Nov 18:35 `/tmp` held 31 `_MEI*` directories from `cade-backend` (6.8 GB, one in use) on a disk with 20 GB free, and the backend was a chain of 26 waiting launcher processes, one per upgrade since it started. `remove_old_extraction` (`backend/upgrade.py`, called from `backend/main.py`) is meant to delete the previous copy and is not doing it; it swallows its errors, so start by making it say why. Deleting the dead directories by hand is Gary's call: check first that no process maps files in them. `[safe]` to diagnose, `[confirm]` to delete.
+1. **Every helper process unpacks its own 219 MB copy of the backend into `/tmp`.** Measured 26 Nov 18:40 on a disk with 20 GB free: 21 live `cade-backend mcp-server` processes, each with its own `/tmp/_MEI*` (4.6 GB), all children of the Codex daemon. CADE writes its two MCP servers into the user-level `~/.codex/config.toml` (`_merge_codex_mcp_servers`, `backend/terminal/cli_agent_adapters.py`), so every Codex thread starts both, inside CADE or not, and all of them carry the connection id of whichever tab connected last. Two ways out, Gary's to choose: build the backend unpacked (PyInstaller one-folder) so nothing is copied per process, or serve those tools from the running backend so no process is started per thread. `[safe]` to design, ask before building either.
+   - 12 copies that no process touched were deleted (2.6 GB). Where they came from was not established; `remove_old_extraction` was not shown to fail, despite what an earlier version of this note said. Before deleting any again, check maps, open files, cwd and environment of every process for the directory: most of what looks stale is in use.
+   - The backend is a chain of launcher processes, one per upgrade since it started (26), and the watchers each old image left behind are zombies under them (56). Small, and gone when the backend exits, but it grows with every upgrade.
 2. Ask how the rebuilt board reads (streams grouped as needs you / in review / close out / in progress, `v` for a view by parent ticket, `]` `[` by section), and whether daylight is readable now. His Claude Code theme was `dark-daltonized`, which is why agent output and the agent-drawn cursor were pale. `[safe]`
 3. The cleanup skill (`docs/plans/worktree-cleanup.md`): takes the board's "finished" worktrees, shows what it will remove, waits for a yes, uses only `git worktree remove` and `git branch -d`. `[safe]` to write; running it is Gary's.
 4. Keep the board warm in the background for projects with open tabs, if the full read still drags. `[safe]`
