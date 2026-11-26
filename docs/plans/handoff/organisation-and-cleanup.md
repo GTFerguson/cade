@@ -38,7 +38,9 @@ Committed and pushed after that install, **not installed**:
 - `be3b062c` The chat agent's base prompt names the file tools it has.
 - `c6e07ae6` The held workspace list closes on a pointer move without Alt or four seconds after the last press, and logs a `workspace-list-stuck` diagnostic when it had to. Frontend change, so Gary must click the update marker after the install. The cause of the missed key-up is not known; after a day of use, read those lines in `~/.cade/logs/cade.log`.
 
-Every plan was checked against the code on 26 Nov and cut to what is unbuilt; what they alone recorded moved into `docs/technical/` and `docs/architecture/` (new: `core/provider-stack.md`, `design/dashboard-system.md`). Code defects found on the way are written up in `docs/plans/quick-fixes/`, not fixed. The one that matters most: a failover provider never falls back (`failover-never-triggers.md`).
+Also not installed, from the quick fixes (26 Nov): `ce5125fa` the chat prompt opens what it writes with `view_file`; `81a4ec9c` failover falls back, the gauge reads the last call's size, chat agents get `view_file`/`show_html`/`spawn_agent` again (the registry had imported a renamed constant since the tools existed), dead provider code and the permission MCP server removed; `08aa7b2b` dashboard config warnings, kanban `on_move` and transitions, refused changes shown. After the install, check in the real app: a chat agent can call `view_file`; the business-manager kanban now shows an error on every move, by design until `vault` write-back exists (`docs/plans/quick-fixes/dashboard-config-follow-ups.md`).
+
+Every plan was checked against the code on 26 Nov and cut to what is unbuilt; what they alone recorded moved into `docs/technical/` and `docs/architecture/` (new: `core/provider-stack.md`, `design/dashboard-system.md`). The defects found on the way were then fixed, apart from those in `docs/plans/quick-fixes/dashboard-config-follow-ups.md`.
 
 In use and liked: workspaces (`Alt+w` / `Alt+Shift+w`, hold `Alt` for the list, `Ctrl+Alt+w` or a drag onto a chip to move a tab, `Alt+x` closes a tab), the strip above the terminal, quiet upgrades. Built and waiting for Gary's opinion: the rebuilt board (`Alt+b`) and the daylight theme fixes.
 
@@ -67,7 +69,7 @@ Nothing. Untracked files from other sessions, leave alone and never stage: `AGEN
 6. Offered, not accepted yet: after an in-place upgrade every terminal has no controller, so any client that connects can resize it (this is how a diagnostic garbled Gary's tab). The window in control before the upgrade should keep control across it. `[safe]`
 7. Tabs past the end of a crowded workspace are cut off (still reachable by key). Wants a real answer if Gary keeps many tabs in one workspace. `[safe]`
 8. A connection that names no session still gets a shell, a file watcher and a knowledge graph build on the backend's working directory, which for the desktop app is the home folder. Nothing in the app needs that any more; worth removing if it shows up as load. `[safe]` to investigate.
-9. The quick fixes in `docs/plans/quick-fixes/`, failover first. Each file has the evidence and a direction; the failover one was confirmed with stub providers and by reading the code, not against a live provider. `[safe]`
+9. `docs/plans/quick-fixes/dashboard-config-follow-ups.md`: `vault` write-back, config errors shown in the pane, warnings an agent can read. Items 2 and 3 are fixes to other projects' configs, so ask first. `[safe]` in CADE
 
 ## Key design decisions
 
