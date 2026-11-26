@@ -1,7 +1,7 @@
 """The attention hook: tells CADE when the agent is waiting on the user.
 
 Installed as ``~/.cade/hooks/attention.py`` and wired to Claude Code's
-Notification, Stop and UserPromptSubmit hooks, and to Codex's ``notify``.
+Notification, Stop, UserPromptSubmit and PostToolUse hooks, and to Codex's ``notify``.
 It is a standalone stdlib-only script, like the view hook, because it runs
 inside the agent's process environment, not CADE's.
 """
