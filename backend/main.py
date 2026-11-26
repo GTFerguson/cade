@@ -945,6 +945,24 @@ def create_app(config: Config | None = None) -> FastAPI:
         project = Path(path).expanduser().resolve()
         return JSONResponse({"path": str(project), "handoffs": list_handoffs(project)})
 
+    @app.get("/api/board")
+    async def get_board(
+        path: str,
+        fresh: bool = False,
+        cade_session: str | None = Cookie(default=None),
+    ) -> JSONResponse:
+        """A project's streams of work: tickets from its board file joined to
+        handoffs, worktrees and pull requests. Read-only (see backend/board.py)."""
+        from backend.board import board
+
+        cfg = get_config()
+        if cfg.auth_enabled and not validate_session_cookie(cade_session or "", cfg):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        project = Path(path).expanduser().resolve()
+        if not project.is_dir():
+            return JSONResponse({"error": "No such folder"}, status_code=404)
+        return JSONResponse(await board(project, fresh=fresh))
+
     @app.get("/api/tab-groups")
     async def get_tab_groups(
         cade_session: str | None = Cookie(default=None),
