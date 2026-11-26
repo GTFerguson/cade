@@ -1,7 +1,7 @@
 ---
 title: Configuration Guide
 created: 2026-01-17
-updated: 2026-01-17
+updated: 2026-11-26
 status: active
 tags: [user, configuration, customization]
 ---
@@ -212,6 +212,7 @@ CADE auto-starts a CLI coding agent in the terminal. By default this is **Claude
 | Claude Code (default) | `CADE_CLI_AGENT=claude` `CADE_CLI_AGENT_ADAPTER=claude-code` |
 | Codex | `CADE_CLI_AGENT=codex` `CADE_CLI_AGENT_ADAPTER=codex` |
 | Cursor | `CADE_CLI_AGENT=cursor-agent` `CADE_CLI_AGENT_ADAPTER=cursor` |
+| Another CLI that takes Claude Code's arguments | `CADE_CLI_AGENT=<command>` `CADE_CLI_AGENT_ADAPTER=claude-compatible` |
 
 Example — switch to Codex:
 
@@ -219,6 +220,8 @@ Example — switch to Codex:
 export CADE_CLI_AGENT=codex
 export CADE_CLI_AGENT_ADAPTER=codex
 ```
+
+The `claude-compatible` adapter is for a different program that accepts the same command line as Claude Code. CADE launches the command you name exactly as it would launch `claude`: with `--mcp-config <path>`, and with a starting prompt after `--`. Use it only for a CLI that understands those arguments.
 
 ### MCP Tool Integration
 
@@ -249,7 +252,7 @@ Settings that can be overridden via environment variables:
 |----------|-------------|
 | `CADE_AUTO_START_CLAUDE` | `true` or `false` — override auto-start setting |
 | `CADE_CLI_AGENT` | Command to run (e.g. `claude`, `codex`, `cursor-agent`) |
-| `CADE_CLI_AGENT_ADAPTER` | Adapter id (e.g. `claude-code`, `codex`, `cursor`) |
+| `CADE_CLI_AGENT_ADAPTER` | Adapter id: `claude-code`, `codex`, `cursor` or `claude-compatible` |
 | `CADE_CLI_AGENT_SEED_STYLE` | How the agent takes a prompt: `positional` or `flag` |
 | `CADE_CLI_AGENT_SEED_FLAG` | Flag used when seed_style is `flag` (e.g. `-p`) |
 

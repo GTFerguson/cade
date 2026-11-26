@@ -1,7 +1,7 @@
 ---
 title: CADE Data Flow
 created: 2026-04-24
-updated: 2026-11-04
+updated: 2026-11-26
 status: active
 tags: [architecture, data-flow, sequences]
 ---
@@ -273,13 +273,15 @@ sequenceDiagram
 
 `make install-desktop` (or `cade-backend upgrade`) asks the running backend to switch to the newly installed build. The process execs the new binary with its PTY descriptors and listening socket inherited, so every shell and CLI agent keeps running; see [[components#In-place Upgrade]] for the design.
 
+The diagram shows one pid for both images. With the installed one-file build the new image at that pid is a launcher, and the backend that reads the manifest is its child; the steps are the same.
+
 ```mermaid
 sequenceDiagram
     participant I as Installer / CLI
     participant O as Backend (pid N, old image)
     participant FS as ~/.cade/upgrade/handoff.json
     participant N as Backend (pid N, new image)
-    participant B as Browser tab
+    participant B as Tab (page)
 
     I->>O: POST /api/upgrade
     O->>O: verify <new> --version; wait until no chat stream
@@ -287,15 +289,18 @@ sequenceDiagram
     O->>O: pause PTY readers; export sessions + chat
     O->>FS: write manifest (fds, pids, scrollback, seqs)
     O->>O: set PTY and listener fds inheritable
-    O->>N: execv(new binary, serve ... --resume-handoff)
+    O->>N: execve(new binary, serve ... --resume-handoff)
     N->>FS: read manifest; adopt listener fd
     N->>N: lifespan: InheritedPTY per terminal, registry.adopt()
     N->>N: remove old _MEIPASS; delete manifest
-    B->>N: reconnect (backoff); SET_PROJECT {sessionId, lastSeq}
-    N-->>B: CONNECTED {buildVersion: new}
-    B->>B: build changed → location.reload() once
-    B->>N: SET_PROJECT again → SESSION_RESTORED (delta or cold)
+    B->>N: reconnect (backoff); SET_PROJECT {sessionId, lastSeq, reloadOnUpgrade}
+    N-->>B: SESSION_RESTORED or OUTPUT (delta or cold)
+    N-->>B: CONNECTED {buildVersion, frontendVersion}
+    B->>B: frontendVersion changed → show "update ready"
+    Note over B: the page reloads only when the marker is clicked
 ```
+
+`buildVersion` and `frontendVersion` are sent only to a client that set `reloadOnUpgrade`, which a page does when the backend serves it. A tab whose handshake arrives late is closed and reconnects; see [[../technical/core/remote-sessions#Handshake: the client names its session first]].
 
 ## See Also
 

@@ -1,7 +1,7 @@
 ---
 title: Development Setup
 created: 2026-01-17
-updated: 2026-11-04
+updated: 2026-11-26
 status: active
 tags: [technical, development, setup, makefile]
 ---
@@ -128,7 +128,11 @@ make install-desktop
 
 This runs the full `build-desktop` and then `sudo apt-get install --reinstall` on the new `.deb`. `--reinstall` is needed because the package version doesn't change between builds.
 
-It finishes with `cade-backend upgrade`: if a backend is running, it switches to the new build in place and every open terminal session, shell or CLI agent, keeps running; the tabs reconnect and reload once. No running backend is not an error. The exec waits for any streaming chat reply to finish (ten minutes at most); `cade-backend upgrade --now` skips the wait and `--status` shows the state. A backend older than this feature has no upgrade endpoint, so the first time you install a build that has it you still restart CADE. Linux only: on Windows the app restarts as before.
+It finishes with `cade-backend upgrade`: if a backend is running, it switches to the new build in place and every open terminal session, shell or CLI agent, keeps running. The tabs reconnect on their own. If the build changed the interface, an "update ready" marker appears at the left end of the tab bar; clicking it reloads the page and reopens the tabs. A build that changed only the backend shows nothing. No running backend is not an error. The exec waits for any streaming chat reply to finish (ten minutes at most); `cade-backend upgrade --now` skips the wait and `--status` shows the state. A backend older than this feature has no upgrade endpoint, so the first time you install a build that has it you still restart CADE. Changes to the Rust shell or the desktop loader page (`desktop/src-tauri/`, `frontend/src/shell/`) are compiled into the running `cade` binary and also need a restart. Linux only: on Windows the app restarts as before.
+
+`make install-desktop-built` installs the package `build-desktop` already produced without the upgrade call, so the next launch runs it. It refuses while a backend is running.
+
+The design is in [[../../architecture/components#In-place Upgrade]] and the desktop window's side in [[frontend-architecture#Desktop Loader and Live Interface Updates]].
 
 `make setup` installs a `post-merge` git hook (`scripts/git-hooks/post-merge`) that prints this reminder whenever a pull or merge changes those directories.
 

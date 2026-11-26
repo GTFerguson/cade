@@ -1,7 +1,7 @@
 ---
 title: Frontend Architecture
 created: 2026-01-17
-updated: 2026-10-22
+updated: 2026-11-26
 status: active
 tags: [technical, frontend, architecture, wiki-links, tabs, session-persistence, keybindings, state-machine, mobile, dashboard]
 ---
@@ -580,6 +580,39 @@ UI state is persisted per-project in `.cade/session.json`. This allows layout an
 - File: `<project>/.cade/session.json`
 - The `.CADE` directory is hidden from the file tree
 
+## Desktop Loader and Live Interface Updates
+
+How the desktop window gets its interface, and how a page learns that a newer one is installed. The backend's side, the exec that keeps sessions alive, is in [[../../architecture/components#In-place Upgrade]].
+
+### Loader page (`shell.html`, `shell/loader.ts`)
+
+The desktop window opens `shell.html` (the window `url` in `desktop/src-tauri/tauri.conf.json`), not the interface built into the app. `boot()` waits for the shell to supply the backend's address, fetches `/` from the backend and writes that page into its own document. The JS and CSS therefore belong to the backend that is running, and after an in-place upgrade a reload brings the new interface without restarting the app.
+
+Design decisions:
+
+- **The document stays on the shell's origin.** The backend's port is picked at each launch (`desktop/src-tauri/src/port.rs`), so its origin changes every start. Navigating there would leave `localStorage` (saved tabs, theme) empty each time.
+- **Asset URLs are made absolute, with no `<base>` element.** `rewriteAssetUrls` points root-relative `src` and `href` in the fetched page at the backend. Chunks, CSS and worker scripts the app loads later are prefixed with `globalThis.__ASSET_ORIGIN__` by `experimental.renderBuiltUrl` in `frontend/vite.config.ts`. Only the loader sets that global, so every other page keeps its base-relative URLs. A `<base>` element would also redirect fragment links and SVG `url(#id)` references, which Mermaid markers use.
+- **Local backends only.** `isLocalBackend` accepts `http://127.0.0.1` and `http://localhost`. With a remote backend the loader opens the built-in copy, because a remote page would run with the shell's native commands (SSH tunnels, opening URLs) in reach.
+- **The built-in copy is the fallback.** `fetchLivePage` tries `FETCH_ATTEMPTS` times, `FETCH_RETRY_MS` apart, which covers a backend that is mid-exec or not listening yet. If every attempt fails, or the response is not the app page (a login redirect or an error page), the loader replaces itself with the built-in `index.html`.
+- **The shell supplies its globals on every load.** `__BACKEND_URL__`, `__TAURI__` and `__HOME_DIR__` are evaluated into the page once the backend is up, and again in `on_page_load` (`desktop/src-tauri/src/main.rs`). `syncShellGlobals` in `config/config.ts` also mirrors them to `sessionStorage` and restores them when a page loads without them, and the loader reads that copy when the injected value is not there yet. A reloaded page with neither has no backend to connect to.
+
+The loader is compiled into the `cade` binary, so it and the Rust shell are the parts that still need an app restart to change. A new interface that calls a Tauri command the running shell lacks will not find it until then. `loader.ts` imports nothing from the app for the same reason: it is the one piece of frontend that cannot be replaced live.
+
+The loader's functions are unit tested in `shell/loader.test.ts`. This section was written from the code; it was not checked against a run in the installed desktop window.
+
+### Noticing a newer interface
+
+- A page served by the backend sends `reloadOnUpgrade` in `set-project` (`WebSocketClient.pageComesFromBackend`). That is a browser tab, or a desktop window whose loader fetched the page and set `__LIVE_FRONTEND__`. A desktop window on the built-in copy does not ask, because a reload would return the same page.
+- The backend then puts `buildVersion` and `frontendVersion` on `connected`. `WebSocketClient.noteBuild` keeps the first value it sees, preferring `frontendVersion`. One page serves every tab, so the value is shared. A later `connected` on any tab with a different value means a newer interface is being served.
+- The update is offered, not applied. A reload redraws every terminal, and the old interface keeps working against the upgraded backend, so the user picks the moment. The risk of running an old interface against a new backend is a message type the old interface does not know.
+- `TabBar.setUpdateReady` shows an "update ready" marker. Clicking it calls `WebSocketClient.reloadForUpdate`, which leaves a note in `sessionStorage` so that the next page reopens the saved tabs without showing the start screen (`takeResumeAfterUpgrade`, read in `main.ts`).
+
+### Where the marker sits
+
+The marker is laid over the left end of the tab bar, above the file tree (`.tab-update-marker` in `styles/layout/tabs.css`), in the desktop window and a browser alike. That stretch is otherwise empty. At the end of the tab area it could not be seen in the desktop window: with the viewer closed the tabs reach the corner, and the window's own buttons are drawn on top of that corner.
+
+A desktop window cannot be inspected from outside, so the page reports what it was told and what it drew. `build-notice` (the versions before and after) and `update-ready` (where the marker ended up, and the window size) are sent as `client-diagnostic` messages, which the backend writes to its log.
+
 ## Mobile Support
 
 ### Detection
@@ -659,6 +692,7 @@ frontend/
 │   │   ├── attention-notify.ts # Browser notification when the page is hidden
 │   │   ├── mobile/          # Screens (search, recent, explorer, viewer, menu), session strip, pinch
 │   │   └── splash.ts        # Startup splash screen
+│   ├── shell/loader.ts      # Desktop loader: fetches the interface from the local backend
 │   ├── push.ts              # Service worker registration, push subscribe/unsubscribe
 │   ├── websocket.ts         # WebSocket client
 │   ├── types.ts             # TypeScript interfaces
@@ -667,11 +701,13 @@ frontend/
 ├── styles/
 │   └── main.css             # All styles including tabs and mobile
 ├── vitest.config.ts         # Test configuration
+├── shell.html               # Page the desktop window opens (runs the loader)
 └── index.html               # HTML template
 ```
 
 ## See Also
 
 - [[remote-sessions|Remote Sessions]]
+- [[../../architecture/components#In-place Upgrade|In-place Upgrade]]
 - [[../README|Technical Documentation Index]]
 - [[../../user/README|User Guide]]
