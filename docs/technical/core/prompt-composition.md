@@ -12,7 +12,7 @@ Agent system prompts are assembled at runtime from small, single-purpose markdow
 
 ## Why the Prompt Teaches Output Channels
 
-A chat agent in CADE is not writing to a bare terminal. It has a chat pane, a dashboard that reloads when its config file changes, and a viewer that renders documents. A model that is not told this puts everything in chat, including tables and long documents that read better elsewhere. So `base.md` opens with a short decision tree (direct answer, structured data, long-form document, finished reference) that maps each kind of output to a surface, and `dashboard.md` is loaded in every mode so any agent can act on it.
+A chat agent in CADE is not writing to a bare terminal. It has a chat pane, a dashboard that reloads when its config file changes, and a viewer that renders documents. A model that is not told this puts everything in chat, including tables and long documents that read better elsewhere. So `base.md` opens with a short decision tree (direct answer, structured data, long-form document, visual output, an existing file, finished reference) that maps each kind of output to a surface, and names the two tools that put something in the viewer, `view_file` and `show_html`. It says plainly that writing a file does not open it: only the Claude Code terminal has a hook that opens edited plan docs, and a chat agent told otherwise tells the user a document is open when it is not. `dashboard.md`, `neovim.md` and `nkrdn.md` are loaded in every mode, so `base.md` does not repeat them; `backend/tests/test_base_prompt.py` holds both rules.
 
 ## Structure
 
@@ -22,7 +22,7 @@ backend/prompts/
 ├── compose.py           — assembles modules by mode
 ├── bundled/rules/       — rules loaded into every prompt
 └── modules/
-    ├── base.md              — CADE identity, output channels, dashboard overview
+    ├── base.md              — CADE identity and output channels
     ├── dashboard.md         — always included: dashboard write instructions
     ├── neovim.md            — always included: Neovim integration
     ├── nkrdn.md             — knowledge graph orientation (added per mode)

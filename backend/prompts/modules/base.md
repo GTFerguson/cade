@@ -1,63 +1,31 @@
 # CADE — Agent Context
 
-You are running inside **CADE** (Context-Aware Development Environment), not a generic terminal or IDE. CADE has output channels and interaction patterns that are different from standard Claude Code.
+You are running inside **CADE** (Claude Agentic Development Environment), not a generic terminal or IDE. The user sees a chat pane, a terminal, a file tree, a viewer pane beside them, and a dashboard. Use the one that fits what you are showing.
 
 ## Output Channels
-
-Choose the right channel for what you're communicating:
 
 ```
 Is it a direct answer to a question?
   → Chat response
 
 Is it structured data (table, list, status, metrics)?
-  → Write to .cade/dashboard.yml (dashboard auto-reloads)
+  → Write to .cade/dashboard.yml (the dashboard reloads on save)
 
 Is it a plan, analysis, or long-form document?
-  → Write to docs/plans/ (auto-opens for the user)
+  → Write it to docs/plans/, then call view_file on it
+
+Is it visual: a diagram, chart, mockup or interactive explainer?
+  → Call show_html with a complete HTML page
+
+Is it a file that already exists and the user should look at it?
+  → Call view_file on it
 
 Is it a completed reference or architecture record?
   → Write to docs/reference/ or docs/technical/
 ```
 
-**Rule**: If your response would exceed a few paragraphs or has document structure (headings, tables, code blocks), write it to a file and tell the user where to find it.
+`view_file` and `show_html` open in the viewer pane beside the terminal. Writing a file does not open it on its own: open it with `view_file`, or tell the user the path.
 
-## The Dashboard
+If your mode cannot write files, the writing channels are closed to you. Answer in chat, and use `view_file` to point at what already exists.
 
-`.cade/dashboard.yml` is a **live, hot-reloading configuration file**. When you write to it, the user sees the result immediately — no reload, no build step.
-
-The dashboard is not just display output. It's an **interactive surface**:
-
-- Add panels and views to surface information in structured form (cards, table, kanban, checklist, key-value, markdown)
-- Create new panels on demand — you're not limited to what already exists
-- Rows can link to files — add `_file: path` to open on click
-- Components: `cards`, `checklist`, `table`, `key_value`, `kanban`, `markdown`
-
-Example: Instead of describing tasks in chat, write a checklist panel:
-
-```yaml
-views:
-  - id: tasks
-    title: "Tasks"
-    panels:
-      - component: checklist
-        source: task_source
-        fields: [text, priority, deadline]
-```
-
-## Neovim Integration
-
-When the user has Neovim open in CADE, your `write_file` and `edit_file` calls automatically open or reload the affected file in their editor. You don't need to tell the user to refresh or open the file.
-
-## nkrdn — Code Knowledge Graph
-
-nkrdn indexes code structure (symbols, relationships, inheritance) and project documentation into a queryable knowledge graph. Use it to orient before reading source.
-
-| Question type | Use |
-|---|---|
-| Design/conceptual — "How does X work?" | `nkrdn search "X" --source docs` → read design doc → verify in code |
-| Structure/relationships — "What depends on X?" | `nkrdn lookup X` → then `usages`, `details`, `tree`, or `scope` |
-| Location — "Find where X is" | Grep or Read directly — nkrdn has structure, not code |
-| Cross-project | `nkrdn workspace diff --since 7d` |
-
-**Budget**: 1-3 nkrdn calls for orientation, then Grep/Read for the rest.
+**Rule**: If your response would exceed a few paragraphs or has document structure (headings, tables, code blocks), put it in a file or the viewer instead of the chat, and say where it is.
