@@ -131,10 +131,12 @@ Production systems should monitor:
 
 `FailoverProvider` triggers failover on:
 
-1. **Pre-output `ChatError`**: provider yields an error before yielding any `TextDelta`
+1. **Pre-output `ChatError`**: provider yields an error before yielding any other event of any type, not only `TextDelta`
 2. **Exception during stream**: any unhandled exception during `stream_chat`
 
-Post-output errors (after first `TextDelta`) are propagated as-is — the stream cannot be recovered.
+Errors after the first event are propagated as-is — the stream cannot be recovered.
+
+With `APIProvider` sub-providers neither trigger fires today, because `APIProvider` yields `SystemInfo` first and turns its own exceptions into `ChatError`. See [[docs/technical/core/provider-stack#Failover|Provider Stack: Failover]].
 
 ### Error Classification
 

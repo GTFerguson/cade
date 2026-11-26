@@ -24,6 +24,7 @@ Architecture and essential developer documentation.
 - [[core/pull-requests|Pull Request and Work State on Tabs]] - The `gh` poller and tab badge for a branch's pull request, and the strip above the terminal: pull request, branch and pending work, latest handoff
 - [[core/board|The Board]] - A project's tickets joined to handoffs, worktrees and pull requests on one screen; worktree verdicts
 - [[core/agent-orchestration|Agent Orchestration]] - Multi-agent coordination, MCP tools, two-gate approval flow
+- [[core/provider-stack|Provider Stack]] - How a chat message becomes a model call: the tool loop, the tool registry, MCP adapters, failover and the context gauge, with what does not work today
 - [[core/agent-tools|Agent Tool System]] - File, discovery, and shell tools for LiteLLM agents; permission gating
 - [[core/prompt-composition|Prompt Composition]] - Modular system prompt assembly from markdown modules
 

@@ -1,91 +1,44 @@
 ---
-title: CADE Agent Context — System Prompt Affordances
+title: CADE Agent Context: System Prompt Affordances
 created: 2026-04-23
-status: partially-shipped
-verified: 2026-05-05
+updated: 2026-11-26
+status: planning
+verified: 2026-11-26
 tags: [agent, system-prompt, ux, dashboard, context]
 ---
 
 # CADE Agent Context
 
-The CADE system prompt must tell the agent what makes CADE different from a generic IDE or terminal. An agent unaware of these affordances will default to chat responses when better surfaces exist, and miss interaction patterns unique to the environment.
+The system prompt tells a chat agent which output surface to use: chat, the dashboard, or a document. That part is built. How it is assembled and why is in [[../../technical/core/prompt-composition]]. How an agent drives the dashboard, including pushing panels and streaming rows into a running dashboard, is in [[../../technical/reference/dashboard-interactive-primitives]].
 
-## Shipped
+This plan holds the two things that are not built.
 
-Core affordances are live as of 2026-04-23:
-- **Output channel decision tree** — `backend/prompts/modules/base.md` (rule: "If response exceeds paragraphs → docs/plans/")
-- **Dashboard as interactive surface** — `backend/prompts/modules/dashboard.md` (71 lines: schema reference, component list, data source types, example config)
-- **Prompt compose system** — `backend/prompts/compose.py` (base → rules → always → mode → project)
-- **docs/plans/ as first-class output** — base.md instructs agent to write there; frontend auto-opens created files
+## Remaining Work
 
-Not shipped: custom component API (agent can only edit `dashboard.yml`, cannot programmatically register new components). The four open questions below remain unanswered in code.
+### 1. Dashboard components an agent can add at run time
 
-## Core Principle
+An agent can use the component types compiled into the frontend (`frontend/src/dashboard/registry.ts`). It cannot add a new type. A new type needs frontend code and a rebuild.
 
-The agent is not running in a terminal. It is running inside CADE — a purpose-built environment with output channels, interactive surfaces, and UX conventions that a generic Claude Code agent knows nothing about. The system prompt's job is to make these first-class.
+The need: when no existing component fits (a custom visualisation, a project-specific panel), the agent should be able to supply one without a CADE release.
 
-## CADE-Specific Affordances the Agent Must Know
+What exists nearby:
 
-### 1. The Dashboard is an Interactive Surface
+- `show_html` draws a self-contained page in the viewer. It covers one-off visuals but the page is not a dashboard panel: it has no data source and does not sit in a view.
+- `POST /api/ui/push-panel` adds a panel to a running dashboard, but only of an existing component type.
 
-`.cade/dashboard.yml` is a live, hot-reloading configuration file. When the agent writes to it, the user sees the result immediately — no reload, no build step.
+Open questions:
 
-The agent can:
-- **Add panels and views** to surface information in structured form (tables, cards, kanban, gauges, key-value)
-- **Build new generic components** when existing component types don't fit the need — the dashboard is extensible, not fixed
-- **Create interactive elements** — the dashboard is not read-only output; it can serve as a real interaction surface between agent and user
+- Whether this is a real component API (the agent registers a renderer) or a panel type that hosts an HTML page with a data source bound to it. The second is much smaller and reuses the isolated frame `show_html` already uses.
+- How a hosted page receives rows and reports clicks back.
+- Where agent-supplied components live in the project, and whether they are trusted on reload.
 
-This makes the dashboard a unique output channel. Instead of dumping structured data into chat, the agent should route it to an appropriate dashboard view. Instead of describing a kanban board of tasks, it should write one.
+### 2. Plan docs written by a chat agent do not open by themselves
 
-**When to use it:** Structured data, progress tracking, multi-item status, anything the user will want to refer back to or interact with rather than read once.
+The prompt tells every agent that a file written to `docs/plans/` opens for the user. That holds only for Claude Code in a terminal tab, where a hook posts each edited plan file to the viewer. A chat agent's `write_file` does not open the viewer. The agent has to call `view_file`, and no prompt module mentions that tool.
 
-### 2. Plan Docs Auto-Open for the User
+Either the write tools open plan docs for chat agents too, or the prompt says to call `view_file`. The prompt wording is recorded in [[../quick-fixes/chat-prompt-names-wrong-tools]].
 
-Files created in `docs/plans/` are automatically opened and rendered for the user as structured markdown. This is a first-class output channel for anything that is too long, too structured, or too valuable to put in a chat response.
+Open questions:
 
-The agent should use `docs/plans/` when:
-- The response would be a wall of text in chat
-- The content has headings, tables, code blocks, or cross-references that benefit from rendering
-- The user will want to navigate, edit, or refer back to the output
-- The work is a plan, analysis, or structured document rather than a direct answer
-
-**Preference rule:** If a response would exceed a few paragraphs, or if it has document-like structure, write it to `docs/plans/` and tell the user where to find it. Don't apologise for not putting it in chat — this is the better experience.
-
-### 3. The Dashboard Can Be Built On Demand
-
-The agent is not limited to the components currently defined in `dashboard.yml`. If a need arises that no existing component satisfies — a custom visualisation, a new interaction pattern, a project-specific panel — the agent can design and implement a new generic component.
-
-This means the dashboard is not a constraint. The agent should think of it as: "what is the right surface for this information?" and build toward that answer, rather than fitting output into whatever already exists.
-
-## Output Channel Decision Tree
-
-When the agent has information to communicate:
-
-```
-Is it a direct answer to a question?
-  → Chat response
-
-Is it structured data (table, list, status, metrics)?
-  → Dashboard panel
-
-Is it a document (plan, analysis, long-form, multi-section)?
-  → docs/plans/ (auto-opens for user)
-
-Is it a completed reference or architecture record?
-  → docs/reference/ or docs/technical/ (with user approval)
-```
-
-## What This Enables
-
-These affordances make CADE's UX qualitatively different from a generic IDE agent:
-
-- **Agent-built dashboards** — the agent assembles views appropriate to the current work, not a fixed layout the user configured upfront
-- **Structured handoff** — long outputs land in rendered documents the user can navigate, not chat walls
-- **Interactive collaboration** — the dashboard is a shared space the agent and user both work with, not just a status display
-
-## Open Questions
-
-- What is the trigger for a plans doc auto-opening? File creation, or explicit signal from the agent?
-- Should the agent be able to write directly to a running dashboard session, or only via config file?
-- Is there a component API the agent can call, or does it always go through `dashboard.yml`?
-- How does the agent signal "I wrote this to plans/" in chat — automatic notification, or explicit mention?
+- Which paths count. The terminal hook uses a per-project filter with a plans-only default. A chat-side rule should match it, not invent a second one.
+- Whether an edit to a file already open should refocus the viewer or only reload it.

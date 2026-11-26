@@ -1,53 +1,50 @@
 ---
 title: APIProvider Tool Support + FailoverProvider
 created: 2026-04-22
+updated: 2026-11-26
 status: partially-shipped
-verified: 2026-05-05
+verified: 2026-11-26
 tags: [cade, providers, tools, litellm]
 ---
 
 # Tool Support for APIProvider + FailoverProvider
 
-## Completed Phases
+## Shipped
 
-### Phase 1 — APIProvider Tool Support + FailoverProvider — Completed 2026-04-22
+How the shipped parts work is in [[../../technical/core/provider-stack]].
 
-Async tool loop in `APIProvider.stream_chat()`, `ToolExecutor` protocol, `ToolRegistry` dispatcher, `NkrdnExecutor` (subprocess, 15s timeout), `FailoverProvider` with cooldown/backoff (60s initial, 10m cap, 2× factor). `_MAX_TOOL_TURNS = 10` guard prevents infinite loops. 31 tests passing.
+| Phase | What | Commit | Now documented in |
+|---|---|---|---|
+| 1 | Tool loop in `APIProvider`, `ToolRegistry`, `FailoverProvider`, two-pass registry build | `98d7828b` | [[../../technical/core/provider-stack#The tool loop]], [[../../technical/core/provider-stack#Failover]], [[../../technical/core/provider-stack#Building providers]] |
+| 2a-d | stdio MCP adapter | `94fea505` | [[../../technical/core/provider-stack#MCP adapters]] |
+| 2f | MCP servers read from the provider block in `providers.toml` | `b8eb45c9` | [[../../technical/core/provider-stack#Tool registry]] |
+| 2g | Async tool discovery, orchestrator tools wired into every API provider | `6e5d7d0a` | [[../../technical/core/provider-stack#Tool registry]] |
 
-Key code: `core/backend/providers/api_provider.py`, `core/backend/providers/tool_executor.py`, `core/backend/providers/failover_provider.py`
+Phases 1 and 2a-d also added `NkrdnExecutor`, `AgentSpawnerTool` and `HandoffCompactor`. None of the three is wired into chat. See [[../quick-fixes/dead-provider-code]].
 
-Gotcha: `content: None` (not `""`) required in assistant tool-call turns for OpenAI-compatible providers.
-
-### Phase 2a-d — MCP Adapter, Agent Spawner, Handoff Compactor — Completed 2026-04-22
-
-`MCPToolAdapter` bridges MCP JSON-RPC to `ToolDefinition`. `AgentSpawnerTool` spawns agents via orchestrator MCP. `HandoffCompactor` integrates `/handoff` skill as a compression mechanism. 27 additional tests.
-
-Key code: `core/backend/providers/mcp_tools.py`, `core/backend/providers/agent_spawner.py`, `backend/providers/handoff_compactor.py`
-
-Gotcha: `ClientSession` requires streams from `stdio_client` context manager — cannot pass streams directly.
-
-### Phase 2f — Registry Integration — Completed 2026-04-22
-
-MCP adapters and agent spawner auto-registered from `providers.toml` in `ProviderRegistry.from_config()`. Two-pass config: non-failover providers first, then failover providers assembled from registered sub-providers.
-
-Key code: `backend/providers/registry.py`
-
-### Phase 2g — Async Tool Definitions + Orchestrator Auto-wiring — Completed 2026-04-22
-
-`definitions_async()` + `execute_async()` on `ToolRegistry` — MCP adapters work from async context. `APIProvider` fetches tool defs async at stream start. Orchestrator MCP server auto-wired into all API provider tool registries (lazy-connect, tools discovered on first call). Mode system prompt passed to API providers. Adaptive failover chain: Mistral → Cerebras → Groq → Google Gemma via `~/.cade/providers.toml`.
-
-Key code: `backend/providers/registry.py`, `core/backend/providers/api_provider.py`
-
-Gotcha: MCP tool discovery runs at stream start with no timeout. An HTTP MCP server that stalls (e.g. returning a 401 OAuth challenge that the MCP library tries to negotiate) blocks the entire chat indefinitely. `definitions_async()` now wraps each `_list_tools()` call in `asyncio.wait_for(..., timeout=10.0)`. `_ensure_connected()` in both `MCPToolAdapter` and `HTTPMCPToolAdapter` similarly has 8s timeouts on the transport handshake.
-
-Gotcha: `except (Exception, BaseException)` in `_list_tools()` and `execute_async()` was swallowing `asyncio.CancelledError`, making task cancellation silently ineffective while a connection was in flight. Both adapters now re-raise `CancelledError` explicitly before the generic except clause.
+Failover is built but does not trigger with `APIProvider` sub-providers. See [[../quick-fixes/failover-never-triggers]].
 
 ## Remaining Work
 
-### Phase 2e — Auto-trigger Handoff on Context Budget Threshold
+### Phase 2e: compact automatically when the context budget is crossed
 
-Auto-trigger the `/handoff` skill when token usage crosses `context_budget_threshold`. Check context size before each turn in `APIProvider`; spawn a fresh agent with the handoff brief injected when approaching the limit.
+Today the user has to notice the gauge and type `/compact`. This phase makes CADE offer that itself.
 
-- Config knobs: `context_budget_threshold` (warn) and `context_budget_hard_limit` (danger) per provider in `~/.cade/providers.toml`
-- The context budget indicator (Phase 3a, shipped) already tracks usage via `ChatDone` events — hook auto-trigger into that same signal
-- Tie into `docs/plans/context-budget-indicator.md` for the threshold values
+What exists to build on:
+
+- `/compact` already runs the handoff skill, writes the brief, shows an approval preview and resets the session ([[../../technical/core/provider-stack#Compacting by hand]]). The auto-trigger should start that same flow. It needs no new compaction code and no new approval dialog.
+- The thresholds are already resolved per provider by `get_context_budget()` (`context_budget_threshold`, `context_budget_hard_limit`). Nothing on the backend acts on them yet.
+
+What has to be built:
+
+- A per-reply figure for the current context size. The usage that `APIProvider` reports today is summed across tool turns, so it cannot be compared to the window ([[../quick-fixes/context-gauge-over-reads]]). This comes first.
+- A check after each reply that compares that figure to the thresholds and starts the compact flow.
+- A decision for orchestrator workers. They stream through `OrchestratorManager`, not through the chat handler that owns the compact flow, so the check does not cover them for free.
+
+Open questions:
+
+- Which threshold triggers what. One option: at the warn level, suggest `/compact` in the chat; at the danger level, start it and show the preview.
+- What a worker does at the danger level: stop and report, or hand off to a fresh worker.
+- Whether a rejected preview should suppress the next automatic offer, and for how long.
+
+Background on threshold choices is in [[../../reference/context-window-management]].

@@ -222,7 +222,7 @@ Only `hooks` changes what the backend does. The rest describe the agent and are 
 | `backend/orchestrator/mcp_config.py` | Writes per-session MCP config files for CLI tabs |
 | `backend/terminal/agent_launch.py` | Generates `cade-resume.sh`; includes `__cade_patch_mcp_config` |
 | `backend/terminal/cli_agent_adapters.py` | Per-CLI adapters (Claude Code / Codex / Cursor): launch syntax, MCP wiring, capabilities |
-| `core/backend/providers/agent_spawner.py` | `AgentSpawnerTool` — tool definition surfaced inside the LiteLLM tool registry |
+| `core/backend/providers/agent_spawner.py` | `AgentSpawnerTool` — a placeholder that nothing registers; chat agents reach `spawn_agent` through the orchestrator's MCP adapter (see [[provider-stack]]) |
 | `backend/main.py` (`/api/orchestrator/*`) | HTTP routes + `mcp-server` subcommand |
 | `backend/prompts/modules/orchestrator.md` | Mode-specific system prompt for orchestrator sessions |
 | `backend/tests/test_orchestrator_manager.py` | Manager + naming + multi-turn coverage |

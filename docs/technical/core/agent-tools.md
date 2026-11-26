@@ -152,7 +152,7 @@ meaningful protection, since the agent already has write access to the project.
 
 ## See Also
 
-- [[tool-support-and-failover]] — how `ToolRegistry` and `APIProvider`'s async
+- [[provider-stack]] — how `ToolRegistry` and `APIProvider`'s async
   tool loop work
 - [[agent-orchestration]] — orchestrator mode and agent spawning
 - [[../reference/websocket-protocol]] — `permission-request` / `permission-resolved`

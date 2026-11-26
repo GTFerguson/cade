@@ -333,8 +333,8 @@ CADE's TCB (Trusted Computing Base) should include:
 
 ## See Also
 
-- [[docs/plans/dynamic-permission-management|Dynamic Permission Management Plan]] — Implementation planning for capability-based extensions
-- [[docs/technical/core/provider-architecture|Provider Architecture]] — Tool execution and filtering infrastructure
+- [[docs/plans/permissions/dynamic-permission-management|Dynamic Permission Management Plan]] — Implementation planning for capability-based extensions
+- [[docs/technical/core/provider-stack|Provider Stack]] — Tool execution and filtering infrastructure
 - [[docs/technical/design/visual-design-philosophy|Visual Design Philosophy]] — UI patterns for permission toggles
 - [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/) — Vulnerability taxonomy
 - [MITRE ATLAS Matrix](https://atlas.mitre.org/matrices/ATLAS) — AI attack techniques
