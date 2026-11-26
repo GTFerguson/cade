@@ -46,6 +46,8 @@ export interface KeybindingCallbacks {
   nextWorkspace: () => void;
   previousWorkspace: () => void;
   openBoard: () => void;
+  /** Take the tab in front to the next (1) or previous (-1) workspace. */
+  moveTabToWorkspace: (step: 1 | -1) => void;
   goToTab: (index: number) => void;
   createTab: () => void;
   createRemoteTab: () => void;
@@ -117,6 +119,26 @@ export function altShortcut(key: string, cb: KeybindingCallbacks): (() => void) 
     case "i": return () => cb.focusChatInput();
     default: return null;
   }
+}
+
+/**
+ * Which way Ctrl+Alt+w takes the current tab, or null for any other key.
+ * It is the workspace key with Ctrl added: the same move between workspaces,
+ * with the tab carried along. Shift reverses it, as it does without Ctrl.
+ */
+export function carryTabStep(e: {
+  key: string;
+  code?: string;
+  ctrlKey: boolean;
+  altKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+}): 1 | -1 | null {
+  if (!e.ctrlKey || !e.altKey || e.metaKey) return null;
+  // The code as well as the key: with Ctrl and Alt both down, some layouts
+  // report a different character for the key.
+  if (e.code !== "KeyW" && e.key.toLowerCase() !== "w") return null;
+  return e.shiftKey ? -1 : 1;
 }
 
 export interface PaneKeyHandler {
@@ -254,6 +276,15 @@ export class KeybindingManager implements Component {
       return;
     }
 
+    const carry = carryTabStep(e);
+    if (carry !== null) {
+      this.interceptedKeyCode = e.code;
+      this.callbacks?.moveTabToWorkspace(carry);
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
     // Alt shortcuts: tab/pane/agent/mode management (no prefix needed).
     // stopPropagation is essential here: xterm.js listens for keydown on its
     // textarea in the capture phase and ignores defaultPrevented, so without
@@ -332,6 +363,7 @@ export class KeybindingManager implements Component {
     if (e.ctrlKey && !e.altKey && !e.metaKey && (e.key === "g" || e.key === "p")) {
       return true;
     }
+    if (carryTabStep(e) !== null) return true;
     if (e.altKey && !e.ctrlKey && !e.metaKey) {
       return this.resolveAltShortcut(e) != null;
     }

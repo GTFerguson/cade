@@ -5,6 +5,9 @@
  * detached ghost image and can't animate siblings, and in Tauri it competes
  * with the window's drag region. Here the dragged tab follows the pointer
  * while the tabs it passes slide aside to open its landing slot.
+ *
+ * A drag can also end on another workspace's chip, which moves the tab into
+ * that workspace instead of reordering it.
  */
 
 /** Pointer travel (px) before a press becomes a drag rather than a click. */
@@ -54,6 +57,25 @@ export function computeDropIndex(
   return target;
 }
 
+/** Somewhere a dragged tab can be dropped to change its workspace. */
+export interface DropTarget {
+  el: HTMLElement;
+  /** The workspace it stands for; null for the ungrouped tabs. */
+  group: string | null;
+}
+
+export interface TargetRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** Index of the rectangle the pointer is inside, or -1. */
+export function targetAt(x: number, y: number, rects: TargetRect[]): number {
+  return rects.findIndex((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
+}
+
 interface ActiveDrag {
   tabEl: HTMLElement;
   pointerId: number;
@@ -64,6 +86,10 @@ interface ActiveDrag {
   slots: TabSlot[];
   started: boolean;
   settling: boolean;
+  targets: DropTarget[];
+  targetRects: TargetRect[];
+  /** Index into `targets` of the chip the pointer is over, or -1. */
+  over: number;
 }
 
 export class TabDragController {
@@ -74,6 +100,9 @@ export class TabDragController {
     private tabList: HTMLElement,
     private onDrop: (tabId: string, toIndex: number) => void,
     private onEnd: () => void,
+    /** The chips a tab of this strip may be dropped on, read when a drag starts. */
+    private dropTargets: () => DropTarget[] = () => [],
+    private onDropOnTarget: (tabId: string, group: string | null) => void = () => {},
   ) {}
 
   isDragging(): boolean {
@@ -105,7 +134,9 @@ export class TabDragController {
 
     const tabEls = Array.from(this.tabList.querySelectorAll<HTMLElement>(".tab"));
     const fromIndex = tabEls.indexOf(tabEl);
-    if (fromIndex === -1 || tabEls.length < 2) return;
+    const targets = this.dropTargets();
+    // A lone tab has nowhere to be reordered to, but can still change workspace.
+    if (fromIndex === -1 || (tabEls.length < 2 && targets.length === 0)) return;
 
     this.drag = {
       tabEl,
@@ -117,6 +148,9 @@ export class TabDragController {
       slots: [],
       started: false,
       settling: false,
+      targets,
+      targetRects: [],
+      over: -1,
     };
   }
 
@@ -130,6 +164,22 @@ export class TabDragController {
       this.start(drag);
     }
 
+    const over = targetAt(e.clientX, e.clientY, drag.targetRects);
+    if (over !== drag.over) {
+      drag.targets[drag.over]?.el.classList.remove("tab-drop-target");
+      drag.targets[over]?.el.classList.add("tab-drop-target");
+      drag.tabEl.classList.toggle("tab-dropping", over !== -1);
+      drag.over = over;
+    }
+    if (over !== -1) {
+      // Over a chip the tab leaves its strip to follow the pointer there,
+      // and its siblings close the gap it left.
+      drag.tabEl.style.transform = `translateX(${dx}px)`;
+      drag.toIndex = drag.fromIndex;
+      this.shiftSiblings(drag);
+      return;
+    }
+
     const offset = clampDragOffset(drag.fromIndex, dx, drag.slots);
     drag.tabEl.style.transform = `translateX(${offset}px)`;
     drag.toIndex = computeDropIndex(drag.fromIndex, offset, drag.slots);
@@ -141,6 +191,10 @@ export class TabDragController {
     drag.slots = drag.tabEls.map((el) => {
       const r = el.getBoundingClientRect();
       return { left: r.left, width: r.width };
+    });
+    drag.targetRects = drag.targets.map((t) => {
+      const r = t.el.getBoundingClientRect();
+      return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
     });
     drag.tabEl.setPointerCapture(drag.pointerId);
     drag.tabEl.classList.add("tab-dragging");
@@ -172,6 +226,15 @@ export class TabDragController {
     drag.settling = true;
     this.suppressClick = true;
 
+    const target = drag.targets[drag.over];
+    if (target) {
+      const id = drag.tabEl.dataset["tabId"];
+      this.finish(drag);
+      if (id) this.onDropOnTarget(id, target.group);
+      this.onEnd();
+      return;
+    }
+
     // Settle the dragged tab into the slot its siblings opened, then commit.
     const { slots, fromIndex, toIndex } = drag;
     const self = slots[fromIndex]!;
@@ -202,7 +265,8 @@ export class TabDragController {
       el.style.transition = "";
       el.style.transform = "";
     }
-    drag.tabEl.classList.remove("tab-dragging");
+    drag.tabEl.classList.remove("tab-dragging", "tab-dropping");
+    drag.targets[drag.over]?.el.classList.remove("tab-drop-target");
     this.tabList.classList.remove("tab-list-dragging");
     if (drag.tabEl.hasPointerCapture(drag.pointerId)) {
       drag.tabEl.releasePointerCapture(drag.pointerId);

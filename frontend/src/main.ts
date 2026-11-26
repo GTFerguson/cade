@@ -55,6 +55,7 @@ import { RemoteProjectSelector } from "./remote/RemoteProjectSelector";
 import { ProjectPicker } from "./local/project-picker";
 import { handoffPrompt } from "./local/picker-model";
 import { WorkspaceSwitcher, type WorkspaceRow } from "./tabs/workspace-switcher";
+import { carryStops } from "./tabs/tab-groups";
 import { BoardScreen } from "./board/board-screen";
 import { loadRecentProjects, rememberRecentProject } from "./local/recent-projects";
 import { Splash } from "./ui/splash";
@@ -444,6 +445,7 @@ class App {
         this.tabManager.previousTab();
       },
       openBoard: () => void this.handleOpenBoard(),
+      moveTabToWorkspace: (step) => this.carryTabToWorkspace(step),
       nextWorkspace: () => this.stepWorkspace(1),
       previousWorkspace: () => this.stepWorkspace(-1),
       goToTab: (index) => {
@@ -1277,6 +1279,22 @@ class App {
         this.renderTabBar();
       })
       .catch((e) => console.warn("[CADE] Could not load tab group definitions:", e));
+  }
+
+  /**
+   * Take the tab in front to the next or previous workspace and go with it.
+   * A workspace that is defined but holds no tab yet counts as a stop here,
+   * since this is how a tab first gets into one from the keyboard.
+   */
+  private carryTabToWorkspace(step: 1 | -1): void {
+    const tab = this.tabManager.getActiveTab();
+    if (!tab) return;
+    const stops = carryStops(this.tabManager.getWorkspaces(), this.groupDefs.map((d) => d.name));
+    if (stops.length < 2) return;
+    const at = Math.max(0, stops.indexOf(tab.group ?? null));
+    this.moveTabToGroup(tab.id, stops[(at + step + stops.length) % stops.length] ?? null);
+    this.workspaceSwitcher ??= new WorkspaceSwitcher(document.body, () => this.workspaceRows());
+    this.workspaceSwitcher.noteSwitch();
   }
 
   /** Move to the next or previous workspace; holding the key lists them. */

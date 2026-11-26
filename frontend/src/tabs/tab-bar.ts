@@ -5,7 +5,7 @@
 import type { AttentionState, Component, EventHandler } from "../types";
 import type { TabBarEvents, TabState } from "./types";
 import { minimizeWindow, toggleMaximizeWindow, closeWindow } from "@core/platform/tauri-bridge";
-import { TabDragController } from "./tab-drag";
+import { TabDragController, type DropTarget } from "./tab-drag";
 import { tabDisplayName } from "./session-title";
 import {
   GROUP_COLOURS,
@@ -341,6 +341,8 @@ export class TabBar implements Component {
       () => {
         if (this.pendingRender) this.render(...this.pendingRender);
       },
+      () => this.workspaceDropTargets(tabs[0]?.group ?? null),
+      (tabId, group) => this.emit("tab-set-group", { tabId, group }),
     );
     this.drags.push(drag);
     for (const tab of tabs) {
@@ -349,6 +351,21 @@ export class TabBar implements Component {
       runEl.appendChild(tabEl);
     }
     return runEl;
+  }
+
+  /**
+   * The chips a tab can be dropped on to change workspace: every workspace's
+   * chip but its own.
+   */
+  private workspaceDropTargets(own: string | null): DropTarget[] {
+    const targets: DropTarget[] = [];
+    for (const chip of this.container.querySelectorAll<HTMLElement>(".tab-group-chip")) {
+      const group = chip.classList.contains("tab-group-chip--ungrouped")
+        ? null
+        : (chip.closest<HTMLElement>(".tab-group")?.dataset["group"] ?? null);
+      if (group !== own) targets.push({ el: chip, group });
+    }
+    return targets;
   }
 
   /**

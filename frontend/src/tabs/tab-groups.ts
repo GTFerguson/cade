@@ -118,6 +118,17 @@ export function tabRuns<T extends Grouped>(tabs: T[]): TabRun<T>[] {
  */
 export const UNGROUPED = "";
 
+/**
+ * Where a tab can be taken from the keyboard: the workspaces that hold tabs,
+ * in tab bar order, then those that are defined and still empty.
+ */
+export function carryStops(
+  withTabs: (string | null)[],
+  defined: string[],
+): (string | null)[] {
+  return [...withTabs, ...defined.filter((name) => !withTabs.includes(name))];
+}
+
 /** Tabs that are on show: those not inside a collapsed group. */
 export function visibleTabs<T extends Grouped>(tabs: T[], collapsed: ReadonlySet<string>): T[] {
   return tabs.filter((t) => !collapsed.has(t.group ?? UNGROUPED));

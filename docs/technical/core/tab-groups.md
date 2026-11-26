@@ -53,13 +53,17 @@ The rules for laying out grouped tabs are pure functions in `frontend/src/tabs/t
 - **Ungrouped tabs are a workspace too.** They are a stop when moving between workspaces, and while a named workspace is open they close to one small unnamed chip showing their count, wherever on the bar they sit (`UNGROUPED` in `tab-groups.ts`).
 - **Each workspace reopens where it was left.** `TabManager` remembers the tab last active in each (`lastTabInWorkspace`); `switchWorkspace` returns to it, or to the first tab when that one has gone.
 - **Order and the open workspace are per browser.** Tab order is saved in `localStorage` with the tabs. Only membership is shared between devices, because a phone and a desktop want different things on show.
-- **Dragging stays inside a run.** Each run of tabs has its own `TabDragController`, so a drag reorders within the workspace and cannot change it. Changing group is done from the tab's right-click menu.
+- **Dragging reorders within a workspace, or changes it.** Each run of tabs has its own `TabDragController`, so a drag along the strip reorders within the workspace. Held over another workspace's chip, the tab leaves its strip to follow the pointer, the chip marks itself as the target, and letting go moves the tab into that workspace (`workspaceDropTargets` in `tab-bar.ts`, `targetAt` in `tab-drag.ts`). A lone tab, which has nowhere to be reordered to, can still be dragged for this.
 - **A new tab joins the open workspace.** The project picker starts with the open workspace selected (see [[project-picker]]); the folder rule applies only when a tab is opened with no group chosen.
 - **Menus.** `tab-menu.ts` is the right-click menu for tabs (move to group, new group, remove from group) and chips (rename, colour, open this workspace, folders to auto-add, ungroup). Clicking a chip opens its workspace.
 
 ### Moving between workspaces
 
 `Alt+w` and `Alt+Shift+w` go to the next and previous workspace in tab bar order, wrapping (`TabManager.workspaceAt`). The switch happens on each press. Holding `Alt` for longer than `HOLD_MS` after a press brings up the list of workspaces (`frontend/src/tabs/workspace-switcher.ts`) with the open one marked, each with its tab count and the number waiting; letting go puts it away. The list is a view of what has already happened, never a pending choice, so a tap behaves the same whether or not the list had time to appear.
+
+### Taking a tab along
+
+`Ctrl+Alt+w` and `Ctrl+Alt+Shift+w` take the tab in front to the next or previous workspace and go with it (`carryTabStep` in `keybindings.ts`, `App.carryTabToWorkspace`). It is the workspace key with Ctrl added: the same move, with the tab carried. The stops are the workspaces that hold tabs and then those that are defined and still empty (`carryStops`), since this is how a tab first reaches an empty workspace from the keyboard; "no workspace" is a stop too, which takes a tab out of its group. The tab's right-click menu does the same by name.
 
 ### Sliding
 
@@ -94,7 +98,6 @@ The chip carries its group's colour on its name and as a bar on its left edge. A
 - A group carries a name and a colour only. Settings such as a default folder or a GitHub account are not part of it.
 - Definitions are per backend and are not synchronised between a local and a remote backend.
 - The phone has no chips. Its session strip names the open workspace, its arrows and swipes stay inside it (`workspaceTabs` in `frontend/src/ui/mobile/session-strip.ts`), and a `!N` there counts sessions waiting in other workspaces. The command menu lists sessions under their workspaces, which is how to move between them.
-- Moving a tab to another workspace is done from the tab's right-click menu; there is no key for it.
 - There are no key chords for collapsing a group or showing only one.
 
 ## See Also

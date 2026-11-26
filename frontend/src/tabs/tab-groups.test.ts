@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from "vitest";
 import {
+  carryStops,
   GROUP_COLOURS,
   arrangeByGroup,
   groupAutoAdds,
@@ -189,5 +190,15 @@ describe("definitions", () => {
     expect(withAutoAdd(work, "/x", true)).toEqual(["/w", "/x"]);
     expect(withAutoAdd(work, "/w", false)).toEqual([]);
     expect(withAutoAdd(undefined, "/x", true)).toEqual(["/x"]);
+  });
+});
+
+describe("where a tab can be carried", () => {
+  it("lists workspaces with tabs first, then defined ones that are still empty", () => {
+    expect(carryStops([null, "Work"], ["Personal", "Work"])).toEqual([null, "Work", "Personal"]);
+  });
+
+  it("is only the workspaces in use when nothing else is defined", () => {
+    expect(carryStops(["Work", "Personal"], ["Work", "Personal"])).toEqual(["Work", "Personal"]);
   });
 });

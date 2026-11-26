@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { clampDragOffset, computeDropIndex, type TabSlot } from "./tab-drag";
+import { clampDragOffset, computeDropIndex, targetAt, type TabSlot } from "./tab-drag";
 
 // Four 100px tabs side by side: midpoints at 50, 150, 250, 350.
 const slots: TabSlot[] = [0, 100, 200, 300].map((left) => ({ left, width: 100 }));
@@ -54,5 +54,23 @@ describe("clampDragOffset", () => {
     expect(clampDragOffset(0, -50, slots)).toBe(0);
     expect(clampDragOffset(0, 500, slots)).toBe(300);
     expect(clampDragOffset(2, 42, slots)).toBe(42);
+  });
+});
+
+describe("targetAt", () => {
+  const chips = [
+    { left: 0, top: 0, right: 80, bottom: 36 },
+    { left: 400, top: 0, right: 520, bottom: 36 },
+  ];
+
+  it("finds the chip the pointer is inside", () => {
+    expect(targetAt(40, 10, chips)).toBe(0);
+    expect(targetAt(450, 30, chips)).toBe(1);
+  });
+
+  it("finds none between chips, below the bar, or with no chips", () => {
+    expect(targetAt(200, 10, chips)).toBe(-1);
+    expect(targetAt(40, 60, chips)).toBe(-1);
+    expect(targetAt(40, 10, [])).toBe(-1);
   });
 });

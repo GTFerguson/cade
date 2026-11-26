@@ -260,6 +260,17 @@
   box-shadow: inset 0 0 0 1px var(--border-focus);
 }
 
+/* A tab held over another workspace's chip: the chip shows it will take the
+   tab, and the tab shows it is leaving. */
+.tab-group-chip.tab-drop-target {
+  background: color-mix(in srgb, var(--group-colour) 30%, transparent);
+  box-shadow: inset 0 0 0 1px var(--group-colour);
+}
+
+.tab.tab-dropping {
+  opacity: 0.6;
+}
+
 .tab-list-dragging .tab {
   cursor: grabbing;
   will-change: transform;

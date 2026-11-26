@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { altShortcut, shouldDelegateToPaneHandler, type KeybindingCallbacks } from "./keybindings";
+import { altShortcut, carryTabStep, shouldDelegateToPaneHandler, type KeybindingCallbacks } from "./keybindings";
 
 // Minimal mock that satisfies the target parameter shape
 function fakeTarget(opts: {
@@ -141,5 +141,30 @@ describe("Alt shortcuts for tabs and workspaces", () => {
     const cb = callbacks() as unknown as KeybindingCallbacks;
     expect(altShortcut("j", cb)).toBeNull();
     expect(altShortcut("k", cb)).toBeNull();
+  });
+});
+
+describe("carrying the tab to another workspace", () => {
+  const chord = (over: Partial<Parameters<typeof carryTabStep>[0]> = {}) => ({
+    key: "w", code: "KeyW", ctrlKey: true, altKey: true, metaKey: false, shiftKey: false, ...over,
+  });
+
+  it("is the workspace key with Ctrl added, forward", () => {
+    expect(carryTabStep(chord())).toBe(1);
+  });
+
+  it("goes back with Shift", () => {
+    expect(carryTabStep(chord({ key: "W", shiftKey: true }))).toBe(-1);
+  });
+
+  it("goes by the physical key when the layout reports another character", () => {
+    expect(carryTabStep(chord({ key: "\u0142" }))).toBe(1);
+  });
+
+  it("is not the plain workspace key, nor Ctrl or Alt with another key", () => {
+    expect(carryTabStep(chord({ ctrlKey: false }))).toBeNull();
+    expect(carryTabStep(chord({ altKey: false }))).toBeNull();
+    expect(carryTabStep(chord({ key: "x", code: "KeyX" }))).toBeNull();
+    expect(carryTabStep(chord({ metaKey: true }))).toBeNull();
   });
 });
