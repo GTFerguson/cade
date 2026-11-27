@@ -68,15 +68,13 @@ answering it.
 
 **What it adds.**
 
-- **Quick-draw mode.** The queue shipped 27 Nov 2026 (see
-  [[../technical/core/frontend-architecture#MobileUI (`mobile.ts`)]]): cards
-  in the agreed order, quoting the prompt from the agent's screen, with "go to
-  it" and "next". Still to come: answer controls on the card, so that
-  answering moves straight to the next one without leaving the queue.
-- **One-tap permission answers.** A permission prompt becomes a card naming
-  the tool and what it wants to do, with large buttons for the prompt's own
-  choices (allow, allow always, deny). A button sends the same keystroke the
-  terminal would take, so nothing new has to be trusted.
+- **Quick-draw mode and one-tap answers.** Shipped 27 Nov 2026 for Claude
+  Code: the queue deals blocked sessions first, and a card answers the
+  dialog with its own options. See
+  [[../technical/core/frontend-architecture#MobileUI (`mobile.ts`)]] and
+  [[../technical/core/remote-sessions#Attention]]. Still open: answer
+  buttons for Codex, for sessions the phone has no tab for (no screen to
+  read), and for multi-select or multi-question dialogs.
 - **A reading view in place of the terminal.** The agent's last message and
   recent tool calls as wrapped text and collapsed blocks, built from the
   agent's own session transcript rather than from terminal output. The raw
@@ -87,34 +85,18 @@ answering it.
 
 **Key challenges.**
 
-- The permission card needs the tool name and its input. What Claude Code's
-  hooks documentation says (code.claude.com/docs/en/hooks, read 27 Nov 2026):
-  - The `Notification` hook CADE uses today carries only `message`, `title`
-    and `notification_type`, never the tool. `permission_prompt` fires only
-    after the dialog has waited about six seconds.
-  - `PermissionRequest` fires when the dialog is about to show, with
-    `tool_name`, `tool_input` and an optional `permission_suggestions` list
-    (the rules "allow always" would add). It has no `tool_use_id`. The docs
-    imply but do not state that a hook which exits 0 with no output leaves
-    the dialog alone; test that in a real session before relying on it.
-  - The dialog's own option labels are not in any hook, so the buttons still
-    have to be read from the screen.
-  - Questions: `AskUserQuestion` is a tool, so `PreToolUse` sees it; its
-    input schema is not documented. MCP elicitations have an `Elicitation`
-    event and the `elicitation_dialog` notification.
-  - No hook fires when the user says no to a permission dialog.
-    `PostToolUse`/`PostToolUseFailure` clear a card when the tool then runs,
-    `Stop` and `UserPromptSubmit` as a coarser fallback, and a keystroke into
-    the session already clears attention.
-  Codex only retitles its terminal, so its prompt has to be read from the
-  screen, which is fragile.
-- The answer keys differ by agent and by prompt (two choices or three), so the
-  buttons must come from the prompt actually shown, never a fixed layout: a
-  wrong key on an approval is the one mistake this mode must not make.
+- Answer keys are read off the screen, never assumed: a wrong key on an
+  approval is the one mistake this mode must not make. Claude Code's are
+  checked (a bare digit picks and confirms, 27 Nov 2026); Codex's are not,
+  and Codex reports its prompt only through its terminal title.
+- No hook fires when the user says no to a permission dialog. A keystroke
+  into the session clears attention, which covers an answer typed anywhere;
+  a dialog dismissed some other way stays in the queue until the next hook.
+- A card can only quote and answer a session the phone has open as a tab.
+  Answering the others means opening a hidden tab for each, or the backend
+  keeping a screen model of its own.
 - The reading view depends on each agent's transcript format, which neither
   agent promises to keep stable.
-- An answer given on the phone must clear the prompt on the desktop tab too,
-  and the reverse, without a stale card inviting a second answer.
 
 **Integration points.** Attention state and push
 (`backend/terminal/attention.py`), agent hooks (`backend/hooks/`), the session

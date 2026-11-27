@@ -55,7 +55,7 @@ One session is running with no tab: `2f56e385` "Clean up handoffs" (AirPLAi, Cod
 
 ## In flight (uncommitted work)
 
-Nothing. Untracked files from other sessions, leave alone and never stage: `AGENTS.md`, `docs/plans/handoff/remote-access-iteration.md`, `docs/plans/padarax-gm-crossrefs.md`.
+Nothing. Untracked files from other sessions, leave alone and never stage: `AGENTS.md`, `docs/plans/padarax-gm-crossrefs.md`.
 
 ## Next actions (ordered)
 
