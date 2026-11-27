@@ -104,6 +104,42 @@ class AttentionEvent:
     event: str
     notification_type: str | None = None
     message: str | None = None
+    tool_name: str | None = None
+    tool_input: dict | None = None
+
+
+# Claude Code asks its questions through this tool, and its dialog arrives
+# as a permission request and a "permission_prompt" notification like any
+# other tool's.
+QUESTION_TOOL = "AskUserQuestion"
+
+# Longest tool input quoted in a message, which also titles a push.
+MAX_PROMPT_TEXT = 160
+
+
+def prompt_text(tool_name: str, tool_input: dict | None) -> str:
+    """A permission dialog in one line: the tool and what it would do."""
+    tool_input = tool_input or {}
+    if tool_name == QUESTION_TOOL:
+        questions = tool_input.get("questions") or []
+        first = questions[0].get("question") if questions and isinstance(questions[0], dict) else None
+        return str(first or "Claude has a question")[:MAX_PROMPT_TEXT]
+    detail = (
+        tool_input.get("command")
+        or tool_input.get("file_path")
+        or tool_input.get("url")
+        or tool_input.get("pattern")
+        or next((v for v in tool_input.values() if isinstance(v, str)), "")
+    )
+    text = f"{tool_name}: {detail}" if detail else tool_name
+    return text[:MAX_PROMPT_TEXT]
+
+
+def attention_text(event: AttentionEvent) -> str | None:
+    """The message a state change carries."""
+    if event.event == "PermissionRequest":
+        return prompt_text(event.tool_name or "a tool", event.tool_input)
+    return event.message
 
 
 def attention_from_event(event: AttentionEvent) -> str | None | bool:
@@ -116,6 +152,8 @@ def attention_from_event(event: AttentionEvent) -> str | None | bool:
         if kind == IDLE_REMINDER:
             return IDLE
         return False
+    if name == "PermissionRequest":
+        return NEEDS_INPUT
     if name == "Stop":
         return IDLE
     if name in ("UserPromptSubmit", "PostToolUse"):
@@ -128,10 +166,26 @@ def attention_from_event(event: AttentionEvent) -> str | None | bool:
 
 
 def attention_kind(event: AttentionEvent) -> str | None:
-    """What a hook event says the agent wants; None when it says nothing."""
+    """What a hook event says the agent wants; None when it says nothing.
+
+    A Notification cannot tell Claude Code's questions from its permission
+    prompts (both are "permission_prompt"); PermissionRequest names the tool.
+    """
+    if event.event == "PermissionRequest":
+        return QUESTION if event.tool_name == QUESTION_TOOL else PERMISSION
     if event.event != "Notification":
         return None
     return _KIND_OF_NOTIFICATION.get((event.notification_type or "").lower())
+
+
+def is_late_reminder(session, event: AttentionEvent) -> bool:
+    """A permission_prompt Notification for a dialog PermissionRequest already reported."""
+    return (
+        event.event == "Notification"
+        and (event.notification_type or "").lower() == "permission_prompt"
+        and session.attention == NEEDS_INPUT
+        and session.attention_kind is not None
+    )
 
 
 def next_attention(current: str | None, event: AttentionEvent) -> str | None | bool:
@@ -262,19 +316,26 @@ async def announce_attention(
         return False
     await broadcast_attention(session)
     ensure_working_watch(session)
-    if push and state in (NEEDS_INPUT, IDLE):
-        from backend.config import get_config
-        from backend.push import get_push_service
-
-        label = session.label or session.project_path.name
-        await get_push_service().send({
-            "title": f"{label}: needs you" if state == NEEDS_INPUT else f"{label}: done",
-            "body": (message or "")[:200],
-            "tag": f"cade-{session.id}",
-            "sessionId": session.id,
-            "url": f"{get_config().root_path}/",
-        })
+    if push:
+        await push_attention(session)
     return True
+
+
+async def push_attention(session) -> None:
+    """Tell subscribed phones that the session is waiting or finished."""
+    if session.attention not in (NEEDS_INPUT, IDLE):
+        return
+    from backend.config import get_config
+    from backend.push import get_push_service
+
+    label = session.label or session.project_path.name
+    await get_push_service().send({
+        "title": f"{label}: needs you" if session.attention == NEEDS_INPUT else f"{label}: done",
+        "body": (session.attention_message or "")[:200],
+        "tag": f"cade-{session.id}",
+        "sessionId": session.id,
+        "url": f"{get_config().root_path}/",
+    })
 
 
 # Announcements started from the PTY reader, held so they are not collected

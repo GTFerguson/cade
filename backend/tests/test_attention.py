@@ -27,7 +27,9 @@ from backend.terminal.attention import (
     attention_from_event,
     attention_kind,
     attention_message,
+    attention_text,
     ensure_working_watch,
+    prompt_text,
     is_user_typing,
     next_attention,
     resolve_session,
@@ -71,6 +73,36 @@ class TestKind:
     def test_hook_events_say_what_a_waiting_agent_wants(self, event, kind, expected):
         e = AttentionEvent(session_id="s", cwd=None, event=event, notification_type=kind)
         assert attention_kind(e) == expected
+
+    def test_a_permission_request_names_the_kind_by_its_tool(self):
+        # Claude Code's questions arrive as permission prompts too; only the
+        # tool tells them apart.
+        ask = AttentionEvent(session_id="s", cwd=None, event="PermissionRequest", tool_name="AskUserQuestion")
+        bash = AttentionEvent(session_id="s", cwd=None, event="PermissionRequest", tool_name="Bash")
+        assert attention_kind(ask) == QUESTION
+        assert attention_kind(bash) == PERMISSION
+        assert attention_from_event(bash) == NEEDS_INPUT
+
+
+class TestPromptText:
+    def test_names_the_tool_and_what_it_would_do(self):
+        assert prompt_text("Bash", {"command": "touch a.txt", "description": "Create a"}) == "Bash: touch a.txt"
+        assert prompt_text("Edit", {"file_path": "/p/x.py", "old_string": "a"}) == "Edit: /p/x.py"
+        assert prompt_text("mcp__srv__do", {"n": 1}) == "mcp__srv__do"
+
+    def test_a_question_is_its_first_question(self):
+        tool_input = {"questions": [{"question": "Red or blue?", "options": []}]}
+        assert prompt_text("AskUserQuestion", tool_input) == "Red or blue?"
+        assert prompt_text("AskUserQuestion", {}) == "Claude has a question"
+
+    def test_a_long_command_is_cut_short(self):
+        assert len(prompt_text("Bash", {"command": "x" * 1000})) == 160
+
+    def test_only_a_permission_request_replaces_the_message(self):
+        note = AttentionEvent(session_id="s", cwd=None, event="Notification", message="hi")
+        req = AttentionEvent(session_id="s", cwd=None, event="PermissionRequest", tool_name="Bash", tool_input={"command": "ls"})
+        assert attention_text(note) == "hi"
+        assert attention_text(req) == "Bash: ls"
 
 
 class TestTransitions:
@@ -457,6 +489,33 @@ class TestRoute:
         payload = send.await_args.args[0]
         assert payload["title"] == "cade: needs you"
         assert payload["sessionId"] == "live"
+
+    def test_permission_request_waits_for_the_notification_to_push(self, api_client, temp_dir: Path):
+        client, registry = api_client
+        session = PTYSession(id="live", project_path=temp_dir, label="cade")
+        registry._sessions["live"] = session
+
+        with patch("backend.push.PushService.send", new_callable=AsyncMock) as send:
+            res = client.post("/api/sessions/attention", json={
+                "session_id": "live", "event": "PermissionRequest",
+                "tool_name": "AskUserQuestion",
+                "tool_input": {"questions": [{"question": "Red or blue?"}]},
+            })
+            assert res.json() == {"status": "ok", "attention": NEEDS_INPUT}
+            assert session.attention_kind == QUESTION
+            assert session.attention_message == "Red or blue?"
+            # Answered at the desk within Claude Code's delay: no buzz.
+            assert send.await_count == 0
+
+            client.post("/api/sessions/attention", json={
+                "session_id": "live", "event": "Notification",
+                "notification_type": "permission_prompt", "message": "Claude needs your permission",
+            })
+        # Still waiting: now the phone hears, with the question kept.
+        assert send.await_count == 1
+        assert send.await_args.args[0]["body"] == "Red or blue?"
+        assert session.attention_kind == QUESTION
+        assert session.attention_message == "Red or blue?"
 
     def test_irrelevant_event_is_ignored(self, api_client):
         client, _ = api_client

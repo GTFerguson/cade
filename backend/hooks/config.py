@@ -14,6 +14,7 @@ class HookType(Enum):
     NOTIFICATION = "Notification"
     STOP = "Stop"
     USER_PROMPT_SUBMIT = "UserPromptSubmit"
+    PERMISSION_REQUEST = "PermissionRequest"
 
 
 # Event-level hooks that feed CADE's attention state (see attention_hook.py).
@@ -24,6 +25,10 @@ ATTENTION_HOOK_TYPES = (
     # A finished tool call shows the turn is still running, which is the
     # only signal that work resumed after a permission prompt was answered.
     HookType.POST_TOOL_USE,
+    # Fires as a permission dialog appears, naming the tool and its input;
+    # the Notification for the same dialog comes about six seconds later
+    # and says neither. A hook that prints nothing leaves the dialog alone.
+    HookType.PERMISSION_REQUEST,
 )
 
 

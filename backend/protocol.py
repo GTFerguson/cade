@@ -11,7 +11,7 @@ class MessageType:
     """Message type constants for WebSocket protocol."""
 
     # Client -> Server
-    INPUT = "input"  # Terminal input: { type, data: str, sessionKey?: str }
+    INPUT = "input"  # Terminal input: { type, data: str, sessionKey?: str, keepSize?: bool }
     RESIZE = "resize"  # Terminal resize: { type, cols: int, rows: int, sessionKey?: str }
     GET_FILE = "get-file"  # Request file content: { type, path: str }
     GET_TREE = "get-tree"  # Request file tree: { type }

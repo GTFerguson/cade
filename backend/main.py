@@ -475,6 +475,9 @@ class AttentionRequest(BaseModel):
     event: str
     notification_type: str | None = None
     message: str | None = None
+    # PermissionRequest only: the tool the dialog asks about, and its input.
+    tool_name: str | None = None
+    tool_input: dict | None = None
 
 
 class PushSubscribeRequest(BaseModel):
@@ -802,7 +805,10 @@ def create_app(config: Config | None = None) -> FastAPI:
             announce_attention,
             attention_from_event,
             attention_kind,
+            attention_text,
+            is_late_reminder,
             next_attention,
+            push_attention,
             resolve_session,
         )
         from backend.terminal.sessions import get_registry
@@ -813,17 +819,34 @@ def create_app(config: Config | None = None) -> FastAPI:
             event=body.event,
             notification_type=body.notification_type,
             message=body.message,
+            tool_name=body.tool_name,
+            tool_input=body.tool_input,
         )
         if attention_from_event(event) is False:
             return JSONResponse({"status": "ignored"})
         session = resolve_session(get_registry().sessions(), body.session_id, body.cwd)
         if session is None:
             return JSONResponse({"status": "no-session"}, status_code=404)
+        if is_late_reminder(session, event):
+            # The dialog is still unanswered after Claude Code's delay; the
+            # state and its details came with PermissionRequest. Only the
+            # phone has yet to hear of it.
+            await push_attention(session)
+            return JSONResponse({"status": "ok", "attention": session.attention})
         state = next_attention(session.attention, event)
         if state is False:
             return JSONResponse({"status": "ignored"})
 
-        await announce_attention(session, state, body.message, kind=attention_kind(event))
+        await announce_attention(
+            session,
+            state,
+            attention_text(event),
+            kind=attention_kind(event),
+            # Pushing at once would buzz the phone for every dialog answered
+            # at the desk; the Notification that follows a still-open dialog
+            # pushes instead.
+            push=event.event != "PermissionRequest",
+        )
         return JSONResponse({"status": "ok", "attention": session.attention})
 
     @app.get("/api/push/status")

@@ -248,6 +248,22 @@ class TestSizePolicyOnTheWire:
         assert desktop_sizes[-1]["controller"] == phone._connection_id
 
     @pytest.mark.asyncio
+    async def test_an_answer_from_the_queue_leaves_the_size_alone(self, temp_dir: Path):
+        session = PTYSession(id="s", project_path=temp_dir)
+        terminal = session.add_terminal(SessionKey.CLAUDE, make_pty())
+        desktop = attach_handler(session, temp_dir)
+        phone = attach_handler(session, temp_dir)
+        await desktop._handle_input({"type": MessageType.INPUT, "data": "x"})
+        await desktop._handle_resize({"type": MessageType.RESIZE, "cols": 200, "rows": 50})
+        await phone._handle_resize({"type": MessageType.RESIZE, "cols": 40, "rows": 20})
+
+        await phone._handle_input({"type": MessageType.INPUT, "data": "1", "keepSize": True})
+
+        assert terminal.controller == desktop._connection_id
+        assert terminal.size.cols == 200
+        terminal.pty.write.assert_awaited_with("1")
+
+    @pytest.mark.asyncio
     async def test_applied_resize_is_broadcast_to_the_others(self, temp_dir: Path):
         session = PTYSession(id="s", project_path=temp_dir)
         session.add_terminal(SessionKey.CLAUDE, make_pty())

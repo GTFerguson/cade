@@ -60,6 +60,8 @@ The PTY has one size. The client that last typed into a terminal is its controll
 
 This was chosen over tmux's smallest-client rule, which would shrink a desktop every time a phone glanced in. The cost is that typing on the phone narrows the desktop until the desktop types again; the session strip and `pty-size.controller` make the handover visible.
 
+Input sent with `keepSize` (the queue's answer buttons) is written without claiming control, so answering a prompt from the phone does not narrow the desktop.
+
 The phone's on-screen keyboard never resizes the PTY either: the input bar reports keyboard open/close before the pane shrinks, and `Terminal.lockRows` freezes the row count while it is up. The pane scrolls to the prompt line instead.
 
 ## Session directory
@@ -91,7 +93,9 @@ Server-side pings (`ws_ping_interval`) do not reach page JavaScript, and a backg
 
 | Source | Event | State |
 |---|---|---|
-| Claude Code `Notification` hook | `permission_prompt`, `elicitation_dialog` | input |
+| Claude Code `PermissionRequest` hook | a dialog appears | input, with the tool's kind and a one-line message; no push yet |
+| Claude Code `Notification` hook | `permission_prompt` after a `PermissionRequest` | unchanged; the phone is pushed now |
+| Claude Code `Notification` hook | `permission_prompt` with no `PermissionRequest` before it, `elicitation_dialog` | input |
 | Claude Code `Notification` hook | `idle_prompt` | idle if the session was still working, otherwise unchanged |
 | Claude Code `Stop` hook | | idle |
 | Claude Code `UserPromptSubmit` hook | | working |
@@ -108,7 +112,9 @@ A finished tool call does not hide a prompt because tools run in parallel: one c
 
 `~/.cade/hooks/attention.py` is installed beside the view hook by `setup_cade_hooks` and registered for the Claude Code events in the table (`ATTENTION_HOOK_TYPES` in `backend/hooks/config.py`); the Codex adapter writes a marked `notify` line into `~/.codex/config.toml` unless the user already has one. The hook POSTs to `/api/sessions/attention`. CADE injects `CADE_SESSION_ID` into every agent's PTY environment so the hook names its session; a hook without it falls back to the unique live session in its `cwd`.
 
-A waiting session also records what it wants, `PTYSession.attention_kind`: `"permission"` for Claude Code's `permission_prompt` and for Codex's prompt title (Codex retitles its terminal only for an approval), `"question"` for `elicitation_dialog`, and `None` when the source did not say (an explicit API caller). The kind is kept only while the state is `input` (`apply_attention`) and is carried across an in-place upgrade. `attention_at` moves only when the state itself changes, so a prompt that rewords itself keeps its place in the phone's queue, which deals the longest wait first.
+A waiting session also records what it wants, `PTYSession.attention_kind`: `"question"` for a `PermissionRequest` from the `AskUserQuestion` tool and for `elicitation_dialog` (MCP servers), `"permission"` for any other `PermissionRequest`, a bare `permission_prompt` and Codex's prompt title (Codex retitles its terminal only for an approval), and `None` when the source did not say (an explicit API caller).
+
+`PermissionRequest` exists because the `Notification` hook cannot tell a question from a permission: in a Claude Code 2.1 session on 27 November 2026, an `AskUserQuestion` dialog raised `permission_prompt` "Claude needs your permission", the same as a Bash approval. `PermissionRequest` fires as the dialog appears with `tool_name` and `tool_input`, and `prompt_text` turns those into the message ("Bash: touch a.txt", or the question itself). It did not fire for calls auto mode approved. The `permission_prompt` notification comes about six seconds later and only while the dialog is still open, so it, not `PermissionRequest`, sends the push (`is_late_reminder`, `push_attention`): a dialog answered at the desk never reaches the phone. The hook script must print nothing, because output from a `PermissionRequest` hook is read as its decision on the dialog; a test runs the generated script and checks it stays silent, and the same session showed that a silent hook leaves the dialog for the user. Claude Code waits for the hook before showing the dialog, so the script gives up on the backend after one second for this event. The kind is kept only while the state is `input` (`apply_attention`) and is carried across an in-place upgrade. `attention_at` moves only when the state itself changes, so a prompt that rewords itself keeps its place in the phone's queue, which deals the longest wait first.
 
 Changes are broadcast to the session's clients as `session-attention` (with `kind`) and included in the session listing (`attentionKind`, `attentionAt`). The frontend shows them on the session strip and in the menu, raises a browser `Notification` when the page is hidden (`frontend/src/ui/attention-notify.ts`), and the backend sends a Web Push for `input` and `idle`.
 

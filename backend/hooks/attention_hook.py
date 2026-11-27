@@ -1,7 +1,9 @@
 """The attention hook: tells CADE when the agent is waiting on the user.
 
 Installed as ``~/.cade/hooks/attention.py`` and wired to Claude Code's
-Notification, Stop, UserPromptSubmit and PostToolUse hooks, and to Codex's ``notify``.
+Notification, Stop, UserPromptSubmit, PostToolUse and PermissionRequest
+hooks, and to Codex's ``notify``. It must never print: output from a
+PermissionRequest hook would answer the dialog instead of the user.
 It is a standalone stdlib-only script, like the view hook, because it runs
 inside the agent's process environment, not CADE's.
 """
@@ -64,6 +66,9 @@ def main():
         "notification_type": data.get("notification_type"),
         "message": data.get("message") or data.get("last-assistant-message"),
     }
+    if event == "PermissionRequest":
+        payload["tool_name"] = data.get("tool_name")
+        payload["tool_input"] = data.get("tool_input")
 
     host = read_setting("host", "localhost")
     port = int(read_setting("port", str(DEFAULT_PORT)))
@@ -75,7 +80,10 @@ def main():
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=3) as resp:
+        # Claude Code waits for a PermissionRequest hook before it shows the
+        # dialog, so a backend that does not answer must not hold it up.
+        timeout = 1 if event == "PermissionRequest" else 3
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             log("%s -> %d" % (event, resp.status))
     except Exception as e:
         log("%s failed: %s" % (event, e))

@@ -1350,8 +1350,10 @@ class ConnectionHandler:
         terminal = self._session.get_terminal(session_key)
         if terminal:
             # Typing takes control of the terminal; the PTY adopts this
-            # device's size so the TUI repaints for whoever is driving.
-            if await self._session.claim_control(
+            # device's size so the TUI repaints for whoever is driving. A
+            # one-tap answer from the phone's queue is not driving, and must
+            # not shrink the desktop to the phone's width.
+            if not data.get("keepSize") and await self._session.claim_control(
                 session_key, self._connection_id, self._terminal_sizes.get(session_key)
             ):
                 await self._broadcast_pty_size(session_key)
