@@ -1,7 +1,7 @@
 ---
 title: Organisation roadmap: workspaces, picker, per-tab strip, the board, Linear and the handshake fix are shipped; next is checking the strip in the real app, then the cleanup skill
 created: 2026-11-25
-updated: 2026-11-26
+updated: 2026-11-27
 status: in-flight
 ---
 
@@ -58,6 +58,8 @@ One session is running with no tab: `2f56e385` "Clean up handoffs" (AirPLAi, Cod
 Nothing. Untracked files from other sessions, leave alone and never stage: `AGENTS.md`, `docs/plans/handoff/remote-access-iteration.md`, `docs/plans/padarax-gm-crossrefs.md`.
 
 ## Next actions (ordered)
+
+The mobile experience (roadmap phase 5) has its own handoff since 27 Nov: [[mobile-upgrades]]. Nothing for it lives here.
 
 1. Install when Gary says in so many words (`make install-desktop`); the permission check refused it on a loose "okay". It carries the commits above. Then check: the `cade-orchestrator` and `cade-permissions` blocks are gone from `~/.codex/config.toml` once a Codex tab has reconnected and its `notify` line is still there; a new Codex thread starts no `cade-backend mcp-server`; a Claude Code tab that finishes still shows finished two minutes later. The helper processes already running, and their copies in `/tmp`, last until their Codex threads end. `[confirm]`
    - Before deleting anything under `/tmp/_MEI*`, check maps, open files, cwd and environment of every process for the directory: most of what looks stale is in use. 12 that nothing touched were deleted on 26 Nov (2.6 GB); where they came from was not established.

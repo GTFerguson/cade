@@ -43,6 +43,11 @@ Known defects with evidence and a fix direction, not yet fixed: [[quick-fixes/RE
 
 Working state for streams in flight is in `handoff/`. A handoff is deleted when its work is done.
 
+| Handoff | Stream |
+|---------|--------|
+| [[handoff/organisation-and-cleanup]] | Workspaces, picker, pull request state, the board and cleanup (roadmap phases 1 to 4 and 6); an install is owed |
+| [[handoff/mobile-upgrades]] | The mobile experience (roadmap phase 5): quick-draw queue, permission cards, reading view, pull request state on the phone |
+
 ## Design
 
 Mockups: [[design/README|design]].
