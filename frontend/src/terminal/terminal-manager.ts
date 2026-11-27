@@ -775,6 +775,11 @@ export class TerminalManager implements Component {
     }
   }
 
+  /** The agent terminal's screen as text, for a phone card that quotes it. */
+  agentScreenLines(): string[] {
+    return this.claudeTerminal?.screenLines() ?? [];
+  }
+
   /**
    * Scroll the active terminal to top.
    */

@@ -238,6 +238,10 @@ export interface LiveSessionInfo {
   clients: number;
   attention?: AttentionState;
   attentionMessage?: string | null;
+  /** What a waiting agent wants. Absent from older backends. */
+  attentionKind?: AttentionKind;
+  /** When the session entered its attention state, in seconds. Absent from older backends. */
+  attentionAt?: number;
   /** The pull request for the session's branch. Absent from older backends. */
   pullRequest?: import("./tabs/pull-request").PullRequestSummary | null;
   terminals: Record<string, LiveTerminalInfo>;
@@ -249,6 +253,9 @@ export interface SessionListMessage extends BaseMessage {
 }
 
 export type AttentionState = "input" | "idle" | "working" | null;
+
+/** What a waiting agent wants of the user; null when it did not say. */
+export type AttentionKind = "permission" | "question" | null;
 
 /** Another device moved the session to a tab group, or out of one. */
 export interface GroupChangedMessage extends BaseMessage {
@@ -277,6 +284,8 @@ export interface SessionAttentionMessage extends BaseMessage {
   sessionId: string;
   attention: AttentionState;
   message?: string | null;
+  /** What a waiting agent wants. Absent from older backends. */
+  kind?: AttentionKind;
 }
 
 /** Flat list of project files for fuzzy search. */

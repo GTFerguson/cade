@@ -1554,6 +1554,10 @@ class App {
           }),
         }));
       },
+      getScreenLines: (sessionId) => {
+        const tab = this.tabManager.getTabs().find((t) => t.id === sessionId);
+        return tab?.context?.getTerminalManager()?.agentScreenLines() ?? null;
+      },
       onSwitchTab: (id) => {
         this.tabManager.switchTab(id);
       },

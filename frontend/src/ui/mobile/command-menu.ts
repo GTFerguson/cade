@@ -64,6 +64,9 @@ export interface CommandMenuCallbacks {
   /** Sessions running on the backend that have no tab here yet. */
   getLiveSessions: () => LiveSessionInfo[];
   onAdoptSession: (session: LiveSessionInfo) => void;
+  /** Open the quick-draw queue; its size in words for the entry. */
+  onQueue: () => void;
+  getQueueSummary: () => string;
   onFiles: () => void;
   onSearch: () => void;
   onRecent: () => void;
@@ -180,6 +183,7 @@ export class CommandMenu implements MobileScreen {
     }
 
     this.addSection(list, "sessions");
+    this.addOption(list, "[queue]", this.callbacks.getQueueSummary(), () => this.callbacks.onQueue());
     // Under their workspaces, when there are any: this list is the phone's
     // way from one workspace to another, so it shows where each session is.
     const tabs = this.callbacks.getTabs();

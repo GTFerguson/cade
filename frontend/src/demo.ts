@@ -819,18 +819,32 @@ function injectMobileRemote(ws: WebSocketClient): void {
       type: "session-attention",
       sessionId: "demo",
       attention: "input",
+      kind: "permission",
       message: "Claude needs your permission to use Bash",
     });
   }, 3000);
-  // Live sessions on the "server", answered whenever the menu opens.
-  const sessions = () =>
+  // Live sessions on the "server", answered whenever the menu opens. The
+  // demo's own tab is among them so the queue can quote its screen.
+  const started = Date.now() / 1000;
+  const demoTabId = (): string => (window as any).__cadeApp?.tabManager?.getActiveTabId() ?? "demo";
+  const sessions = () => {
+    const prompting = Date.now() / 1000 - started >= 3;
     ws.injectEvent("session-list", {
       type: "session-list",
       sessions: [
         {
+          id: demoTabId(), label: "demo", projectPath: "/home/gary/projects/cade",
+          agent: "claude-code", createdAt: 0, lastActivity: Date.now() / 1000, alive: true, clients: 2,
+          attention: prompting ? "input" : "working",
+          attentionKind: prompting ? "permission" : null,
+          attentionAt: started + 3,
+          attentionMessage: prompting ? "Claude needs your permission to use Bash" : null,
+          terminals: {},
+        },
+        {
           id: "codex-demo", label: "padarax", projectPath: "/home/gary/projects/padarax",
           agent: "codex", createdAt: 0, lastActivity: Date.now() / 1000, alive: true, clients: 1,
-          attention: "idle", terminals: {},
+          attention: "idle", attentionAt: started - 600, terminals: {},
           pullRequest: {
             number: 88, title: "Quest log", url: "https://github.com/",
             draft: false, checks: "passing", review: "approved", conflicts: false,
@@ -839,10 +853,12 @@ function injectMobileRemote(ws: WebSocketClient): void {
         {
           id: "shell-demo", label: "nkrdn", projectPath: "/home/gary/projects/nkrdn",
           agent: "claude-code", createdAt: 0, lastActivity: Date.now() / 1000, alive: true, clients: 0,
-          attention: null, terminals: {},
+          attention: "input", attentionKind: "question", attentionAt: started - 120,
+          attentionMessage: "Claude has a question about the rebuild schedule", terminals: {},
         },
       ],
     });
+  };
   setTimeout(sessions, 600);
   setInterval(sessions, 4000);
   // File listing for the search screen, answered the same way.

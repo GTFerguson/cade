@@ -59,6 +59,14 @@ Pinch the terminal with two fingers, or use **A-** / **A+**. The size is remembe
 
 The same markers appear next to each tab in the **[cmd]** menu.
 
+## The queue
+
+**[cmd] → [queue]** deals out the sessions that want you, one card at a time: agents waiting for permission first, then agents with a question, then agents that have finished their turn. Within each, the one that has waited longest comes first. The menu entry says how many are waiting, for example "2 blocked · 1 finished".
+
+A card shows the session and its workspace, what it is waiting for and for how long, and, if that session is open on this phone, the bottom of its screen, where the prompt is. Tap **go to it** to open the session and answer it there, or **next** to put the card aside and see the next one. When you have been through them all, **deal them again** brings back the ones you put aside. A prompt answered somewhere else, on the desktop for example, leaves the queue within a few seconds.
+
+The queue covers the sessions on the backend this tab is connected to.
+
 ## Pull requests
 
 When the session's work has a pull request, the strip shows its number and a mark at the right, coloured by how it stands. Tap it to open the pull request on GitHub.

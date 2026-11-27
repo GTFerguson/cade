@@ -556,6 +556,18 @@ export class Terminal implements Component {
     this.scrollToBottom();
   }
 
+  /** The screen's rows as text, top to bottom, wherever the user has scrolled. */
+  screenLines(): string[] {
+    const term = this.terminal;
+    if (!term) return [];
+    const buf = term.buffer.active;
+    const lines: string[] = [];
+    for (let y = buf.baseY; y < buf.baseY + term.rows; y++) {
+      lines.push(buf.getLine(y)?.translateToString(true) ?? "");
+    }
+    return lines;
+  }
+
   /**
    * Scroll terminal to the top of the buffer.
    */

@@ -17,6 +17,8 @@ import { FileExplorer } from "./mobile/file-explorer";
 import { FileViewer } from "./mobile/file-viewer";
 import { DashboardScreen } from "./mobile/dashboard-screen";
 import { SessionStrip, neighbourTab, workspaceTabs, type StripTab } from "./mobile/session-strip";
+import { QuickDrawScreen, type QueueCardSession } from "./mobile/quick-draw-screen";
+import { drawQueue, queueSummary } from "./mobile/quick-draw";
 import { FileSearch } from "./mobile/file-search";
 import { RecentFiles, recordChange, type RecentChange } from "./mobile/recent-files";
 import { setupPinchZoom } from "./mobile/pinch-zoom";
@@ -52,6 +54,8 @@ export interface MobileUICallbacks {
   getDashboardContainer: () => HTMLElement | null;
   /** Whether the active tab has a dashboard config loaded. */
   dashboardHasConfig: () => boolean;
+  /** The agent's screen in the tab for a session, or null with no such tab. */
+  getScreenLines: (sessionId: string) => string[] | null;
 }
 
 export class MobileUI implements Component {
@@ -68,6 +72,8 @@ export class MobileUI implements Component {
   /** Live sessions on the backend, refreshed each time the menu opens. */
   private liveSessions: LiveSessionInfo[] = [];
   private activeMenu: CommandMenu | null = null;
+  /** The queue screen while it shows; a stale one only redraws off screen. */
+  private activeQueue: QuickDrawScreen | null = null;
 
   private strip: SessionStrip | null = null;
   private cleanupPinch: (() => void) | null = null;
@@ -184,6 +190,12 @@ export class MobileUI implements Component {
       pr: t.pr ?? null,
     }));
     this.strip.render(tabs, this.agentLabel);
+    // An open tab's attention just changed: the queue should hear of it now,
+    // not at its next timed refresh.
+    if (this.activeQueue && this.screenManager.current() === this.activeQueue) {
+      const ws = this.callbacks.getActiveWs();
+      if (ws.isConnected()) ws.requestSessionList();
+    }
   }
 
   private switchRelative(direction: 1 | -1): void {
@@ -249,6 +261,7 @@ export class MobileUI implements Component {
     this.ws.on("session-list", (message) => {
       this.liveSessions = message.sessions;
       this.activeMenu?.refresh();
+      this.activeQueue?.render();
     });
   }
 
@@ -303,6 +316,8 @@ export class MobileUI implements Component {
         this.callbacks.onAdoptSession(session);
         this.focusTerminal();
       },
+      onQueue: () => this.openQueue(),
+      getQueueSummary: () => queueSummary(drawQueue(this.queueSessions()).map((c) => c.kind)),
       onFiles: () => this.openFileExplorer(),
       onSearch: () => this.openFileSearch(),
       onRecent: () => this.openRecentFiles(),
@@ -348,6 +363,59 @@ export class MobileUI implements Component {
     // Ask for the backend's live sessions; the menu re-renders on reply.
     const ws = this.callbacks.getActiveWs();
     if (ws.isConnected()) ws.requestSessionList();
+  }
+
+  /**
+   * Every session on the backend as the queue deals it, named as its tab is
+   * when this device has one open.
+   */
+  private queueSessions(): QueueCardSession[] {
+    const tabs = new Map(this.callbacks.getTabs().map((t) => [t.id, t]));
+    return this.liveSessions
+      .filter((s) => s.alive)
+      .map((s) => {
+        const tab = tabs.get(s.id);
+        return {
+          id: s.id,
+          name: tab?.name ?? s.label ?? s.projectPath.split("/").pop() ?? s.id,
+          group: tab?.group ?? s.group ?? null,
+          ...(tab?.groupColour && { groupColour: tab.groupColour }),
+          attention: s.attention ?? null,
+          attentionKind: s.attentionKind ?? null,
+          ...(s.attentionAt !== undefined && { attentionAt: s.attentionAt }),
+          message: s.attentionMessage ?? null,
+        };
+      });
+  }
+
+  private openQueue(): void {
+    const queue = new QuickDrawScreen({
+      getSessions: () => this.queueSessions(),
+      getScreenLines: (id) => this.callbacks.getScreenLines(id),
+      onGoTo: (id) => {
+        this.screenManager.popToRoot();
+        this.activeViewer = null;
+        this.activeMenu = null;
+        this.activeQueue = null;
+        if (this.callbacks.getOpenTabIds().includes(id)) {
+          this.callbacks.onSwitchTab(id);
+        } else {
+          const session = this.liveSessions.find((s) => s.id === id);
+          if (session) this.callbacks.onAdoptSession(session);
+        }
+        this.focusTerminal();
+      },
+      onBack: () => {
+        this.screenManager.pop();
+        this.activeQueue = null;
+      },
+      requestRefresh: () => {
+        const ws = this.callbacks.getActiveWs();
+        if (ws.isConnected()) ws.requestSessionList();
+      },
+    });
+    this.activeQueue = queue;
+    this.screenManager.push(queue);
   }
 
   /** Push a viewer for `path` (or an empty one) and request its content. */
