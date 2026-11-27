@@ -1,7 +1,7 @@
 ---
 title: Configuration Guide
 created: 2026-01-17
-updated: 2026-11-26
+updated: 2026-11-27
 status: active
 tags: [user, configuration, customization]
 ---
@@ -230,6 +230,17 @@ CADE attaches its orchestrator tools to the selected agent where that can be don
 - **Claude Code** — passes `--mcp-config <path>` on the command line.
 - **Codex** — none. Codex has a single config file for every Codex session on the machine, so tools written there would be started by all of them, not only those in CADE. CADE sets only its notify command in `~/.codex/config.toml`, which is how a Codex tab says it has finished.
 - **Cursor** — merges CADE servers into `.cursor/mcp.json` in the project directory (removed on session teardown).
+
+### Turning tools off
+
+Any tool CADE offers an agent can be switched off by name in `~/.cade/providers.toml`:
+
+```toml
+[tools]
+disabled = ["spawn_agent", "list_agents"]
+```
+
+The list applies to the chat pane's agents, the worker agents they start, and the orchestrator tools a Claude Code tab is given. Tabs started before the change keep the tools they had. Tool names are the ones the agent sees, such as `bash`, `write_file`, `view_file` or `show_html`.
 
 ### Capabilities by Agent
 

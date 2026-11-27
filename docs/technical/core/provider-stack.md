@@ -1,7 +1,7 @@
 ---
 title: Provider Stack
 created: 2026-11-26
-updated: 2026-11-26
+updated: 2026-11-27
 status: implemented
 tags: [providers, litellm, tools, mcp, failover, context-budget]
 ---
@@ -60,6 +60,17 @@ The system prompt is recomposed on every chat message (`_stream_chat_response` i
 
 nkrdn has no tool of its own. Chat agents run it through `bash`.
 
+### Turning tools off
+
+`[tools] disabled` in `providers.toml` names tools no agent is offered. It is read into `ProvidersConfig.disabled_tools`, and it holds in every place CADE hands out tools:
+
+- `ToolRegistry` takes the set when it is built. It leaves those names out of `definitions()` and `definitions_async()`, including tools an MCP adapter reports on discovery, and refuses them in `execute()` and `execute_async()`. The refusal matters because a model can call a tool by a name it was not offered.
+- The orchestrator server does not read `providers.toml`, because run from source it is a plain script that cannot import the backend. `server_env()` in `backend/orchestrator/mcp_config.py` passes the names in `DISABLED_TOOLS_ENV`, and `build_server()` in `mcp_server.py` leaves those tools out. Both launches go through `server_env()`: the chat registry's and the one written into a CLI agent's MCP config, so a Claude Code tab loses the tool too.
+
+A change takes effect for agents started after it. A running Claude Code tab keeps the server it was started with.
+
+Turning off `spawn_agent` does not remove the orchestrator overlay. `/orch` still adds the orchestrator prompt module, which tells the agent to delegate with a tool it no longer has.
+
 ### Orchestrator tools
 
 The orchestrator server (`backend/orchestrator/mcp_server.py`) reaches every chat agent. `_create_tool_registry()` registers it as a stdio adapter under the name `__orchestrator__`, so every API provider and every orchestrator worker (which builds its registry with the same function) gets it. `APIProvider` removes the tools in `_ORCHESTRATOR_ONLY_TOOLS` (`spawn_agent`, `list_agents`) from the definitions unless the provider's mode is `orchestrator` or the orchestrator overlay is on (`set_orchestrator()`, driven by `/orch`). `view_file` and `show_html` are always offered.
@@ -68,7 +79,7 @@ The adapter's command comes from `server_command("orchestrator")` in `backend/or
 
 If the adapter cannot be built, the registry is returned without it and the reason is logged at warning level. Nothing else shows that the orchestrator tools are missing, so the log line is the place to look when a chat agent says it has no `view_file`.
 
-The filter hides definitions only. `ToolRegistry.execute_async()` does not check it.
+That filter hides definitions only; `ToolRegistry.execute_async()` does not check it. A tool listed in `[tools] disabled` is refused at execution as well.
 
 ## MCP adapters
 
@@ -172,6 +183,12 @@ Nothing on the backend acts on the thresholds. They only colour the gauge.
 `/compact` is typed by the user. The handler (`backend/websocket.py`) replaces the message with the `/handoff` skill prompt and streams the reply as usual. `_do_compact()` then writes the reply to `docs/plans/handoff/` and sends `COMPACT_PREVIEW`. When the client answers `COMPACT_PREVIEW_RESOLVED` with approval, the chat session is replaced by a new one seeded with the handoff, and `CHAT_COMPACT` tells the client to clear the pane. A rejection leaves the session as it was. The handoff file is written before the preview, so it stays either way.
 
 ## Configuration
+
+Top-level `[tools]` table:
+
+| Key | Used by |
+|---|---|
+| `disabled` | Tool names no agent is offered (see [[#Turning tools off]]) |
 
 Keys in a `[provider.<name>]` block that this stack reads:
 

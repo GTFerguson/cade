@@ -64,6 +64,8 @@ class ProvidersConfig:
     default_provider: str = ""
     worker_provider: str = ""
     cli_orchestrator: bool = True
+    # Tool names no agent is offered, from `[tools] disabled`.
+    disabled_tools: frozenset[str] = frozenset()
 
 
 # Default warn / danger thresholds for the context-budget indicator,
@@ -250,7 +252,19 @@ def load_providers_config(path: Path | None = None) -> ProvidersConfig:
         default_provider=default_provider,
         worker_provider=worker_provider,
         cli_orchestrator=cli_orchestrator,
+        disabled_tools=_disabled_tools(data.get("tools")),
     )
+
+
+def _disabled_tools(section: object) -> frozenset[str]:
+    """Tool names from `[tools] disabled`, dropping anything that is not one."""
+    if not isinstance(section, dict):
+        return frozenset()
+    names = section.get("disabled", [])
+    if not isinstance(names, list):
+        logger.warning("[tools] disabled must be a list of tool names; ignoring it")
+        return frozenset()
+    return frozenset(n.strip() for n in names if isinstance(n, str) and n.strip())
 
 
 def resolve_worker_provider(cfg: ProvidersConfig) -> ProviderConfig | None:

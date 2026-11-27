@@ -27,8 +27,12 @@ class ToolExecutor(Protocol):
 class ToolRegistry:
     """Holds named executors and dispatches calls by tool name."""
 
-    def __init__(self) -> None:
+    def __init__(self, disabled: "set[str] | frozenset[str]" = frozenset()) -> None:
         self._executors: dict[str, ToolExecutor] = {}
+        # Turned off in providers.toml. Left out of the definitions and also
+        # refused on execution, because a model can call a tool by a name it
+        # was not offered.
+        self._disabled = frozenset(disabled)
 
     def register(self, executor: ToolExecutor, *tool_names: str) -> None:
         """Register an executor under one or more tool names."""
@@ -50,10 +54,18 @@ class ToolRegistry:
             seen.add(executor_id)
             if hasattr(executor, "tool_definitions"):
                 result.extend(executor.tool_definitions())
-        return result
+        return [d for d in result if d.name not in self._disabled]
+
+    def _refusal(self, name: str) -> str | None:
+        if name in self._disabled:
+            return f"Error: tool '{name}' is turned off in providers.toml ([tools] disabled)"
+        return None
 
     def execute(self, name: str, arguments: dict) -> str:
         """Execute a tool by name. Returns error string if tool not found or raises."""
+        refusal = self._refusal(name)
+        if refusal:
+            return refusal
         executor = self._executors.get(name)
         if executor is None:
             return f"Error: unknown tool '{name}'"
@@ -87,10 +99,13 @@ class ToolRegistry:
                 result.extend(tools.values())
             elif hasattr(executor, "tool_definitions"):
                 result.extend(executor.tool_definitions())
-        return result
+        return [d for d in result if d.name not in self._disabled]
 
     async def execute_async(self, name: str, arguments: dict) -> str:
         """Async version of execute() — delegates to execute_async if available."""
+        refusal = self._refusal(name)
+        if refusal:
+            return refusal
         executor = self._executors.get(name)
         if executor is None:
             return f"Error: unknown tool '{name}'"

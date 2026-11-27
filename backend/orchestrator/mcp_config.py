@@ -30,6 +30,27 @@ def _get_python() -> str:
     return sys.executable
 
 
+# The orchestrator server cannot read providers.toml itself when it runs as a
+# plain script, so the tools turned off there are passed to it by name.
+DISABLED_TOOLS_ENV = "CADE_DISABLED_TOOLS"
+
+
+def disabled_tools() -> frozenset[str]:
+    """Tool names turned off in providers.toml (`[tools] disabled`)."""
+    from core.backend.providers.config import get_providers_config
+
+    return get_providers_config().disabled_tools
+
+
+def server_env(base: dict[str, str]) -> dict[str, str]:
+    """`base` with the disabled tools added, for launching the orchestrator server."""
+    env = dict(base)
+    off = disabled_tools()
+    if off:
+        env[DISABLED_TOOLS_ENV] = ",".join(sorted(off))
+    return env
+
+
 def server_command(server_type: str) -> tuple[str, list[str]]:
     """Return (command, args) to launch the given MCP server.
 
@@ -84,7 +105,7 @@ def write_mcp_config(
             "cade-orchestrator": {
                 "command": orch_cmd,
                 "args": orch_args,
-                "env": dict(env),
+                "env": server_env(env),
             },
         }
     }

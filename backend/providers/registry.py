@@ -26,7 +26,8 @@ def _create_tool_registry(provider_config, working_dir: "Path | None" = None, co
     the orchestrator MCP server (always). nkrdn is reached through bash.
     """
     from pathlib import Path as _Path
-    registry = ToolRegistry()
+    from core.backend.providers.config import get_providers_config
+    registry = ToolRegistry(disabled=get_providers_config().disabled_tools)
 
     # File read/write/edit/delete tools — only wired when we have a project root
     if working_dir is not None:
@@ -106,7 +107,7 @@ def _create_tool_registry(provider_config, working_dir: "Path | None" = None, co
             mcp_env["CADE_AGENT_ID"] = connection_id
         if cfg.auth_token:
             mcp_env["CADE_AUTH_TOKEN"] = cfg.auth_token
-        orchestrator_adapter = MCPToolAdapter(command=command, args=args, env=mcp_env)
+        orchestrator_adapter = MCPToolAdapter(command=command, args=args, env=mcp_config.server_env(mcp_env))
         registry.register(orchestrator_adapter, "__orchestrator__")
     except Exception as e:
         # Warning, not debug: without this adapter the chat agent silently

@@ -11,7 +11,6 @@ import os
 import httpx
 from mcp.server.fastmcp import FastMCP
 
-mcp = FastMCP("cade-orchestrator")
 
 BACKEND_PORT = int(os.environ.get("CADE_BACKEND_PORT", "3000"))
 BACKEND_HOST = os.environ.get("CADE_BACKEND_HOST", "localhost")
@@ -30,7 +29,6 @@ def _get_headers() -> dict[str, str]:
     return headers
 
 
-@mcp.tool()
 async def spawn_agent(name: str, task: str, mode: str = "code") -> str:
     """Spawn a CADE worker agent (LiteLLM/API) to execute a task on your behalf.
 
@@ -67,7 +65,6 @@ async def spawn_agent(name: str, task: str, mode: str = "code") -> str:
         return response.text
 
 
-@mcp.tool()
 async def list_agents() -> str:
     """List all orchestrator agents and their current states.
 
@@ -102,7 +99,6 @@ async def _post_ui(endpoint: str, payload: dict) -> str:
         return response.text
 
 
-@mcp.tool()
 async def view_file(path: str) -> str:
     """Open a file in the CADE viewer pane.
 
@@ -119,7 +115,6 @@ async def view_file(path: str) -> str:
     return await _post_ui("view-file", {"path": path})
 
 
-@mcp.tool()
 async def show_html(html: str, name: str = "canvas") -> str:
     """Draw a page in the CADE viewer pane, beside the terminal.
 
@@ -145,5 +140,22 @@ async def show_html(html: str, name: str = "canvas") -> str:
     return await _post_ui("show-html", {"html": html, "name": name})
 
 
+_TOOLS = (spawn_agent, list_agents, view_file, show_html)
+
+# Must match DISABLED_TOOLS_ENV in backend/orchestrator/mcp_config.py. Not
+# imported from there: run as a script, this file sees only its own folder.
+_DISABLED_TOOLS_ENV = "CADE_DISABLED_TOOLS"
+
+
+def build_server() -> FastMCP:
+    """The server, offering every tool not turned off in providers.toml."""
+    off = {n.strip() for n in os.environ.get(_DISABLED_TOOLS_ENV, "").split(",") if n.strip()}
+    server = FastMCP("cade-orchestrator")
+    for tool in _TOOLS:
+        if tool.__name__ not in off:
+            server.add_tool(tool)
+    return server
+
+
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    build_server().run(transport="stdio")

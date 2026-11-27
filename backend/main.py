@@ -2067,8 +2067,8 @@ def run_setup_hook(args: argparse.Namespace) -> None:
 
 def run_mcp_server(args: argparse.Namespace) -> None:
     """Run a CADE MCP server over stdio."""
-    from backend.orchestrator.mcp_server import mcp
-    mcp.run(transport="stdio")
+    from backend.orchestrator.mcp_server import build_server
+    build_server().run(transport="stdio")
 
 
 def main() -> None:
@@ -2082,8 +2082,8 @@ def main() -> None:
             # The permission server was removed. Exit rather than serve the
             # orchestrator's tools under the permission server's name.
             _sys.exit("cade-backend: the permission MCP server no longer exists")
-        from backend.orchestrator.mcp_server import mcp as _mcp
-        _mcp.run(transport="stdio")
+        from backend.orchestrator.mcp_server import build_server
+        build_server().run(transport="stdio")
         return
 
     args = parse_args()
