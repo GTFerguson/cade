@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isDone, isQueued, pullRequestWords, ticketTone, type AnyPullRequest } from "./work-words";
+import { isDone, isQueued, pullRequestMark, pullRequestWords, ticketTone, type AnyPullRequest } from "./work-words";
 
 const pr = (over: Partial<AnyPullRequest> = {}): AnyPullRequest => ({
   number: 9, title: "A change", url: "https://example.test/9", ...over,
@@ -46,5 +46,22 @@ describe("a pull request in words", () => {
 
   it("does not repeat the leading state among the rest", () => {
     expect(pullRequestWords(pr({ checks: "passing", review: "approved" })).rest).toEqual([]);
+  });
+});
+
+describe("a pull request as a mark", () => {
+  it("is the number and the leading state's mark, in that state's tone", () => {
+    expect(pullRequestMark(pr({ checks: "failing" }))).toEqual({ text: "#9 ✗", tone: "bad" });
+    expect(pullRequestMark(pr({ review: "approved" }))).toEqual({ text: "#9 ✓", tone: "good" });
+  });
+
+  it("is the number alone for a state with no mark", () => {
+    expect(pullRequestMark(pr({ checks: "passing" }))).toEqual({ text: "#9", tone: "good" });
+    expect(pullRequestMark(pr())).toEqual({ text: "#9", tone: "plain" });
+  });
+
+  it("keeps the word for merged and closed, which have no mark", () => {
+    expect(pullRequestMark(pr({ state: "merged" }))).toEqual({ text: "#9 merged", tone: "good" });
+    expect(pullRequestMark(pr({ state: "closed" }))).toEqual({ text: "#9 closed", tone: "muted" });
   });
 });

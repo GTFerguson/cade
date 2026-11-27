@@ -2,6 +2,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { SessionStrip, neighbourTab, waitingElsewhere, workspaceTabs } from "./session-strip";
 
+const newStrip = () =>
+  new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn(), onOpenUrl: vi.fn() });
+
 const tabs = (active: string, ids = ["a", "b", "c"]) =>
   ids.map((id) => ({ id, name: id, isActive: id === active, unread: false }));
 
@@ -40,7 +43,7 @@ describe("the open workspace on the phone", () => {
   });
 
   it("draws a dot per session of the workspace and flags waiting elsewhere", () => {
-    const strip = new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn() });
+    const strip = newStrip();
     strip.render(mixed("w1"), null);
     expect(strip.element.querySelectorAll(".session-strip-dot")).toHaveLength(2);
     expect(strip.element.querySelector(".session-strip-elsewhere")!.textContent).toBe("!1");
@@ -51,7 +54,7 @@ describe("the open workspace on the phone", () => {
   });
 
   it("shows no flag when nothing is waiting elsewhere", () => {
-    const strip = new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn() });
+    const strip = newStrip();
     strip.render(mixed("h1").filter((t) => t.group !== "Work"), null);
     expect(strip.element.querySelector(".session-strip-elsewhere")).toBeNull();
   });
@@ -59,7 +62,7 @@ describe("the open workspace on the phone", () => {
 
 describe("SessionStrip", () => {
   it("names the active session and marks unread siblings", () => {
-    const strip = new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn() });
+    const strip = newStrip();
     const list = tabs("b");
     list[2]!.unread = true;
     strip.render(list, "claude-code");
@@ -73,7 +76,7 @@ describe("SessionStrip", () => {
   });
 
   it("shows the active session's tab group in the group's colour", () => {
-    const strip = new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn() });
+    const strip = newStrip();
     const list = tabs("b").map((t) =>
       t.id === "b" ? { ...t, group: "Work", groupColour: "var(--accent-purple)" } : t,
     );
@@ -85,7 +88,7 @@ describe("SessionStrip", () => {
   });
 
   it("shows no group for an ungrouped session", () => {
-    const strip = new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn() });
+    const strip = newStrip();
     strip.render(tabs("a"));
     expect(strip.element.querySelector(".session-strip-group")).toBeNull();
   });
@@ -93,7 +96,7 @@ describe("SessionStrip", () => {
   it("switches on arrow taps and opens the menu from the name", () => {
     const onSwitchRelative = vi.fn();
     const onOpenMenu = vi.fn();
-    const strip = new SessionStrip({ onSwitchRelative, onOpenMenu });
+    const strip = new SessionStrip({ onSwitchRelative, onOpenMenu, onOpenUrl: vi.fn() });
     strip.render(tabs("a"));
     (strip.element.querySelector('[aria-label="next session"]') as HTMLButtonElement).click();
     (strip.element.querySelector(".session-strip-centre") as HTMLButtonElement).click();
@@ -102,8 +105,44 @@ describe("SessionStrip", () => {
   });
 
   it("disables the arrows with a single session", () => {
-    const strip = new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn() });
+    const strip = newStrip();
     strip.render(tabs("a", ["a"]));
     expect((strip.element.querySelector('[aria-label="next session"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("the pull request on the strip", () => {
+  const pr = { number: 41, title: "Phone PR state", url: "https://example.test/41", checks: "failing" as const };
+  const prButton = (strip: SessionStrip) => strip.element.querySelector<HTMLButtonElement>(".session-strip-pr")!;
+
+  it("shows the active session's as its number and mark, in its tone", () => {
+    const strip = newStrip();
+    strip.render(tabs("b").map((t) => (t.id === "b" ? { ...t, pr } : t)));
+    const btn = prButton(strip);
+    expect(btn.hidden).toBe(false);
+    expect(btn.textContent).toBe("#41 ✗");
+    expect(btn.dataset["tone"]).toBe("bad");
+    expect(btn.getAttribute("aria-label")).toBe("pull request #41 ✗ checks failing");
+  });
+
+  it("is hidden when the active session has none, even if a sibling does", () => {
+    const strip = newStrip();
+    strip.render(tabs("a").map((t) => (t.id === "b" ? { ...t, pr } : t)));
+    expect(prButton(strip).hidden).toBe(true);
+  });
+
+  it("is hidden again when the pull request goes away", () => {
+    const strip = newStrip();
+    strip.render(tabs("a").map((t) => ({ ...t, pr })));
+    strip.render(tabs("a"));
+    expect(prButton(strip).hidden).toBe(true);
+  });
+
+  it("opens the pull request when tapped", () => {
+    const onOpenUrl = vi.fn();
+    const strip = new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn(), onOpenUrl });
+    strip.render(tabs("a").map((t) => ({ ...t, pr })));
+    prButton(strip).click();
+    expect(onOpenUrl).toHaveBeenCalledWith("https://example.test/41");
   });
 });

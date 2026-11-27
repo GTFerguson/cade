@@ -316,6 +316,20 @@
   font-weight: 700;
 }
 
+/* Sized to its text so the session name, not the pull request, is what
+   shortens on a narrow screen. */
+.session-strip-pr {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.session-strip-pr[hidden] {
+  display: none;
+}
+
 .session-strip-dots {
   display: inline-flex;
   gap: 5px;
@@ -482,6 +496,11 @@
 .mobile-command-menu .option.selected .option-meta {
   color: var(--bg-primary);
   opacity: 0.6;
+}
+
+/* A tone would vanish against the selected row's fill. */
+.mobile-command-menu .option.selected [data-tone] {
+  color: inherit;
 }
 
 .mobile-command-menu .option-label {

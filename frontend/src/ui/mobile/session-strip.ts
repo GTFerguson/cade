@@ -3,10 +3,12 @@
  * with a dot per tab of its workspace so unread output beside it is visible
  * at a glance. ‹ › and a horizontal swipe move between those sessions, as
  * the tab keys do on the desktop; tapping the name opens the command menu,
- * which lists every workspace.
+ * which lists every workspace. The active session's pull request sits at
+ * the right as its number and mark, and a tap opens it.
  */
 
 import { escapeHtml } from "@core/ui/menu-nav";
+import { pullRequestMark, pullRequestWords, type AnyPullRequest } from "../../tabs/work-words";
 
 export interface StripTab {
   id: string;
@@ -18,11 +20,14 @@ export interface StripTab {
   /** Tab group the tab is in, and the CSS colour the group is drawn in. */
   group?: string;
   groupColour?: string;
+  /** The pull request for the tab's stream, else for its folder's branch. */
+  pr?: AnyPullRequest | null;
 }
 
 export interface SessionStripCallbacks {
   onSwitchRelative: (direction: 1 | -1) => void;
   onOpenMenu: () => void;
+  onOpenUrl: (url: string) => void;
 }
 
 const SWIPE_THRESHOLD_PX = 50;
@@ -60,6 +65,8 @@ export class SessionStrip {
   private dotsEl: HTMLElement;
   private prevBtn: HTMLButtonElement;
   private nextBtn: HTMLButtonElement;
+  private prBtn: HTMLButtonElement;
+  private prUrl: string | null = null;
   private touchStartX: number | null = null;
   private touchStartY: number | null = null;
 
@@ -83,8 +90,16 @@ export class SessionStrip {
     centre.appendChild(this.nameEl);
     centre.appendChild(this.dotsEl);
 
+    this.prBtn = document.createElement("button");
+    this.prBtn.className = "session-strip-pr";
+    this.prBtn.hidden = true;
+    this.prBtn.addEventListener("click", () => {
+      if (this.prUrl) this.callbacks.onOpenUrl(this.prUrl);
+    });
+
     this.element.appendChild(this.prevBtn);
     this.element.appendChild(centre);
+    this.element.appendChild(this.prBtn);
     this.element.appendChild(this.nextBtn);
 
     this.element.addEventListener("touchstart", (e) => {
@@ -144,9 +159,26 @@ export class SessionStrip {
       })
       .join("");
 
+    this.renderPullRequest(active?.pr ?? null);
+
     const multiple = tabs.length > 1;
     this.prevBtn.disabled = !multiple;
     this.nextBtn.disabled = !multiple;
+  }
+
+  private renderPullRequest(pr: AnyPullRequest | null): void {
+    this.prUrl = pr?.url ?? null;
+    this.prBtn.hidden = !pr;
+    if (!pr) return;
+    const { text, tone } = pullRequestMark(pr);
+    this.prBtn.textContent = text;
+    this.prBtn.dataset["tone"] = tone;
+    // The mark alone is terse; the label carries the whole state for a
+    // screen reader and for a long press.
+    const words = pullRequestWords(pr);
+    const label = [words.text, ...words.rest].join(", ");
+    this.prBtn.setAttribute("aria-label", `pull request ${label}`);
+    this.prBtn.title = `${label}\n${pr.title}`;
   }
 
   show(): void {

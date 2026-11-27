@@ -1,7 +1,7 @@
 ---
 title: Frontend Architecture
 created: 2026-01-17
-updated: 2026-11-26
+updated: 2026-11-27
 status: active
 tags: [technical, frontend, architecture, wiki-links, tabs, session-persistence, keybindings, state-machine, mobile, dashboard]
 ---
@@ -319,7 +319,7 @@ Two rows fixed to the bottom. The composer row is `[cmd]`, a native textarea and
 
 **Session strip (`ui/mobile/session-strip.ts`):**
 
-One line above the terminal: `‹ name · agent ›` with a dot per tab. Arrows and a horizontal swipe switch sessions (`neighbourTab`), tapping the name opens the CommandMenu. Dot colours: green active, blue unread output, pulsing orange when the agent needs input, cyan when a turn finished. `App` tracks unread and attention per tab and calls `MobileUI.refresh()`.
+One line above the terminal: `‹ name · agent ›` with a dot per tab. Arrows and a horizontal swipe switch sessions (`neighbourTab`), tapping the name opens the CommandMenu. Dot colours: green active, blue unread output, pulsing orange when the agent needs input, cyan when a turn finished. At the right, a button shows the active tab's pull request as its number and mark (`pullRequestMark` in `tabs/work-words.ts`) and opens it through `openExternal`; the CommandMenu rows give each session's pull request in words (`sessionMeta`, using `pullRequestWords`), live sessions included through `pullRequest` in `session-list`. Both take their wording and tone from `work-words.ts`, the same source as the desktop context strip and board, and the tone colours are one rule set in `styles/screens/board.css`. `App` tracks unread, attention and pull request per tab and calls `MobileUI.refresh()`. The pull request is `effectivePullRequest` of the tab's `session-pr` and `session-context`, which is what the desktop context strip shows, merged and closed included: the phone has no context strip, so its session strip stands in for it.
 
 **Font size:** one per-device setting (`terminal/font-size.ts`, localStorage) that every `Terminal` follows; pinch on the tab content (`ui/mobile/pinch-zoom.ts`) or the `A-`/`A+` keys change it, and the viewer reads at the same size through `--mobile-code-font-size`.
 

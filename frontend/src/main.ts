@@ -58,6 +58,8 @@ import { WorkspaceSwitcher, type WorkspaceRow } from "./tabs/workspace-switcher"
 import { carryStops, groupRollup } from "./tabs/tab-groups";
 import { BoardScreen } from "./board/board-screen";
 import type { PullRequestSummary } from "./tabs/pull-request";
+import { effectivePullRequest, type SessionContext } from "./tabs/context-strip";
+import type { AnyPullRequest } from "./tabs/work-words";
 import { loadRecentProjects, rememberRecentProject } from "./local/recent-projects";
 import { Splash } from "./ui/splash";
 import type { RemoteProfile } from "./remote/types";
@@ -77,6 +79,8 @@ class App {
   private unreadTabs = new Set<string>();
   /** Per-tab agent attention, from the session-attention hook events. */
   private attentionByTab = new Map<string, AttentionState>();
+  /** Each tab's pull request as the strip above its terminal shows it, for the phone. */
+  private pullRequestByTab = new Map<string, AnyPullRequest>();
   /** Colour and auto-add folders of each tab group, as the backend holds them. */
   private groupDefs: TabGroupDef[] = [];
   private projectPickerOpen = false;
@@ -386,6 +390,9 @@ class App {
       this.renderTabBar();
       for (const id of this.unreadTabs) {
         if (!tabs.some((t) => t.id === id)) this.unreadTabs.delete(id);
+      }
+      for (const id of this.pullRequestByTab.keys()) {
+        if (!tabs.some((t) => t.id === id)) this.pullRequestByTab.delete(id);
       }
       this.mobileUI?.refresh();
       if (this.resumeInProgress) return;
@@ -867,12 +874,22 @@ class App {
     // on one project folder would otherwise all show that folder's branch.
     let folderPr: PullRequestSummary | null = null;
     let streamPr: PullRequestSummary | null = null;
-    const showBadge = () => this.tabBar?.setPullRequest(tab.id, streamPr ?? folderPr);
+    let sessionContext: SessionContext | null = null;
+    const showBadge = () => {
+      this.tabBar?.setPullRequest(tab.id, streamPr ?? folderPr);
+      // The phone has no context strip, so its session strip says what that
+      // strip would, merged and closed included.
+      const shown = effectivePullRequest(folderPr, sessionContext);
+      if (shown) this.pullRequestByTab.set(tab.id, shown);
+      else this.pullRequestByTab.delete(tab.id);
+      this.mobileUI?.refresh();
+    };
     tab.ws.on("session-pr", (msg) => {
       folderPr = msg.pr;
       showBadge();
     });
     tab.ws.on("session-context", (msg) => {
+      sessionContext = msg.context;
       const pr = msg.context?.pr;
       // A merged or closed one is said on the strip; the badge is for one in play.
       streamPr = pr && pr.state === "open" ? (pr as unknown as PullRequestSummary) : null;
@@ -1530,6 +1547,7 @@ class App {
           isActive: t.id === activeId,
           unread: this.unreadTabs.has(t.id),
           attention: this.attentionByTab.get(t.id) ?? null,
+          pr: this.pullRequestByTab.get(t.id) ?? null,
           ...(t.group && {
             group: t.group,
             groupColour: groupColourVar(this.groupDefs.find((d) => d.name === t.group)?.colour),

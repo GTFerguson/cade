@@ -1,7 +1,7 @@
 ---
 title: Mobile Guide
 created: 2026-02-02
-updated: 2026-10-14
+updated: 2026-11-27
 status: active
 tags: [user, mobile, guide]
 ---
@@ -14,7 +14,7 @@ On a screen 768px wide or narrower CADE switches to a phone layout: the terminal
 
 | Element | Position | Purpose |
 |---------|----------|---------|
-| Session strip | Top | Current session and agent; ‹ › or swipe to switch; dots show other tabs' state |
+| Session strip | Top | Current session and agent; ‹ › or swipe to switch; dots show other tabs' state; the session's pull request at the right |
 | Terminal | Middle | The agent or shell session |
 | Composer | Above the key strip | Type a prompt, tap **send** |
 | Key strip | Bottom | Keys that are awkward on a phone keyboard |
@@ -58,6 +58,22 @@ Pinch the terminal with two fingers, or use **A-** / **A+**. The size is remembe
 | Cyan | The agent there finished its turn |
 
 The same markers appear next to each tab in the **[cmd]** menu.
+
+## Pull requests
+
+When the session's work has a pull request, the strip shows its number and a mark at the right, coloured by how it stands. Tap it to open the pull request on GitHub.
+
+| Mark | Meaning |
+|------|---------|
+| ≠ (red) | Conflicts with its base branch |
+| ✗ (red) | Checks failing |
+| ✎ (yellow) | Changes requested |
+| … (blue) | Checks running |
+| ✓ (green) | Approved |
+| no mark, green | Checks passing |
+| `merged` / `closed` | Merged or closed |
+
+The **[cmd]** menu says the same in words beside each session, for example "needs you · #412 ✗ checks failing". The pull request is the one for the session's handoff when CADE knows it, otherwise the one for the branch its folder is on, the same one the line above a desktop terminal names.
 
 ## Files
 

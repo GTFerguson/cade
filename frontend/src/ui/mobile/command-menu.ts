@@ -11,6 +11,7 @@
 
 import { MenuNav, escapeHtml } from "@core/ui/menu-nav";
 import type { LiveSessionInfo } from "../../types";
+import { pullRequestWords, type AnyPullRequest, type Tone } from "../../tabs/work-words";
 import type { MobileScreen } from "./screen-manager";
 import { setupSwipeBack } from "./swipe-back";
 
@@ -25,6 +26,36 @@ export interface OverflowTab {
   /** Tab group the tab is in, and the CSS colour the group is drawn in. */
   group?: string;
   groupColour?: string;
+  /** The pull request for the tab's stream, else for its folder's branch. */
+  pr?: AnyPullRequest | null;
+}
+
+const ATTENTION_SAYS = { input: "needs you", idle: "done", working: "working" } as const;
+
+/**
+ * What a session's row says beside its name: whether the agent wants the
+ * user, then its pull request, else `fallback`. Tones are for the pull
+ * request only; the attention word is coloured by the dot beside it.
+ */
+export function sessionMeta(
+  attention: "input" | "idle" | "working" | null | undefined,
+  pr: AnyPullRequest | null | undefined,
+  fallback: string,
+): { text: string; tone?: Tone }[] {
+  const parts: { text: string; tone?: Tone }[] = [];
+  if (attention) parts.push({ text: ATTENTION_SAYS[attention] });
+  if (pr) {
+    const { text, tone } = pullRequestWords(pr);
+    if (parts.length > 0) parts.push({ text: " · " });
+    parts.push({ text, tone });
+  }
+  return parts.length > 0 ? parts : [{ text: fallback }];
+}
+
+function metaHtml(parts: { text: string; tone?: Tone }[]): string {
+  return parts
+    .map((p) => (p.tone ? `<span data-tone="${p.tone}">${escapeHtml(p.text)}</span>` : escapeHtml(p.text)))
+    .join("");
 }
 
 export interface CommandMenuCallbacks {
@@ -238,15 +269,11 @@ export class CommandMenu implements MobileScreen {
     if (tab.attention === "input") indicator.push("needs-input");
     else if (tab.attention === "idle") indicator.push("idle");
     else if (tab.unread) indicator.push("unread");
-    const meta =
-      tab.attention === "input" ? "needs you" :
-      tab.attention === "idle" ? "done" :
-      tab.attention === "working" ? "working" :
-      tab.unread ? "new output" : tab.projectPath;
+    const meta = sessionMeta(tab.attention, tab.pr, tab.unread ? "new output" : tab.projectPath);
     el.innerHTML =
       `<span class="${indicator.join(" ")}"></span>` +
       `<span class="option-label">${escapeHtml(tab.name)}</span>` +
-      `<span class="option-meta">${escapeHtml(meta)}</span>`;
+      `<span class="option-meta">${metaHtml(meta)}</span>`;
     container.appendChild(el);
     this.optionEls.push(el);
     this.actions.push(() => this.callbacks.onSwitchTab(tab.id));
@@ -259,15 +286,11 @@ export class CommandMenu implements MobileScreen {
     const indicator = ["tab-indicator", "remote"];
     if (session.attention === "input") indicator.push("needs-input");
     else if (session.attention === "idle") indicator.push("idle");
-    const meta =
-      session.attention === "input" ? "needs you · attach" :
-      session.attention === "idle" ? "done · attach" :
-      session.attention === "working" ? "working · attach" :
-      `${session.agent} · attach`;
+    const meta = sessionMeta(session.attention, session.pullRequest, session.agent);
     el.innerHTML =
       `<span class="${indicator.join(" ")}"></span>` +
       `<span class="option-label">${escapeHtml(name)}</span>` +
-      `<span class="option-meta">${escapeHtml(meta)}</span>`;
+      `<span class="option-meta">${metaHtml(meta)} · attach</span>`;
     container.appendChild(el);
     this.optionEls.push(el);
     this.actions.push(() => this.callbacks.onAdoptSession(session));

@@ -8,6 +8,7 @@
 
 import type { Component, FileChangesMessage, LiveSessionInfo } from "../types";
 import { sessionsToAdopt } from "../tabs/tab-manager";
+import { openExternal } from "@core/platform/tauri-bridge";
 import type { WebSocketClient } from "../platform/websocket";
 import { TouchToolbar } from "./touch-toolbar";
 import { ScreenManager } from "./mobile/screen-manager";
@@ -121,6 +122,7 @@ export class MobileUI implements Component {
       this.strip = new SessionStrip({
         onSwitchRelative: (direction) => this.switchRelative(direction),
         onOpenMenu: () => this.openCommandMenu(),
+        onOpenUrl: (url) => void openExternal(url),
       });
       document.body.appendChild(this.strip.element);
     }
@@ -179,6 +181,7 @@ export class MobileUI implements Component {
       attention: t.attention ?? null,
       ...(t.group && { group: t.group }),
       ...(t.groupColour && { groupColour: t.groupColour }),
+      pr: t.pr ?? null,
     }));
     this.strip.render(tabs, this.agentLabel);
   }

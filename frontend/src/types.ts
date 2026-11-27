@@ -238,6 +238,8 @@ export interface LiveSessionInfo {
   clients: number;
   attention?: AttentionState;
   attentionMessage?: string | null;
+  /** The pull request for the session's branch. Absent from older backends. */
+  pullRequest?: import("./tabs/pull-request").PullRequestSummary | null;
   terminals: Record<string, LiveTerminalInfo>;
 }
 

@@ -62,6 +62,18 @@ const OPEN_TONE: Record<ReturnType<typeof pullRequestState>, Tone> = {
 };
 
 /**
+ * A pull request as its number and mark only, for a line with no room for
+ * words: the phone's session strip. Merged and closed have no mark, so they
+ * keep their one word. The tone is the same one `pullRequestWords` gives.
+ */
+export function pullRequestMark(pr: AnyPullRequest): { text: string; tone: Tone } {
+  const { text, tone } = pullRequestWords(pr);
+  if (pr.state === "merged" || pr.state === "closed") return { text, tone };
+  const mark = PR_DISPLAY[pullRequestState(pr as PullRequestSummary)].mark;
+  return { text: `#${pr.number}${mark ? ` ${mark}` : ""}`, tone };
+}
+
+/**
  * A pull request in a few words: what matters most about it, how that
  * should be coloured, and whatever else is true of it that the first part
  * does not already say.

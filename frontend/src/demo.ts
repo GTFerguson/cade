@@ -793,6 +793,16 @@ function injectMobileRemote(ws: WebSocketClient): void {
     controller: "desktop-demo",
   });
   ws.injectEvent("file-tree", { type: "file-tree", data: [] });
+  // The branch's pull request is failing checks: the strip's mark and the
+  // menu's words both show it.
+  ws.injectEvent("session-pr", {
+    type: "session-pr",
+    sessionId: "demo",
+    pr: {
+      number: 412, title: "Reconnect: detach handlers before closing", url: "https://github.com/",
+      draft: false, checks: "failing", review: "required", conflicts: false,
+    },
+  });
   const changes = [
     ["core/frontend/platform/ws-client.ts", "modified"],
     ["docs/plans/remote-access-overhaul.md", "modified"],
@@ -821,6 +831,10 @@ function injectMobileRemote(ws: WebSocketClient): void {
           id: "codex-demo", label: "padarax", projectPath: "/home/gary/projects/padarax",
           agent: "codex", createdAt: 0, lastActivity: Date.now() / 1000, alive: true, clients: 1,
           attention: "idle", terminals: {},
+          pullRequest: {
+            number: 88, title: "Quest log", url: "https://github.com/",
+            draft: false, checks: "passing", review: "approved", conflicts: false,
+          },
         },
         {
           id: "shell-demo", label: "nkrdn", projectPath: "/home/gary/projects/nkrdn",
