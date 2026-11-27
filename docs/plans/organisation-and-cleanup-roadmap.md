@@ -1,7 +1,7 @@
 ---
 title: Organisation and Cleanup Roadmap
 created: 2026-11-25
-updated: 2026-11-26
+updated: 2026-11-27
 status: partially-shipped
 tags: [plan, roadmap, tabs, workspaces, github, mobile, cleanup]
 ---
@@ -81,8 +81,9 @@ answering it.
   recent tool calls as wrapped text and collapsed blocks, built from the
   agent's own session transcript rather than from terminal output. The raw
   terminal stays one tap away for anything the reading view does not cover.
-- **Pull request state.** The phone shows neither the tab's badge nor the
-  strip above the terminal.
+- **Pull request state.** Shipped 27 Nov 2026: the session strip shows the
+  active session's pull request mark and the command menu each session's in
+  words. See [[../technical/core/frontend-architecture#MobileUI (`mobile.ts`)]].
 
 **Key challenges.**
 
@@ -104,13 +105,14 @@ strip and composer (`frontend/src/ui/mobile/`), transcript lookup
 [[remote-access-overhaul]] (measurement on a device, chat parity, QR sign-in)
 stay in that plan.
 
-**Open questions.**
+**Decided (Gary, 27 Nov 2026).**
 
-- Is the reading view the default on the phone, with the terminal as the
-  fallback, or the other way round until it has proved itself?
-- Should finished turns sit in the queue at all, or only sessions that are
-  truly blocked?
-- Does quick-draw belong on desktop too, as a "next blocked tab" key?
+- Default view: undecided until both exist. Build the reading view, show it
+  beside the terminal, and Gary picks.
+- The queue holds finished turns too, after every blocked session: blocked
+  ones are quicker to deal with, so they come first.
+- Quick-draw is phone only for now. A desktop "next blocked tab" key is a
+  conversation for much later.
 
 ## 6. Cleanup and modernisation
 

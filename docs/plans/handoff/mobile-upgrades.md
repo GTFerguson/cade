@@ -7,11 +7,11 @@ status: in-flight
 
 # Resume: build phase 5 of the organisation roadmap, the mobile experience
 
-Gary chose this as the next stream on 27 Nov. Nothing for it is built yet.
+Gary chose this as the next stream on 27 Nov. Pull request state on the phone shipped the same day; the quick-draw queue is next.
 
 ## Governing plans
 
-- **What to build and why**: [[../organisation-and-cleanup-roadmap#5. Mobile experience]]. It holds the four items, their key challenges and three open questions. This file holds only execution state.
+- **What to build and why**: [[../organisation-and-cleanup-roadmap#5. Mobile experience]]. It holds the items, their key challenges and Gary's answers to the open questions (27 Nov). This file holds only execution state.
 - **Neighbouring plan, separate scope**: [[../remote-access-overhaul]]. It covers device measurement, chat on the phone, QR sign-in and writing up the route a phone uses to reach the desktop backend. Pick those up only if Gary asks.
 - **How the phone works today**: [[../../technical/core/remote-sessions]] (attention, push, size control, the handshake) and [[../../technical/core/frontend-architecture#MobileUI (`mobile.ts`)]]. The user guide is [[../../user/mobile-guide]].
 
@@ -26,22 +26,22 @@ Attention, which the quick-draw queue would read, is `input` / `working` / `idle
 - `fcabe41e`: Claude Code's idle reminder no longer turns a finished tab into a waiting one. The queue would have been full of finished tabs without it.
 - Codex approval prompts come from the terminal title (`CODEX_PROMPT_TITLE`), not a hook.
 
-The phone shows no pull request state. The data is already sent: `pullRequest` on each session in `session-list`, and `session-context` per session with the stream's ticket, pull request and branch (`backend/session_context.py`). `frontend/src/ui/mobile/session-strip.ts` reads neither.
+Pull request state is on the phone: the session strip shows the active session's number and mark, and the command menu each session's in words (see [[../../technical/core/frontend-architecture#MobileUI (`mobile.ts`)]]). Checked in the `mobile-remote` demo at 390x844, not yet on a real phone.
 
 ## Checkout and evidence
 
-- `/home/gary/projects/cade`, branch `main`, pushed through `fa257c37` (27 Nov). The repository is public.
+- `/home/gary/projects/cade`, branch `main`. The repository is public.
 - Untracked files that belong to other sessions; never stage them: `AGENTS.md`, `docs/plans/handoff/remote-access-iteration.md`, `docs/plans/padarax-gm-crossrefs.md`.
 
 ## Next actions
 
-1. **The install is still owed.** Everything since 26 Nov 17:40 is committed and not installed. The permission check refused `make install-desktop` twice on a loose "yes", so it runs only when Gary writes something like "run make install-desktop", or runs it himself as `! PATH="$PWD/.venv/bin:$PATH" make install-desktop`. What it carries and what to check after it is in [[organisation-and-cleanup#Next actions (ordered)]] item 1. `[confirm]`
-2. **Ask Gary the roadmap's three open questions**, unless he has already answered them: reading view or terminal as the phone's default; whether finished turns belong in the queue; quick-draw on desktop too. Start building with these defaults if he has not answered: terminal stays the default; the queue holds only blocked sessions (permission prompts and questions), with finished turns counted but not queued; phone only. `[safe]`
-3. **Pull request state on the phone first.** The data is already on the client, so this proves the work end to end at small cost. Show the stream's pull request mark and state in the session strip, reusing `frontend/src/tabs/work-words.ts`, which holds the pull request wording and ticket status colours the desktop strip and board share. `[safe]`
-4. **The quick-draw queue.** Order: permission prompts, then questions, then the rest per item 2. Build the ordering as a pure function next to `session-strip.ts` with tests, then the screen. An answer given on the desktop clears attention through `session-attention`, so a card disappears from the phone when that arrives; check that no card can be answered twice. `[safe]`
-5. **Find out what a permission card can know before designing it.** The roadmap assumes a Claude Code hook can supply the tool name and its input. Check this against Claude Code's current hook documentation (ask the `claude-code-guide` agent) rather than from memory. Today CADE gets only the `Notification` hook's message text for a permission prompt (`attention_hook.py`). Codex gives only its terminal title. Record what you find in the roadmap's key challenges before writing the card. The answer buttons must come from the prompt on screen, never a fixed layout. `[safe]`
-6. **The reading view last.** It depends on each agent's transcript format (`backend/cc_session_resolver.py` for Claude Code). Neither agent promises to keep that format stable. `[safe]`
-7. **After each shipped item**: document it in `docs/technical/` and `docs/user/mobile-guide.md` in the same change, commit and push, and shrink the roadmap's phase 5. Batch installs; do not install after each change.
+1. **The install is still owed.** Everything since 26 Nov 17:40 is committed and not installed, now including the phone's pull request state. The permission check refused `make install-desktop` twice on a loose "yes", so it runs only when Gary writes something like "run make install-desktop", or runs it himself as `! PATH="$PWD/.venv/bin:$PATH" make install-desktop`. What it carries and what to check after it is in [[organisation-and-cleanup#Next actions (ordered)]] item 1; add a look at the phone's strip and menu for a session with a pull request. `[confirm]`
+2. **The quick-draw queue.** Gary's order (27 Nov): permission prompts, then questions, then finished turns; finished turns are cards too, after every blocked one. Build the ordering as a pure function next to `session-strip.ts` with tests, then the screen. An answer given on the desktop clears attention through `session-attention`, so a card disappears from the phone when that arrives; check that no card can be answered twice. Attention does not yet tell a permission prompt from a question: the hook passes Claude Code's `notification_type` (`permission_prompt` or `elicitation_dialog`), but `backend/terminal/attention.py` turns both into `input`. Carry that kind through `session-attention` and `session-list` first; Codex's title gives only a prompt, so treat it as a permission prompt. See item 3. `[safe]`
+3. **Find out what a permission card can know before designing it.** The roadmap assumes a Claude Code hook can supply the tool name and its input. Check this against Claude Code's current hook documentation (ask the `claude-code-guide` agent) rather than from memory. Today CADE gets only the `Notification` hook's message text for a permission prompt (`attention_hook.py`). Codex gives only its terminal title. Record what you find in the roadmap's key challenges before writing the card. The answer buttons must come from the prompt on screen, never a fixed layout. `[safe]`
+4. **The reading view, built to sit beside the terminal.** Gary will choose the phone's default after seeing both side by side, so build it as a switchable view and show him; do not make either the default yet. It depends on each agent's transcript format (`backend/cc_session_resolver.py` for Claude Code). Neither agent promises to keep that format stable. `[safe]`
+5. **After each shipped item**: document it in `docs/technical/` and `docs/user/mobile-guide.md` in the same change, commit and push, and shrink the roadmap's phase 5. Batch installs; do not install after each change. `[safe]`
+
+Quick-draw on the desktop is out of scope until Gary raises it.
 
 ## Verifying on the phone without a phone
 
@@ -56,4 +56,4 @@ cd /home/gary/projects/cade && .venv/bin/python -m pytest backend/tests -q -p no
 cd /home/gary/projects/cade/frontend && npx tsc --noEmit -p . && npx vitest run
 ```
 
-Both were green at `fa257c37`: 1,561 backend, 944 frontend. `test_session_scope.py::TestFallback::test_runs_as_a_plain_child_without_systemd` has failed once in a full run and passes alone.
+Frontend green on 27 Nov after the pull request change: 954. Backend last run green at `fa257c37` (1,561) and untouched since. `test_session_scope.py::TestFallback::test_runs_as_a_plain_child_without_systemd` has failed once in a full run and passes alone.
