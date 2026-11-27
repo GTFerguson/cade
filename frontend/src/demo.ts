@@ -763,12 +763,16 @@ function injectMobileRemote(ws: WebSocketClient): void {
     `  detach the handlers before closing.\r\n\r\n` +
     `${esc}[32m●${esc}[0m ${esc}[1mUpdate${esc}[0m(core/frontend/platform/ws-client.ts)\r\n` +
     `  ${esc}[90m⎿  Updated 1 file (+9 -2)${esc}[0m\r\n\r\n` +
-    `${esc}[33m⚠ Bash command${esc}[0m\r\n` +
+    // The dialog as Claude Code 2.1 draws it, so the queue's card can read it.
+    ` Bash command\r\n` +
     `  ${esc}[90mnpx vitest run ws-client${esc}[0m\r\n` +
-    `  Do you want to proceed?\r\n` +
-    `  ${esc}[36m❯ 1. Yes${esc}[0m\r\n` +
-    `    2. Yes, and don't ask again for npx commands\r\n` +
-    `    3. No, and tell Claude what to do differently (esc)\r\n`;
+    ` Do you want to proceed?\r\n` +
+    ` ${esc}[36m❯ 1. Yes${esc}[0m\r\n` +
+    `   2. Yes, and don't ask again for npx vitest commands in\r\n` +
+    `      /home/gary/projects/cade\r\n` +
+    `   3. Yes, and switch to auto mode · auto mode handles these prompts for you\r\n` +
+    `   4. No\r\n\r\n` +
+    ` Esc to cancel · Tab to amend\r\n`;
 
   ws.injectEvent("connected", {
     type: "connected",
@@ -838,7 +842,7 @@ function injectMobileRemote(ws: WebSocketClient): void {
           attention: prompting ? "input" : "working",
           attentionKind: prompting ? "permission" : null,
           attentionAt: started + 3,
-          attentionMessage: prompting ? "Claude needs your permission to use Bash" : null,
+          attentionMessage: prompting ? "Bash: npx vitest run ws-client" : null,
           terminals: {},
         },
         {

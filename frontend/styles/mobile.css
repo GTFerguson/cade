@@ -896,6 +896,29 @@
   white-space: pre;
 }
 
+/* The dialog's own options, one full-width button each, in its order. */
+.mobile-quick-draw .quick-draw-answers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mobile-quick-draw .quick-draw-answer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 12px;
+  text-align: left;
+  border-color: var(--accent-orange);
+}
+
+.mobile-quick-draw .quick-draw-answer-detail {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
 .mobile-quick-draw .quick-draw-actions {
   display: flex;
   gap: 8px;

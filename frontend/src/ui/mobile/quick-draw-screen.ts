@@ -4,10 +4,13 @@
  *
  * A card names the session and its workspace, says what kind of wait it is,
  * and quotes the bottom of the agent's screen, where the prompt is drawn,
- * when this device has the session open. "go to it" opens the session;
- * "next" puts the card aside for this showing of the screen. The screen
- * redraws whenever the sessions change, so a prompt answered elsewhere
- * drops out of the queue without anyone acting on its card.
+ * when this device has the session open. When that screen shows a dialog
+ * `promptOptions` can read, and the agent is one whose keys have been
+ * checked, the card offers the dialog's own options as buttons. "go to it"
+ * opens the session; "next" puts the card aside for this showing of the
+ * screen. The screen redraws whenever the sessions change, so a prompt
+ * answered elsewhere drops out of the queue without anyone acting on its
+ * card.
  */
 
 import { escapeHtml } from "@core/ui/menu-nav";
@@ -15,7 +18,7 @@ import type { AttentionKind, AttentionState } from "../../types";
 import type { MobileScreen } from "./screen-manager";
 import { setupSwipeBack } from "./swipe-back";
 import { relativeTime } from "./recent-files";
-import { drawQueue, screenTail, type CardKind } from "./quick-draw";
+import { drawQueue, promptOptions, screenTail, type CardKind, type PromptOption } from "./quick-draw";
 
 export interface QueueCardSession {
   id: string;
@@ -26,13 +29,24 @@ export interface QueueCardSession {
   attentionKind?: AttentionKind;
   attentionAt?: number;
   message?: string | null;
+  /** The agent adapter running in the session, e.g. "claude-code". */
+  agent?: string;
 }
+
+/**
+ * Agents whose dialogs have been seen to take a bare digit as pick and
+ * confirm. Another agent's card offers no answer buttons until its keys
+ * have been checked the same way.
+ */
+export const ANSWERABLE_AGENTS = new Set(["claude-code"]);
 
 export interface QuickDrawCallbacks {
   getSessions: () => QueueCardSession[];
   /** The agent's screen for a session open on this device, else null. */
   getScreenLines: (id: string) => string[] | null;
   onGoTo: (id: string) => void;
+  /** Send one key to the session's agent terminal, without taking over its size. */
+  onAnswer: (id: string, key: string) => void;
   onBack: () => void;
   /** Ask for fresh sessions; called on a timer while the screen shows. */
   requestRefresh: () => void;
@@ -59,6 +73,8 @@ export class QuickDrawScreen implements MobileScreen {
   private header: HTMLElement;
   private body: HTMLElement;
   private skipped = new Set<string>();
+  /** Waits answered from this screen: never dealt again, so never answered twice. */
+  private answered = new Set<string>();
   private cleanupSwipe: (() => void) | null = null;
   private boundKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -85,10 +101,11 @@ export class QuickDrawScreen implements MobileScreen {
   }
 
   render(): void {
-    const queue = drawQueue(this.callbacks.getSessions());
-    const live = new Set(queue.map((c) => waitKey(c.session)));
-    // Forget put-aside cards whose wait is over, so the set cannot grow.
+    const live = new Set(drawQueue(this.callbacks.getSessions()).map((c) => waitKey(c.session)));
+    // Forget cards whose wait is over, so the sets cannot grow.
     for (const key of this.skipped) if (!live.has(key)) this.skipped.delete(key);
+    for (const key of this.answered) if (!live.has(key)) this.answered.delete(key);
+    const queue = drawQueue(this.callbacks.getSessions()).filter((c) => !this.answered.has(waitKey(c.session)));
     const dealt = queue.filter((c) => !this.skipped.has(waitKey(c.session)));
 
     this.header.textContent = queue.length > 0 ? `[ queue · ${queue.length} ]` : "[ queue ]";
@@ -145,12 +162,30 @@ export class QuickDrawScreen implements MobileScreen {
     }
 
     const lines = this.callbacks.getScreenLines(session.id);
+    const options = this.answerOptions(session, kind, lines);
     const tail = lines ? screenTail(lines) : [];
     if (tail.length > 0) {
       const screen = document.createElement("pre");
       screen.className = "quick-draw-screen";
       screen.textContent = tail.join("\n");
       card.appendChild(screen);
+    }
+
+    if (options) {
+      const answers = document.createElement("div");
+      answers.className = "quick-draw-answers";
+      for (const option of options) {
+        const btn = this.button(option.label, "quick-draw-answer", () => this.answer(session, kind, option));
+        btn.dataset["key"] = option.key;
+        if (option.detail) {
+          const detail = document.createElement("span");
+          detail.className = "quick-draw-answer-detail";
+          detail.textContent = option.detail;
+          btn.appendChild(detail);
+        }
+        answers.appendChild(btn);
+      }
+      card.appendChild(answers);
     }
 
     const actions = document.createElement("div");
@@ -164,6 +199,31 @@ export class QuickDrawScreen implements MobileScreen {
     );
     card.appendChild(actions);
     this.body.appendChild(card);
+  }
+
+  private answerOptions(
+    session: QueueCardSession,
+    kind: CardKind,
+    lines: string[] | null,
+  ): PromptOption[] | null {
+    if (kind === "finished" || !lines || !ANSWERABLE_AGENTS.has(session.agent ?? "")) return null;
+    const options = promptOptions(lines);
+    return options && options.length > 0 ? options : null;
+  }
+
+  /**
+   * Send an option's key, but only if the dialog on screen still offers
+   * that option under that key: the card may have been drawn before the
+   * dialog changed.
+   */
+  private answer(session: QueueCardSession, kind: CardKind, option: PromptOption): void {
+    const now = this.answerOptions(session, kind, this.callbacks.getScreenLines(session.id));
+    const same = now?.find((o) => o.key === option.key);
+    if (same && same.label === option.label && !this.answered.has(waitKey(session))) {
+      this.answered.add(waitKey(session));
+      this.callbacks.onAnswer(session.id, option.key);
+    }
+    this.render();
   }
 
   private button(label: string, className: string, action: () => void): HTMLButtonElement {

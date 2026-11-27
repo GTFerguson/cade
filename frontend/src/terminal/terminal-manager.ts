@@ -780,6 +780,11 @@ export class TerminalManager implements Component {
     return this.claudeTerminal?.screenLines() ?? [];
   }
 
+  /** A key answering the agent's dialog, from a phone card. */
+  answerAgent(key: string): void {
+    this.claudeTerminal?.sendInputKeepingSize(key);
+  }
+
   /**
    * Scroll the active terminal to top.
    */

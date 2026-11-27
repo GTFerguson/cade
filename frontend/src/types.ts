@@ -35,6 +35,8 @@ export interface InputMessage extends BaseMessage {
   type: "input";
   data: string;
   sessionKey?: AnySessionKey;
+  /** Input that must not make this device the terminal's size controller. */
+  keepSize?: boolean;
 }
 
 /**

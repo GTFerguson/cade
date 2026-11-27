@@ -635,6 +635,11 @@ export class Terminal implements Component {
     this.ws.sendInput(data, this.sessionKey);
   }
 
+  /** Send input without taking over the terminal's size (see `sendInput` on the socket). */
+  sendInputKeepingSize(data: string): void {
+    this.ws.sendInput(data, this.sessionKey, { keepSize: true });
+  }
+
   /**
    * Paste text through xterm rather than sending raw bytes to the PTY.
    * xterm wraps the text in bracketed-paste markers when the running app

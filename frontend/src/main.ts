@@ -1558,6 +1558,10 @@ class App {
         const tab = this.tabManager.getTabs().find((t) => t.id === sessionId);
         return tab?.context?.getTerminalManager()?.agentScreenLines() ?? null;
       },
+      answerSession: (sessionId, key) => {
+        const tab = this.tabManager.getTabs().find((t) => t.id === sessionId);
+        tab?.context?.getTerminalManager()?.answerAgent(key);
+      },
       onSwitchTab: (id) => {
         this.tabManager.switchTab(id);
       },

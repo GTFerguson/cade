@@ -56,6 +56,8 @@ export interface MobileUICallbacks {
   dashboardHasConfig: () => boolean;
   /** The agent's screen in the tab for a session, or null with no such tab. */
   getScreenLines: (sessionId: string) => string[] | null;
+  /** Send a key to the agent in the tab for a session. */
+  answerSession: (sessionId: string, key: string) => void;
 }
 
 export class MobileUI implements Component {
@@ -384,6 +386,7 @@ export class MobileUI implements Component {
           attentionKind: s.attentionKind ?? null,
           ...(s.attentionAt !== undefined && { attentionAt: s.attentionAt }),
           message: s.attentionMessage ?? null,
+          agent: s.agent,
         };
       });
   }
@@ -405,6 +408,7 @@ export class MobileUI implements Component {
         }
         this.focusTerminal();
       },
+      onAnswer: (id, key) => this.callbacks.answerSession(id, key),
       onBack: () => {
         this.screenManager.pop();
         this.activeQueue = null;

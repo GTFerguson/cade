@@ -526,11 +526,16 @@ export class WebSocketClient extends BaseWSClient {
   // CADE protocol send methods
   // ---------------------------------------------------------------------
 
-  sendInput(data: string, sessionKey?: AnySessionKey): void {
+  /**
+   * `keepSize` sends the input without making this device the terminal's
+   * size controller: a one-tap answer is not someone taking over the session.
+   */
+  sendInput(data: string, sessionKey?: AnySessionKey, opts: { keepSize?: boolean } = {}): void {
     const message = {
       type: MessageType.INPUT,
       data,
       ...(sessionKey !== undefined && { sessionKey }),
+      ...(opts.keepSize && { keepSize: true }),
     } as const;
     this.send(message);
   }

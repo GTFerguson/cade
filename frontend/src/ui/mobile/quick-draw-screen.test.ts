@@ -5,10 +5,12 @@ import { QuickDrawScreen, type QueueCardSession } from "./quick-draw-screen";
 function setup(initial: QueueCardSession[], screens: Record<string, string[]> = {}) {
   let sessions = initial;
   const onGoTo = vi.fn();
+  const onAnswer = vi.fn();
   const screen = new QuickDrawScreen({
     getSessions: () => sessions,
     getScreenLines: (id) => screens[id] ?? null,
     onGoTo,
+    onAnswer,
     onBack: vi.fn(),
     requestRefresh: vi.fn(),
   });
@@ -19,7 +21,7 @@ function setup(initial: QueueCardSession[], screens: Record<string, string[]> = 
     sessions = next;
     screen.render();
   };
-  return { screen, card, click, set, onGoTo };
+  return { screen, card, click, set, onGoTo, onAnswer };
 }
 
 const perm: QueueCardSession = {
@@ -89,5 +91,68 @@ describe("the quick-draw screen", () => {
     expect(card()).toBeNull();
     expect(screen.element.querySelector(".quick-draw-empty")!.textContent).toBe("nothing waiting");
     expect(screen.element.querySelector(".mobile-screen-header")!.textContent).toBe("[ queue ]");
+  });
+});
+
+const DIALOG = [
+  " Do you want to proceed?",
+  " ❯ 1. Yes",
+  "   2. Yes, and switch to auto mode",
+  "   3. No",
+  "",
+  " Esc to cancel · Tab to amend",
+];
+const claude = { ...perm, agent: "claude-code" };
+const answers = (screen: QuickDrawScreen) =>
+  [...screen.element.querySelectorAll<HTMLButtonElement>(".quick-draw-answer")].map((b) => [
+    b.dataset["key"],
+    b.firstChild!.textContent,
+  ]);
+
+describe("answering from a card", () => {
+  it("offers the dialog's own options under their own keys", () => {
+    const { screen } = setup([claude], { p: DIALOG });
+    expect(answers(screen)).toEqual([
+      ["1", "Yes"],
+      ["2", "Yes, and switch to auto mode"],
+      ["3", "No"],
+    ]);
+  });
+
+  it("offers no answers for an agent whose keys have not been checked", () => {
+    const { screen } = setup([{ ...perm, agent: "codex" }], { p: DIALOG });
+    expect(answers(screen)).toEqual([]);
+  });
+
+  it("offers no answers on a finished card or without a dialog on screen", () => {
+    expect(answers(setup([{ ...done, agent: "claude-code" }], { d: DIALOG }).screen)).toEqual([]);
+    expect(answers(setup([claude], { p: ["● Working…"] }).screen)).toEqual([]);
+  });
+
+  it("sends the option's key and deals the next card", () => {
+    const { screen, card, onAnswer } = setup([claude, done], { p: DIALOG });
+    screen.element.querySelector<HTMLButtonElement>('.quick-draw-answer[data-key="3"]')!.click();
+    expect(onAnswer).toHaveBeenCalledWith("p", "3");
+    expect(card()!.dataset["session"]).toBe("d");
+  });
+
+  it("cannot answer the same wait twice, even before the backend hears", () => {
+    const { screen, card, onAnswer, set } = setup([claude], { p: DIALOG });
+    const yes = screen.element.querySelector<HTMLButtonElement>('.quick-draw-answer[data-key="1"]')!;
+    yes.click();
+    yes.click();
+    set([claude]);
+    expect(onAnswer).toHaveBeenCalledTimes(1);
+    expect(card()).toBeNull();
+  });
+
+  it("sends nothing when the dialog changed after the card was drawn", () => {
+    const screens: Record<string, string[]> = { p: DIALOG };
+    const { screen, onAnswer } = setup([claude], screens);
+    const no = screen.element.querySelector<HTMLButtonElement>('.quick-draw-answer[data-key="3"]')!;
+    screens["p"] = DIALOG.map((l) => l.replace("3. No", "3. Yes, and always allow"));
+    no.click();
+    expect(onAnswer).not.toHaveBeenCalled();
+    expect(answers(screen)[2]).toEqual(["3", "Yes, and always allow"]);
   });
 });
