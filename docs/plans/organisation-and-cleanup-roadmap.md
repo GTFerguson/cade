@@ -68,11 +68,11 @@ answering it.
 
 **What it adds.**
 
-- **Quick-draw mode.** A queue of the sessions that are blocked, permission
-  prompts first, then agents waiting on a question, then finished turns. The
-  screen shows one at a time: the tab name and workspace across the top, what
-  the agent is asking, and the answer controls. Answering moves straight to
-  the next one. Empty queue, empty screen.
+- **Quick-draw mode.** The queue shipped 27 Nov 2026 (see
+  [[../technical/core/frontend-architecture#MobileUI (`mobile.ts`)]]): cards
+  in the agreed order, quoting the prompt from the agent's screen, with "go to
+  it" and "next". Still to come: answer controls on the card, so that
+  answering moves straight to the next one without leaving the queue.
 - **One-tap permission answers.** A permission prompt becomes a card naming
   the tool and what it wants to do, with large buttons for the prompt's own
   choices (allow, allow always, deny). A button sends the same keystroke the
@@ -87,9 +87,27 @@ answering it.
 
 **Key challenges.**
 
-- The permission card needs the tool name and its input. Claude Code can
-  supply both through a hook; Codex only retitles its terminal, so its prompt
-  has to be read from the screen, which is fragile.
+- The permission card needs the tool name and its input. What Claude Code's
+  hooks documentation says (code.claude.com/docs/en/hooks, read 27 Nov 2026):
+  - The `Notification` hook CADE uses today carries only `message`, `title`
+    and `notification_type`, never the tool. `permission_prompt` fires only
+    after the dialog has waited about six seconds.
+  - `PermissionRequest` fires when the dialog is about to show, with
+    `tool_name`, `tool_input` and an optional `permission_suggestions` list
+    (the rules "allow always" would add). It has no `tool_use_id`. The docs
+    imply but do not state that a hook which exits 0 with no output leaves
+    the dialog alone; test that in a real session before relying on it.
+  - The dialog's own option labels are not in any hook, so the buttons still
+    have to be read from the screen.
+  - Questions: `AskUserQuestion` is a tool, so `PreToolUse` sees it; its
+    input schema is not documented. MCP elicitations have an `Elicitation`
+    event and the `elicitation_dialog` notification.
+  - No hook fires when the user says no to a permission dialog.
+    `PostToolUse`/`PostToolUseFailure` clear a card when the tool then runs,
+    `Stop` and `UserPromptSubmit` as a coarser fallback, and a keystroke into
+    the session already clears attention.
+  Codex only retitles its terminal, so its prompt has to be read from the
+  screen, which is fragile.
 - The answer keys differ by agent and by prompt (two choices or three), so the
   buttons must come from the prompt actually shown, never a fixed layout: a
   wrong key on an approval is the one mistake this mode must not make.
