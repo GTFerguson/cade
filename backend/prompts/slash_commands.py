@@ -81,7 +81,12 @@ def build_slash_commands() -> list[dict[str, str]]:
 
     Native commands first, then bundled skills, then user skills.
     """
+    from backend.orchestrator.mcp_config import orchestrator_available
+
     commands: list[dict[str, str]] = list(NATIVE_COMMANDS)
+    if not orchestrator_available():
+        # /orch would only answer that spawn_agent is turned off.
+        commands = [c for c in commands if c["name"] != "orch"]
     seen: set[str] = set()
     commands.extend(_collect_skills(BUNDLED_SKILLS_DIR, seen))
     commands.extend(_collect_skills(USER_SKILLS_DIR, seen))

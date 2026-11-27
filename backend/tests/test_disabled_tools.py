@@ -172,3 +172,17 @@ class TestOrchestratorOverlay:
             assert mcp_config.orchestrator_available() is False
         with patch.object(mcp_config, "disabled_tools", lambda: frozenset({"bash"})):
             assert mcp_config.orchestrator_available() is True
+
+
+class TestSlashCommands:
+    def _names(self, disabled: frozenset[str]) -> set[str]:
+        from backend.prompts.slash_commands import build_slash_commands
+
+        with patch.object(mcp_config, "disabled_tools", lambda: disabled):
+            return {c["name"] for c in build_slash_commands()}
+
+    def test_orch_is_not_offered_while_spawn_agent_is_off(self):
+        assert "orch" not in self._names(frozenset({"spawn_agent"}))
+
+    def test_orch_is_offered_when_spawn_agent_is_available(self):
+        assert "orch" in self._names(frozenset())

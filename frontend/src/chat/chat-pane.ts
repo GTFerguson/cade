@@ -50,6 +50,15 @@ function formatCountTooltip(c: FileMemoryCounts): string {
   return `Memory: ${parts.join(", ")} — click to open`;
 }
 
+/**
+ * Whether the backend offers orchestrator mode. It leaves `/orch` out of the
+ * command list when `spawn_agent` is turned off, and the ORCH button follows
+ * that list so it never offers a mode that cannot start.
+ */
+export function offersOrchestrator(commands: ReadonlyArray<{ name: string }>): boolean {
+  return commands.some((c) => c.name === "orch");
+}
+
 export class ChatPane implements Component, PaneKeyHandler {
   private messagesEl: HTMLElement;
   private inputArea: HTMLElement;
@@ -195,6 +204,8 @@ export class ChatPane implements Component, PaneKeyHandler {
     this.orchToggleEl.title = "Toggle orchestrator mode (/orch)";
     this.orchToggleEl.textContent = "ORCH";
     this.orchToggleEl.addEventListener("click", () => this.sendMessage("/orch"));
+    // Hidden until the backend's command list says orchestrator mode exists.
+    this.orchToggleEl.hidden = true;
 
     // Right-side group pushed to the end of the statusline
     const statusRight = document.createElement("div");
@@ -470,6 +481,13 @@ export class ChatPane implements Component, PaneKeyHandler {
     commands: Array<{ name: string; description: string }>,
   ): void {
     this.systemInfo.slashCommands = commands;
+    this.showOrchToggle();
+  }
+
+  private showOrchToggle(): void {
+    if (this.orchToggleEl) {
+      this.orchToggleEl.hidden = !offersOrchestrator(this.systemInfo.slashCommands);
+    }
   }
 
   setConnectionId(id: string): void {
@@ -661,7 +679,10 @@ export class ChatPane implements Component, PaneKeyHandler {
   private handleSystemInfo(msg: ChatStreamMessage): void {
     const modelChanged = !!msg.model && msg.model !== this.systemInfo.model;
     if (msg.model) this.systemInfo.model = msg.model;
-    if (msg.slashCommands) this.systemInfo.slashCommands = msg.slashCommands;
+    if (msg.slashCommands) {
+      this.systemInfo.slashCommands = msg.slashCommands;
+      this.showOrchToggle();
+    }
     if (msg.modes) this.systemInfo.modes = msg.modes;
     if (msg.model) {
       this.providerEl.textContent = msg.model;

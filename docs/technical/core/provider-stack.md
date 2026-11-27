@@ -69,7 +69,7 @@ nkrdn has no tool of its own. Chat agents run it through `bash`.
 
 A change takes effect for agents started after it. A running Claude Code tab keeps the server it was started with.
 
-Turning off `spawn_agent` also turns off the orchestrator overlay (`orchestrator_available()` in `mcp_config.py`). Its prompt module tells the agent to delegate with that tool, so `/orch` answers with an error instead of switching on, and a Claude Code tab does not get the overlay. The tab still gets the orchestrator server for `view_file` and `show_html`.
+Turning off `spawn_agent` also turns off the orchestrator overlay (`orchestrator_available()` in `mcp_config.py`). Its prompt module tells the agent to delegate with that tool, so `/orch` is left out of the chat's slash-command list (`build_slash_commands()`), the chat pane's ORCH button is hidden because it follows that list (`offersOrchestrator()`), and a Claude Code tab does not get the overlay. A typed `/orch` answers with an error instead of switching on. The tab still gets the orchestrator server for `view_file` and `show_html`.
 
 ### Orchestrator tools
 
