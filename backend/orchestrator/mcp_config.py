@@ -42,6 +42,15 @@ def disabled_tools() -> frozenset[str]:
     return get_providers_config().disabled_tools
 
 
+def orchestrator_available() -> bool:
+    """Whether the orchestrator overlay has anything to do.
+
+    Its prompt tells the agent to delegate through `spawn_agent`. With that
+    tool turned off, the overlay would only send the agent looking for it.
+    """
+    return "spawn_agent" not in disabled_tools()
+
+
 def server_env(base: dict[str, str]) -> dict[str, str]:
     """`base` with the disabled tools added, for launching the orchestrator server."""
     env = dict(base)

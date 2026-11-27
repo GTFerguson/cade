@@ -126,3 +126,49 @@ class TestServer:
         monkeypatch.delenv(mcp_config.DISABLED_TOOLS_ENV, raising=False)
         names = {t.name for t in asyncio.run(mcp_server.build_server().list_tools())}
         assert {"spawn_agent", "list_agents", "view_file", "show_html"} <= names
+
+
+class TestOrchestratorOverlay:
+    """With spawn_agent off there is nothing for the orchestrator overlay to do.
+
+    Its prompt tells the agent to delegate with a tool it no longer has, so
+    /orch refuses instead of turning it on.
+    """
+
+    def _handler(self, disabled: frozenset[str]):
+        from backend.websocket import ConnectionHandler
+
+        handler = ConnectionHandler.__new__(ConnectionHandler)
+        handler._orchestrator_on = False
+        handler._connection_id = "conn"
+        handler._current_mode = "code"
+        handler._provider_registry = None
+        sent: list[dict] = []
+
+        async def _send(msg: dict) -> None:
+            sent.append(msg)
+
+        handler._send = _send  # type: ignore[attr-defined]
+        return handler, sent
+
+    def _toggle(self, disabled: frozenset[str]):
+        handler, sent = self._handler(disabled)
+        with patch.object(mcp_config, "disabled_tools", lambda: disabled):
+            asyncio.run(handler._handle_orchestrator_toggle())
+        return handler, sent
+
+    def test_orch_refuses_while_spawn_agent_is_off(self):
+        handler, sent = self._toggle(frozenset({"spawn_agent"}))
+        assert handler._orchestrator_on is False
+        assert sent[-1]["event"] == "error"
+        assert "spawn_agent" in sent[-1]["message"]
+
+    def test_orch_turns_on_when_spawn_agent_is_available(self):
+        handler, sent = self._toggle(frozenset())
+        assert handler._orchestrator_on is True
+
+    def test_orchestrator_available_follows_the_switch(self):
+        with patch.object(mcp_config, "disabled_tools", lambda: frozenset({"spawn_agent"})):
+            assert mcp_config.orchestrator_available() is False
+        with patch.object(mcp_config, "disabled_tools", lambda: frozenset({"bash"})):
+            assert mcp_config.orchestrator_available() is True

@@ -710,7 +710,11 @@ class ConnectionHandler:
         pm.set_cli_autonomous(True, connection_id=self._connection_id)
         pm.set_permission("allowSubagents", True, connection_id=self._connection_id)
         pm.set_permission("autoApproveReports", True, connection_id=self._connection_id)
-        self._orchestrator_on = True
+        # The tab still gets the server for view_file and show_html; only the
+        # delegation overlay depends on spawn_agent being available.
+        from backend.orchestrator.mcp_config import orchestrator_available
+
+        self._orchestrator_on = orchestrator_available()
         logger.info(
             "CLI orchestrator enabled (autonomous) for connection %s (session=%s, mcp=%s)",
             self._connection_id,
@@ -1908,6 +1912,18 @@ class ConnectionHandler:
 
     async def _handle_orchestrator_toggle(self) -> None:
         """Toggle orchestrator overlay on/off without changing the current mode."""
+        from backend.orchestrator.mcp_config import orchestrator_available
+
+        if not self._orchestrator_on and not orchestrator_available():
+            await self._send({
+                "type": MessageType.CHAT_STREAM,
+                "event": "error",
+                "message": (
+                    "Orchestrator mode needs spawn_agent, which is turned off in "
+                    "~/.cade/providers.toml ([tools] disabled)."
+                ),
+            })
+            return
         self._orchestrator_on = not self._orchestrator_on
         from backend.permissions.manager import get_permission_manager
         get_permission_manager().set_orchestrator(self._orchestrator_on, connection_id=self._connection_id)
