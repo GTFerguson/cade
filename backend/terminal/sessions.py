@@ -253,6 +253,8 @@ class PTYSession:
     # Whether the agent needs the user: "input", "idle" or None (see attention.py).
     attention: str | None = None
     attention_message: str | None = None
+    # What a waiting agent wants: "permission", "question" or None.
+    attention_kind: str | None = None
     attention_at: float = 0.0
     # Summary of the open pull request for the branch checked out in the
     # project, or None (see backend/pull_requests.py).

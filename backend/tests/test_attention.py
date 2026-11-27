@@ -17,12 +17,16 @@ from backend.push import PushService, set_push_service
 from backend.terminal.attention import (
     IDLE,
     NEEDS_INPUT,
+    PERMISSION,
+    QUESTION,
     WORKING,
     AttentionEvent,
     TitleScanner,
     apply_attention,
     attention_after_keystroke,
     attention_from_event,
+    attention_kind,
+    attention_message,
     ensure_working_watch,
     is_user_typing,
     next_attention,
@@ -51,6 +55,22 @@ class TestMapping:
     def test_hook_events_map_to_states(self, event, kind, expected):
         e = AttentionEvent(session_id="s", cwd=None, event=event, notification_type=kind)
         assert attention_from_event(e) == expected
+
+
+class TestKind:
+    @pytest.mark.parametrize(
+        "event,kind,expected",
+        [
+            ("Notification", "permission_prompt", PERMISSION),
+            ("Notification", "elicitation_dialog", QUESTION),
+            ("Notification", "idle_prompt", None),
+            ("Stop", None, None),
+            ("input", None, None),
+        ],
+    )
+    def test_hook_events_say_what_a_waiting_agent_wants(self, event, kind, expected):
+        e = AttentionEvent(session_id="s", cwd=None, event=event, notification_type=kind)
+        assert attention_kind(e) == expected
 
 
 class TestTransitions:
@@ -210,6 +230,7 @@ class TestTitleDrivenAttention:
             await asyncio.sleep(0.05)
             terminal.output_task.cancel()
         assert session.attention == NEEDS_INPUT
+        assert session.attention_kind == PERMISSION
         assert send.await_count == 1
         assert send.await_args.args[0]["title"] == "cade: needs you"
 
@@ -301,6 +322,29 @@ class TestApply:
         assert apply_attention(s, NEEDS_INPUT, "Allow Bash?") is False
         assert apply_attention(s, None, None) is True
         assert s.attention_message is None
+
+
+    def test_kind_is_kept_only_while_waiting(self, temp_dir: Path):
+        s = PTYSession(id="a", project_path=temp_dir)
+        apply_attention(s, NEEDS_INPUT, "Allow Bash?", PERMISSION)
+        assert s.attention_kind == PERMISSION
+        assert attention_message(s)["kind"] == PERMISSION
+        apply_attention(s, IDLE, None, PERMISSION)
+        assert s.attention_kind is None
+
+    def test_a_new_kind_is_a_change(self, temp_dir: Path):
+        s = PTYSession(id="a", project_path=temp_dir)
+        apply_attention(s, NEEDS_INPUT, "Waiting", None)
+        assert apply_attention(s, NEEDS_INPUT, "Waiting", QUESTION) is True
+
+    def test_the_same_wait_keeps_its_place(self, temp_dir: Path):
+        s = PTYSession(id="a", project_path=temp_dir)
+        apply_attention(s, NEEDS_INPUT, "Allow Bash?", PERMISSION)
+        since = s.attention_at
+        apply_attention(s, NEEDS_INPUT, "Allow Edit?", PERMISSION)
+        assert s.attention_at == since
+        apply_attention(s, IDLE, None)
+        assert s.attention_at >= since
 
 
 class TestRename:
@@ -409,6 +453,7 @@ class TestRoute:
             })
         assert res.json() == {"status": "ok", "attention": NEEDS_INPUT}
         assert session.attention == NEEDS_INPUT
+        assert session.attention_kind == PERMISSION
         payload = send.await_args.args[0]
         assert payload["title"] == "cade: needs you"
         assert payload["sessionId"] == "live"
@@ -425,7 +470,10 @@ class TestRoute:
         apply_attention(session, IDLE, None)
         registry._sessions["live"] = session
         res = client.get("/api/sessions")
-        assert res.json()["sessions"][0]["attention"] == IDLE
+        listed = res.json()["sessions"][0]
+        assert listed["attention"] == IDLE
+        assert listed["attentionKind"] is None
+        assert listed["attentionAt"] == session.attention_at
 
     def test_ending_a_session_nothing_is_attached_to(self, api_client, temp_dir: Path):
         client, registry = api_client

@@ -801,6 +801,7 @@ def create_app(config: Config | None = None) -> FastAPI:
             AttentionEvent,
             announce_attention,
             attention_from_event,
+            attention_kind,
             next_attention,
             resolve_session,
         )
@@ -822,7 +823,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         if state is False:
             return JSONResponse({"status": "ignored"})
 
-        await announce_attention(session, state, body.message)
+        await announce_attention(session, state, body.message, kind=attention_kind(event))
         return JSONResponse({"status": "ok", "attention": session.attention})
 
     @app.get("/api/push/status")

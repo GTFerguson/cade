@@ -1,7 +1,7 @@
 ---
 title: Remote Sessions
 created: 2026-10-14
-updated: 2026-11-26
+updated: 2026-11-27
 status: active
 tags: [technical, backend, frontend, sessions, mobile, transport, attention, push]
 ---
@@ -108,7 +108,9 @@ A finished tool call does not hide a prompt because tools run in parallel: one c
 
 `~/.cade/hooks/attention.py` is installed beside the view hook by `setup_cade_hooks` and registered for the Claude Code events in the table (`ATTENTION_HOOK_TYPES` in `backend/hooks/config.py`); the Codex adapter writes a marked `notify` line into `~/.codex/config.toml` unless the user already has one. The hook POSTs to `/api/sessions/attention`. CADE injects `CADE_SESSION_ID` into every agent's PTY environment so the hook names its session; a hook without it falls back to the unique live session in its `cwd`.
 
-Changes are broadcast to the session's clients as `session-attention` and included in the session listing. The frontend shows them on the session strip and in the menu, raises a browser `Notification` when the page is hidden (`frontend/src/ui/attention-notify.ts`), and the backend sends a Web Push for `input` and `idle`.
+A waiting session also records what it wants, `PTYSession.attention_kind`: `"permission"` for Claude Code's `permission_prompt` and for Codex's prompt title (Codex retitles its terminal only for an approval), `"question"` for `elicitation_dialog`, and `None` when the source did not say (an explicit API caller). The kind is kept only while the state is `input` (`apply_attention`) and is carried across an in-place upgrade. `attention_at` moves only when the state itself changes, so a prompt that rewords itself keeps its place in the phone's queue, which deals the longest wait first.
+
+Changes are broadcast to the session's clients as `session-attention` (with `kind`) and included in the session listing (`attentionKind`, `attentionAt`). The frontend shows them on the session strip and in the menu, raises a browser `Notification` when the page is hidden (`frontend/src/ui/attention-notify.ts`), and the backend sends a Web Push for `input` and `idle`.
 
 ## Web Push and the installable app
 

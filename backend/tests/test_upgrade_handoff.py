@@ -46,6 +46,7 @@ def test_manifest_round_trips_through_json(tmp_path: Path):
         sessions=[upgrade.SessionHandoff(
             id="s1", project_path="/p", label="L", group="G", last_activity=1.0, created_at=0.5,
             mcp_config_path=None, attention="input", attention_message="m", attention_at=2.0,
+            attention_kind="permission",
             terminals=[upgrade.TerminalHandoff(
                 session_key="claude", master_fd=7, pid=99, last_seq=12,
                 scrollback=[(11, "a"), (12, "b")], size={"cols": 100, "rows": 30}, exited=False,
@@ -59,6 +60,7 @@ def test_manifest_round_trips_through_json(tmp_path: Path):
     back = upgrade.read_manifest(path)
     assert back.to_dict() == manifest.to_dict()
     assert back.sessions[0].group == "G"
+    assert back.sessions[0].attention_kind == "permission"
     assert back.inherited_fds == [7, 5]
 
 

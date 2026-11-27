@@ -22,6 +22,12 @@ NEEDS_INPUT = "input"   # permission prompt or question
 IDLE = "idle"           # turn finished; ready for the next prompt
 WORKING = "working"     # the agent is in the middle of a turn
 
+# What a waiting agent wants. The phone deals permission prompts before
+# questions, and only a permission prompt can be offered answer buttons.
+PERMISSION = "permission"
+QUESTION = "question"
+_KIND_OF_NOTIFICATION = {"permission_prompt": PERMISSION, "elicitation_dialog": QUESTION}
+
 # Claude Code's notification that its prompt has sat unanswered. It follows
 # every finished turn, question or not, so it is not a sign the agent needs
 # anything: treated as a prompt it turned each finished tab into a waiting
@@ -121,6 +127,13 @@ def attention_from_event(event: AttentionEvent) -> str | None | bool:
     return False
 
 
+def attention_kind(event: AttentionEvent) -> str | None:
+    """What a hook event says the agent wants; None when it says nothing."""
+    if event.event != "Notification":
+        return None
+    return _KIND_OF_NOTIFICATION.get((event.notification_type or "").lower())
+
+
 def next_attention(current: str | None, event: AttentionEvent) -> str | None | bool:
     """The state a session moves to on a hook event; False to leave it alone.
 
@@ -195,6 +208,7 @@ def attention_message(session) -> dict:
         "sessionId": session.id,
         "attention": session.attention,
         "message": session.attention_message,
+        "kind": session.attention_kind,
     }
 
 
@@ -208,25 +222,43 @@ async def broadcast_attention(session) -> None:
             pass
 
 
-def apply_attention(session, state: str | None, message: str | None) -> bool:
-    """Set a session's attention; returns True when it changed."""
-    if session.attention == state and (state is None or session.attention_message == message):
+def apply_attention(
+    session, state: str | None, message: str | None, kind: str | None = None
+) -> bool:
+    """Set a session's attention; returns True when it changed.
+
+    `kind` says what a waiting agent wants and is kept only while it waits.
+    """
+    kind = kind if state == NEEDS_INPUT else None
+    if session.attention == state and (
+        state is None
+        or (session.attention_message == message and session.attention_kind == kind)
+    ):
         return False
+    # A prompt that changes its wording or kind is the same wait, so it keeps
+    # its place in the phone's queue.
+    if session.attention != state:
+        session.attention_at = time.time()
     session.attention = state
     session.attention_message = message if state is not None else None
-    session.attention_at = time.time()
+    session.attention_kind = kind
     return True
 
 
 async def announce_attention(
-    session, state: str | None, message: str | None, *, push: bool = True
+    session,
+    state: str | None,
+    message: str | None,
+    *,
+    kind: str | None = None,
+    push: bool = True,
 ) -> bool:
     """Move a session to a state and tell everyone who should hear of it.
 
     Attached clients get the new state; subscribed phones get a notification
     when the agent is waiting or finished. Returns True when the state changed.
     """
-    if not apply_attention(session, state, message):
+    if not apply_attention(session, state, message, kind):
         return False
     await broadcast_attention(session)
     ensure_working_watch(session)
@@ -272,6 +304,8 @@ class AgentTitleWatch:
                     self._session,
                     state,
                     "Waiting for approval" if state == NEEDS_INPUT else None,
+                    # Codex retitles its terminal only for an approval.
+                    kind=PERMISSION if state == NEEDS_INPUT else None,
                     push=not was_prompting,
                 )
             )

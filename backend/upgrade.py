@@ -238,6 +238,7 @@ class SessionHandoff:
     terminals: list[TerminalHandoff] = field(default_factory=list)
     group: str | None = None
     agent: str | None = None
+    attention_kind: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -252,6 +253,7 @@ class SessionHandoff:
             "attention": self.attention,
             "attention_message": self.attention_message,
             "attention_at": self.attention_at,
+            "attention_kind": self.attention_kind,
             "terminals": [t.to_dict() for t in self.terminals],
         }
 
@@ -269,6 +271,7 @@ class SessionHandoff:
             attention=d.get("attention"),
             attention_message=d.get("attention_message"),
             attention_at=float(d.get("attention_at", 0.0)),
+            attention_kind=d.get("attention_kind"),
             terminals=[TerminalHandoff.from_dict(t) for t in d.get("terminals", [])],
         )
 
@@ -353,6 +356,7 @@ async def export_sessions(registry: SessionRegistry) -> list[SessionHandoff]:
             attention=session.attention,
             attention_message=session.attention_message,
             attention_at=session.attention_at,
+            attention_kind=session.attention_kind,
         )
         for key, terminal in session.terminals.items():
             descriptor = terminal.pty.handoff_descriptor()
@@ -401,6 +405,7 @@ def import_sessions(manifest: Manifest, registry: SessionRegistry) -> int:
             attention=item.attention,
             attention_message=item.attention_message,
             attention_at=item.attention_at,
+            attention_kind=item.attention_kind,
         )
         for term in item.terminals:
             if not _fd_is_open(term.master_fd):
