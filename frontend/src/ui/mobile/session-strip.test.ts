@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import { SessionStrip, neighbourTab, waitingElsewhere, workspaceTabs } from "./session-strip";
+import { SessionStrip, neighbourTab, workspaceTabs } from "./session-strip";
 
 const newStrip = () =>
-  new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn(), onOpenUrl: vi.fn() });
+  new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn(), onOpenUrl: vi.fn(), onOpenQueue: vi.fn() });
 
 const tabs = (active: string, ids = ["a", "b", "c"]) =>
   ids.map((id) => ({ id, name: id, isActive: id === active, unread: false }));
@@ -37,26 +37,12 @@ describe("the open workspace on the phone", () => {
     expect(neighbourTab(workspaceTabs(mixed("w2")), 1)?.id).toBe("w1");
   });
 
-  it("counts sessions waiting in the other workspaces only", () => {
-    expect(waitingElsewhere(mixed("w1"))).toBe(1);
-    expect(waitingElsewhere(mixed("l"))).toBe(2);
-  });
-
-  it("draws a dot per session of the workspace and flags waiting elsewhere", () => {
+  it("draws a dot per session of the workspace", () => {
     const strip = newStrip();
     strip.render(mixed("w1"), null);
     expect(strip.element.querySelectorAll(".session-strip-dot")).toHaveLength(2);
-    expect(strip.element.querySelector(".session-strip-elsewhere")!.textContent).toBe("!1");
-
     strip.render(mixed("h1"), null);
-    expect(strip.element.querySelector(".session-strip-elsewhere")!.textContent).toBe("!1");
     expect(strip.element.querySelectorAll(".session-strip-dot")).toHaveLength(1);
-  });
-
-  it("shows no flag when nothing is waiting elsewhere", () => {
-    const strip = newStrip();
-    strip.render(mixed("h1").filter((t) => t.group !== "Work"), null);
-    expect(strip.element.querySelector(".session-strip-elsewhere")).toBeNull();
   });
 });
 
@@ -96,7 +82,7 @@ describe("SessionStrip", () => {
   it("switches on arrow taps and opens the menu from the name", () => {
     const onSwitchRelative = vi.fn();
     const onOpenMenu = vi.fn();
-    const strip = new SessionStrip({ onSwitchRelative, onOpenMenu, onOpenUrl: vi.fn() });
+    const strip = new SessionStrip({ onSwitchRelative, onOpenMenu, onOpenUrl: vi.fn(), onOpenQueue: vi.fn() });
     strip.render(tabs("a"));
     (strip.element.querySelector('[aria-label="next session"]') as HTMLButtonElement).click();
     (strip.element.querySelector(".session-strip-centre") as HTMLButtonElement).click();
@@ -140,9 +126,38 @@ describe("the pull request on the strip", () => {
 
   it("opens the pull request when tapped", () => {
     const onOpenUrl = vi.fn();
-    const strip = new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn(), onOpenUrl });
+    const strip = new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn(), onOpenUrl, onOpenQueue: vi.fn() });
     strip.render(tabs("a").map((t) => ({ ...t, pr })));
     prButton(strip).click();
     expect(onOpenUrl).toHaveBeenCalledWith("https://example.test/41");
+  });
+});
+
+describe("the queue count on the strip", () => {
+  const queueButton = (strip: SessionStrip) => strip.element.querySelector<HTMLButtonElement>(".session-strip-queue")!;
+
+  it("counts everything waiting, marked blocked while anything is", () => {
+    const strip = newStrip();
+    strip.setQueue(2, 1);
+    expect(queueButton(strip).hidden).toBe(false);
+    expect(queueButton(strip).textContent).toBe("[3]");
+    expect(queueButton(strip).classList.contains("blocked")).toBe(true);
+    expect(queueButton(strip).getAttribute("aria-label")).toBe("queue: 2 blocked, 1 finished");
+    strip.setQueue(0, 1);
+    expect(queueButton(strip).classList.contains("blocked")).toBe(false);
+  });
+
+  it("is hidden when nothing waits", () => {
+    const strip = newStrip();
+    strip.setQueue(0, 0);
+    expect(queueButton(strip).hidden).toBe(true);
+  });
+
+  it("opens the queue when tapped", () => {
+    const onOpenQueue = vi.fn();
+    const strip = new SessionStrip({ onSwitchRelative: vi.fn(), onOpenMenu: vi.fn(), onOpenUrl: vi.fn(), onOpenQueue });
+    strip.setQueue(1, 0);
+    queueButton(strip).click();
+    expect(onOpenQueue).toHaveBeenCalled();
   });
 });

@@ -14,7 +14,7 @@ On a screen 768px wide or narrower CADE switches to a phone layout: the terminal
 
 | Element | Position | Purpose |
 |---------|----------|---------|
-| Session strip | Top | Current session and agent; ‹ › or swipe to switch; dots show other tabs' state; the session's pull request at the right |
+| Session strip | Top | Current session and agent; ‹ › or swipe to switch; dots show other tabs' state; the queue count and the session's pull request at the right |
 | Terminal | Middle | The agent or shell session |
 | Composer | Above the key strip | Type a prompt, tap **send** |
 | Key strip | Bottom | Keys that are awkward on a phone keyboard |
@@ -61,7 +61,9 @@ The same markers appear next to each tab in the **[cmd]** menu.
 
 ## The queue
 
-**[cmd] → [queue]** deals out the sessions that want you, one card at a time: agents waiting for permission first, then agents with a question, then agents that have finished their turn. Within each, the one that has waited longest comes first. The menu entry says how many are waiting, for example "2 blocked · 1 finished".
+The count in brackets on the session strip, for example **[3]**, is how many sessions want you, in any workspace: orange while one is blocked, cyan when only finished turns are waiting. Tap it to open the queue, and again to close it. **[cmd] → [queue]** opens it too.
+
+The queue deals out the sessions that want you, one card at a time: agents waiting for permission first, then agents with a question, then agents that have finished their turn. Within each, the one that has waited longest comes first. The menu entry says how many are waiting, for example "2 blocked · 1 finished".
 
 A card shows the session and its workspace, what it is waiting for and for how long, and what it wants (the command, or the question). The controls sit at the bottom of the screen and stay in the same place from one card to the next.
 

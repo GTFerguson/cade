@@ -32,6 +32,13 @@ import {
 
 const MOBILE_BREAKPOINT = 768;
 
+/**
+ * How often the phone asks for the backend's sessions to keep the strip's
+ * queue count current. Attention changes reach it only for sessions it has
+ * open as tabs; the rest are found by asking.
+ */
+const QUEUE_COUNT_REFRESH_MS = 10_000;
+
 export interface MobileUICallbacks {
   sendInput: (data: string) => void;
   /** A prompt from the composer: pasted as a block, then Enter. */
@@ -76,6 +83,7 @@ export class MobileUI implements Component {
   private activeMenu: CommandMenu | null = null;
   /** The queue screen while it shows; a stale one only redraws off screen. */
   private activeQueue: QuickDrawScreen | null = null;
+  private queueCountTimer: ReturnType<typeof setInterval> | null = null;
 
   private strip: SessionStrip | null = null;
   private cleanupPinch: (() => void) | null = null;
@@ -131,8 +139,15 @@ export class MobileUI implements Component {
         onSwitchRelative: (direction) => this.switchRelative(direction),
         onOpenMenu: () => this.openCommandMenu(),
         onOpenUrl: (url) => void openExternal(url),
+        onOpenQueue: () => this.openQueueFromStrip(),
       });
       document.body.appendChild(this.strip.element);
+    }
+    if (!this.queueCountTimer) {
+      this.queueCountTimer = setInterval(() => {
+        if (MobileUI.isMobile()) this.requestSessions();
+      }, QUEUE_COUNT_REFRESH_MS);
+      this.requestSessions();
     }
     this.strip.show();
     this.refresh();
@@ -264,6 +279,7 @@ export class MobileUI implements Component {
       this.liveSessions = message.sessions;
       this.activeMenu?.refresh();
       this.activeQueue?.render();
+      this.updateQueueCount();
     });
   }
 
@@ -389,6 +405,31 @@ export class MobileUI implements Component {
           agent: s.agent,
         };
       });
+  }
+
+  private requestSessions(): void {
+    const ws = this.callbacks.getActiveWs();
+    if (ws.isConnected()) ws.requestSessionList();
+  }
+
+  private updateQueueCount(): void {
+    const kinds = drawQueue(this.queueSessions()).map((c) => c.kind);
+    const finished = kinds.filter((k) => k === "finished").length;
+    this.strip?.setQueue(kinds.length - finished, finished);
+  }
+
+  /** The strip's count opens the queue from anywhere, or closes it if it is showing. */
+  private openQueueFromStrip(): void {
+    const showing = this.activeQueue !== null && this.screenManager.current() === this.activeQueue;
+    this.screenManager.popToRoot();
+    this.activeViewer = null;
+    this.activeMenu = null;
+    this.activeQueue = null;
+    if (showing) {
+      this.focusTerminal();
+      return;
+    }
+    this.openQueue();
   }
 
   private openQueue(): void {
@@ -521,6 +562,8 @@ export class MobileUI implements Component {
   }
 
   dispose(): void {
+    if (this.queueCountTimer) clearInterval(this.queueCountTimer);
+    this.queueCountTimer = null;
     this.screenManager.dispose();
     this.activeViewer = null;
     this.toolbar?.dispose();

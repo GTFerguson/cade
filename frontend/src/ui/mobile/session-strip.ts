@@ -4,7 +4,8 @@
  * at a glance. ‹ › and a horizontal swipe move between those sessions, as
  * the tab keys do on the desktop; tapping the name opens the command menu,
  * which lists every workspace. The active session's pull request sits at
- * the right as its number and mark, and a tap opens it.
+ * the right as its number and mark, and a tap opens it. Beside it, a count
+ * of the sessions waiting on the user, in any workspace, opens the queue.
  */
 
 import { escapeHtml } from "@core/ui/menu-nav";
@@ -28,6 +29,7 @@ export interface SessionStripCallbacks {
   onSwitchRelative: (direction: 1 | -1) => void;
   onOpenMenu: () => void;
   onOpenUrl: (url: string) => void;
+  onOpenQueue: () => void;
 }
 
 const SWIPE_THRESHOLD_PX = 50;
@@ -53,12 +55,6 @@ export function workspaceTabs<T extends { isActive: boolean; group?: string }>(t
   return tabs.filter((t) => (t.group ?? null) === (active.group ?? null));
 }
 
-/** How many tabs outside the open workspace are waiting on the user. */
-export function waitingElsewhere(tabs: StripTab[]): number {
-  const here = new Set(workspaceTabs(tabs));
-  return tabs.filter((t) => !here.has(t) && t.attention === "input").length;
-}
-
 export class SessionStrip {
   readonly element: HTMLElement;
   private nameEl: HTMLElement;
@@ -66,6 +62,7 @@ export class SessionStrip {
   private prevBtn: HTMLButtonElement;
   private nextBtn: HTMLButtonElement;
   private prBtn: HTMLButtonElement;
+  private queueBtn: HTMLButtonElement;
   private prUrl: string | null = null;
   private touchStartX: number | null = null;
   private touchStartY: number | null = null;
@@ -97,8 +94,14 @@ export class SessionStrip {
       if (this.prUrl) this.callbacks.onOpenUrl(this.prUrl);
     });
 
+    this.queueBtn = document.createElement("button");
+    this.queueBtn.className = "session-strip-queue";
+    this.queueBtn.hidden = true;
+    this.queueBtn.addEventListener("click", () => this.callbacks.onOpenQueue());
+
     this.element.appendChild(this.prevBtn);
     this.element.appendChild(centre);
+    this.element.appendChild(this.queueBtn);
     this.element.appendChild(this.prBtn);
     this.element.appendChild(this.nextBtn);
 
@@ -133,7 +136,6 @@ export class SessionStrip {
   /** `tabs` is every open tab; the strip shows the open workspace's. */
   render(allTabs: StripTab[], agentLabel?: string | null): void {
     const tabs = workspaceTabs(allTabs);
-    const elsewhere = waitingElsewhere(allTabs);
     const active = tabs.find((t) => t.isActive);
     const name = active?.name ?? "no session";
     this.nameEl.innerHTML =
@@ -141,12 +143,7 @@ export class SessionStrip {
         ? `<span class="session-strip-group" style="color: ${escapeHtml(active.groupColour ?? "inherit")}">${escapeHtml(active.group)}</span> `
         : "") +
       escapeHtml(name) +
-      (agentLabel ? `<span class="session-strip-agent"> · ${escapeHtml(agentLabel)}</span>` : "") +
-      // Sessions waiting in a workspace that is not on show would otherwise
-      // have no mark anywhere on this screen.
-      (elsewhere > 0
-        ? ` <span class="session-strip-elsewhere" title="waiting in another workspace">!${elsewhere}</span>`
-        : "");
+      (agentLabel ? `<span class="session-strip-agent"> · ${escapeHtml(agentLabel)}</span>` : "");
 
     this.dotsEl.innerHTML = tabs
       .map((t) => {
@@ -164,6 +161,20 @@ export class SessionStrip {
     const multiple = tabs.length > 1;
     this.prevBtn.disabled = !multiple;
     this.nextBtn.disabled = !multiple;
+  }
+
+  /**
+   * The queue's size: sessions blocked on the user, and finished turns.
+   * Orange while anything is blocked, the finished dot's cyan otherwise;
+   * hidden when nothing waits.
+   */
+  setQueue(blocked: number, finished: number): void {
+    const total = blocked + finished;
+    this.queueBtn.hidden = total === 0;
+    this.queueBtn.textContent = `[${total}]`;
+    this.queueBtn.classList.toggle("blocked", blocked > 0);
+    const parts = [blocked > 0 ? `${blocked} blocked` : null, finished > 0 ? `${finished} finished` : null];
+    this.queueBtn.setAttribute("aria-label", `queue: ${parts.filter(Boolean).join(", ")}`);
   }
 
   private renderPullRequest(pr: AnyPullRequest | null): void {

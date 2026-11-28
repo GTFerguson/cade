@@ -311,9 +311,25 @@
   font-weight: 700;
 }
 
-.session-strip-elsewhere {
-  color: var(--accent-orange);
+/* Coloured like the dots: orange while a session is blocked, cyan when
+   only finished turns wait. */
+.session-strip-queue {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  font-size: 12px;
   font-weight: 700;
+}
+
+.session-strip .session-strip-queue {
+  color: var(--accent-cyan);
+}
+
+.session-strip .session-strip-queue.blocked {
+  color: var(--accent-orange);
+}
+
+.session-strip-queue[hidden] {
+  display: none;
 }
 
 /* Sized to its text so the session name, not the pull request, is what
