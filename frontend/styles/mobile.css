@@ -461,14 +461,14 @@
 
 /* ── Command Menu ────────────────────────────────────── */
 
-.mobile-command-menu .options-list {
+:is(.mobile-command-menu, .mobile-quick-draw) .options-list {
   display: flex;
   flex-direction: column;
   width: 100%;
   padding-bottom: 12px;
 }
 
-.mobile-command-menu .option {
+:is(.mobile-command-menu, .mobile-quick-draw) .option {
   padding: 0 16px;
   color: var(--text-secondary);
   cursor: pointer;
@@ -484,30 +484,30 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.mobile-command-menu .option:active {
+:is(.mobile-command-menu, .mobile-quick-draw) .option:active {
   background: var(--bg-hover);
 }
 
-.mobile-command-menu .option.selected {
+:is(.mobile-command-menu, .mobile-quick-draw) .option.selected {
   background: var(--accent-red);
   color: var(--bg-primary);
 }
 
-.mobile-command-menu .option.selected .option-meta {
+:is(.mobile-command-menu, .mobile-quick-draw) .option.selected .option-meta {
   color: var(--bg-primary);
   opacity: 0.6;
 }
 
 /* A tone would vanish against the selected row's fill. */
-.mobile-command-menu .option.selected [data-tone] {
+:is(.mobile-command-menu, .mobile-quick-draw) .option.selected [data-tone] {
   color: inherit;
 }
 
-.mobile-command-menu .option-label {
+:is(.mobile-command-menu, .mobile-quick-draw) .option-label {
   flex-shrink: 0;
 }
 
-.mobile-command-menu .option-meta {
+:is(.mobile-command-menu, .mobile-quick-draw) .option-meta {
   color: var(--text-muted);
   font-size: 11px;
   flex: 1;
@@ -524,7 +524,7 @@
   padding: 10px 16px 2px;
 }
 
-.mobile-command-menu .section-label {
+:is(.mobile-command-menu, .mobile-quick-draw) .section-label {
   font-size: 10px;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -837,31 +837,21 @@
 
 /* ── Quick-draw queue ───────────────────────────────── */
 
-.mobile-quick-draw .quick-draw-body {
-  flex: 1;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  padding: 12px;
-  font-family: var(--font-mono);
-}
+/* The queue shares the command menu's option list above. What the session
+   wants is plain text above it: colour only on the data (workspace, kind of
+   wait), as the design bible asks, and the prompt quoted on the background
+   step rather than in a box. */
 
 .mobile-quick-draw .quick-draw-card {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--border-color);
-  border-left: 3px solid var(--accent-orange);
-  background: var(--bg-secondary);
-}
-
-/* Blocked cards share the waiting dot's orange; a finished one its cyan. */
-.mobile-quick-draw .quick-draw-card[data-kind="finished"] {
-  border-left-color: var(--accent-cyan);
+  gap: 6px;
+  padding: 14px 16px;
+  font-family: var(--font-mono);
 }
 
 .mobile-quick-draw .quick-draw-who {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--text-primary);
 }
 
@@ -869,6 +859,7 @@
   font-weight: 700;
 }
 
+/* The same orange and cyan as the waiting and finished dots. */
 .mobile-quick-draw .quick-draw-what {
   font-size: 12px;
   color: var(--accent-orange);
@@ -880,76 +871,44 @@
 
 .mobile-quick-draw .quick-draw-message {
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
-/* The prompt as the agent drew it: rows keep their layout and scroll
-   sideways rather than wrap, so option lists stay readable. */
+/* Rows keep the agent's layout and scroll sideways rather than wrap. */
 .mobile-quick-draw .quick-draw-screen {
-  margin: 0;
+  margin: 4px 0 0;
   padding: 8px;
   font-size: 11px;
   line-height: 1.4;
-  color: var(--text-primary);
-  background: var(--bg-primary);
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
   overflow-x: auto;
   white-space: pre;
 }
 
-/* The dialog's own options, one full-width button each, in its order. */
-.mobile-quick-draw .quick-draw-answers {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.mobile-quick-draw .quick-draw-answer {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 8px 12px;
-  text-align: left;
-  border-color: var(--accent-orange);
-}
-
-.mobile-quick-draw .quick-draw-answer-detail {
-  font-size: 11px;
-  color: var(--text-muted);
+/* A dialog's option can be a sentence or carry a path, so answers wrap
+   with their detail under the label instead of being cut off. */
+.mobile-quick-draw .quick-draw-answer .option-label {
+  flex-shrink: 1;
+  padding: 10px 0;
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 
-.mobile-quick-draw .quick-draw-actions {
-  display: flex;
-  gap: 8px;
+.mobile-quick-draw .quick-draw-detail {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
-.mobile-quick-draw button {
-  flex: 1;
-  min-height: 44px;
-  font-family: inherit;
-  font-size: 14px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.mobile-quick-draw .quick-draw-go {
-  background: var(--accent-green);
+.mobile-quick-draw .option.selected .quick-draw-detail {
   color: var(--bg-primary);
-  font-weight: 700;
 }
 
 .mobile-quick-draw .quick-draw-empty {
   text-align: center;
   color: var(--text-muted);
   padding: 40px 0 16px;
-}
-
-.mobile-quick-draw .quick-draw-again {
-  width: 100%;
 }
 
 /* ── Viewer: diff toggle and shared font size ────────── */

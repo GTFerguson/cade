@@ -50,4 +50,4 @@ cd /home/gary/projects/cade && .venv/bin/python -m pytest backend/tests -q -p no
 cd /home/gary/projects/cade/frontend && npx tsc --noEmit -p . && npx vitest run
 ```
 
-Green on 27 Nov after the answer buttons: 984 frontend, 1,577 backend. Two backend tests have each failed once in a full run and pass alone: `test_session_scope.py::TestFallback::test_runs_as_a_plain_child_without_systemd` and `test_file_tools.py::TestReadFiles::test_offset_and_limit_apply_per_file`.
+Green on 28 Nov after the queue restyle: 991 frontend, 1,577 backend. Two backend tests have each failed once in a full run and pass alone: `test_session_scope.py::TestFallback::test_runs_as_a_plain_child_without_systemd` and `test_file_tools.py::TestReadFiles::test_offset_and_limit_apply_per_file`.

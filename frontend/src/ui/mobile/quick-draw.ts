@@ -52,6 +52,12 @@ export function drawQueue<S extends QueueSession>(sessions: S[]): { session: S; 
 export const SCREEN_TAIL_ROWS = 14;
 
 /**
+ * Rows quoted above a dialog whose options are on the card as answers:
+ * enough for the command and the question, so the answers stay in view.
+ */
+export const PROMPT_CONTEXT_ROWS = 4;
+
+/**
  * The bottom of an agent's screen, where a prompt is drawn: the last
  * `rows` rows down to the last one with text, so the blank rows under a
  * prompt do not push it off the card.
@@ -100,6 +106,39 @@ const NEEDS_MORE = /^(type something|chat about this)/i;
  * take more than one key, so they get no buttons.
  */
 export function promptOptions(lines: string[]): PromptOption[] | null {
+  const dialog = findDialog(lines);
+  if (!dialog) return null;
+  const { start, footer } = dialog;
+  if (lines.slice(0, start).some((l) => /☐|☒|✔/.test(l) && /submit/i.test(l))) return null;
+
+  const options: PromptOption[] = [];
+  for (const line of lines.slice(start, footer)) {
+    if (line.trim() === "" || RULE_LINE.test(line)) continue;
+    const m = OPTION_LINE.exec(line);
+    if (m && Number(m[1]) === options.length + 1) {
+      options.push({ key: m[1]!, label: m[2]!, detail: "" });
+    } else {
+      const last = options[options.length - 1]!;
+      last.detail = last.detail ? `${last.detail} ${line.trim()}` : line.trim();
+    }
+  }
+  if (options.length < 2) return null;
+  if (options.some((o) => /^\[|^[☐☒✔]/.test(o.label))) return null;
+  return options.filter((o) => !NEEDS_MORE.test(o.label));
+}
+
+/**
+ * The screen above a dialog's options: the command or question it asks
+ * about. A card that offers the options as answers quotes only this, so
+ * the options are not shown twice. All of `lines` when no dialog is found.
+ */
+export function promptContext(lines: string[]): string[] {
+  const dialog = findDialog(lines);
+  return dialog ? lines.slice(0, dialog.start) : lines;
+}
+
+/** Where a dialog's options start, and its footer line. */
+function findDialog(lines: string[]): { start: number; footer: number } | null {
   let footer = -1;
   for (let i = lines.length - 1; i >= 0; i--) {
     if (FOOTER.test(lines[i]!)) {
@@ -118,20 +157,5 @@ export function promptOptions(lines: string[]): PromptOption[] | null {
     }
   }
   if (start < 0) return null;
-  if (lines.slice(0, start).some((l) => /☐|☒|✔/.test(l) && /submit/i.test(l))) return null;
-
-  const options: PromptOption[] = [];
-  for (const line of lines.slice(start, footer)) {
-    if (line.trim() === "" || RULE_LINE.test(line)) continue;
-    const m = OPTION_LINE.exec(line);
-    if (m && Number(m[1]) === options.length + 1) {
-      options.push({ key: m[1]!, label: m[2]!, detail: "" });
-    } else {
-      const last = options[options.length - 1]!;
-      last.detail = last.detail ? `${last.detail} ${line.trim()}` : line.trim();
-    }
-  }
-  if (options.length < 2) return null;
-  if (options.some((o) => /^\[|^[☐☒✔]/.test(o.label))) return null;
-  return options.filter((o) => !NEEDS_MORE.test(o.label));
+  return { start, footer };
 }

@@ -1,6 +1,11 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
-import { QuickDrawScreen, type QueueCardSession } from "./quick-draw-screen";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CARD_SETTLE_MS, QuickDrawScreen, type QueueCardSession } from "./quick-draw-screen";
+
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => vi.useRealTimers());
+/** Let a newly dealt card take answers. */
+const settle = () => vi.advanceTimersByTime(CARD_SETTLE_MS);
 
 function setup(initial: QueueCardSession[], screens: Record<string, string[]> = {}) {
   let sessions = initial;
@@ -58,8 +63,8 @@ describe("the quick-draw screen", () => {
   });
 
   it("puts a card aside and deals the next one", () => {
-    const { card, click } = setup([perm, done]);
-    expect(card()!.querySelector(".quick-draw-next")!.textContent).toBe("next · 1 more");
+    const { screen, card, click } = setup([perm, done]);
+    expect(screen.element.querySelector(".quick-draw-next")!.textContent).toBe("[next]1 more");
     click(".quick-draw-next");
     expect(card()!.dataset["session"]).toBe("d");
   });
@@ -104,19 +109,64 @@ const DIALOG = [
 ];
 const claude = { ...perm, agent: "claude-code" };
 const answers = (screen: QuickDrawScreen) =>
-  [...screen.element.querySelectorAll<HTMLButtonElement>(".quick-draw-answer")].map((b) => [
+  [...screen.element.querySelectorAll<HTMLElement>(".quick-draw-answer")].map((b) => [
     b.dataset["key"],
-    b.firstChild!.textContent,
+    b.dataset["label"],
   ]);
+const answerRow = (screen: QuickDrawScreen, key: string) =>
+  screen.element.querySelector<HTMLElement>(`.quick-draw-answer[data-key="${key}"]`)!;
 
 describe("answering from a card", () => {
-  it("offers the dialog's own options under their own keys", () => {
+  it("offers the dialog's own options under their own keys, as bracketed options", () => {
     const { screen } = setup([claude], { p: DIALOG });
     expect(answers(screen)).toEqual([
       ["1", "Yes"],
       ["2", "Yes, and switch to auto mode"],
       ["3", "No"],
     ]);
+    expect(answerRow(screen, "3").querySelector(".option-label")!.textContent).toBe("[no]");
+  });
+
+  it("quotes what the dialog asks about, not its options a second time", () => {
+    const { card } = setup([claude], { p: DIALOG });
+    expect(card()!.querySelector(".quick-draw-screen")!.textContent).toBe(" Do you want to proceed?");
+  });
+
+  it("starts a new card on [go to it], so a stray Enter approves nothing", () => {
+    const { screen, onGoTo, onAnswer } = setup([claude], { p: DIALOG });
+    screen.onShow();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    screen.onHide();
+    expect(onGoTo).toHaveBeenCalledWith("p");
+    expect(onAnswer).not.toHaveBeenCalled();
+  });
+
+  it("ignores answers until a newly dealt card has settled", () => {
+    const { screen, onAnswer } = setup([claude], { p: DIALOG });
+    answerRow(screen, "1").click();
+    expect(onAnswer).not.toHaveBeenCalled();
+    settle();
+    answerRow(screen, "1").click();
+    expect(onAnswer).toHaveBeenCalledWith("p", "1");
+  });
+
+  it("does not let a double tap answer the next card too", () => {
+    const second = { ...claude, id: "q", attentionAt: 11 };
+    const { screen, card, onAnswer } = setup([claude, second], { p: DIALOG, q: DIALOG });
+    settle();
+    answerRow(screen, "1").click();
+    expect(card()!.dataset["session"]).toBe("q");
+    answerRow(screen, "1").click();
+    expect(onAnswer).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing for a tap on a row a redraw has replaced", () => {
+    const { screen, onAnswer, set } = setup([claude], { p: DIALOG });
+    settle();
+    const stale = answerRow(screen, "3");
+    set([claude]);
+    stale.click();
+    expect(onAnswer).not.toHaveBeenCalled();
   });
 
   it("offers no answers for an agent whose keys have not been checked", () => {
@@ -131,14 +181,16 @@ describe("answering from a card", () => {
 
   it("sends the option's key and deals the next card", () => {
     const { screen, card, onAnswer } = setup([claude, done], { p: DIALOG });
-    screen.element.querySelector<HTMLButtonElement>('.quick-draw-answer[data-key="3"]')!.click();
+    settle();
+    answerRow(screen, "3").click();
     expect(onAnswer).toHaveBeenCalledWith("p", "3");
     expect(card()!.dataset["session"]).toBe("d");
   });
 
   it("cannot answer the same wait twice, even before the backend hears", () => {
     const { screen, card, onAnswer, set } = setup([claude], { p: DIALOG });
-    const yes = screen.element.querySelector<HTMLButtonElement>('.quick-draw-answer[data-key="1"]')!;
+    settle();
+    const yes = answerRow(screen, "1");
     yes.click();
     yes.click();
     set([claude]);
@@ -149,7 +201,8 @@ describe("answering from a card", () => {
   it("sends nothing when the dialog changed after the card was drawn", () => {
     const screens: Record<string, string[]> = { p: DIALOG };
     const { screen, onAnswer } = setup([claude], screens);
-    const no = screen.element.querySelector<HTMLButtonElement>('.quick-draw-answer[data-key="3"]')!;
+    settle();
+    const no = answerRow(screen, "3");
     screens["p"] = DIALOG.map((l) => l.replace("3. No", "3. Yes, and always allow"));
     no.click();
     expect(onAnswer).not.toHaveBeenCalled();

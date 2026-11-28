@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardKind, drawQueue, promptOptions, queueSummary, screenTail, type QueueSession } from "./quick-draw";
+import { cardKind, drawQueue, promptContext, promptOptions, queueSummary, screenTail, type QueueSession } from "./quick-draw";
 
 const s = (id: string, over: Partial<QueueSession> = {}): QueueSession => ({ id, ...over });
 
@@ -140,5 +140,19 @@ describe("the options of the dialog on screen", () => {
     const options = promptOptions(["1. step one from the reply", "2. step two", ...PERMISSION_SCREEN])!;
     expect(options[0]!.label).toBe("Yes");
     expect(options).toHaveLength(4);
+  });
+});
+
+describe("the screen above a dialog", () => {
+  it("is what the dialog asks about, without its options", () => {
+    expect(screenTail(promptContext(PERMISSION_SCREEN))).toEqual([
+      " touch probe-four.txt",
+      "╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌",
+      " Do you want to proceed?",
+    ]);
+  });
+
+  it("is the whole screen when there is no dialog", () => {
+    expect(promptContext(["● Done."])).toEqual(["● Done."]);
   });
 });

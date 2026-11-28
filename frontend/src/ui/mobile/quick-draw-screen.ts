@@ -13,12 +13,20 @@
  * card.
  */
 
-import { escapeHtml } from "@core/ui/menu-nav";
+import { MenuNav, escapeHtml } from "@core/ui/menu-nav";
 import type { AttentionKind, AttentionState } from "../../types";
 import type { MobileScreen } from "./screen-manager";
 import { setupSwipeBack } from "./swipe-back";
 import { relativeTime } from "./recent-files";
-import { drawQueue, promptOptions, screenTail, type CardKind, type PromptOption } from "./quick-draw";
+import {
+  PROMPT_CONTEXT_ROWS,
+  drawQueue,
+  promptContext,
+  promptOptions,
+  screenTail,
+  type CardKind,
+  type PromptOption,
+} from "./quick-draw";
 
 export interface QueueCardSession {
   id: string;
@@ -59,6 +67,12 @@ export interface QuickDrawCallbacks {
  */
 export const QUEUE_REFRESH_MS = 3000;
 
+/**
+ * How long a newly dealt card ignores answer taps. Answering deals the next
+ * card under the finger, so a double tap would otherwise answer that one too.
+ */
+export const CARD_SETTLE_MS = 500;
+
 const KIND_SAYS: Record<CardKind, string> = {
   permission: "wants permission",
   question: "has a question",
@@ -68,6 +82,11 @@ const KIND_SAYS: Record<CardKind, string> = {
 /** A card is put aside for one wait only: the same session waiting again comes back. */
 const waitKey = (s: QueueCardSession) => `${s.id}@${s.attentionAt ?? 0}`;
 
+/**
+ * The queue as a full-pane option list, the command menu's pattern: what
+ * the session wants as plain text, then its answers and the queue's own
+ * actions as `[bracketed]` options that j/k/l/h and taps both drive.
+ */
 export class QuickDrawScreen implements MobileScreen {
   readonly element: HTMLElement;
   private header: HTMLElement;
@@ -75,6 +94,12 @@ export class QuickDrawScreen implements MobileScreen {
   private skipped = new Set<string>();
   /** Waits answered from this screen: never dealt again, so never answered twice. */
   private answered = new Set<string>();
+  private optionEls: HTMLElement[] = [];
+  private actions: (() => void)[] = [];
+  private nav: MenuNav;
+  /** The wait on show, so a redraw of the same card keeps the selection. */
+  private shownKey: string | null = null;
+  private dealtAt = 0;
   private cleanupSwipe: (() => void) | null = null;
   private boundKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -88,7 +113,7 @@ export class QuickDrawScreen implements MobileScreen {
     this.element.appendChild(this.header);
 
     this.body = document.createElement("div");
-    this.body.className = "quick-draw-body";
+    this.body.className = "mobile-screen-body";
     this.element.appendChild(this.body);
 
     const statusline = document.createElement("div");
@@ -98,6 +123,13 @@ export class QuickDrawScreen implements MobileScreen {
       `<span style="flex:1"></span>` +
       `<span class="help-hint">blocked first · swipe → back</span>`;
     this.element.appendChild(statusline);
+
+    this.nav = new MenuNav({
+      getOptions: () => this.optionEls,
+      onSelect: (i) => this.actions[i]?.(),
+      onBack: () => this.callbacks.onBack(),
+      onCancel: () => this.callbacks.onBack(),
+    });
   }
 
   render(): void {
@@ -110,13 +142,24 @@ export class QuickDrawScreen implements MobileScreen {
 
     this.header.textContent = queue.length > 0 ? `[ queue · ${queue.length} ]` : "[ queue ]";
     this.body.innerHTML = "";
+    this.optionEls = [];
+    this.actions = [];
 
     const top = dealt[0];
-    if (!top) {
-      this.renderEmpty(queue.length);
-      return;
-    }
-    this.renderCard(top.session, top.kind, dealt.length - 1);
+    const key = top ? waitKey(top.session) : null;
+    const sameCard = key === this.shownKey;
+    const selected = this.nav.selectedIndex;
+    if (!sameCard) this.dealtAt = Date.now();
+    this.shownKey = key;
+
+    let first = 0;
+    if (top) first = this.renderCard(top.session, top.kind, dealt.length - 1);
+    else this.renderEmpty(queue.length);
+
+    // A new card starts on [go to it], never on an answer: a stray Enter
+    // must not approve anything.
+    this.nav.selectedIndex = sameCard ? Math.min(selected, Math.max(0, this.optionEls.length - 1)) : first;
+    this.nav.renderSelection();
   }
 
   private renderEmpty(putAside: number): void {
@@ -125,20 +168,20 @@ export class QuickDrawScreen implements MobileScreen {
     empty.textContent = putAside > 0 ? `${putAside} put aside` : "nothing waiting";
     this.body.appendChild(empty);
     if (putAside > 0) {
-      this.body.appendChild(
-        this.button("deal them again", "quick-draw-again", () => {
-          this.skipped.clear();
-          this.render();
-        }),
-      );
+      const list = this.list();
+      this.addOption(list, "[deal them again]", "", "quick-draw-again", () => {
+        this.skipped.clear();
+        this.render();
+      });
     }
   }
 
-  private renderCard(session: QueueCardSession, kind: CardKind, behind: number): void {
-    const card = document.createElement("div");
-    card.className = "quick-draw-card";
-    card.dataset["kind"] = kind;
-    card.dataset["session"] = session.id;
+  /** Draws the card; returns the index of its [go to it] option. */
+  private renderCard(session: QueueCardSession, kind: CardKind, behind: number): number {
+    const info = document.createElement("div");
+    info.className = "quick-draw-card";
+    info.dataset["kind"] = kind;
+    info.dataset["session"] = session.id;
 
     const who = document.createElement("div");
     who.className = "quick-draw-who";
@@ -146,59 +189,101 @@ export class QuickDrawScreen implements MobileScreen {
       (session.group
         ? `<span class="quick-draw-group" style="color: ${escapeHtml(session.groupColour ?? "inherit")}">${escapeHtml(session.group)}</span> `
         : "") + `<span class="quick-draw-name">${escapeHtml(session.name)}</span>`;
-    card.appendChild(who);
+    info.appendChild(who);
 
     const what = document.createElement("div");
     what.className = "quick-draw-what";
     const waited = session.attentionAt ? ` · ${relativeTime(session.attentionAt * 1000, Date.now())}` : "";
     what.textContent = `${KIND_SAYS[kind]}${waited}`;
-    card.appendChild(what);
+    info.appendChild(what);
 
     if (session.message) {
       const message = document.createElement("div");
       message.className = "quick-draw-message";
       message.textContent = session.message;
-      card.appendChild(message);
+      info.appendChild(message);
     }
 
     const lines = this.callbacks.getScreenLines(session.id);
     const options = this.answerOptions(session, kind, lines);
-    const tail = lines ? screenTail(lines) : [];
+    const tail = !lines ? [] : options ? screenTail(promptContext(lines), PROMPT_CONTEXT_ROWS) : screenTail(lines);
     if (tail.length > 0) {
       const screen = document.createElement("pre");
       screen.className = "quick-draw-screen";
       screen.textContent = tail.join("\n");
-      card.appendChild(screen);
+      info.appendChild(screen);
     }
+    this.body.appendChild(info);
 
+    const list = this.list();
     if (options) {
-      const answers = document.createElement("div");
-      answers.className = "quick-draw-answers";
+      this.addSection(list, "answer");
       for (const option of options) {
-        const btn = this.button(option.label, "quick-draw-answer", () => this.answer(session, kind, option));
-        btn.dataset["key"] = option.key;
-        if (option.detail) {
-          const detail = document.createElement("span");
-          detail.className = "quick-draw-answer-detail";
-          detail.textContent = option.detail;
-          btn.appendChild(detail);
-        }
-        answers.appendChild(btn);
+        const el = this.addOption(
+          list,
+          `[${option.label.toLowerCase()}]`,
+          option.detail,
+          "quick-draw-answer",
+          () => this.answer(session, kind, option),
+        );
+        el.dataset["key"] = option.key;
+        el.dataset["label"] = option.label;
       }
-      card.appendChild(answers);
+      this.addSection(list, "queue");
     }
+    const goTo = this.optionEls.length;
+    this.addOption(list, "[go to it]", "open the session", "quick-draw-go", () => this.callbacks.onGoTo(session.id));
+    this.addOption(list, "[next]", behind > 0 ? `${behind} more` : "last one", "quick-draw-next", () => {
+      this.skipped.add(waitKey(session));
+      this.render();
+    });
+    return goTo;
+  }
 
-    const actions = document.createElement("div");
-    actions.className = "quick-draw-actions";
-    actions.appendChild(this.button("go to it", "quick-draw-go", () => this.callbacks.onGoTo(session.id)));
-    actions.appendChild(
-      this.button(behind > 0 ? `next · ${behind} more` : "next", "quick-draw-next", () => {
-        this.skipped.add(waitKey(session));
-        this.render();
-      }),
-    );
-    card.appendChild(actions);
-    this.body.appendChild(card);
+  private list(): HTMLElement {
+    const list = document.createElement("div");
+    list.className = "options-list";
+    this.body.appendChild(list);
+    return list;
+  }
+
+  private addSection(container: HTMLElement, title: string): void {
+    const label = document.createElement("div");
+    label.className = "section-label";
+    label.textContent = title;
+    container.appendChild(label);
+  }
+
+  /**
+   * An option row. A detail line wraps under the label instead of sitting
+   * at the right, because a dialog's option can be a sentence or a path.
+   */
+  private addOption(
+    container: HTMLElement,
+    label: string,
+    detail: string,
+    className: string,
+    action: () => void,
+  ): HTMLElement {
+    const el = document.createElement("div");
+    el.className = `option ${className}`;
+    el.innerHTML =
+      `<span class="option-label">${escapeHtml(label)}` +
+      (detail ? `<span class="quick-draw-detail">${escapeHtml(detail)}</span>` : "") +
+      `</span>`;
+    // Bound to this row's own action, not its index: after a redraw, a tap
+    // on a row that has gone must not run whatever now sits in its place.
+    const index = this.optionEls.length;
+    el.addEventListener("click", () => {
+      if (this.optionEls[index] !== el) return;
+      this.nav.selectedIndex = index;
+      this.nav.renderSelection();
+      action();
+    });
+    container.appendChild(el);
+    this.optionEls.push(el);
+    this.actions.push(action);
+    return el;
   }
 
   private answerOptions(
@@ -217,6 +302,7 @@ export class QuickDrawScreen implements MobileScreen {
    * dialog changed.
    */
   private answer(session: QueueCardSession, kind: CardKind, option: PromptOption): void {
+    if (Date.now() - this.dealtAt < CARD_SETTLE_MS) return;
     const now = this.answerOptions(session, kind, this.callbacks.getScreenLines(session.id));
     const same = now?.find((o) => o.key === option.key);
     if (same && same.label === option.label && !this.answered.has(waitKey(session))) {
@@ -226,23 +312,14 @@ export class QuickDrawScreen implements MobileScreen {
     this.render();
   }
 
-  private button(label: string, className: string, action: () => void): HTMLButtonElement {
-    const btn = document.createElement("button");
-    btn.className = className;
-    btn.textContent = label;
-    btn.addEventListener("click", action);
-    return btn;
-  }
-
   onShow(): void {
     this.render();
     this.callbacks.requestRefresh();
     this.refreshTimer = setInterval(() => this.callbacks.requestRefresh(), QUEUE_REFRESH_MS);
     this.boundKeyHandler = (e: KeyboardEvent) => {
-      if (e.key === "h" || e.key === "Backspace" || e.key === "Escape") {
+      if (this.nav.handleKeyDown(e)) {
         e.preventDefault();
         e.stopPropagation();
-        this.callbacks.onBack();
       }
     };
     document.addEventListener("keydown", this.boundKeyHandler, true);
@@ -264,5 +341,7 @@ export class QuickDrawScreen implements MobileScreen {
 
   dispose(): void {
     this.onHide();
+    this.optionEls = [];
+    this.actions = [];
   }
 }
