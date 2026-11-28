@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardKind, drawQueue, promptOptions, queueSummary, screenTail, type QueueSession } from "./quick-draw";
+import { answerTone, cardKind, drawQueue, promptOptions, queueSummary, screenTail, type QueueSession } from "./quick-draw";
 
 const s = (id: string, over: Partial<QueueSession> = {}): QueueSession => ({ id, ...over });
 
@@ -143,3 +143,18 @@ describe("the options of the dialog on screen", () => {
   });
 });
 
+
+describe("the colour of an answer", () => {
+  it("is red for no, green for yes, and orange for anything granting more than this call", () => {
+    expect(answerTone("No")).toBe("bad");
+    expect(answerTone("Yes")).toBe("good");
+    expect(answerTone("Yes, and don't ask again for npx vitest commands in")).toBe("warn");
+    expect(answerTone("Yes, and always allow access to")).toBe("warn");
+    expect(answerTone("Yes, and switch to auto mode · auto mode handles these prompts for you")).toBe("warn");
+  });
+
+  it("is plain for a question's own answers", () => {
+    expect(answerTone("Red")).toBe("plain");
+    expect(answerTone("Nobody")).toBe("plain");
+  });
+});

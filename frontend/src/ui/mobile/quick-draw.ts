@@ -9,6 +9,7 @@
  */
 
 import type { AttentionKind, AttentionState } from "../../types";
+import type { Tone } from "../../tabs/work-words";
 
 export interface QueueSession {
   id: string;
@@ -142,4 +143,17 @@ function findDialog(lines: string[]): { start: number; footer: number } | null {
   }
   if (start < 0) return null;
   return { start, footer };
+}
+
+/**
+ * The colour an answer is drawn in, from what it says: refusing in red,
+ * agreeing in green, and anything that grants more than this one call
+ * (always allow, don't ask again, auto mode) in orange, because that is the
+ * answer to read twice. A question's own answers stay plain.
+ */
+export function answerTone(label: string): Tone {
+  if (/^no\b/i.test(label)) return "bad";
+  if (/always|don't ask again|do not ask again|auto mode|bypass/i.test(label)) return "warn";
+  if (/^yes\b/i.test(label)) return "good";
+  return "plain";
 }

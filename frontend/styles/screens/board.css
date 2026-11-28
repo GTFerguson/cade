@@ -115,12 +115,12 @@
    above a terminal and the phone's session strip and menu
    (tabs/work-words.ts decides which tone a state gets), so they cannot drift
    apart. */
-:is(.board-screen, .context-strip, .session-strip, .mobile-command-menu) [data-tone="muted"] { color: var(--text-muted); }
-:is(.board-screen, .context-strip, .session-strip, .mobile-command-menu) [data-tone="good"] { color: var(--accent-green); }
-:is(.board-screen, .context-strip, .session-strip, .mobile-command-menu) [data-tone="bad"] { color: var(--accent-red); }
-:is(.board-screen, .context-strip, .session-strip, .mobile-command-menu) [data-tone="warn"] { color: var(--accent-orange); }
-:is(.board-screen, .context-strip, .session-strip, .mobile-command-menu) [data-tone="review"] { color: var(--accent-yellow); }
-:is(.board-screen, .context-strip, .session-strip, .mobile-command-menu) [data-tone="busy"] { color: var(--accent-blue); }
+:is(.board-screen, .context-strip, .session-strip, .mobile-command-menu, .mobile-quick-draw) [data-tone="muted"] { color: var(--text-muted); }
+:is(.board-screen, .context-strip, .session-strip, .mobile-command-menu, .mobile-quick-draw) [data-tone="good"] { color: var(--accent-green); }
+:is(.board-screen, .context-strip, .session-strip, .mobile-command-menu, .mobile-quick-draw) [data-tone="bad"] { color: var(--accent-red); }
+:is(.board-screen, .context-strip, .session-strip, .mobile-command-menu, .mobile-quick-draw) [data-tone="warn"] { color: var(--accent-orange); }
+:is(.board-screen, .context-strip, .session-strip, .mobile-command-menu, .mobile-quick-draw) [data-tone="review"] { color: var(--accent-yellow); }
+:is(.board-screen, .context-strip, .session-strip, .mobile-command-menu, .mobile-quick-draw) [data-tone="busy"] { color: var(--accent-blue); }
 
 /* The selected row is filled, so everything on it takes the fill's ink. */
 .board-row.selected,

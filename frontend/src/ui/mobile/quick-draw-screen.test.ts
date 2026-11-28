@@ -124,14 +124,18 @@ const answerRow = (screen: QuickDrawScreen, key: string) =>
   screen.element.querySelector<HTMLElement>(`.quick-draw-answer[data-key="${key}"]`)!;
 
 describe("answering from a card", () => {
-  it("offers the dialog's own options under their own keys, as bracketed options", () => {
+  it("offers the dialog's own options under their own keys, in its own words and coloured by meaning", () => {
     const { screen } = setup([claude], { p: DIALOG });
     expect(answers(screen)).toEqual([
       ["1", "Yes"],
       ["2", "Yes, and switch to auto mode"],
       ["3", "No"],
     ]);
-    expect(answerRow(screen, "3").querySelector(".option-label")!.textContent).toBe("[no]");
+    const no = answerRow(screen, "3").querySelector<HTMLElement>(".option-label")!;
+    expect(no.textContent).toBe("No");
+    expect(no.dataset["tone"]).toBe("bad");
+    expect(answerRow(screen, "2").querySelector<HTMLElement>(".option-label")!.dataset["tone"]).toBe("warn");
+    expect(answerRow(screen, "3").querySelector(".quick-draw-key")!.textContent).toBe("3");
   });
 
   it("does not quote the screen when the answers are listed", () => {

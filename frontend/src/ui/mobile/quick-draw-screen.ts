@@ -18,7 +18,7 @@ import type { AttentionKind, AttentionState } from "../../types";
 import type { MobileScreen } from "./screen-manager";
 import { setupSwipeBack } from "./swipe-back";
 import { relativeTime } from "./recent-files";
-import { drawQueue, promptOptions, screenTail, type CardKind, type PromptOption } from "./quick-draw";
+import { answerTone, drawQueue, promptOptions, screenTail, type CardKind, type PromptOption } from "./quick-draw";
 
 export interface QueueCardSession {
   id: string;
@@ -225,10 +225,16 @@ export class QuickDrawScreen implements MobileScreen {
     info.appendChild(card);
 
     for (const option of options ?? []) {
+      // The prompt's own words, as it shows them: an answer is content,
+      // like a tab name, so it is not bracketed or lowercased like a command.
       const text = option.detail ? `${option.label} ${option.detail}` : option.label;
-      const el = this.addOption(dock, `[${text.toLowerCase()}]`, "quick-draw-answer", () =>
-        this.answer(session, kind, option),
-      );
+      const el = this.addOption(dock, text, "quick-draw-answer", () => this.answer(session, kind, option));
+      const label = el.querySelector<HTMLElement>(".option-label")!;
+      label.dataset["tone"] = answerTone(option.label);
+      const key = document.createElement("span");
+      key.className = "quick-draw-key";
+      key.textContent = option.key;
+      el.insertBefore(key, label);
       el.dataset["key"] = option.key;
       el.dataset["label"] = option.label;
     }
