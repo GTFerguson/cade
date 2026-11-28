@@ -837,21 +837,39 @@
 
 /* ── Quick-draw queue ───────────────────────────────── */
 
-/* The queue shares the command menu's option list above. What the session
-   wants is plain text above it: colour only on the data (workspace, kind of
-   wait), as the design bible asks, and the prompt quoted on the background
-   step rather than in a box. */
+/* The queue shares the command menu's option rows above. The prompt
+   scrolls in the space at the top; the answers and [open]/[next] sit in a
+   dock pinned to the bottom, one line each, so they stay under the thumb
+   in the same place from one prompt to the next. Colour only on the data
+   (workspace, kind of wait), as the design bible asks. */
+
+.mobile-quick-draw .mobile-screen-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.mobile-quick-draw .quick-draw-info {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
 
 .mobile-quick-draw .quick-draw-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   padding: 14px 16px;
   font-family: var(--font-mono);
 }
 
 .mobile-quick-draw .quick-draw-who {
-  font-size: 14px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
   color: var(--text-primary);
 }
 
@@ -861,7 +879,8 @@
 
 /* The same orange and cyan as the waiting and finished dots. */
 .mobile-quick-draw .quick-draw-what {
-  font-size: 12px;
+  flex-shrink: 0;
+  font-size: 11px;
   color: var(--accent-orange);
 }
 
@@ -869,46 +888,65 @@
   color: var(--accent-cyan);
 }
 
+/* What the agent wants is the one thing to read, so it is the largest. */
 .mobile-quick-draw .quick-draw-message {
-  font-size: 13px;
+  font-size: 15px;
+  line-height: 1.5;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 
 /* Rows keep the agent's layout and scroll sideways rather than wrap. */
 .mobile-quick-draw .quick-draw-screen {
-  margin: 4px 0 0;
+  margin: 0;
   padding: 8px;
   font-size: 11px;
   line-height: 1.4;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   background: var(--bg-secondary);
   overflow-x: auto;
   white-space: pre;
-}
-
-/* A dialog's option can be a sentence or carry a path, so answers wrap
-   with their detail under the label instead of being cut off. */
-.mobile-quick-draw .quick-draw-answer .option-label {
-  flex-shrink: 1;
-  padding: 10px 0;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.mobile-quick-draw .quick-draw-detail {
-  display: block;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.mobile-quick-draw .option.selected .quick-draw-detail {
-  color: var(--bg-primary);
 }
 
 .mobile-quick-draw .quick-draw-empty {
   text-align: center;
   color: var(--text-muted);
   padding: 40px 0 16px;
+}
+
+.mobile-quick-draw .quick-draw-dock {
+  flex-shrink: 0;
+  padding-bottom: 0;
+  border-top: 1px solid var(--border-color);
+}
+
+/* One line per answer, cut short rather than wrapped, so rows never change
+   height; the full text is the row's title. */
+.mobile-quick-draw .quick-draw-dock .option-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* [open] and [next] share the bottom line, split down the middle. */
+.mobile-quick-draw .quick-draw-row {
+  display: flex;
+}
+
+.mobile-quick-draw .quick-draw-row .option {
+  flex: 1;
+  justify-content: center;
+  border-bottom: none;
+}
+
+.mobile-quick-draw .quick-draw-row .option + .option {
+  border-left: 1px solid var(--bg-tertiary);
+}
+
+.mobile-quick-draw .quick-draw-row .option-label {
+  flex: 0 1 auto;
 }
 
 /* ── Viewer: diff toggle and shared font size ────────── */

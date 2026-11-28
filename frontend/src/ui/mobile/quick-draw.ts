@@ -52,12 +52,6 @@ export function drawQueue<S extends QueueSession>(sessions: S[]): { session: S; 
 export const SCREEN_TAIL_ROWS = 14;
 
 /**
- * Rows quoted above a dialog whose options are on the card as answers:
- * enough for the command and the question, so the answers stay in view.
- */
-export const PROMPT_CONTEXT_ROWS = 4;
-
-/**
  * The bottom of an agent's screen, where a prompt is drawn: the last
  * `rows` rows down to the last one with text, so the blank rows under a
  * prompt do not push it off the card.
@@ -125,16 +119,6 @@ export function promptOptions(lines: string[]): PromptOption[] | null {
   if (options.length < 2) return null;
   if (options.some((o) => /^\[|^[☐☒✔]/.test(o.label))) return null;
   return options.filter((o) => !NEEDS_MORE.test(o.label));
-}
-
-/**
- * The screen above a dialog's options: the command or question it asks
- * about. A card that offers the options as answers quotes only this, so
- * the options are not shown twice. All of `lines` when no dialog is found.
- */
-export function promptContext(lines: string[]): string[] {
-  const dialog = findDialog(lines);
-  return dialog ? lines.slice(0, dialog.start) : lines;
 }
 
 /** Where a dialog's options start, and its footer line. */

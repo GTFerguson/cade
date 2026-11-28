@@ -18,15 +18,7 @@ import type { AttentionKind, AttentionState } from "../../types";
 import type { MobileScreen } from "./screen-manager";
 import { setupSwipeBack } from "./swipe-back";
 import { relativeTime } from "./recent-files";
-import {
-  PROMPT_CONTEXT_ROWS,
-  drawQueue,
-  promptContext,
-  promptOptions,
-  screenTail,
-  type CardKind,
-  type PromptOption,
-} from "./quick-draw";
+import { drawQueue, promptOptions, screenTail, type CardKind, type PromptOption } from "./quick-draw";
 
 export interface QueueCardSession {
   id: string;
@@ -72,6 +64,9 @@ export const QUEUE_REFRESH_MS = 3000;
  * card under the finger, so a double tap would otherwise answer that one too.
  */
 export const CARD_SETTLE_MS = 500;
+
+/** MenuNav's index when no row is selected: Enter then selects nothing. */
+const NO_SELECTION = -1;
 
 const KIND_SAYS: Record<CardKind, string> = {
   permission: "wants permission",
@@ -140,137 +135,120 @@ export class QuickDrawScreen implements MobileScreen {
     const queue = drawQueue(this.callbacks.getSessions()).filter((c) => !this.answered.has(waitKey(c.session)));
     const dealt = queue.filter((c) => !this.skipped.has(waitKey(c.session)));
 
-    this.header.textContent = queue.length > 0 ? `[ queue · ${queue.length} ]` : "[ queue ]";
+    const top = dealt[0];
+    const position = top ? queue.indexOf(top) + 1 : 0;
+    this.header.textContent = top ? `[ queue · ${position}/${queue.length} ]` : "[ queue ]";
     this.body.innerHTML = "";
     this.optionEls = [];
     this.actions = [];
 
-    const top = dealt[0];
     const key = top ? waitKey(top.session) : null;
     const sameCard = key === this.shownKey;
     const selected = this.nav.selectedIndex;
     if (!sameCard) this.dealtAt = Date.now();
     this.shownKey = key;
 
-    let first = 0;
-    if (top) first = this.renderCard(top.session, top.kind, dealt.length - 1);
-    else this.renderEmpty(queue.length);
+    // What the session wants scrolls in the space above; the controls sit
+    // in a dock at the bottom, so they stay under the thumb in the same
+    // place however long the prompt above them is.
+    const info = document.createElement("div");
+    info.className = "quick-draw-info";
+    this.body.appendChild(info);
+    const dock = document.createElement("div");
+    dock.className = "options-list quick-draw-dock";
+    this.body.appendChild(dock);
 
-    // A new card starts on [go to it], never on an answer: a stray Enter
-    // must not approve anything.
-    this.nav.selectedIndex = sameCard ? Math.min(selected, Math.max(0, this.optionEls.length - 1)) : first;
+    if (top) this.renderCard(info, dock, top.session, top.kind, dealt.length - 1);
+    else this.renderEmpty(info, dock, queue.length);
+
+    // A new card starts with nothing selected, so a stray Enter does nothing
+    // and no row looks like the one to press; j/k pick one.
+    this.nav.selectedIndex = sameCard ? Math.min(selected, this.optionEls.length - 1) : NO_SELECTION;
     this.nav.renderSelection();
   }
 
-  private renderEmpty(putAside: number): void {
+  private renderEmpty(info: HTMLElement, dock: HTMLElement, skipped: number): void {
     const empty = document.createElement("div");
     empty.className = "quick-draw-empty";
-    empty.textContent = putAside > 0 ? `${putAside} put aside` : "nothing waiting";
-    this.body.appendChild(empty);
-    if (putAside > 0) {
-      const list = this.list();
-      this.addOption(list, "[deal them again]", "", "quick-draw-again", () => {
+    empty.textContent = "nothing waiting";
+    info.appendChild(empty);
+    if (skipped > 0) {
+      this.addOption(dock, `[show ${skipped} skipped]`, "quick-draw-again", () => {
         this.skipped.clear();
         this.render();
       });
     }
   }
 
-  /** Draws the card; returns the index of its [go to it] option. */
-  private renderCard(session: QueueCardSession, kind: CardKind, behind: number): number {
-    const info = document.createElement("div");
-    info.className = "quick-draw-card";
-    info.dataset["kind"] = kind;
-    info.dataset["session"] = session.id;
+  private renderCard(
+    info: HTMLElement,
+    dock: HTMLElement,
+    session: QueueCardSession,
+    kind: CardKind,
+    behind: number,
+  ): void {
+    const card = document.createElement("div");
+    card.className = "quick-draw-card";
+    card.dataset["kind"] = kind;
+    card.dataset["session"] = session.id;
 
     const who = document.createElement("div");
     who.className = "quick-draw-who";
+    const waited = session.attentionAt ? relativeTime(session.attentionAt * 1000, Date.now()) : "";
     who.innerHTML =
+      `<span class="quick-draw-name">` +
       (session.group
         ? `<span class="quick-draw-group" style="color: ${escapeHtml(session.groupColour ?? "inherit")}">${escapeHtml(session.group)}</span> `
-        : "") + `<span class="quick-draw-name">${escapeHtml(session.name)}</span>`;
-    info.appendChild(who);
-
-    const what = document.createElement("div");
-    what.className = "quick-draw-what";
-    const waited = session.attentionAt ? ` · ${relativeTime(session.attentionAt * 1000, Date.now())}` : "";
-    what.textContent = `${KIND_SAYS[kind]}${waited}`;
-    info.appendChild(what);
+        : "") +
+      `${escapeHtml(session.name)}</span>` +
+      `<span class="quick-draw-what">${KIND_SAYS[kind]}${waited ? ` · ${waited}` : ""}</span>`;
+    card.appendChild(who);
 
     if (session.message) {
       const message = document.createElement("div");
       message.className = "quick-draw-message";
       message.textContent = session.message;
-      info.appendChild(message);
+      card.appendChild(message);
     }
 
     const lines = this.callbacks.getScreenLines(session.id);
     const options = this.answerOptions(session, kind, lines);
-    const tail = !lines ? [] : options ? screenTail(promptContext(lines), PROMPT_CONTEXT_ROWS) : screenTail(lines);
+    // With the answers listed, the message already says what is asked; the
+    // screen is quoted only when it is the one way to see the prompt.
+    const tail = lines && !options ? screenTail(lines) : [];
     if (tail.length > 0) {
       const screen = document.createElement("pre");
       screen.className = "quick-draw-screen";
       screen.textContent = tail.join("\n");
-      info.appendChild(screen);
+      card.appendChild(screen);
     }
-    this.body.appendChild(info);
+    info.appendChild(card);
 
-    const list = this.list();
-    if (options) {
-      this.addSection(list, "answer");
-      for (const option of options) {
-        const el = this.addOption(
-          list,
-          `[${option.label.toLowerCase()}]`,
-          option.detail,
-          "quick-draw-answer",
-          () => this.answer(session, kind, option),
-        );
-        el.dataset["key"] = option.key;
-        el.dataset["label"] = option.label;
-      }
-      this.addSection(list, "queue");
+    for (const option of options ?? []) {
+      const text = option.detail ? `${option.label} ${option.detail}` : option.label;
+      const el = this.addOption(dock, `[${text.toLowerCase()}]`, "quick-draw-answer", () =>
+        this.answer(session, kind, option),
+      );
+      el.dataset["key"] = option.key;
+      el.dataset["label"] = option.label;
     }
-    const goTo = this.optionEls.length;
-    this.addOption(list, "[go to it]", "open the session", "quick-draw-go", () => this.callbacks.onGoTo(session.id));
-    this.addOption(list, "[next]", behind > 0 ? `${behind} more` : "last one", "quick-draw-next", () => {
+
+    const row = document.createElement("div");
+    row.className = "quick-draw-row";
+    dock.appendChild(row);
+    this.addOption(row, "[open]", "quick-draw-go", () => this.callbacks.onGoTo(session.id));
+    this.addOption(row, behind > 0 ? `[next · ${behind}]` : "[skip]", "quick-draw-next", () => {
       this.skipped.add(waitKey(session));
       this.render();
     });
-    return goTo;
   }
 
-  private list(): HTMLElement {
-    const list = document.createElement("div");
-    list.className = "options-list";
-    this.body.appendChild(list);
-    return list;
-  }
-
-  private addSection(container: HTMLElement, title: string): void {
-    const label = document.createElement("div");
-    label.className = "section-label";
-    label.textContent = title;
-    container.appendChild(label);
-  }
-
-  /**
-   * An option row. A detail line wraps under the label instead of sitting
-   * at the right, because a dialog's option can be a sentence or a path.
-   */
-  private addOption(
-    container: HTMLElement,
-    label: string,
-    detail: string,
-    className: string,
-    action: () => void,
-  ): HTMLElement {
+  /** A one-line option row; long labels are cut short so every row is the same height. */
+  private addOption(container: HTMLElement, label: string, className: string, action: () => void): HTMLElement {
     const el = document.createElement("div");
     el.className = `option ${className}`;
-    el.innerHTML =
-      `<span class="option-label">${escapeHtml(label)}` +
-      (detail ? `<span class="quick-draw-detail">${escapeHtml(detail)}</span>` : "") +
-      `</span>`;
+    el.innerHTML = `<span class="option-label">${escapeHtml(label)}</span>`;
+    el.title = label;
     // Bound to this row's own action, not its index: after a redraw, a tap
     // on a row that has gone must not run whatever now sits in its place.
     const index = this.optionEls.length;

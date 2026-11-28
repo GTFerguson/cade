@@ -39,7 +39,7 @@ describe("the quick-draw screen", () => {
   it("deals the blocked session first, naming it and what it wants", () => {
     const { card } = setup([done, perm]);
     expect(card()!.dataset["session"]).toBe("p");
-    expect(card()!.querySelector(".quick-draw-who")!.textContent).toBe("Work cade");
+    expect(card()!.querySelector(".quick-draw-name")!.textContent).toBe("Work cade");
     expect(card()!.querySelector(".quick-draw-what")!.textContent).toMatch(/^wants permission/);
     expect(card()!.querySelector(".quick-draw-message")!.textContent).toContain("use Bash");
   });
@@ -64,7 +64,7 @@ describe("the quick-draw screen", () => {
 
   it("puts a card aside and deals the next one", () => {
     const { screen, card, click } = setup([perm, done]);
-    expect(screen.element.querySelector(".quick-draw-next")!.textContent).toBe("[next]1 more");
+    expect(screen.element.querySelector(".quick-draw-next")!.textContent).toBe("[next · 1]");
     click(".quick-draw-next");
     expect(card()!.dataset["session"]).toBe("d");
   });
@@ -73,7 +73,7 @@ describe("the quick-draw screen", () => {
     const { screen, card, click } = setup([perm]);
     click(".quick-draw-next");
     expect(card()).toBeNull();
-    expect(screen.element.querySelector(".quick-draw-empty")!.textContent).toBe("1 put aside");
+    expect(screen.element.querySelector(".quick-draw-again")!.textContent).toBe("[show 1 skipped]");
     click(".quick-draw-again");
     expect(card()!.dataset["session"]).toBe("p");
   });
@@ -96,6 +96,13 @@ describe("the quick-draw screen", () => {
     expect(card()).toBeNull();
     expect(screen.element.querySelector(".quick-draw-empty")!.textContent).toBe("nothing waiting");
     expect(screen.element.querySelector(".mobile-screen-header")!.textContent).toBe("[ queue ]");
+  });
+
+  it("says where in the queue the card is", () => {
+    const { screen, click } = setup([perm, done]);
+    expect(screen.element.querySelector(".mobile-screen-header")!.textContent).toBe("[ queue · 1/2 ]");
+    click(".quick-draw-next");
+    expect(screen.element.querySelector(".mobile-screen-header")!.textContent).toBe("[ queue · 2/2 ]");
   });
 });
 
@@ -127,17 +134,19 @@ describe("answering from a card", () => {
     expect(answerRow(screen, "3").querySelector(".option-label")!.textContent).toBe("[no]");
   });
 
-  it("quotes what the dialog asks about, not its options a second time", () => {
+  it("does not quote the screen when the answers are listed", () => {
     const { card } = setup([claude], { p: DIALOG });
-    expect(card()!.querySelector(".quick-draw-screen")!.textContent).toBe(" Do you want to proceed?");
+    expect(card()!.querySelector(".quick-draw-screen")).toBeNull();
   });
 
-  it("starts a new card on [go to it], so a stray Enter approves nothing", () => {
+  it("starts a new card with nothing selected, so a stray Enter does nothing", () => {
     const { screen, onGoTo, onAnswer } = setup([claude], { p: DIALOG });
+    expect(screen.element.querySelector(".option.selected")).toBeNull();
     screen.onShow();
+    settle();
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
     screen.onHide();
-    expect(onGoTo).toHaveBeenCalledWith("p");
+    expect(onGoTo).not.toHaveBeenCalled();
     expect(onAnswer).not.toHaveBeenCalled();
   });
 
