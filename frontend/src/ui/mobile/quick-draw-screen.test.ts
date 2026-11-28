@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CARD_SETTLE_MS, QuickDrawScreen, type QueueCardSession } from "./quick-draw-screen";
+import { ARRIVAL_MARK_MS, CARD_SETTLE_MS, QuickDrawScreen, type QueueCardSession } from "./quick-draw-screen";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -63,8 +63,7 @@ describe("the quick-draw screen", () => {
   });
 
   it("puts a card aside and deals the next one", () => {
-    const { screen, card, click } = setup([perm, done]);
-    expect(screen.element.querySelector(".quick-draw-next")!.textContent).toBe("[next · 1]");
+    const { card, click } = setup([perm, done]);
     click(".quick-draw-next");
     expect(card()!.dataset["session"]).toBe("d");
   });
@@ -98,11 +97,9 @@ describe("the quick-draw screen", () => {
     expect(screen.element.querySelector(".mobile-screen-header")!.textContent).toBe("[ queue ]");
   });
 
-  it("says where in the queue the card is", () => {
-    const { screen, click } = setup([perm, done]);
-    expect(screen.element.querySelector(".mobile-screen-header")!.textContent).toBe("[ queue · 1/2 ]");
-    click(".quick-draw-next");
-    expect(screen.element.querySelector(".mobile-screen-header")!.textContent).toBe("[ queue · 2/2 ]");
+  it("says how many are waiting", () => {
+    const { screen } = setup([perm, done]);
+    expect(screen.element.querySelector(".mobile-screen-header")!.textContent).toBe("[ queue · 2 ]");
   });
 });
 
@@ -220,5 +217,53 @@ describe("answering from a card", () => {
     no.click();
     expect(onAnswer).not.toHaveBeenCalled();
     expect(answers(screen)[2]).toEqual(["3", "Yes, and always allow"]);
+  });
+});
+
+describe("the stack of waiting sessions", () => {
+  const ask: QueueCardSession = { id: "q", name: "nkrdn", attention: "input", attentionKind: "question", attentionAt: 12, message: "Red or blue?" };
+  const waiting = (screen: QuickDrawScreen) =>
+    [...screen.element.querySelectorAll<HTMLElement>(".quick-draw-waiting")].map((e) => e.dataset["session"]);
+
+  it("stacks the waiting sessions above the card in hand, the next one nearest", () => {
+    const { screen, card } = setup([done, ask, perm]);
+    expect(card()!.dataset["session"]).toBe("p");
+    // Top to bottom: last in the queue first, the next one just above the card.
+    expect(waiting(screen)).toEqual(["d", "q"]);
+    const next = screen.element.querySelector<HTMLElement>('.quick-draw-waiting[data-session="q"]')!;
+    expect(next.querySelector(".quick-draw-name")!.textContent).toBe("nkrdn");
+    expect(next.querySelector(".quick-draw-waiting-message")!.textContent).toBe("Red or blue?");
+  });
+
+  it("snaps the next one into the hand when the card is skipped", () => {
+    const { screen, card, click } = setup([perm, ask, done]);
+    click(".quick-draw-next");
+    expect(card()!.dataset["session"]).toBe("q");
+    // The skipped one goes to the top of the stack, marked.
+    expect(waiting(screen)).toEqual(["p", "d"]);
+    const mark = screen.element.querySelector('.quick-draw-waiting[data-session="p"] .quick-draw-mark')!;
+    expect(mark.textContent).toBe("skipped");
+  });
+
+  it("brings a waiting session to the front when tapped", () => {
+    const { screen, card } = setup([perm, ask, done]);
+    screen.element.querySelector<HTMLElement>('.quick-draw-waiting[data-session="d"]')!.click();
+    expect(card()!.dataset["session"]).toBe("d");
+    expect(waiting(screen)).toEqual(["q", "p"]);
+  });
+
+  it("marks a session that joins the queue while it shows, for a while", () => {
+    const { screen, set } = setup([perm]);
+    set([perm, ask]);
+    const mark = () => screen.element.querySelector('.quick-draw-waiting[data-session="q"] .quick-draw-mark');
+    expect(mark()!.textContent).toBe("new");
+    vi.advanceTimersByTime(ARRIVAL_MARK_MS);
+    set([perm, ask]);
+    expect(mark()).toBeNull();
+  });
+
+  it("does not mark the sessions already waiting when it opened", () => {
+    const { screen } = setup([perm, ask]);
+    expect(screen.element.querySelector(".quick-draw-mark")).toBeNull();
   });
 });

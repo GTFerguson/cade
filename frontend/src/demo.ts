@@ -860,6 +860,15 @@ function injectMobileRemote(ws: WebSocketClient): void {
           attention: "input", attentionKind: "question", attentionAt: started - 120,
           attentionMessage: "Claude has a question about the rebuild schedule", terminals: {},
         },
+        // Joins the queue a while in, so the queue's "new" mark can be seen.
+        ...(Date.now() / 1000 - started >= 12
+          ? [{
+              id: "late-demo", label: "airplai", projectPath: "/home/gary/projects/airplai",
+              agent: "claude-code", createdAt: 0, lastActivity: Date.now() / 1000, alive: true, clients: 0,
+              attention: "input" as const, attentionKind: "permission" as const, attentionAt: started + 12,
+              attentionMessage: "Bash: git push origin feature/sso", terminals: {},
+            }]
+          : []),
       ],
     });
   };

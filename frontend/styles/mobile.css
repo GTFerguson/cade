@@ -853,11 +853,11 @@
 
 /* ── Quick-draw queue ───────────────────────────────── */
 
-/* The queue shares the command menu's option rows above. The prompt
-   scrolls in the space at the top; the answers and [open]/[next] sit in a
-   dock pinned to the bottom, one line each, so they stay under the thumb
-   in the same place from one prompt to the next. Colour only on the data
-   (workspace, kind of wait), as the design bible asks. */
+/* A stack of full-width cards. The card in hand sits at the bottom with
+   everything to read and press in one place under the thumb; the waiting
+   sessions stack above it as their headers, the next one nearest. Flat,
+   square and shadowless per the design bible: cards are told apart by the
+   background step and a rule in the colour of their kind of wait. */
 
 .mobile-quick-draw .mobile-screen-body {
   display: flex;
@@ -865,18 +865,75 @@
   overflow: hidden;
 }
 
-.mobile-quick-draw .quick-draw-info {
+/* Bottom-aligned with margin-top: auto rather than justify-content, which
+   would push an overflowing stack out of reach above the top. */
+.mobile-quick-draw .quick-draw-stack {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-quick-draw .quick-draw-stack > :first-child {
+  margin-top: auto;
+}
+
+.mobile-quick-draw .option.quick-draw-waiting {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
+  min-height: 52px;
+  padding: 6px 16px;
+  background: var(--bg-secondary);
+  border-bottom: none;
+  border-top: 1px solid var(--border-color);
+}
+
+.mobile-quick-draw .quick-draw-waiting .quick-draw-name {
+  color: var(--text-secondary);
+}
+
+.mobile-quick-draw .quick-draw-waiting-message {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-quick-draw .quick-draw-mark {
+  color: var(--accent-green);
+}
+
+.mobile-quick-draw .quick-draw-mark[data-mark="skipped"] {
+  color: var(--text-muted);
+}
+
+/* The card in hand: a rule in its kind's colour (the waiting dot's orange,
+   the finished dot's cyan) marks it as the one being dealt with. */
+.mobile-quick-draw .quick-draw-current {
+  flex-shrink: 0;
+  max-height: 75%;
+  display: flex;
+  flex-direction: column;
+  border-top: 2px solid var(--accent-orange);
+  background: var(--bg-primary);
+}
+
+.mobile-quick-draw .quick-draw-current:has(.quick-draw-card[data-kind="finished"]) {
+  border-top-color: var(--accent-cyan);
 }
 
 .mobile-quick-draw .quick-draw-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
+  gap: 8px;
+  padding: 12px 16px;
+  min-height: 0;
+  overflow-y: auto;
   font-family: var(--font-mono);
 }
 
@@ -887,6 +944,13 @@
   gap: 12px;
   font-size: 13px;
   color: var(--text-primary);
+  min-width: 0;
+}
+
+.mobile-quick-draw .quick-draw-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mobile-quick-draw .quick-draw-group {
@@ -900,7 +964,7 @@
   color: var(--accent-orange);
 }
 
-.mobile-quick-draw .quick-draw-card[data-kind="finished"] .quick-draw-what {
+.mobile-quick-draw [data-kind="finished"] .quick-draw-what {
   color: var(--accent-cyan);
 }
 
@@ -924,23 +988,24 @@
   white-space: pre;
 }
 
-.mobile-quick-draw .quick-draw-empty {
+.mobile-quick-draw .quick-draw-current.quick-draw-empty {
+  padding: 24px 16px;
   text-align: center;
   color: var(--text-muted);
-  padding: 40px 0 16px;
+  border-top-color: var(--border-color);
 }
 
 .mobile-quick-draw .quick-draw-dock {
   flex-shrink: 0;
   padding-bottom: 0;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid var(--bg-tertiary);
 }
 
 /* Answers read at full brightness, coloured by what they mean (red no,
    green yes, orange for anything granting more than this call), with the
    dialog's own number beside them as the terminal shows it. Every row is
    the same height and holds two lines, so a long answer is readable and
-   the rows still never move. */
+   the rows never move. */
 .mobile-quick-draw .quick-draw-answer {
   height: 56px;
   min-height: 56px;
@@ -968,7 +1033,10 @@
   overflow-wrap: anywhere;
 }
 
-.mobile-quick-draw .option.selected .quick-draw-key {
+.mobile-quick-draw .option.selected .quick-draw-key,
+.mobile-quick-draw .option.selected .quick-draw-what,
+.mobile-quick-draw .option.selected .quick-draw-name,
+.mobile-quick-draw .option.selected .quick-draw-waiting-message {
   color: var(--bg-primary);
 }
 
@@ -985,10 +1053,6 @@
 
 .mobile-quick-draw .quick-draw-row .option + .option {
   border-left: 1px solid var(--bg-tertiary);
-}
-
-.mobile-quick-draw .quick-draw-row .option-label {
-  flex: 0 1 auto;
 }
 
 /* ── Viewer: diff toggle and shared font size ────────── */

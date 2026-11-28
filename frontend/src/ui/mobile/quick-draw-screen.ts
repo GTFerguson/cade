@@ -65,6 +65,9 @@ export const QUEUE_REFRESH_MS = 3000;
  */
 export const CARD_SETTLE_MS = 500;
 
+/** How long a session that joins the queue while it shows is marked "new". */
+export const ARRIVAL_MARK_MS = 5000;
+
 /** MenuNav's index when no row is selected: Enter then selects nothing. */
 const NO_SELECTION = -1;
 
@@ -78,9 +81,13 @@ const KIND_SAYS: Record<CardKind, string> = {
 const waitKey = (s: QueueCardSession) => `${s.id}@${s.attentionAt ?? 0}`;
 
 /**
- * The queue as a full-pane option list, the command menu's pattern: what
- * the session wants as plain text, then its answers and the queue's own
- * actions as `[bracketed]` options that j/k/l/h and taps both drive.
+ * The queue as a stack of full-width cards: the card in hand at the bottom,
+ * holding what the session wants, its answers and [open] / [next] in one
+ * place under the thumb, and the waiting sessions stacked above it as their
+ * headers, the next one nearest. Answering or skipping snaps the next one
+ * down; a session joining the queue appears in the stack marked "new".
+ * Rows share the command menu's option-list CSS, and j/k/l/h drive them as
+ * taps do.
  */
 export class QuickDrawScreen implements MobileScreen {
   readonly element: HTMLElement;
@@ -95,6 +102,10 @@ export class QuickDrawScreen implements MobileScreen {
   /** The wait on show, so a redraw of the same card keeps the selection. */
   private shownKey: string | null = null;
   private dealtAt = 0;
+  /** A waiting card the user tapped to bring to the front. */
+  private front: string | null = null;
+  /** When each wait was first seen here, so a session joining the queue is marked. */
+  private firstSeen = new Map<string, number>();
   private cleanupSwipe: (() => void) | null = null;
   private boundKeyHandler: ((e: KeyboardEvent) => void) | null = null;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -132,12 +143,25 @@ export class QuickDrawScreen implements MobileScreen {
     // Forget cards whose wait is over, so the sets cannot grow.
     for (const key of this.skipped) if (!live.has(key)) this.skipped.delete(key);
     for (const key of this.answered) if (!live.has(key)) this.answered.delete(key);
+    for (const key of this.firstSeen.keys()) if (!live.has(key)) this.firstSeen.delete(key);
+    if (this.front && !live.has(this.front)) this.front = null;
+
     const queue = drawQueue(this.callbacks.getSessions()).filter((c) => !this.answered.has(waitKey(c.session)));
+    const now = Date.now();
+    // Sessions already waiting when the screen opened are not news.
+    const opening = this.firstSeen.size === 0;
+    for (const c of queue) {
+      const k = waitKey(c.session);
+      if (!this.firstSeen.has(k)) this.firstSeen.set(k, opening ? 0 : now);
+    }
+
     const dealt = queue.filter((c) => !this.skipped.has(waitKey(c.session)));
+    const fronted = dealt.findIndex((c) => waitKey(c.session) === this.front);
+    if (fronted > 0) dealt.unshift(...dealt.splice(fronted, 1));
+    const skipped = queue.filter((c) => this.skipped.has(waitKey(c.session)));
 
     const top = dealt[0];
-    const position = top ? queue.indexOf(top) + 1 : 0;
-    this.header.textContent = top ? `[ queue · ${position}/${queue.length} ]` : "[ queue ]";
+    this.header.textContent = queue.length > 0 ? `[ queue · ${queue.length} ]` : "[ queue ]";
     this.body.innerHTML = "";
     this.optionEls = [];
     this.actions = [];
@@ -145,21 +169,22 @@ export class QuickDrawScreen implements MobileScreen {
     const key = top ? waitKey(top.session) : null;
     const sameCard = key === this.shownKey;
     const selected = this.nav.selectedIndex;
-    if (!sameCard) this.dealtAt = Date.now();
+    if (!sameCard) this.dealtAt = now;
     this.shownKey = key;
 
-    // What the session wants scrolls in the space above; the controls sit
-    // in a dock at the bottom, so they stay under the thumb in the same
-    // place however long the prompt above them is.
-    const info = document.createElement("div");
-    info.className = "quick-draw-info";
-    this.body.appendChild(info);
-    const dock = document.createElement("div");
-    dock.className = "options-list quick-draw-dock";
-    this.body.appendChild(dock);
+    // The waiting sessions stack above the card in hand, the next one
+    // nearest it, so what is coming is in view and the card in hand, with
+    // everything to read and press, sits in one place at the bottom.
+    const stack = document.createElement("div");
+    stack.className = "quick-draw-stack";
+    this.body.appendChild(stack);
+    const upcoming = [...dealt.slice(1), ...skipped];
+    for (const c of [...upcoming].reverse()) {
+      this.renderWaiting(stack, c.session, c.kind, this.skipped.has(waitKey(c.session)), now);
+    }
 
-    if (top) this.renderCard(info, dock, top.session, top.kind, dealt.length - 1);
-    else this.renderEmpty(info, dock, queue.length);
+    if (top) this.renderCard(top.session, top.kind, now);
+    else this.renderEmpty(skipped.length);
 
     // A new card starts with nothing selected, so a stray Enter does nothing
     // and no row looks like the one to press; j/k pick one.
@@ -167,12 +192,59 @@ export class QuickDrawScreen implements MobileScreen {
     this.nav.renderSelection();
   }
 
-  private renderEmpty(info: HTMLElement, dock: HTMLElement, skipped: number): void {
-    const empty = document.createElement("div");
-    empty.className = "quick-draw-empty";
-    empty.textContent = "nothing waiting";
-    info.appendChild(empty);
+  /** A session further down the queue: its header, which brings it forward when tapped. */
+  private renderWaiting(
+    stack: HTMLElement,
+    session: QueueCardSession,
+    kind: CardKind,
+    skipped: boolean,
+    now: number,
+  ): void {
+    const el = this.addOption(stack, "", "quick-draw-waiting", () => {
+      this.skipped.delete(waitKey(session));
+      this.front = waitKey(session);
+      this.render();
+    });
+    el.dataset["kind"] = kind;
+    el.dataset["session"] = session.id;
+    el.innerHTML = "";
+    const arrived = this.firstSeen.get(waitKey(session)) ?? 0;
+    const isNew = arrived > 0 && now - arrived < ARRIVAL_MARK_MS;
+    el.appendChild(this.headerLine(session, kind, now, skipped ? "skipped" : isNew ? "new" : null));
+    if (session.message) {
+      const message = document.createElement("div");
+      message.className = "quick-draw-waiting-message";
+      message.textContent = session.message;
+      el.appendChild(message);
+    }
+  }
+
+  /** Name and workspace at the left; the kind of wait, how long, and any mark at the right. */
+  private headerLine(session: QueueCardSession, kind: CardKind, now: number, mark: string | null): HTMLElement {
+    const line = document.createElement("div");
+    line.className = "quick-draw-who";
+    const waited = session.attentionAt ? relativeTime(session.attentionAt * 1000, now) : "";
+    line.innerHTML =
+      `<span class="quick-draw-name">` +
+      (session.group
+        ? `<span class="quick-draw-group" style="color: ${escapeHtml(session.groupColour ?? "inherit")}">${escapeHtml(session.group)}</span> `
+        : "") +
+      `${escapeHtml(session.name)}</span>` +
+      `<span class="quick-draw-what">` +
+      (mark ? `<span class="quick-draw-mark" data-mark="${mark}">${mark}</span> · ` : "") +
+      `${KIND_SAYS[kind]}${waited ? ` · ${waited}` : ""}</span>`;
+    return line;
+  }
+
+  private renderEmpty(skipped: number): void {
+    const card = document.createElement("div");
+    card.className = "quick-draw-current quick-draw-empty";
+    card.textContent = "nothing waiting";
+    this.body.appendChild(card);
     if (skipped > 0) {
+      const dock = document.createElement("div");
+      dock.className = "options-list quick-draw-dock";
+      this.body.appendChild(dock);
       this.addOption(dock, `[show ${skipped} skipped]`, "quick-draw-again", () => {
         this.skipped.clear();
         this.render();
@@ -180,29 +252,17 @@ export class QuickDrawScreen implements MobileScreen {
     }
   }
 
-  private renderCard(
-    info: HTMLElement,
-    dock: HTMLElement,
-    session: QueueCardSession,
-    kind: CardKind,
-    behind: number,
-  ): void {
+  /** The card in hand: what it wants, then its answers and [open] / [next], together. */
+  private renderCard(session: QueueCardSession, kind: CardKind, now: number): void {
+    const current = document.createElement("div");
+    current.className = "quick-draw-current";
+    this.body.appendChild(current);
+
     const card = document.createElement("div");
     card.className = "quick-draw-card";
     card.dataset["kind"] = kind;
     card.dataset["session"] = session.id;
-
-    const who = document.createElement("div");
-    who.className = "quick-draw-who";
-    const waited = session.attentionAt ? relativeTime(session.attentionAt * 1000, Date.now()) : "";
-    who.innerHTML =
-      `<span class="quick-draw-name">` +
-      (session.group
-        ? `<span class="quick-draw-group" style="color: ${escapeHtml(session.groupColour ?? "inherit")}">${escapeHtml(session.group)}</span> `
-        : "") +
-      `${escapeHtml(session.name)}</span>` +
-      `<span class="quick-draw-what">${KIND_SAYS[kind]}${waited ? ` · ${waited}` : ""}</span>`;
-    card.appendChild(who);
+    card.appendChild(this.headerLine(session, kind, now, null));
 
     if (session.message) {
       const message = document.createElement("div");
@@ -222,7 +282,11 @@ export class QuickDrawScreen implements MobileScreen {
       screen.textContent = tail.join("\n");
       card.appendChild(screen);
     }
-    info.appendChild(card);
+    current.appendChild(card);
+
+    const dock = document.createElement("div");
+    dock.className = "options-list quick-draw-dock";
+    current.appendChild(dock);
 
     for (const option of options ?? []) {
       // The prompt's own words, as it shows them: an answer is content,
@@ -243,8 +307,9 @@ export class QuickDrawScreen implements MobileScreen {
     row.className = "quick-draw-row";
     dock.appendChild(row);
     this.addOption(row, "[open]", "quick-draw-go", () => this.callbacks.onGoTo(session.id));
-    this.addOption(row, behind > 0 ? `[next · ${behind}]` : "[skip]", "quick-draw-next", () => {
+    this.addOption(row, "[next]", "quick-draw-next", () => {
       this.skipped.add(waitKey(session));
+      if (this.front === waitKey(session)) this.front = null;
       this.render();
     });
   }
